@@ -3,6 +3,7 @@ import datetime
 import aiohttp
 import asyncio
 from abc import ABC, abstractmethod
+from ..utils.currency_utils import get_default_currency
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ class BaseEnergyAPI(ABC):
         self.config = config
         self.session = None
         self.vat = config.get("vat", 0.0)
+        self._currency = config.get("currency", get_default_currency(config.get("area")))
         
     async def _ensure_session(self):
         """Ensure that we have an aiohttp session."""
