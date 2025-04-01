@@ -64,6 +64,10 @@ class NordpoolAPI(BaseEnergyAPI):
     
     async def _fetch_day_data(self, delivery_area, currency, date):
         """Fetch data for a specific day."""
+        if not delivery_area or not currency or not date:
+            _LOGGER.error("Missing required parameters for Nordpool API call")
+            return None
+            
         params = {
             "currency": currency,
             "date": date,
@@ -136,6 +140,9 @@ class NordpoolAPI(BaseEnergyAPI):
             # If real data fails, use simulated data
             _LOGGER.warning("Failed to get real data from Nordpool, using simulated data")
             return self._generate_simulated_data()
+        except AttributeError as e:
+            _LOGGER.error(f"AttributeError in Nordpool data processing: {str(e)}, falling back to simulation")
+            return self._generate_simulated_data()
         except Exception as e:
             _LOGGER.error(f"Error getting Nordpool data: {e}, falling back to simulation")
             return self._generate_simulated_data()
@@ -143,14 +150,18 @@ class NordpoolAPI(BaseEnergyAPI):
     def _process_data(self, raw_data):
         """Process the data from Nordpool."""
         # Check if we have valid data
-        if not raw_data or "today" not in raw_data:
-            _LOGGER.error("No valid data in Nordpool response")
+        if not raw_data:
+            _LOGGER.error("No data in Nordpool response")
             return None
             
-        today_data = raw_data["today"]
+        today_data = raw_data.get("today")
         tomorrow_data = raw_data.get("tomorrow")
         
-        if not today_data or "multiAreaEntries" not in today_data:
+        if not today_data:
+            _LOGGER.error("No today data in Nordpool response")
+            return None
+            
+        if "multiAreaEntries" not in today_data:
             _LOGGER.error("No multiAreaEntries in Nordpool today data")
             return None
             
