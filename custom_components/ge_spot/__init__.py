@@ -10,6 +10,7 @@ from .const import (
     DOMAIN,
     CONF_SOURCE,
     CONF_UPDATE_INTERVAL,
+    CONF_ENABLE_FALLBACK,
     SOURCE_ENERGI_DATA_SERVICE,
     SOURCE_NORDPOOL,
     SOURCE_ENTSO_E,
@@ -17,6 +18,7 @@ from .const import (
     SOURCE_OMIE,
     SOURCE_AEMO,
     DEFAULT_UPDATE_INTERVAL,
+    DEFAULT_ENABLE_FALLBACK,
 )
 from .coordinator import GSpotDataUpdateCoordinator
 
@@ -52,11 +54,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
     )
     
+    # Get fallback preference (prefer options over data, with fallback to default)
+    enable_fallback = entry.options.get(
+        CONF_ENABLE_FALLBACK,
+        entry.data.get(CONF_ENABLE_FALLBACK, DEFAULT_ENABLE_FALLBACK)
+    )
+    
     # Create a data coordinator
     coordinator = GSpotDataUpdateCoordinator(
         hass,
         api,
         update_interval,
+        enable_fallback,
     )
     
     # Fetch initial data
@@ -81,7 +90,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Close API session
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    await coordinator.api.close()
+    await coordinator.close()
     
     # Remove entry from data
     if unload_ok:
