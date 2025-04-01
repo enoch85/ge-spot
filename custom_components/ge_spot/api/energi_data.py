@@ -3,6 +3,7 @@ import datetime
 import json
 import asyncio
 from .base import BaseEnergyAPI
+from ..utils.currency_utils import convert_to_subunit, convert_energy_price
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,10 +75,19 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
         hourly_prices = {}
         all_prices = []
         
+        use_cents = self.config.get("price_in_cents", False)
+        
         for record in records:
             hour_dk = datetime.datetime.fromisoformat(record["HourDK"].replace("Z", "+00:00"))
-            price = record["SpotPriceDKK"] / 1000  # Convert from DKK/MWh to DKK/kWh
+            
+            # Convert from DKK/MWh to DKK/kWh
+            price = convert_energy_price(record["SpotPriceDKK"], from_unit="MWh", to_unit="kWh", vat=0)
             price = self._apply_vat(price)
+            
+            # Convert to subunit if needed (øre instead of DKK)
+            if use_cents:
+                price = convert_to_subunit(price, self._currency)
+                
             all_prices.append(price)
             
             # Store in hourly prices
