@@ -121,9 +121,42 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Optional(CONF_ENABLE_FALLBACK, default=defaults.get(CONF_ENABLE_FALLBACK, DEFAULT_ENABLE_FALLBACK)): selector.BooleanSelector(),
         }
 
-    # Rest of the configuration flow methods remain largely unchanged
-    # Only adding the fallback option to each source configuration
-    
+    async def async_step_energi_data_service(self, user_input):
+        """Handle Energi Data Service configuration."""
+        errors = {}
+
+        if user_input is not None and CONF_AREA in user_input:
+            # Update the stored data with area and other configs
+            data = {**self._data, **user_input}
+            _LOGGER.debug(f"Creating entry with data: {data}")
+            
+            # Save the config
+            return self.async_create_entry(
+                title=f"Energi Data Service - {ENERGI_DATA_AREAS[user_input[CONF_AREA]]}",
+                data=data,
+            )
+
+        # Show area selection form
+        schema_dict = {
+            vol.Required(CONF_AREA, default="DK1"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": area, "label": name}
+                        for area, name in ENERGI_DATA_AREAS.items()
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
+        # Add common options
+        schema_dict.update(self._common_schema({}))
+        
+        return self.async_show_form(
+            step_id="energi_data_service",
+            data_schema=vol.Schema(schema_dict),
+            errors=errors,
+        )
+
     async def async_step_nordpool(self, user_input):
         """Handle Nordpool configuration."""
         errors = {}
@@ -160,10 +193,155 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    # Other async_step methods for other sources follow the same pattern
-    # They should all include the fallback option via _common_schema
-    
-    # Include similar modifications for all other source configurations...
+    async def async_step_entso_e(self, user_input):
+        """Handle ENTSO-E configuration."""
+        errors = {}
+
+        if user_input is not None and CONF_AREA in user_input:
+            # Validate API key
+            if not user_input.get("api_key"):
+                errors["api_key"] = "api_key_required"
+            else:
+                # Update the stored data with area and other configs
+                data = {**self._data, **user_input}
+                _LOGGER.debug(f"Creating entry with data: {data}")
+                
+                # Save the config
+                return self.async_create_entry(
+                    title=f"ENTSO-E - {ENTSOE_AREAS[user_input[CONF_AREA]]}",
+                    data=data,
+                )
+
+        # Show area selection form
+        schema_dict = {
+            vol.Required(CONF_AREA, default="10YDK-1--------W"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": area, "label": name}
+                        for area, name in ENTSOE_AREAS.items()
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required("api_key"): cv.string,
+        }
+        # Add common options
+        schema_dict.update(self._common_schema({}))
+        
+        return self.async_show_form(
+            step_id="entso_e",
+            data_schema=vol.Schema(schema_dict),
+            errors=errors,
+        )
+
+    async def async_step_epex(self, user_input):
+        """Handle EPEX configuration."""
+        errors = {}
+
+        if user_input is not None and CONF_AREA in user_input:
+            # Update the stored data with area and other configs
+            data = {**self._data, **user_input}
+            _LOGGER.debug(f"Creating entry with data: {data}")
+            
+            # Save the config
+            return self.async_create_entry(
+                title=f"EPEX - {EPEX_AREAS[user_input[CONF_AREA]]}",
+                data=data,
+            )
+
+        # Show area selection form
+        schema_dict = {
+            vol.Required(CONF_AREA, default="DE-LU"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": area, "label": name}
+                        for area, name in EPEX_AREAS.items()
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
+        # Add common options
+        schema_dict.update(self._common_schema({}))
+        
+        return self.async_show_form(
+            step_id="epex",
+            data_schema=vol.Schema(schema_dict),
+            errors=errors,
+        )
+
+    async def async_step_omie(self, user_input):
+        """Handle OMIE configuration."""
+        errors = {}
+
+        if user_input is not None and CONF_AREA in user_input:
+            # Update the stored data with area and other configs
+            data = {**self._data, **user_input}
+            _LOGGER.debug(f"Creating entry with data: {data}")
+            
+            # Save the config
+            return self.async_create_entry(
+                title=f"OMIE - {OMIE_AREAS[user_input[CONF_AREA]]}",
+                data=data,
+            )
+
+        # Show area selection form
+        schema_dict = {
+            vol.Required(CONF_AREA, default="ES"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": area, "label": name}
+                        for area, name in OMIE_AREAS.items()
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
+        # Add common options
+        schema_dict.update(self._common_schema({}))
+        
+        return self.async_show_form(
+            step_id="omie",
+            data_schema=vol.Schema(schema_dict),
+            errors=errors,
+        )
+
+    async def async_step_aemo(self, user_input):
+        """Handle AEMO configuration."""
+        errors = {}
+
+        if user_input is not None and CONF_AREA in user_input:
+            # Update the stored data with area and other configs
+            data = {**self._data, **user_input}
+            _LOGGER.debug(f"Creating entry with data: {data}")
+            
+            # Save the config
+            return self.async_create_entry(
+                title=f"AEMO - {AEMO_AREAS[user_input[CONF_AREA]]}",
+                data=data,
+            )
+
+        # Show area selection form
+        schema_dict = {
+            vol.Required(CONF_AREA, default="NSW1"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": area, "label": name}
+                        for area, name in AEMO_AREAS.items()
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
+        # Add common options
+        schema_dict.update(self._common_schema({}))
+        
+        return self.async_show_form(
+            step_id="aemo",
+            data_schema=vol.Schema(schema_dict),
+            errors=errors,
+        )
+
 
 class GSpotOptionsFlow(config_entries.OptionsFlow):
     """Handle GE-Spot options."""
