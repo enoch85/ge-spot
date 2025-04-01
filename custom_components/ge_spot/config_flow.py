@@ -1,9 +1,11 @@
+"""Config flow for GE-Spot integration."""
 import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
+
 from .const import (
     DOMAIN,
     CONF_SOURCE,
@@ -33,7 +35,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for Energy Prices integration."""
+    """Handle a config flow for GE-Spot integration."""
 
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
@@ -333,11 +335,11 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class GSpotOptionsFlow(config_entries.OptionsFlow):
-    """Handle Energy Prices options."""
+    """Handle GE-Spot options."""
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        super().__init__(config_entry)
+        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
