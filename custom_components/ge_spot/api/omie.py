@@ -4,6 +4,7 @@ import asyncio
 import csv
 import io
 from .base import BaseEnergyAPI
+from ..utils.currency_utils import convert_to_subunit, convert_energy_price
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,15 +92,20 @@ class OmieAPI(BaseEnergyAPI):
             
             area = self.config.get("area", "ES")  # Default to Spain
             area_index = 1 if area == "ES" else 2  # Spain is column 1, Portugal is column 2
+            use_cents = self.config.get("price_in_cents", False)
             
             for row in data_rows:
                 try:
                     hour = int(row[0]) - 1  # OMIE hours are 1-24
                     price_str = row[area_index].replace(",", ".")
                     
-                    # Convert from EUR/MWh to EUR/kWh
-                    price = float(price_str) / 1000
+                    # Convert from EUR/MWh to EUR/kWh with utility function
+                    price = convert_energy_price(float(price_str), from_unit="MWh", to_unit="kWh", vat=0)
                     price = self._apply_vat(price)
+                    
+                    # Convert to cents if needed
+                    if use_cents:
+                        price = convert_to_subunit(price, self._currency)
                     
                     hour_str = f"{hour:02d}:00"
                     hourly_prices[hour_str] = price
