@@ -193,7 +193,7 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_entso_e(self, user_input):
+    async def async_step_entsoe(self, user_input):
         """Handle ENTSO-E configuration."""
         errors = {}
 
@@ -229,7 +229,7 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema_dict.update(self._common_schema({}))
         
         return self.async_show_form(
-            step_id="entso_e",
+            step_id="entsoe",
             data_schema=vol.Schema(schema_dict),
             errors=errors,
         )
