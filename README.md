@@ -1,2 +1,4 @@
 # ge-spot
-Global Energy Spotprices 
+Global Energy Spotprices
+
+*"Hit the right spot with your energy prices"*
