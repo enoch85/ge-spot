@@ -3,6 +3,7 @@ import datetime
 import asyncio
 import json
 from .base import BaseEnergyAPI
+from ..utils.currency_utils import convert_to_subunit, convert_energy_price
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,6 +78,8 @@ class AemoAPI(BaseEnergyAPI):
         hourly_prices = {}
         all_prices = []
         
+        use_cents = self.config.get("price_in_cents", False)
+        
         # Australia has typically higher electricity prices
         # Simulate with realistic patterns
         for hour in range(24):
@@ -90,6 +93,11 @@ class AemoAPI(BaseEnergyAPI):
                 price = 0.25 + 0.02 * (abs(13 - hour) / 13) + (now.day % 10) * 0.002
             
             price = self._apply_vat(price)
+            
+            # Convert to cents if needed
+            if use_cents:
+                price = convert_to_subunit(price, self._currency)
+                
             hour_str = f"{hour:02d}:00"
             hourly_prices[hour_str] = price
             all_prices.append(price)
