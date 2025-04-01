@@ -242,15 +242,19 @@ class NordpoolAPI(BaseEnergyAPI):
                     # Get the timezone for this area
                     tz_name = area_timezones.get(area, "UTC")
                     try:
-                        import pytz
-                        local_tz = pytz.timezone(tz_name)
+                        # Use Home Assistant's async timezone utilities
+                        from homeassistant.util import dt as dt_utils
+                        # Note: We're not using await here because this is called from a non-async method
+                        # This is a synchronous version that's safe to use in this context
+                        local_tz = dt_utils.get_time_zone(tz_name)
                         local_dt = dt.astimezone(local_tz)
-                    except ImportError:
-                        # Fallback if pytz is not available
-                        # CET is UTC+1, but this is simplified
+                    except (ImportError, AttributeError):
+                        # Fallback if dt_utils is not available
                         utc_offset = 1
                         if tz_name == "Europe/Helsinki" or tz_name == "Europe/Tallinn":
                             utc_offset = 2
+                        elif tz_name == "Europe/Stockholm":
+                            utc_offset = 1
                         local_dt = dt.astimezone(datetime.timezone(datetime.timedelta(hours=utc_offset)))
                     
                     hour = local_dt.hour
