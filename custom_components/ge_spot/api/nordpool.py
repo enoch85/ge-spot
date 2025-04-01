@@ -1,6 +1,7 @@
 import logging
 import datetime
 from .base import BaseEnergyAPI
+from ..utils.currency_utils import convert_to_subunit, convert_energy_price
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -225,9 +226,13 @@ class NordpoolAPI(BaseEnergyAPI):
                 elif not isinstance(price, (int, float)):
                     continue
                 
-                # Convert from EUR/MWh to EUR/kWh
-                price = price / 1000
+                # Convert from EUR/MWh to the appropriate currency and unit
+                price = convert_energy_price(price, from_unit="MWh", to_unit="kWh", vat=0)
                 price = self._apply_vat(price)
+                
+                # Convert to subunit (e.g., öre, cents) if price_in_cents is enabled
+                if self.config.get("price_in_cents", False):
+                    price = convert_to_subunit(price, self._currency)
                 
                 # Parse the hour from the start_time
                 try:

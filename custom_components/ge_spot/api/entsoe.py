@@ -3,6 +3,7 @@ import datetime
 import asyncio
 import xml.etree.ElementTree as ET
 from .base import BaseEnergyAPI
+from ..utils.currency_utils import convert_to_subunit, convert_energy_price
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +92,8 @@ class EntsoEAPI(BaseEnergyAPI):
             current_price = None
             next_hour_price = None
             
+            use_cents = self.config.get("price_in_cents", False)
+            
             for ts in time_series:
                 # Find Point elements with price data
                 points = ts.findall(".//ns:Point", ns)
@@ -99,9 +102,13 @@ class EntsoEAPI(BaseEnergyAPI):
                     position = int(point.find("ns:position", ns).text)
                     price = float(point.find("ns:price.amount", ns).text)
                     
-                    # ENTSO-E returns prices in EUR/MWh, convert to EUR/kWh
-                    price = price / 1000
+                    # Convert from EUR/MWh to the appropriate currency/unit
+                    price = convert_energy_price(price, from_unit="MWh", to_unit="kWh", vat=0)
                     price = self._apply_vat(price)
+                    
+                    # Convert to subunit if needed
+                    if use_cents:
+                        price = convert_to_subunit(price, self._currency)
                     
                     # Calculate the hour based on position (1-24)
                     hour = (position - 1)
