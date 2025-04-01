@@ -15,6 +15,7 @@ class NordpoolAPI(BaseEnergyAPI):
         """Fetch data from Nordpool."""
         now = self._get_now()
         today = now.strftime("%Y-%m-%d")
+        tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         
         area = self.config.get("area", "Oslo")  # Default to Oslo
         currency = "EUR"  # Default currency for the API request
@@ -41,9 +42,31 @@ class NordpoolAPI(BaseEnergyAPI):
         
         delivery_area = area_mapping.get(area, area)
         
+        # Fetch today's data
+        today_data = await self._fetch_day_data(delivery_area, currency, today)
+        
+        # Fetch tomorrow's data if available (after 13:00 CET)
+        tomorrow_data = None
+        # Convert now to CET timezone for checking if tomorrow's prices should be available
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        now_cet = now_utc.astimezone(datetime.timezone(datetime.timedelta(hours=1)))  # CET is UTC+1
+        
+        # If it's after 13:00 CET, tomorrow's prices should be available
+        if now_cet.hour >= 13:
+            tomorrow_data = await self._fetch_day_data(delivery_area, currency, tomorrow)
+        
+        # Combine the data
+        return {
+            "today": today_data,
+            "tomorrow": tomorrow_data,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+    
+    async def _fetch_day_data(self, delivery_area, currency, date):
+        """Fetch data for a specific day."""
         params = {
             "currency": currency,
-            "date": today,
+            "date": date,
             "market": "DayAhead",
             "deliveryArea": delivery_area
         }
@@ -104,9 +127,11 @@ class NordpoolAPI(BaseEnergyAPI):
         """Get data with fallback to simulation if real data fails."""
         try:
             # Try to get real data
-            data = await super().async_get_data()
-            if data:
-                return data
+            raw_data = await self._fetch_data()
+            if raw_data:
+                data = self._process_data(raw_data)
+                if data:
+                    return data
                 
             # If real data fails, use simulated data
             _LOGGER.warning("Failed to get real data from Nordpool, using simulated data")
@@ -115,17 +140,61 @@ class NordpoolAPI(BaseEnergyAPI):
             _LOGGER.error(f"Error getting Nordpool data: {e}, falling back to simulation")
             return self._generate_simulated_data()
             
-    def _process_data(self, data):
-        """Process the data from Nordpool based on new API format."""
-        if not data or "multiAreaEntries" not in data:
-            _LOGGER.error("No multiAreaEntries in Nordpool data")
+    def _process_data(self, raw_data):
+        """Process the data from Nordpool."""
+        # Check if we have valid data
+        if not raw_data or "today" not in raw_data:
+            _LOGGER.error("No valid data in Nordpool response")
+            return None
+            
+        today_data = raw_data["today"]
+        tomorrow_data = raw_data.get("tomorrow")
+        
+        if not today_data or "multiAreaEntries" not in today_data:
+            _LOGGER.error("No multiAreaEntries in Nordpool today data")
             return None
             
         area = self.config.get("area", "Oslo")  # Default to Oslo
         now = self._get_now()
         current_hour = now.hour
         
-        # Find current price
+        result = {
+            "last_updated": raw_data.get("timestamp", datetime.datetime.now(datetime.timezone.utc).isoformat()),
+        }
+        
+        # Process today's data
+        today_processed = self._process_day_data(today_data, area, current_hour)
+        if today_processed:
+            # Add today's data to result
+            result.update({
+                "current_price": today_processed.get("current_price"),
+                "next_hour_price": today_processed.get("next_hour_price"),
+                "day_average_price": today_processed.get("day_average_price"),
+                "peak_price": today_processed.get("peak_price"),
+                "off_peak_price": today_processed.get("off_peak_price"),
+                "hourly_prices": today_processed.get("hourly_prices", {}),
+            })
+        
+        # Process tomorrow's data if available
+        if tomorrow_data and "multiAreaEntries" in tomorrow_data:
+            tomorrow_processed = self._process_day_data(tomorrow_data, area)
+            if tomorrow_processed:
+                # Add tomorrow's data to result
+                result.update({
+                    "tomorrow_average_price": tomorrow_processed.get("day_average_price"),
+                    "tomorrow_peak_price": tomorrow_processed.get("peak_price"),
+                    "tomorrow_off_peak_price": tomorrow_processed.get("off_peak_price"),
+                    "tomorrow_hourly_prices": tomorrow_processed.get("hourly_prices", {}),
+                })
+        
+        return result
+    
+    def _process_day_data(self, data, area, current_hour=None):
+        """Process price data for a single day."""
+        if not data or "multiAreaEntries" not in data:
+            return None
+            
+        # Process today's prices
         current_price = None
         next_hour_price = None
         hourly_prices = {}
@@ -162,17 +231,17 @@ class NordpoolAPI(BaseEnergyAPI):
                     local_dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
                     hour = local_dt.hour
                     
-                    # Store in hourly prices
-                    hour_str = f"{hour:02d}:00"
+                    # Format time in ISO format (HH:MM:SS)
+                    hour_str = f"{hour:02d}:00:00"
                     hourly_prices[hour_str] = price
                     all_prices.append(price)
                     
                     # Check if this is current hour
-                    if hour == current_hour:
+                    if current_hour is not None and hour == current_hour:
                         current_price = price
                         
                     # Check if this is next hour
-                    if hour == (current_hour + 1) % 24:
+                    if current_hour is not None and hour == (current_hour + 1) % 24:
                         next_hour_price = price
                         
                 except (ValueError, TypeError) as e:
@@ -193,7 +262,6 @@ class NordpoolAPI(BaseEnergyAPI):
                 "peak_price": peak_price,
                 "off_peak_price": off_peak_price,
                 "hourly_prices": hourly_prices,
-                "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
         except Exception as e:
             _LOGGER.error(f"Error processing Nordpool data: {e}")
@@ -204,45 +272,65 @@ class NordpoolAPI(BaseEnergyAPI):
         now = self._get_now()
         current_hour = now.hour
         
-        # Create simulated hourly prices
-        hourly_prices = {}
-        all_prices = []
+        # Create simulated hourly prices for today
+        today_hourly_prices = {}
+        today_all_prices = []
         
-        # Generate prices with realistic patterns (higher during morning and evening peaks)
+        # Create simulated hourly prices for tomorrow
+        tomorrow_hourly_prices = {}
+        tomorrow_all_prices = []
+        
+        # Generate prices with realistic patterns for today and tomorrow
         for hour in range(24):
-            # Base price around 0.15 EUR/kWh with variation based on hour
-            # Morning peak (7-9) and evening peak (18-21)
+            # Base price with time-based variation
             is_peak = (7 <= hour <= 9) or (18 <= hour <= 21)
             
-            # Base price + time-based variation + small random component
-            # Simulating real price patterns with peaks
+            # Today's prices
             if is_peak:
-                price = 0.18 + 0.02 * (hour % 3) + (now.day % 10) * 0.001
+                today_price = 0.18 + 0.02 * (hour % 3) + (now.day % 10) * 0.001
             else:
-                price = 0.12 + 0.01 * (abs(12 - hour) / 12) + (now.day % 10) * 0.001
+                today_price = 0.12 + 0.01 * (abs(12 - hour) / 12) + (now.day % 10) * 0.001
             
-            price = self._apply_vat(price)
-            hour_str = f"{hour:02d}:00"
-            hourly_prices[hour_str] = price
-            all_prices.append(price)
+            today_price = self._apply_vat(today_price)
+            hour_str = f"{hour:02d}:00:00"  # ISO format HH:MM:SS
+            today_hourly_prices[hour_str] = today_price
+            today_all_prices.append(today_price)
+            
+            # Tomorrow's prices (slightly different pattern)
+            if is_peak:
+                tomorrow_price = 0.19 + 0.015 * (hour % 3) + ((now.day + 1) % 10) * 0.001
+            else:
+                tomorrow_price = 0.13 + 0.008 * (abs(12 - hour) / 12) + ((now.day + 1) % 10) * 0.001
+            
+            tomorrow_price = self._apply_vat(tomorrow_price)
+            tomorrow_hourly_prices[hour_str] = tomorrow_price
+            tomorrow_all_prices.append(tomorrow_price)
         
-        current_price = hourly_prices.get(f"{current_hour:02d}:00")
-        next_hour_price = hourly_prices.get(f"{(current_hour + 1) % 24:02d}:00")
+        current_price = today_hourly_prices.get(f"{current_hour:02d}:00:00")
+        next_hour_price = today_hourly_prices.get(f"{(current_hour + 1) % 24:02d}:00:00")
         
-        # Calculate day average
-        day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
+        # Calculate day averages
+        today_average_price = sum(today_all_prices) / len(today_all_prices) if today_all_prices else None
+        tomorrow_average_price = sum(tomorrow_all_prices) / len(tomorrow_all_prices) if tomorrow_all_prices else None
         
         # Find peak and off-peak prices
-        peak_price = max(all_prices) if all_prices else None
-        off_peak_price = min(all_prices) if all_prices else None
+        today_peak_price = max(today_all_prices) if today_all_prices else None
+        today_off_peak_price = min(today_all_prices) if today_all_prices else None
+        
+        tomorrow_peak_price = max(tomorrow_all_prices) if tomorrow_all_prices else None
+        tomorrow_off_peak_price = min(tomorrow_all_prices) if tomorrow_all_prices else None
         
         return {
             "current_price": current_price,
             "next_hour_price": next_hour_price,
-            "day_average_price": day_average_price,
-            "peak_price": peak_price,
-            "off_peak_price": off_peak_price,
-            "hourly_prices": hourly_prices,
+            "day_average_price": today_average_price,
+            "peak_price": today_peak_price,
+            "off_peak_price": today_off_peak_price,
+            "hourly_prices": today_hourly_prices,
+            "tomorrow_average_price": tomorrow_average_price,
+            "tomorrow_peak_price": tomorrow_peak_price,
+            "tomorrow_off_peak_price": tomorrow_off_peak_price,
+            "tomorrow_hourly_prices": tomorrow_hourly_prices,
             "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "simulated": True,  # Flag to indicate this is simulated data
         }
