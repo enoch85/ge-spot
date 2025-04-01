@@ -1,7 +1,5 @@
 import logging
 import datetime
-import asyncio
-import aiohttp
 from .base import BaseEnergyAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -12,18 +10,9 @@ class NordpoolAPI(BaseEnergyAPI):
     # New API endpoint based on the updated Nordpool API
     BASE_URL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
     
-    async def _ensure_session(self):
-        """Ensure that we have an aiohttp session."""
-        if self.session is None:
-            _LOGGER.debug("Creating new aiohttp session for NordpoolAPI")
-            self.session = aiohttp.ClientSession()
-            
     async def _fetch_data(self):
         """Fetch data from Nordpool."""
         try:
-            # Ensure we have a session
-            await self._ensure_session()
-            
             now = self._get_now()
             today = now.strftime("%Y-%m-%d")
             tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
@@ -54,7 +43,13 @@ class NordpoolAPI(BaseEnergyAPI):
             delivery_area = area_mapping.get(area, area)
             
             # Fetch today's data
-            today_data = await self._fetch_day_data(delivery_area, currency, today)
+            params = {
+                "currency": currency,
+                "date": today,
+                "market": "DayAhead",
+                "deliveryArea": delivery_area
+            }
+            today_data = await self._fetch_with_retry(self.BASE_URL, params=params)
             
             # Fetch tomorrow's data if available (after 13:00 CET)
             tomorrow_data = None
@@ -64,7 +59,8 @@ class NordpoolAPI(BaseEnergyAPI):
             
             # If it's after 13:00 CET, tomorrow's prices should be available
             if now_cet.hour >= 13:
-                tomorrow_data = await self._fetch_day_data(delivery_area, currency, tomorrow)
+                params["date"] = tomorrow
+                tomorrow_data = await self._fetch_with_retry(self.BASE_URL, params=params)
             
             # Only return data structure if we actually have today's data
             if today_data is not None:
@@ -74,145 +70,11 @@ class NordpoolAPI(BaseEnergyAPI):
                     "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 }
             
-            # Otherwise return None to trigger fallback
-            _LOGGER.warning("No valid data returned from Nordpool API for today")
             return None
             
         except Exception as e:
             _LOGGER.error(f"Error in _fetch_data: {str(e)}")
             return None
-    
-    async def _fetch_day_data(self, delivery_area, currency, date):
-        """Fetch data for a specific day."""
-        if not delivery_area or not currency or not date:
-            _LOGGER.error("Missing required parameters for Nordpool API call")
-            return None
-            
-        params = {
-            "currency": currency,
-            "date": date,
-            "market": "DayAhead",
-            "deliveryArea": delivery_area
-        }
-        
-        _LOGGER.debug(f"Fetching Nordpool with params: {params}")
-        
-        url = self.BASE_URL
-        
-        # Add retry mechanism
-        retry_count = 3
-        for attempt in range(retry_count):
-            try:
-                if self.session is None:
-                    _LOGGER.error("Session is None, attempting to recreate")
-                    await self._ensure_session()
-                    
-                if self.session is None:
-                    _LOGGER.error("Failed to create session")
-                    return None
-                    
-                _LOGGER.debug(f"Sending request to Nordpool: {url} with params: {params}")
-                async with self.session.get(url, params=params, timeout=30) as response:
-                    if response.status != 200:
-                        _LOGGER.error(f"Error fetching from Nordpool (attempt {attempt+1}/{retry_count}): Status {response.status}")
-                        
-                        # Try to get the error response body for better debugging
-                        try:
-                            error_text = await response.text()
-                            _LOGGER.error(f"Nordpool error response: {error_text[:500]}...")
-                        except Exception as e:
-                            _LOGGER.error(f"Could not read error response from Nordpool: {str(e)}")
-                            
-                        if attempt < retry_count - 1:
-                            await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                            continue
-                        return None
-                    
-                    _LOGGER.debug("Successfully received response from Nordpool API")
-                    
-                    try:
-                        data = await response.json()
-                    except Exception as e:
-                        _LOGGER.error(f"Error parsing JSON from Nordpool: {str(e)}")
-                        if attempt < retry_count - 1:
-                            await asyncio.sleep(2 ** attempt)
-                            continue
-                        return None
-                    
-                    # Basic validation of the returned data
-                    if not data:
-                        _LOGGER.error("Empty data returned from Nordpool API")
-                        if attempt < retry_count - 1:
-                            await asyncio.sleep(2 ** attempt)
-                            continue
-                        return None
-                        
-                    if not isinstance(data, dict):
-                        _LOGGER.error(f"Invalid data format from Nordpool: {type(data)}")
-                        if attempt < retry_count - 1:
-                            await asyncio.sleep(2 ** attempt)
-                            continue
-                        return None
-                        
-                    return data
-            except AttributeError as e:
-                _LOGGER.error(f"AttributeError in Nordpool request (attempt {attempt+1}/{retry_count}): {str(e)}")
-                # Try to recreate the session
-                try:
-                    await self.close()
-                    self.session = None
-                    await self._ensure_session()
-                except Exception as session_error:
-                    _LOGGER.error(f"Error recreating session: {str(session_error)}")
-                
-                if attempt < retry_count - 1:
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                    continue
-                return None
-            except asyncio.TimeoutError:
-                _LOGGER.error(f"Timeout fetching from Nordpool (attempt {attempt+1}/{retry_count})")
-                if attempt < retry_count - 1:
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                    continue
-                return None
-            except Exception as e:
-                _LOGGER.error(f"Error fetching from Nordpool (attempt {attempt+1}/{retry_count}): {e}")
-                if attempt < retry_count - 1:
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                    continue
-                return None
-                
-        return None
-    
-    async def async_get_data(self):
-        """Get data with fallback to simulation if real data fails."""
-        try:
-            # Ensure we have a session
-            await self._ensure_session()
-            
-            # Try to get real data
-            raw_data = await self._fetch_data()
-            if raw_data:
-                try:
-                    data = self._process_data(raw_data)
-                    if data:
-                        return data
-                except AttributeError as e:
-                    _LOGGER.error(f"AttributeError in Nordpool data processing: {str(e)}, falling back to simulation")
-                    return self._generate_simulated_data()
-                except Exception as e:
-                    _LOGGER.error(f"Error processing Nordpool data: {str(e)}, falling back to simulation")
-                    return self._generate_simulated_data()
-                
-            # If real data fails, use simulated data
-            _LOGGER.warning("Failed to get real data from Nordpool, using simulated data")
-            return self._generate_simulated_data()
-        except AttributeError as e:
-            _LOGGER.error(f"AttributeError in Nordpool data processing: {str(e)}, falling back to simulation")
-            return self._generate_simulated_data()
-        except Exception as e:
-            _LOGGER.error(f"Error getting Nordpool data: {e}, falling back to simulation")
-            return self._generate_simulated_data()
             
     def _process_data(self, raw_data):
         """Process the data from Nordpool."""
