@@ -10,7 +10,7 @@ CONF_ENABLE_FALLBACK = "enable_fallback"
 # Available price sources
 SOURCE_ENERGI_DATA_SERVICE = "energi_data_service"
 SOURCE_NORDPOOL = "nordpool"
-SOURCE_ENTSO_E = "entso_e"
+SOURCE_ENTSO_E = "entsoe"
 SOURCE_EPEX = "epex"
 SOURCE_OMIE = "omie"
 SOURCE_AEMO = "aemo"
