@@ -4,6 +4,7 @@ import datetime
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import (
     DOMAIN,
@@ -31,8 +32,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Get configuration
     source_type = entry.data.get(CONF_SOURCE)
     
+    _LOGGER.debug(f"Setting up integration with source_type: {source_type}")
+    _LOGGER.debug(f"Config entry data: {entry.data}")
+    
+    if not source_type:
+        _LOGGER.error(f"Invalid source type: {source_type}. Check your configuration.")
+        raise ConfigEntryNotReady(f"Invalid source type: {source_type}")
+    
     # Create API handler
     api = create_api_handler(source_type, entry.data, entry.options)
+    
+    if not api:
+        _LOGGER.error(f"Failed to create API handler for source type: {source_type}")
+        raise ConfigEntryNotReady(f"Failed to create API handler for source type: {source_type}")
     
     # Get update interval (prefer options over data, with fallback to default)
     update_interval = entry.options.get(
@@ -87,6 +99,8 @@ def create_api_handler(source_type, config, options=None):
     combined_config = dict(config)
     if options:
         combined_config.update(options)
+    
+    _LOGGER.debug(f"Creating API handler for source_type: {source_type}")
     
     if source_type == SOURCE_ENERGI_DATA_SERVICE:
         return EnergiDataServiceAPI(combined_config)

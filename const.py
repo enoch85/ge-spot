@@ -1,9 +1,10 @@
 # Configuration constants
-DOMAIN = "g_spot"
+DOMAIN = "ge_spot"
 CONF_SOURCE = "source"
 CONF_AREA = "area"
 CONF_VAT = "vat"
 CONF_UPDATE_INTERVAL = "update_interval"
+CONF_DISPLAY_UNIT = "display_unit"
 
 # Available price sources
 SOURCE_ENERGI_DATA_SERVICE = "energi_data_service"
@@ -26,6 +27,16 @@ SOURCES = [
 DEFAULT_NAME = "Energy Price"
 DEFAULT_VAT = 0.0
 DEFAULT_UPDATE_INTERVAL = 60  # minutes
+DEFAULT_DISPLAY_UNIT = "decimal"  # default is decimal format (e.g., 0.15 EUR/kWh)
+
+# Display unit options
+DISPLAY_UNIT_DECIMAL = "decimal"  # Example: 0.15 EUR/kWh
+DISPLAY_UNIT_CENTS = "cents"  # Example: 15 cents/kWh or 15 öre/kWh
+
+DISPLAY_UNITS = {
+    DISPLAY_UNIT_DECIMAL: "Decimal (e.g., 0.15 EUR/kWh)",
+    DISPLAY_UNIT_CENTS: "Cents/Öre (e.g., 15 cents/kWh)",
+}
 
 # Source-specific constants
 NORDPOOL_AREAS = {
@@ -121,6 +132,16 @@ CURRENCY_BY_SOURCE = {
     SOURCE_EPEX: "EUR",
     SOURCE_OMIE: "EUR",
     SOURCE_AEMO: "AUD",
+}
+
+# Currency subunit mapping (for cents/öre display)
+CURRENCY_SUBUNITS = {
+    "EUR": "cents",
+    "DKK": "øre",
+    "SEK": "öre",
+    "NOK": "øre",
+    "AUD": "cents",
+    "GBP": "pence",
 }
 
 # Sensor types

@@ -1,12 +1,12 @@
 {
-    "domain": "g_spot",
-    "name": "Global Spot Prices",
-    "documentation": "https://github.com/username/ha-energy-prices",
-    "issue_tracker": "https://github.com/username/ha-energy-prices/issues",
+    "domain": "ge_spot",
+    "name": "Global Electricity Spot Prices",
+    "documentation": "https://github.com/enoch85/ge-spot",
+    "issue_tracker": "https://github.com/enoch85/ge-spot/issues",
     "dependencies": [],
-    "codeowners": ["@username"],
+    "codeowners": ["@enoch85"],
     "config_flow": true,
-    "version": "1.0.0",
+    "version": "0.0.1",
     "requirements": [],
     "iot_class": "cloud_polling"
 }

@@ -92,7 +92,7 @@ class GSpotDataUpdateCoordinator(DataUpdateCoordinator):
             
             # Schedule a retry sooner than regular interval if we hit a timeout
             if self.update_interval > datetime.timedelta(seconds=self._retry_delay):
-                self.hass.async_create_task(self._schedule_refresh(self._retry_delay))
+                self._schedule_refresh()
                 
             raise UpdateFailed(f"Timeout error fetching data: {error}")
             
@@ -127,11 +127,21 @@ class GSpotDataUpdateCoordinator(DataUpdateCoordinator):
                 
             # Schedule a retry sooner than regular interval if we hit an error
             if self.update_interval > datetime.timedelta(seconds=self._retry_delay):
-                self.hass.async_create_task(self._schedule_refresh(self._retry_delay))
+                self._schedule_refresh()
                 
             raise UpdateFailed(f"Error communicating with API: {err}")
-            
-    async def _schedule_refresh(self, delay_seconds):
-        """Schedule a refresh after delay."""
-        await asyncio.sleep(delay_seconds)
-        await self.async_refresh()
+    
+    def _schedule_refresh(self):
+        """Schedule a refresh after delay.
+        
+        This is a non-async method that schedules an async refresh.
+        """
+        if self.update_interval > datetime.timedelta(seconds=self._retry_delay):
+            # Use a shorter delay for retries
+            delay = self._retry_delay
+        else:
+            # Use the standard update interval
+            delay = self.update_interval.total_seconds()
+        
+        # Schedule the refresh task
+        self.hass.loop.call_later(delay, lambda: self.hass.async_create_task(self.async_refresh()))
