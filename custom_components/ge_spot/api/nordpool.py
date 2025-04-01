@@ -150,6 +150,38 @@ class NordpoolAPI(BaseEnergyAPI):
             _LOGGER.debug("No multiAreaEntries in data for _process_day_data")
             return None
             
+        # Map area to correct timezone
+        area_timezones = {
+            "DK1": "Europe/Copenhagen",
+            "DK2": "Europe/Copenhagen",
+            "FI": "Europe/Helsinki",
+            "EE": "Europe/Tallinn",
+            "LT": "Europe/Vilnius",
+            "LV": "Europe/Riga",
+            "NO1": "Europe/Oslo",
+            "NO2": "Europe/Oslo",
+            "NO3": "Europe/Oslo",
+            "NO4": "Europe/Oslo",
+            "NO5": "Europe/Oslo",
+            "SE1": "Europe/Stockholm",
+            "SE2": "Europe/Stockholm",
+            "SE3": "Europe/Stockholm",
+            "SE4": "Europe/Stockholm",
+            "SYS": "Europe/Stockholm",
+            "FR": "Europe/Paris",
+            "NL": "Europe/Amsterdam",
+            "BE": "Europe/Brussels",
+            "AT": "Europe/Vienna",
+            "DE-LU": "Europe/Berlin",
+            "GER": "Europe/Berlin",
+            "Oslo": "Europe/Oslo",
+            "Kr.sand": "Europe/Oslo",
+            "Bergen": "Europe/Oslo",
+            "Molde": "Europe/Oslo",
+            "Tr.heim": "Europe/Oslo",
+            "Tromsø": "Europe/Oslo"
+        }
+        
         # Process today's prices
         current_price = None
         next_hour_price = None
@@ -199,12 +231,27 @@ class NordpoolAPI(BaseEnergyAPI):
                 
                 # Parse the hour from the start_time
                 try:
+                    # Parse the datetime with proper timezone handling
                     dt = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-                    local_dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+                    
+                    # Get the timezone for this area
+                    tz_name = area_timezones.get(area, "UTC")
+                    try:
+                        import pytz
+                        local_tz = pytz.timezone(tz_name)
+                        local_dt = dt.astimezone(local_tz)
+                    except ImportError:
+                        # Fallback if pytz is not available
+                        # CET is UTC+1, but this is simplified
+                        utc_offset = 1
+                        if tz_name == "Europe/Helsinki" or tz_name == "Europe/Tallinn":
+                            utc_offset = 2
+                        local_dt = dt.astimezone(datetime.timezone(datetime.timedelta(hours=utc_offset)))
+                    
                     hour = local_dt.hour
                     
-                    # Format time in ISO format (HH:MM:SS)
-                    hour_str = f"{hour:02d}:00:00"
+                    # Format time in HH:MM format (like website)
+                    hour_str = f"{hour:02d}:00"
                     hourly_prices[hour_str] = price
                     all_prices.append(price)
                     
