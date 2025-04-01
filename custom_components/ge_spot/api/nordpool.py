@@ -1,6 +1,7 @@
 import logging
 import datetime
 import asyncio
+import aiohttp
 from .base import BaseEnergyAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -11,9 +12,18 @@ class NordpoolAPI(BaseEnergyAPI):
     # New API endpoint based on the updated Nordpool API
     BASE_URL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
     
+    async def _ensure_session(self):
+        """Ensure that we have an aiohttp session."""
+        if self.session is None:
+            _LOGGER.debug("Creating new aiohttp session for NordpoolAPI")
+            self.session = aiohttp.ClientSession()
+            
     async def _fetch_data(self):
         """Fetch data from Nordpool."""
         try:
+            # Ensure we have a session
+            await self._ensure_session()
+            
             now = self._get_now()
             today = now.strftime("%Y-%m-%d")
             tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
@@ -93,6 +103,14 @@ class NordpoolAPI(BaseEnergyAPI):
         retry_count = 3
         for attempt in range(retry_count):
             try:
+                if self.session is None:
+                    _LOGGER.error("Session is None, attempting to recreate")
+                    await self._ensure_session()
+                    
+                if self.session is None:
+                    _LOGGER.error("Failed to create session")
+                    return None
+                    
                 _LOGGER.debug(f"Sending request to Nordpool: {url} with params: {params}")
                 async with self.session.get(url, params=params, timeout=30) as response:
                     if response.status != 200:
@@ -137,6 +155,20 @@ class NordpoolAPI(BaseEnergyAPI):
                         return None
                         
                     return data
+            except AttributeError as e:
+                _LOGGER.error(f"AttributeError in Nordpool request (attempt {attempt+1}/{retry_count}): {str(e)}")
+                # Try to recreate the session
+                try:
+                    await self.close()
+                    self.session = None
+                    await self._ensure_session()
+                except Exception as session_error:
+                    _LOGGER.error(f"Error recreating session: {str(session_error)}")
+                
+                if attempt < retry_count - 1:
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                return None
             except asyncio.TimeoutError:
                 _LOGGER.error(f"Timeout fetching from Nordpool (attempt {attempt+1}/{retry_count})")
                 if attempt < retry_count - 1:
@@ -155,6 +187,9 @@ class NordpoolAPI(BaseEnergyAPI):
     async def async_get_data(self):
         """Get data with fallback to simulation if real data fails."""
         try:
+            # Ensure we have a session
+            await self._ensure_session()
+            
             # Try to get real data
             raw_data = await self._fetch_data()
             if raw_data:
