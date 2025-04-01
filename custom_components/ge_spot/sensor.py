@@ -239,8 +239,8 @@ class GSpotSensor(CoordinatorEntity, SensorEntity):
             
         self._attr_device_class = SensorDeviceClass.MONETARY
         
-        # For monetary sensors, the state class should be measurement, not total
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        # For monetary sensors, the state class must be total or None
+        self._attr_state_class = SensorStateClass.TOTAL
         
         self._attr_has_entity_name = False
         self._attr_name = name
