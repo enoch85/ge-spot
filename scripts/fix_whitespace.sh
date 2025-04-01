@@ -12,7 +12,7 @@ fi
 git pull
 
 # Fix whitespace
-find "../custom_components/ovms" -name "*.py" -exec sed -i 's/[ \t]*$//' {} \;
+find "../custom_components/ge-spot" -name "*.py" -exec sed -i 's/[ \t]*$//' {} \;
 
 # Commit and push!
 git commit -a -s -m "fix whitespace"
