@@ -2,6 +2,7 @@ import logging
 import datetime
 import asyncio
 from .base import BaseEnergyAPI
+from ..utils.currency_utils import convert_to_subunit, convert_energy_price
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +30,8 @@ class EpexAPI(BaseEnergyAPI):
         hourly_prices = {}
         all_prices = []
         
+        use_cents = self.config.get("price_in_cents", False)
+        
         # Generate prices with realistic patterns (higher during morning and evening peaks)
         for hour in range(24):
             # Base price around 0.15 EUR/kWh with variation based on hour
@@ -43,6 +46,11 @@ class EpexAPI(BaseEnergyAPI):
                 price = 0.12 + 0.01 * (abs(12 - hour) / 12) + (now.day % 10) * 0.001
             
             price = self._apply_vat(price)
+            
+            # Convert to subunit if needed
+            if use_cents:
+                price = convert_to_subunit(price, self._currency)
+                
             hour_str = f"{hour:02d}:00"
             hourly_prices[hour_str] = price
             all_prices.append(price)
