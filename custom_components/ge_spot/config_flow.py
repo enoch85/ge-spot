@@ -348,7 +348,8 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        self.config_entry = config_entry
+        super().__init__(config_entry)
+        # No need to explicitly store config_entry as it's handled by parent class
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
