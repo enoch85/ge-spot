@@ -17,11 +17,9 @@ from .const import (
 )
 from .coordinator import ElectricityPriceCoordinator
 
-# Import API handlers (as needed based on source)
-from .api.base import BaseEnergyAPI
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR]
-_LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up from a config entry."""
@@ -37,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(f"Invalid source type: {source_type}")
     
     # Create API handler
-    api = create_api_handler(source_type, entry.data, entry.options)
+    api = await create_api_handler_async(hass, source_type, entry.data, entry.options)
     
     if not api:
         _LOGGER.error(f"Failed to create API handler for source type: {source_type}")
@@ -93,9 +91,53 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
     await hass.config_entries.async_reload(entry.entry_id)
 
+async def create_api_handler_async(hass, source_type, config, options=None):
+    """Create API handler asynchronously to avoid blocking imports."""
+    return await hass.async_add_executor_job(
+        create_api_handler, source_type, config, options
+    )
+
 def create_api_handler(source_type, config, options=None):
     """Create the appropriate API handler based on source type."""
-    # Implementation will vary based on your API modules
-    # This is a placeholder for the actual implementation
-    # You should import and return the appropriate API class instance
-    return BaseEnergyAPI(config)
+    import importlib
+    
+    try:
+        # Map source types to API classes
+        source_to_api = {
+            "nordpool": ("nordpool", "NordpoolAPI"),
+            "energi_data_service": ("energi_data", "EnergiDataServiceAPI"),
+            "entsoe": ("entsoe", "EntsoEAPI"),
+            "epex": ("epex", "EpexAPI"),
+            "omie": ("omie", "OmieAPI"),
+            "aemo": ("aemo", "AemoAPI"),
+        }
+        
+        if source_type not in source_to_api:
+            _LOGGER.error(f"Unknown source type: {source_type}")
+            return None
+        
+        # Get module and class name
+        module_name, class_name = source_to_api[source_type]
+        
+        # Import base API first since it's needed by all specific APIs
+        base_module = importlib.import_module(".api.base", package="custom_components.ge_spot")
+        
+        # Dynamically import the module and get the class
+        full_module_name = f".api.{module_name}"
+        module = importlib.import_module(full_module_name, package="custom_components.ge_spot")
+        api_class = getattr(module, class_name)
+        
+        # Create and return an instance
+        config_data = dict(config)
+        if options:
+            # Override with any options
+            config_data.update(options)
+            
+        return api_class(config_data)
+        
+    except (ImportError, AttributeError) as e:
+        _LOGGER.error(f"Error creating API handler for {source_type}: {e}")
+        return None
+    except Exception as e:
+        _LOGGER.error(f"Unexpected error creating API handler: {e}")
+        return None
