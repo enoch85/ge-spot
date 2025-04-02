@@ -84,12 +84,12 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 _LOGGER.warning(f"Price is not a number: {price} (type: {type(price)})")
                 continue
             
-            # Convert from EUR/MWh to the appropriate currency and unit
+            # Convert from EUR/MWh to SEK/kWh with the updated conversion function
             price = convert_energy_price(price, from_unit="MWh", to_unit="kWh", vat=0)
             if apply_vat_func:
                 price = apply_vat_func(price)
             
-            # Convert to subunit (e.g., öre, cents) if enabled
+            # Convert to subunit (e.g., öre) if enabled
             if use_subunit:
                 price = convert_to_subunit(price, currency)
             
