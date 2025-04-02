@@ -4,14 +4,17 @@ import datetime
 import asyncio
 from .base import BaseEnergyAPI
 from ..utils.currency_utils import convert_to_subunit, convert_energy_price
-from ..const import (
+from .nordpool_utils import process_day_data, generate_simulated_data
+
+# Import constants directly from the module
+from custom_components.ge_spot.const import (
     AREA_TIMEZONES, 
     REGION_TO_CURRENCY, 
     CONF_DISPLAY_UNIT, 
     DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES,
+    NORDPOOL_DELIVERY_AREA_MAPPING,
 )
-from .nordpool_utils import process_day_data, generate_simulated_data
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,16 +47,8 @@ class NordpoolAPI(BaseEnergyAPI):
             
             currency = "EUR"  # Default currency for the API request
             
-            # Map the area names to the API's delivery area codes if needed
-            area_mapping = {
-                "Oslo": "Oslo", "Kr.sand": "Kr.sand", "Bergen": "Bergen",
-                "Molde": "Molde", "Tr.heim": "Tr.heim", "Tromsø": "Tromsø",
-                "SE1": "SE1", "SE2": "SE2", "SE3": "SE3", "SE4": "SE4",
-                "DK1": "DK1", "DK2": "DK2", "FI": "FI", "EE": "EE",
-                "LV": "LV", "LT": "LT",
-            }
-            
-            delivery_area = area_mapping.get(area, area)
+            # Map the area names to the API's delivery area codes
+            delivery_area = NORDPOOL_DELIVERY_AREA_MAPPING.get(area, area)
             _LOGGER.debug(f"Fetching Nordpool data for area: {delivery_area}")
             
             # Fetch today's data
