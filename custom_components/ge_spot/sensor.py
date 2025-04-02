@@ -1,3 +1,5 @@
+"""Support for Nordpool sensor."""
+
 import logging
 import math
 from operator import itemgetter
@@ -36,6 +38,16 @@ from .const import (
     _CENT_MULTIPLIER,
 )
 from .misc import start_of, stock
+from .utils.timezone_utils import (
+    find_current_price,
+    process_price_data,
+    filter_today_data,
+    filter_tomorrow_data,
+    get_raw_data_for_attributes,
+    get_price_list,
+    get_statistics,
+    is_tomorrow_valid,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -135,6 +147,7 @@ class NordpoolSensor(SensorEntity):
         self._ad_template = ad_template
         self._hass = hass
         self._attr_force_update = True
+        self._local_timezone = dt_utils.get_time_zone(hass.config.time_zone)
 
         if vat is True:
             self._vat = _REGIONS[area][2]
@@ -147,6 +160,9 @@ class NordpoolSensor(SensorEntity):
         # Holds the data for today and morrow.
         self._data_today = SENTINEL
         self._data_tomorrow = SENTINEL
+        
+        # Processed price data
+        self._processed_data = []
 
         # Values for the day
         self._average = None
@@ -322,25 +338,30 @@ class NordpoolSensor(SensorEntity):
         # _LOGGER.debug("Current hours price for %s is %s", self.name, res)
         return res
 
+    def _process_api_data(self, data):
+        """Process API data into a consistent format."""
+        if data is None or data is SENTINEL:
+            return []
+            
+        # First convert data values to the expected format
+        values = []
+        for item in data.get("values", []):
+            values.append({
+                "start": dt_utils.as_local(item["start"]),
+                "end": dt_utils.as_local(item["end"]),
+                "value": item["value"],
+            })
+            
+        return values
+
     def _someday(self, data) -> list:
         """The data is already sorted in the xml,
         but I don't trust that to continue forever. That's why we sort it ourselves."""
         if data is None or data is SENTINEL:
             return []
 
-        local_times = []
-        for item in data.get("values", []):
-            i = {
-                "start": dt_utils.as_local(item["start"]),
-                "end": dt_utils.as_local(item["end"]),
-                "value": item["value"],
-            }
-
-            local_times.append(i)
-
-        data["values"] = local_times
-
-        return sorted(data.get("values", []), key=itemgetter("start"))
+        processed = self._process_api_data(data)
+        return sorted(processed, key=itemgetter("start"))
 
     @property
     def today(self) -> list:
@@ -423,28 +444,31 @@ class NordpoolSensor(SensorEntity):
         return len([i for i in self.tomorrow if i not in (None, float("inf"))]) >= 23
 
     async def _update_current_price(self) -> None:
-        """Update the current price (price this hour)."""
+        """Update the current price (price this hour) using timezone-safe methods."""
         local_now = dt_utils.now()
         
-        # Get the data for today
         data = await self._api.today(self._area, self._currency)
-        if not data:
-            _LOGGER.debug("Cant update _update_current_price because it was no data")
-            return
+        if data:
+            # Process data into consistent format
+            processed_data = self._process_api_data(data)
             
-        # Use timezone-aware matching to find the current price period
-        for item in self._someday(data):
-            # Convert timestamps to local timezone for comparison
-            if item["start"] <= local_now < item["end"]:
-                self._current_price = item["value"]
-                _LOGGER.debug(
-                    "Updated %s _current_price %s for period %s to %s", 
-                    self.name, 
-                    item["value"],
-                    item["start"],
-                    item["end"]
-                )
-                break
+            # Use the timezone-safe method to find current price
+            current_price = find_current_price(processed_data, local_now)
+            if current_price is not None:
+                self._current_price = current_price
+                _LOGGER.debug("Updated %s _current_price %s", self.name, current_price)
+            else:
+                # Fallback to original method for backward compatibility
+                for item in self._someday(data):
+                    if item["start"] == start_of(local_now, "hour"):
+                        self._current_price = item["value"]
+                        _LOGGER.debug(
+                            "Updated %s _current_price %s (fallback method)", 
+                            self.name, 
+                            item["value"]
+                        )
+        else:
+            _LOGGER.debug("Cant update _update_current_price because it was no data")
 
     async def handle_new_day(self):
         """Update attrs for the new day"""
