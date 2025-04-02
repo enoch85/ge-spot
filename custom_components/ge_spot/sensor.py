@@ -8,6 +8,26 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
 )
 
+from .const import (
+    DOMAIN,
+    ATTR_CURRENCY,
+    ATTR_AREA,
+    ATTR_VAT,
+    ATTR_TODAY,
+    ATTR_TOMORROW,
+    ATTR_TOMORROW_VALID,
+    ATTR_RAW_TODAY,
+    ATTR_RAW_TOMORROW,
+    ATTR_CURRENT_PRICE,
+    ATTR_MIN,
+    ATTR_MAX,
+    ATTR_AVERAGE,
+    ATTR_OFF_PEAK_1,
+    ATTR_OFF_PEAK_2,
+    ATTR_PEAK,
+    ATTR_LAST_UPDATED,
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 class ElectricityPriceSensor(SensorEntity):
@@ -32,7 +52,7 @@ class ElectricityPriceSensor(SensorEntity):
         """Return the native value of the sensor."""
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data["current_price"]
+        return self.coordinator.data[ATTR_CURRENT_PRICE]
         
     @property
     def available(self):
@@ -46,22 +66,22 @@ class ElectricityPriceSensor(SensorEntity):
             return {}
             
         return {
-            "currency": self._currency,
-            "area": self._area,
-            "vat": self._vat,
-            "today": self.coordinator.data["today_prices"],
-            "tomorrow": self.coordinator.data["tomorrow_prices"],
-            "tomorrow_valid": self.coordinator.data["tomorrow_valid"],
-            "raw_today": self.coordinator.data["today_raw"],
-            "raw_tomorrow": self.coordinator.data["tomorrow_raw"],
-            "current_price": self.coordinator.data["current_price"],
-            "min": self.coordinator.data["today_stats"]["min"],
-            "max": self.coordinator.data["today_stats"]["max"],
-            "average": self.coordinator.data["today_stats"]["average"],
-            "off_peak_1": self.coordinator.data["today_stats"]["off_peak_1"],
-            "off_peak_2": self.coordinator.data["today_stats"]["off_peak_2"],
-            "peak": self.coordinator.data["today_stats"]["peak"],
-            "last_updated": self.coordinator.data["last_update"],
+            ATTR_CURRENCY: self._currency,
+            ATTR_AREA: self._area,
+            ATTR_VAT: self._vat,
+            ATTR_TODAY: self.coordinator.data[ATTR_TODAY],
+            ATTR_TOMORROW: self.coordinator.data[ATTR_TOMORROW],
+            ATTR_TOMORROW_VALID: self.coordinator.data[ATTR_TOMORROW_VALID],
+            ATTR_RAW_TODAY: self.coordinator.data[ATTR_RAW_TODAY],
+            ATTR_RAW_TOMORROW: self.coordinator.data[ATTR_RAW_TOMORROW],
+            ATTR_CURRENT_PRICE: self.coordinator.data[ATTR_CURRENT_PRICE],
+            ATTR_MIN: self.coordinator.data["today_stats"][ATTR_MIN],
+            ATTR_MAX: self.coordinator.data["today_stats"][ATTR_MAX],
+            ATTR_AVERAGE: self.coordinator.data["today_stats"][ATTR_AVERAGE],
+            ATTR_OFF_PEAK_1: self.coordinator.data["today_stats"][ATTR_OFF_PEAK_1],
+            ATTR_OFF_PEAK_2: self.coordinator.data["today_stats"][ATTR_OFF_PEAK_2],
+            ATTR_PEAK: self.coordinator.data["today_stats"][ATTR_PEAK],
+            ATTR_LAST_UPDATED: self.coordinator.data[ATTR_LAST_UPDATED],
         }
         
     async def async_added_to_hass(self):
@@ -77,14 +97,14 @@ class ElectricityPriceSensor(SensorEntity):
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the sensor platform."""
-    coordinator = hass.data[entry.domain][entry.entry_id]
+    coordinator = hass.data[DOMAIN][entry.entry_id]
     
     async_add_entities([
         ElectricityPriceSensor(
             coordinator,
-            entry.data.get("currency"),
-            entry.data.get("area"),
-            entry.data.get("vat", 0),
+            entry.data.get(ATTR_CURRENCY),
+            entry.data.get(ATTR_AREA),
+            entry.data.get(ATTR_VAT, 0),
             entry.data.get("precision", 3)
         )
     ])
