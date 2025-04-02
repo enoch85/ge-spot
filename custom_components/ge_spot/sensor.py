@@ -63,7 +63,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         
         # Set the correct unit based on display_unit configuration
         if self._display_unit == DISPLAY_UNIT_CENTS:
-            from ..utils.currency_utils import get_subunit_name
+            from .utils.currency_utils import get_subunit_name
             subunit = get_subunit_name(self._currency)
             self._attr_native_unit_of_measurement = f"{subunit}/kWh"
         else:
