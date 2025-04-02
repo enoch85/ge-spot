@@ -146,3 +146,105 @@ ATTR_OFF_PEAK_1 = "off_peak_1"
 ATTR_OFF_PEAK_2 = "off_peak_2"
 ATTR_PEAK = "peak"
 ATTR_LAST_UPDATED = "last_updated"
+
+# Nordpool areas
+NORDPOOL_AREAS = {
+    "Oslo": "Norway (Oslo)",
+    "Kr.sand": "Norway (Kristiansand)",
+    "Bergen": "Norway (Bergen)",
+    "Molde": "Norway (Molde)",
+    "Tr.heim": "Norway (Trondheim)",
+    "Tromsø": "Norway (Tromsø)",
+    "SE1": "Sweden (North)",
+    "SE2": "Sweden (North-Central)",
+    "SE3": "Sweden (South-Central)",
+    "SE4": "Sweden (South)",
+    "DK1": "Denmark (West)",
+    "DK2": "Denmark (East)",
+    "FI": "Finland",
+    "EE": "Estonia",
+    "LV": "Latvia",
+    "LT": "Lithuania",
+}
+
+# Energi Data Service areas
+ENERGI_DATA_AREAS = {
+    "DK1": "Denmark (West)",
+    "DK2": "Denmark (East)",
+}
+
+# ENTSO-E areas
+ENTSOE_AREAS = {
+    "10YDK-1--------W": "Denmark (DK1)",
+    "10YDK-2--------M": "Denmark (DK2)",
+    "10YSE-1--------K": "Sweden (SE1)",
+    "10YSE-2--------8": "Sweden (SE2)",
+    "10YSE-3--------J": "Sweden (SE3)",
+    "10YSE-4--------9": "Sweden (SE4)",
+    "10YFI-1--------U": "Finland",
+    "10YNO-1--------2": "Norway (NO1)",
+    "10YNO-2--------T": "Norway (NO2)",
+    "10YNO-3--------J": "Norway (NO3)",
+    "10YNO-4--------9": "Norway (NO4)",
+    "10Y1001A1001A83F": "Germany",
+    "10YFR-RTE------C": "France",
+    "10YBE----------2": "Belgium",
+    "10YNL----------L": "Netherlands",
+    "10YAT-APG------L": "Austria",
+}
+
+# EPEX areas
+EPEX_AREAS = {
+    "DE-LU": "Germany-Luxembourg",
+    "FR": "France",
+    "BE": "Belgium",
+    "NL": "Netherlands",
+    "AT": "Austria",
+}
+
+# OMIE areas
+OMIE_AREAS = {
+    "ES": "Spain",
+    "PT": "Portugal",
+}
+
+# AEMO areas
+AEMO_AREAS = {
+    "NSW1": "New South Wales",
+    "QLD1": "Queensland",
+    "SA1": "South Australia",
+    "TAS1": "Tasmania",
+    "VIC1": "Victoria",
+}
+
+# Area to timezone mapping - useful for multiple API handlers
+AREA_TIMEZONES = {
+    "DK1": "Europe/Copenhagen",
+    "DK2": "Europe/Copenhagen",
+    "FI": "Europe/Helsinki",
+    "EE": "Europe/Tallinn",
+    "LT": "Europe/Vilnius",
+    "LV": "Europe/Riga",
+    "NO1": "Europe/Oslo",
+    "NO2": "Europe/Oslo",
+    "NO3": "Europe/Oslo",
+    "NO4": "Europe/Oslo",
+    "NO5": "Europe/Oslo",
+    "SE1": "Europe/Stockholm",
+    "SE2": "Europe/Stockholm",
+    "SE3": "Europe/Stockholm",
+    "SE4": "Europe/Stockholm",
+    "SYS": "Europe/Stockholm",
+    "FR": "Europe/Paris",
+    "NL": "Europe/Amsterdam",
+    "BE": "Europe/Brussels",
+    "AT": "Europe/Vienna",
+    "DE-LU": "Europe/Berlin",
+    "GER": "Europe/Berlin",
+    "Oslo": "Europe/Oslo",
+    "Kr.sand": "Europe/Oslo",
+    "Bergen": "Europe/Oslo",
+    "Molde": "Europe/Oslo",
+    "Tr.heim": "Europe/Oslo",
+    "Tromsø": "Europe/Oslo"
+}
