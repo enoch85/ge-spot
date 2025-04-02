@@ -62,11 +62,14 @@ def convert_energy_price(price: float, from_unit: str = "MWh", to_unit: str = "k
     Returns:
         Converted price value
     """
-    # Convert between energy units
-    from_factor = ENERGY_UNIT_CONVERSION.get(from_unit, 1)
-    to_factor = ENERGY_UNIT_CONVERSION.get(to_unit, 1)
-    
-    converted = price * from_factor / to_factor
+    # Only convert if units are different
+    if from_unit != to_unit:
+        from_factor = ENERGY_UNIT_CONVERSION.get(from_unit, 1)
+        to_factor = ENERGY_UNIT_CONVERSION.get(to_unit, 1)
+        
+        converted = price * from_factor / to_factor
+    else:
+        converted = price
     
     # Apply VAT
     if vat > 0:
