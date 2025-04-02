@@ -62,14 +62,27 @@ class NordpoolAPI(BaseEnergyAPI):
             today_data = await self._fetch_with_retry(self.BASE_URL, params=params)
             
             if today_data is None:
-                _LOGGER.error(f"Failed to fetch today's data for {delivery_area}")
+                _LOGGER.error(f"Failed to fetch today's data for {delivery_area}. Check network connectivity and API status.")
                 return None
                 
             # Log the structure of the data received to help with debugging
-            if today_data and "multiAreaEntries" in today_data:
-                _LOGGER.debug(f"Successfully retrieved today's data with {len(today_data['multiAreaEntries'])} entries")
+            if today_data and isinstance(today_data, dict):
+                if "multiAreaEntries" in today_data:
+                    _LOGGER.debug(f"Successfully retrieved today's data with {len(today_data['multiAreaEntries'])} entries")
+                    # Check for area in data
+                    areas_in_data = set()
+                    for entry in today_data.get("multiAreaEntries", []):
+                        if isinstance(entry, dict) and "entryPerArea" in entry:
+                            areas_in_data.update(entry["entryPerArea"].keys())
+                    
+                    if area not in areas_in_data and delivery_area not in areas_in_data:
+                        _LOGGER.error(f"Area '{area}' or '{delivery_area}' not found in response data. Available areas: {sorted(areas_in_data)}")
+                else:
+                    _LOGGER.error(f"Unexpected today's data structure: {list(today_data.keys())}")
+                    _LOGGER.debug(f"First 500 chars of response: {str(today_data)[:500]}")
             else:
-                _LOGGER.error(f"Unexpected today's data structure: {today_data.keys() if today_data else 'None'}")
+                _LOGGER.error(f"Invalid response type: {type(today_data)}")
+                return None
             
             # Fetch tomorrow's data if available (after 13:00 CET)
             tomorrow_data = None
@@ -86,7 +99,7 @@ class NordpoolAPI(BaseEnergyAPI):
                 if tomorrow_data and "multiAreaEntries" in tomorrow_data:
                     _LOGGER.debug(f"Successfully retrieved tomorrow's data with {len(tomorrow_data['multiAreaEntries'])} entries")
                 else:
-                    _LOGGER.warning(f"Tomorrow's data not available or has unexpected structure: {tomorrow_data.keys() if tomorrow_data else 'None'}")
+                    _LOGGER.warning(f"Tomorrow's data not available or has unexpected structure: {tomorrow_data.keys() if tomorrow_data and isinstance(tomorrow_data, dict) else 'None'}")
             else:
                 _LOGGER.debug(f"Not fetching tomorrow's data yet, current CET hour: {now_cet.hour}")
             
@@ -101,7 +114,7 @@ class NordpoolAPI(BaseEnergyAPI):
             return None
             
         except Exception as e:
-            _LOGGER.error(f"Error in _fetch_data: {str(e)}")
+            _LOGGER.error(f"Error in _fetch_data: {str(e)}", exc_info=True)
             return None
             
     def _process_data(self, raw_data):
@@ -120,6 +133,7 @@ class NordpoolAPI(BaseEnergyAPI):
         
         if "multiAreaEntries" not in today_data:
             _LOGGER.error("Missing multiAreaEntries in Nordpool today data")
+            _LOGGER.debug(f"Available keys in today_data: {list(today_data.keys())}")
             return self._generate_simulated_data()
             
         area = self.config.get("area", "Oslo")  # Default to Oslo
@@ -148,10 +162,10 @@ class NordpoolAPI(BaseEnergyAPI):
                 })
                 _LOGGER.debug(f"Successfully processed today's data, current price: {today_processed.get('current_price')}")
             else:
-                _LOGGER.error("Failed to process today's Nordpool data, using simulated data")
+                _LOGGER.error(f"Failed to process today's Nordpool data for area {area}, using simulated data")
                 return self._generate_simulated_data()
         except Exception as e:
-            _LOGGER.error(f"Error processing today's Nordpool data: {str(e)}")
+            _LOGGER.error(f"Error processing today's Nordpool data: {str(e)}", exc_info=True)
             return self._generate_simulated_data()
         
         # Process tomorrow's data if available
@@ -171,15 +185,15 @@ class NordpoolAPI(BaseEnergyAPI):
                     })
                     _LOGGER.debug("Successfully processed tomorrow's data")
                 else:
-                    _LOGGER.warning("Failed to process tomorrow's Nordpool data")
+                    _LOGGER.warning(f"Failed to process tomorrow's Nordpool data for area {area}")
             except Exception as e:
-                _LOGGER.warning(f"Error processing tomorrow's Nordpool data: {str(e)}")
+                _LOGGER.warning(f"Error processing tomorrow's Nordpool data: {str(e)}", exc_info=True)
                 # Continue even if tomorrow's data fails
         
         return result
         
     def _generate_simulated_data(self):
         """Generate simulated data when Nordpool API is unavailable."""
-        _LOGGER.warning(f"Generating simulated data for area: {self.config.get('area')}")
+        _LOGGER.warning(f"Generating simulated data for area: {self.config.get('area')}. Please check API connectivity and configuration.")
         return generate_simulated_data(self._get_now(), self._apply_vat, self._currency, 
                                       self.config.get("price_in_cents", False))
