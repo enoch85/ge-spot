@@ -348,8 +348,11 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        super().__init__(config_entry)
-        # No need to explicitly store config_entry as it's handled by parent class
+        # Store the entry_id instead of the config_entry object
+        self.entry_id = config_entry.entry_id
+        # Store other needed properties without storing the whole config_entry
+        self._data = dict(config_entry.data)
+        self._options = dict(config_entry.options)
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
@@ -359,22 +362,22 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
             # Update options
             return self.async_create_entry(title="", data=user_input)
 
-        # Get the source from config data
-        source = self.config_entry.data.get(CONF_SOURCE)
+        # Get the source from data
+        source = self._data.get(CONF_SOURCE)
         
         # Common options for all sources, now including fallback option
         schema = {
             vol.Optional(
                 CONF_VAT, 
-                default=self.config_entry.options.get(CONF_VAT, self.config_entry.data.get(CONF_VAT, DEFAULT_VAT))
+                default=self._options.get(CONF_VAT, self._data.get(CONF_VAT, DEFAULT_VAT))
             ): vol.All(vol.Coerce(float), vol.Range(min=0, max=1)),
             vol.Optional(
                 CONF_UPDATE_INTERVAL, 
-                default=self.config_entry.options.get(CONF_UPDATE_INTERVAL, self.config_entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
+                default=self._options.get(CONF_UPDATE_INTERVAL, self._data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
             ): vol.All(vol.Coerce(int), vol.Range(min=15, max=1440)),
             vol.Optional(
                 CONF_DISPLAY_UNIT,
-                default=self.config_entry.options.get(CONF_DISPLAY_UNIT, self.config_entry.data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT))
+                default=self._options.get(CONF_DISPLAY_UNIT, self._data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT))
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
@@ -386,7 +389,7 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
             ),
             vol.Optional(
                 CONF_ENABLE_FALLBACK,
-                default=self.config_entry.options.get(CONF_ENABLE_FALLBACK, self.config_entry.data.get(CONF_ENABLE_FALLBACK, DEFAULT_ENABLE_FALLBACK))
+                default=self._options.get(CONF_ENABLE_FALLBACK, self._data.get(CONF_ENABLE_FALLBACK, DEFAULT_ENABLE_FALLBACK))
             ): selector.BooleanSelector(),
         }
         
@@ -394,7 +397,7 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
         if source == SOURCE_ENTSO_E:
             schema[vol.Optional(
                 "api_key", 
-                default=self.config_entry.options.get("api_key", self.config_entry.data.get("api_key", ""))
+                default=self._options.get("api_key", self._data.get("api_key", ""))
             )] = cv.string
         
         return self.async_show_form(
