@@ -24,6 +24,26 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
         if not entries:
             _LOGGER.debug("Empty multiAreaEntries in Nordpool data")
             return None
+        
+        _LOGGER.debug(f"Processing {len(entries)} entries for area: {area}")
+        
+        # Check if the area exists in any entry
+        area_exists = False
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            
+            entry_per_area = entry.get("entryPerArea")
+            if not entry_per_area or not isinstance(entry_per_area, dict):
+                continue
+            
+            if area in entry_per_area:
+                area_exists = True
+                break
+        
+        if not area_exists:
+            _LOGGER.error(f"Area '{area}' not found in any entry. Available areas: {[k for e in entries if isinstance(e, dict) and 'entryPerArea' in e for k in e.get('entryPerArea', {})]}")
+            return None
             
         for entry in entries:
             if not isinstance(entry, dict):
@@ -39,11 +59,13 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
             
             # Check if this area exists in the entryPerArea data
             if area not in entry_per_area:
+                _LOGGER.debug(f"Area '{area}' not found in this entry")
                 continue
             
             # Get the price for this area
             price = entry_per_area.get(area)
             if price is None:
+                _LOGGER.debug(f"No price found for area '{area}' in this entry")
                 continue
             
             # Convert to float if needed
@@ -51,8 +73,10 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 try:
                     price = float(price.replace(",", ".").replace(" ", ""))
                 except ValueError:
+                    _LOGGER.warning(f"Could not convert price '{price}' to float")
                     continue
             elif not isinstance(price, (int, float)):
+                _LOGGER.warning(f"Price is not a number: {price}")
                 continue
             
             # Convert from EUR/MWh to the appropriate currency and unit
@@ -82,10 +106,12 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 # Check if this is current hour
                 if current_hour is not None and hour == current_hour:
                     current_price = price
+                    _LOGGER.debug(f"Found current hour price for {hour}: {price}")
                     
                 # Check if this is next hour
                 if current_hour is not None and hour == (current_hour + 1) % 24:
                     next_hour_price = price
+                    _LOGGER.debug(f"Found next hour price for hour {(current_hour + 1) % 24}: {price}")
                     
             except (ValueError, TypeError) as e:
                 _LOGGER.error(f"Error parsing datetime {start_time}: {e}")
@@ -138,6 +164,9 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
             today_price = 0.12 + 0.01 * (abs(12 - hour) / 12) + (now.day % 10) * 0.001
         
         today_price = apply_vat_func(today_price)
+        if use_subunit:
+            today_price = convert_to_subunit(today_price, currency)
+            
         hour_str = f"{hour:02d}:00"  # Format HH:MM
         today_hourly_prices[hour_str] = today_price
         today_all_prices.append(today_price)
@@ -149,6 +178,9 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
             tomorrow_price = 0.13 + 0.008 * (abs(12 - hour) / 12) + ((now.day + 1) % 10) * 0.001
         
         tomorrow_price = apply_vat_func(tomorrow_price)
+        if use_subunit:
+            tomorrow_price = convert_to_subunit(tomorrow_price, currency)
+            
         tomorrow_hourly_prices[hour_str] = tomorrow_price
         tomorrow_all_prices.append(tomorrow_price)
     
@@ -165,6 +197,8 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
     
     tomorrow_peak_price = max(tomorrow_all_prices) if tomorrow_all_prices else None
     tomorrow_off_peak_price = min(tomorrow_all_prices) if tomorrow_all_prices else None
+    
+    _LOGGER.debug(f"Generated simulated data with current price: {current_price}, next hour: {next_hour_price}")
     
     return {
         "current_price": current_price,
