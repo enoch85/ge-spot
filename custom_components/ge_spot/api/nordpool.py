@@ -4,7 +4,13 @@ import datetime
 import asyncio
 from .base import BaseEnergyAPI
 from ..utils.currency_utils import convert_to_subunit, convert_energy_price
-from ..const import AREA_TIMEZONES, REGION_TO_CURRENCY, CONF_DISPLAY_UNIT, DISPLAY_UNIT_CENTS
+from ..const import (
+    AREA_TIMEZONES, 
+    REGION_TO_CURRENCY, 
+    CONF_DISPLAY_UNIT, 
+    DISPLAY_UNIT_CENTS,
+    CURRENCY_SUBUNIT_NAMES,
+)
 from .nordpool_utils import process_day_data, generate_simulated_data
 
 _LOGGER = logging.getLogger(__name__)
