@@ -1,101 +1,147 @@
 """Timezone utilities for GE-Spot integration."""
 
-from __future__ import annotations
-
 import logging
-from datetime import datetime
-from typing import Any, List, Optional, Union
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
-import homeassistant.util.dt as dt_util
+from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def ensure_timezone_aware(dt_obj: datetime) -> datetime:
-    """Ensure a datetime object has timezone information.
-    
-    Args:
-        dt_obj: Datetime object to check
-        
-    Returns:
-        Timezone-aware datetime object (using UTC if original had no timezone)
-    """
+    """Ensure a datetime object has timezone information."""
     if dt_obj.tzinfo is None:
         return dt_obj.replace(tzinfo=dt_util.UTC)
     return dt_obj
 
 
-def find_current_price(price_data: List[Any], reference_time: Optional[datetime] = None) -> Optional[float]:
-    """Find the current price in a timezone-safe way.
+def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
+    """Process raw price data into a consistent format with proper timezone handling."""
+    if not raw_data:
+        return []
+        
+    periods = []
     
-    This function works with the INTERVAL namedtuples used in GE-Spot
-    
-    Args:
-        price_data: List of price data entries
-        reference_time: Optional time to find price for (defaults to now)
-    
-    Returns:
-        Current price or None if no matching price found
-    """
+    for item in raw_data:
+        if "start" not in item or "end" not in item or "value" not in item:
+            _LOGGER.warning("Skipping malformed price data: %s", item)
+            continue
+            
+        # Ensure timestamps are timezone-aware
+        start_time = dt_util.parse_datetime(item["start"]) if isinstance(item["start"], str) else item["start"]
+        end_time = dt_util.parse_datetime(item["end"]) if isinstance(item["end"], str) else item["end"]
+        
+        # Ensure timestamps have timezone info
+        if start_time.tzinfo is None:
+            start_time = dt_util.as_utc(start_time)
+        if end_time.tzinfo is None:
+            end_time = dt_util.as_utc(end_time)
+            
+        # Convert to local time if specified
+        if local_tz:
+            local_start = start_time.astimezone(local_tz)
+            local_end = end_time.astimezone(local_tz)
+        else:
+            local_start = dt_util.as_local(start_time)
+            local_end = dt_util.as_local(end_time)
+        
+        periods.append({
+            "start": local_start,
+            "end": local_end,
+            "price": float(item["value"]),
+            "utc_start": start_time,
+            "utc_end": end_time,
+            "day": local_start.date(),
+            "hour": local_start.hour,
+            "raw": item,
+        })
+        
+    return sorted(periods, key=lambda x: x["start"])
+
+
+def find_current_price(price_data: List[Dict], reference_time: Optional[datetime] = None) -> Optional[float]:
+    """Find the current price for a given time."""
     if not price_data:
         return None
         
-    # Use current time if not provided
     if reference_time is None:
         reference_time = dt_util.now()
-    
-    # Ensure reference time is timezone-aware
-    reference_time = ensure_timezone_aware(reference_time)
-    
-    # Convert to local time for consistent comparison
-    reference_local = dt_util.as_local(reference_time)
-    local_hour_start = reference_local.replace(minute=0, second=0, microsecond=0)
-    
-    for item in price_data:
-        # Convert price data timestamp to local time for comparison
-        item_time = ensure_timezone_aware(item.hour)
-        item_local = dt_util.as_local(item_time)
-        
-        # Compare year, month, day, hour for exact hourly match
-        if (item_local.year == local_hour_start.year and
-            item_local.month == local_hour_start.month and
-            item_local.day == local_hour_start.day and
-            item_local.hour == local_hour_start.hour):
-            return item.price
             
-    _LOGGER.debug(
-        "No matching price found for %s in %d price entries", 
-        reference_local.isoformat(),
-        len(price_data)
-    )
+    for period in price_data:
+        if period["start"] <= reference_time < period["end"]:
+            return period["price"]
+                
     return None
 
 
-def filter_day_prices(price_data: List[Any], day_offset: int = 0) -> List[Any]:
-    """Filter price data to get entries for today or tomorrow.
+def get_prices_for_day(price_data: List[Dict], day_offset: int = 0) -> List[Dict]:
+    """Get all prices for a specific day (today + offset)."""
+    target_date = dt_util.now().date()
+    if day_offset:
+        target_date = dt_util.as_local(
+            dt_util.utcnow() + timedelta(days=day_offset)
+        ).date()
+        
+    return [p for p in price_data if p["day"] == target_date]
+
+
+def get_raw_prices_for_day(day_data: List[Dict]) -> List[Dict]:
+    """Format price data for Home Assistant attributes."""
+    return [
+        {
+            "start": period["start"].isoformat(),
+            "end": period["end"].isoformat(),
+            "price": period["price"],
+        }
+        for period in day_data
+    ]
+
+
+def get_price_list(day_data: List[Dict]) -> List[float]:
+    """Get list of prices in chronological order."""
+    return [p["price"] for p in day_data]
+
+
+def get_statistics(price_data: List[Dict]) -> Dict[str, Any]:
+    """Calculate statistics for the price data."""
+    prices = [p["price"] for p in price_data]
     
-    Args:
-        price_data: List of price data entries
-        day_offset: 0 for today, 1 for tomorrow, etc.
-        
-    Returns:
-        Filtered price data for the requested day
-    """
-    if not price_data:
-        return []
-        
-    # Get target date in local timezone
-    target_date = dt_util.as_local(
-        dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0) + 
-        dt_util.dt.timedelta(days=day_offset)
-    ).date()
+    if not prices:
+        return {
+            "min": None,
+            "max": None,
+            "average": None,
+            "off_peak_1": None,
+            "off_peak_2": None,
+            "peak": None,
+        }
     
-    result = []
-    for item in price_data:
-        item_time = ensure_timezone_aware(item.hour)
-        item_local = dt_util.as_local(item_time)
-        
-        if item_local.date() == target_date:
-            result.append(item)
-            
-    return result
+    # Group periods by hour ranges
+    off_peak_1 = []
+    peak = []
+    off_peak_2 = []
+    
+    for period in price_data:
+        hour = period["hour"]
+        if 0 <= hour < 8:
+            off_peak_1.append(period["price"])
+        elif 8 <= hour < 20:
+            peak.append(period["price"])
+        else:  # 20-24
+            off_peak_2.append(period["price"])
+    
+    return {
+        "min": min(prices) if prices else None,
+        "max": max(prices) if prices else None,
+        "average": sum(prices) / len(prices) if prices else None,
+        "off_peak_1": sum(off_peak_1) / len(off_peak_1) if off_peak_1 else None,
+        "off_peak_2": sum(off_peak_2) / len(off_peak_2) if off_peak_2 else None,
+        "peak": sum(peak) / len(peak) if peak else None,
+    }
+
+
+def is_tomorrow_valid(price_data: List[Dict]) -> bool:
+    """Check if tomorrow's data is valid (at least 20 entries)."""
+    tomorrow_data = get_prices_for_day(price_data, 1)
+    return len(tomorrow_data) >= 20
