@@ -112,6 +112,26 @@ CURRENCY_SUBUNIT_NAMES = {
     "AUD": "cents",
 }
 
+# Nordpool delivery area mapping
+NORDPOOL_DELIVERY_AREA_MAPPING = {
+    "Oslo": "Oslo", 
+    "Kr.sand": "Kr.sand", 
+    "Bergen": "Bergen",
+    "Molde": "Molde", 
+    "Tr.heim": "Tr.heim", 
+    "Tromsø": "Tromsø",
+    "SE1": "SE1", 
+    "SE2": "SE2", 
+    "SE3": "SE3", 
+    "SE4": "SE4",
+    "DK1": "DK1", 
+    "DK2": "DK2", 
+    "FI": "FI", 
+    "EE": "EE",
+    "LV": "LV", 
+    "LT": "LT",
+}
+
 # Energy unit conversion
 ENERGY_UNIT_CONVERSION = {
     "MWh": 1,
