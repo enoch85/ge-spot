@@ -73,7 +73,7 @@ class BaseEnergyAPI(ABC):
             return processed_data
             
         except Exception as e:
-            _LOGGER.error(f"Error fetching day-ahead prices: {str(e)}")
+            _LOGGER.error(f"Error fetching day-ahead prices: {str(e)}", exc_info=True)
             return None
     
     @abstractmethod
@@ -109,21 +109,59 @@ class BaseEnergyAPI(ABC):
         """Fetch data from URL with retry mechanism."""
         await self._ensure_session()
         
+        if not self.session:
+            _LOGGER.error("No session available for API request")
+            return None
+            
         for attempt in range(max_retries):
             try:
+                _LOGGER.debug(f"API request attempt {attempt+1}/{max_retries}: {url} with params {params}")
                 async with self.session.get(url, params=params, timeout=30) as response:
                     if response.status != 200:
-                        _LOGGER.error(f"Error fetching from URL (attempt {attempt+1}/{max_retries}): {response.status}")
+                        _LOGGER.error(f"Error fetching from URL (attempt {attempt+1}/{max_retries}): HTTP {response.status}")
+                        
+                        # Log response body for debugging if not successful
+                        if response.status != 404:  # Don't log 404 body as it's usually large error pages
+                            try:
+                                error_text = await response.text()
+                                _LOGGER.debug(f"Error response (first 500 chars): {error_text[:500]}")
+                            except:
+                                _LOGGER.debug("Could not read error response body")
+                                
                         if attempt < max_retries - 1:
-                            await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                            retry_delay = 2 ** attempt  # Exponential backoff
+                            _LOGGER.debug(f"Retrying in {retry_delay} seconds...")
+                            await asyncio.sleep(retry_delay)
                             continue
                         return None
                     
-                    return await response.json()
-            except Exception as e:
-                _LOGGER.error(f"Error in _fetch_with_retry: {str(e)}")
+                    # Check content type to handle response appropriately
+                    content_type = response.headers.get('Content-Type', '')
+                    
+                    if 'application/json' in content_type:
+                        return await response.json()
+                    else:
+                        _LOGGER.warning(f"Unexpected content type: {content_type}")
+                        # Try to parse as JSON anyway, but log warning
+                        try:
+                            return await response.json()
+                        except Exception as e:
+                            _LOGGER.error(f"Failed to parse response as JSON: {e}")
+                            # Return the text in case caller wants to handle it
+                            return await response.text()
+                            
+            except asyncio.TimeoutError:
+                _LOGGER.error(f"Timeout fetching from URL (attempt {attempt+1}/{max_retries})")
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    retry_delay = 2 ** attempt  # Exponential backoff
+                    await asyncio.sleep(retry_delay)
+                    continue
+                raise
+            except Exception as e:
+                _LOGGER.error(f"Error in _fetch_with_retry: {str(e)}", exc_info=True)
+                if attempt < max_retries - 1:
+                    retry_delay = 2 ** attempt  # Exponential backoff
+                    await asyncio.sleep(retry_delay)
                     continue
                 raise
         
