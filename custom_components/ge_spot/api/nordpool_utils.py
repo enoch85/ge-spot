@@ -27,8 +27,10 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
         
         _LOGGER.debug(f"Processing {len(entries)} entries for area: {area}")
         
-        # Check if the area exists in any entry
+        # Check if the area exists in any entry and collect all available areas
         area_exists = False
+        available_areas = set()
+        
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
@@ -37,12 +39,14 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
             if not entry_per_area or not isinstance(entry_per_area, dict):
                 continue
             
+            # Add all areas from this entry to the available_areas set
+            available_areas.update(entry_per_area.keys())
+            
             if area in entry_per_area:
                 area_exists = True
-                break
         
         if not area_exists:
-            _LOGGER.error(f"Area '{area}' not found in any entry. Available areas: {[k for e in entries if isinstance(e, dict) and 'entryPerArea' in e for k in e.get('entryPerArea', {})]}")
+            _LOGGER.error(f"Area '{area}' not found in any entry. Available areas: {sorted(available_areas)}")
             return None
             
         for entry in entries:
@@ -51,15 +55,16 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 
             start_time = entry.get("deliveryStart")
             if not start_time:
+                _LOGGER.warning(f"Missing deliveryStart in entry: {entry.keys() if isinstance(entry, dict) else 'not a dict'}")
                 continue
             
             entry_per_area = entry.get("entryPerArea")
             if not entry_per_area or not isinstance(entry_per_area, dict):
+                _LOGGER.warning(f"Missing or invalid entryPerArea in entry: {entry.keys() if isinstance(entry, dict) else 'not a dict'}")
                 continue
             
             # Check if this area exists in the entryPerArea data
             if area not in entry_per_area:
-                _LOGGER.debug(f"Area '{area}' not found in this entry")
                 continue
             
             # Get the price for this area
@@ -76,7 +81,7 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                     _LOGGER.warning(f"Could not convert price '{price}' to float")
                     continue
             elif not isinstance(price, (int, float)):
-                _LOGGER.warning(f"Price is not a number: {price}")
+                _LOGGER.warning(f"Price is not a number: {price} (type: {type(price)})")
                 continue
             
             # Convert from EUR/MWh to the appropriate currency and unit
@@ -118,8 +123,13 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 continue
         
         if not hourly_prices:
-            _LOGGER.warning("No hourly prices found in Nordpool data")
+            _LOGGER.warning(f"No hourly prices found in Nordpool data for area {area}")
             return None
+            
+        # Check if we have all 24 hours
+        if len(hourly_prices) < 24:
+            _LOGGER.warning(f"Incomplete hourly prices for area {area}: found {len(hourly_prices)}/24 hours")
+            # Continue anyway, we'll use what we have
             
         # Calculate day average
         day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
@@ -137,7 +147,7 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
             "hourly_prices": hourly_prices,
         }
     except Exception as e:
-        _LOGGER.error(f"Error processing Nordpool data: {e}")
+        _LOGGER.error(f"Error processing Nordpool data: {e}", exc_info=True)
         return None
 
 def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
