@@ -39,6 +39,7 @@ from .const import (
     DEFAULT_DISPLAY_UNIT,
     DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES,
+    REGION_TO_CURRENCY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,6 +60,13 @@ class BaseElectricityPriceSensor(SensorEntity):
         self._sensor_type = sensor_type
         self._display_unit = config_data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
         
+        # Ensure correct currency is used for specific areas
+        # This is sometimes needed because it might not be correctly set in the config data
+        area_specific_currency = REGION_TO_CURRENCY.get(self._area)
+        if area_specific_currency and not self._currency:
+            self._currency = area_specific_currency
+            _LOGGER.debug(f"Corrected currency for {self._area} to {self._currency}")
+        
         self._attr_name = f"Electricity {name_suffix} {self._area}"
         self._attr_unique_id = f"electricity_{sensor_type}_{self._area}_{self._currency}".lower()
         
@@ -66,6 +74,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         if self._display_unit == DISPLAY_UNIT_CENTS:
             subunit = CURRENCY_SUBUNIT_NAMES.get(self._currency, "cents")
             self._attr_native_unit_of_measurement = f"{subunit}/kWh"
+            _LOGGER.debug(f"Using subunit {subunit} for currency {self._currency}")
         else:
             self._attr_native_unit_of_measurement = f"{self._currency}/kWh"
             
