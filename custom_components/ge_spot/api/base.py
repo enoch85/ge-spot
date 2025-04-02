@@ -17,6 +17,9 @@ class BaseEnergyAPI(ABC):
         self.config = config
         self.session = None
         self.vat = config.get("vat", 0.0)
+        self._currency = config.get("currency", "EUR")
+        self._area = None
+        self._date_str = None
         
     async def _ensure_session(self):
         """Ensure that we have an aiohttp session."""
@@ -53,14 +56,19 @@ class BaseEnergyAPI(ABC):
             else:
                 date_str = date
                 
-            # This will be implemented by subclasses to fetch actual data
-            raw_data = await self._fetch_prices(area, currency, date_str)
+            # Store current configuration
+            self._area = area
+            self._currency = currency
+            self._date_str = date_str
+            
+            # Fetch the raw data
+            raw_data = await self._fetch_data()
             
             if not raw_data:
                 return None
                 
-            # Process the data into a consistent format for the adapter
-            processed_data = self._process_prices(raw_data, area, currency, date_str)
+            # Process the data into a consistent format
+            processed_data = self._process_data(raw_data)
             
             return processed_data
             
@@ -69,23 +77,54 @@ class BaseEnergyAPI(ABC):
             return None
     
     @abstractmethod
-    async def _fetch_prices(self, area, currency, date_str):
+    async def _fetch_data(self):
         """Fetch raw price data from the API. To be implemented by subclasses."""
         pass
         
-    def _process_prices(self, raw_data, area, currency, date_str):
+    @abstractmethod
+    def _process_data(self, raw_data):
         """Process raw price data into a consistent format.
         
-        The expected output format is a list of dictionaries with:
-        - start: datetime for the start of the period (timezone-aware)
-        - end: datetime for the end of the period (timezone-aware)
-        - value: price value
+        The expected output format is a dictionary with keys like:
+        - current_price: price for current hour
+        - next_hour_price: price for next hour
+        - day_average_price: average price for the day
+        - peak_price: highest price of the day
+        - off_peak_price: lowest price of the day
+        - hourly_prices: dict mapping hour strings to prices
         """
-        # Default implementation - subclasses should override if needed
-        return raw_data
+        pass
     
     def _apply_vat(self, price):
         """Apply VAT to price."""
         if price is None:
             return None
         return price * (1 + self.vat)
+        
+    def _get_now(self):
+        """Get current datetime. Separate method for easier testing."""
+        return datetime.datetime.now()
+        
+    async def _fetch_with_retry(self, url, params=None, max_retries=3):
+        """Fetch data from URL with retry mechanism."""
+        await self._ensure_session()
+        
+        for attempt in range(max_retries):
+            try:
+                async with self.session.get(url, params=params, timeout=30) as response:
+                    if response.status != 200:
+                        _LOGGER.error(f"Error fetching from URL (attempt {attempt+1}/{max_retries}): {response.status}")
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                            continue
+                        return None
+                    
+                    return await response.json()
+            except Exception as e:
+                _LOGGER.error(f"Error in _fetch_with_retry: {str(e)}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                raise
+        
+        return None
