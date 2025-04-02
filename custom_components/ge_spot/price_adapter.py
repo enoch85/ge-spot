@@ -26,11 +26,40 @@ class ElectricityPriceAdapter:
         self.hass = hass
         self.raw_data = raw_data or []
         self.local_tz = dt_util.get_time_zone(hass.config.time_zone)
-        self.price_periods = self._process_price_data()
-    
-    def _process_price_data(self) -> List[Dict]:
-        """Process raw data into clean, timezone-aware period objects."""
-        return process_price_data(self.raw_data, self.local_tz)
+        
+        # Transform raw data format if necessary
+        self.processed_raw_data = []
+        for item in self.raw_data:
+            # Skip non-dictionary items
+            if not isinstance(item, dict):
+                continue
+                
+            # Find price data which may be in different formats from different APIs
+            if all(key in item for key in ["start", "end", "value"]):
+                # Already in the correct format
+                self.processed_raw_data.append(item)
+            elif "current_price" in item and "hourly_prices" in item:
+                # Process hourly prices into individual periods
+                for hour_str, price in item.get("hourly_prices", {}).items():
+                    try:
+                        # Parse hour string (format: "HH:00")
+                        hour = int(hour_str.split(":")[0])
+                        
+                        # Create a start and end time for this hour
+                        now = dt_util.now()
+                        start_time = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+                        end_time = start_time.replace(hour=hour+1) if hour < 23 else start_time.replace(hour=0, day=start_time.day+1)
+                        
+                        self.processed_raw_data.append({
+                            "start": start_time.isoformat(),
+                            "end": end_time.isoformat(),
+                            "value": price
+                        })
+                    except (ValueError, IndexError) as e:
+                        _LOGGER.warning(f"Error processing hourly price {hour_str}: {e}")
+                        
+        # Process data into periods
+        self.price_periods = process_price_data(self.processed_raw_data, self.local_tz)
     
     def get_current_price(self, reference_time: Optional[datetime] = None) -> Optional[float]:
         """Get price for the current period."""
