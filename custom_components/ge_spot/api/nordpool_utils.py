@@ -2,7 +2,7 @@
 import logging
 import datetime
 from ..utils.currency_utils import convert_to_subunit, convert_energy_price
-from ..const import AREA_TIMEZONES
+from ..utils.timezone_utils import convert_to_local_time
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,22 +69,8 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 # Parse the datetime with proper timezone handling
                 dt = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
                 
-                # Get the timezone for this area
-                tz_name = AREA_TIMEZONES.get(area, "UTC")
-                try:
-                    # Use Home Assistant's async timezone utilities
-                    from homeassistant.util import dt as dt_utils
-                    # This is a synchronous version that's safe to use in this context
-                    local_tz = dt_utils.get_time_zone(tz_name)
-                    local_dt = dt.astimezone(local_tz)
-                except (ImportError, AttributeError):
-                    # Fallback if dt_utils is not available
-                    utc_offset = 1
-                    if tz_name == "Europe/Helsinki" or tz_name == "Europe/Tallinn":
-                        utc_offset = 2
-                    elif tz_name == "Europe/Stockholm":
-                        utc_offset = 1
-                    local_dt = dt.astimezone(datetime.timezone(datetime.timedelta(hours=utc_offset)))
+                # Convert to local time for this area
+                local_dt = convert_to_local_time(dt, area)
                 
                 hour = local_dt.hour
                 
