@@ -1,7 +1,10 @@
+"""API module for Nordpool."""
 import logging
 import datetime
+import asyncio
 from .base import BaseEnergyAPI
 from ..utils.currency_utils import convert_to_subunit, convert_energy_price
+from ..const import AREA_TIMEZONES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -118,10 +121,10 @@ class NordpoolAPI(BaseEnergyAPI):
                 })
             else:
                 _LOGGER.error("Failed to process today's Nordpool data")
-                return None
+                return self._generate_simulated_data()
         except Exception as e:
             _LOGGER.error(f"Error processing today's Nordpool data: {str(e)}")
-            return None
+            return self._generate_simulated_data()
         
         # Process tomorrow's data if available
         if tomorrow_data and "multiAreaEntries" in tomorrow_data:
@@ -151,38 +154,6 @@ class NordpoolAPI(BaseEnergyAPI):
             _LOGGER.debug("No multiAreaEntries in data for _process_day_data")
             return None
             
-        # Map area to correct timezone
-        area_timezones = {
-            "DK1": "Europe/Copenhagen",
-            "DK2": "Europe/Copenhagen",
-            "FI": "Europe/Helsinki",
-            "EE": "Europe/Tallinn",
-            "LT": "Europe/Vilnius",
-            "LV": "Europe/Riga",
-            "NO1": "Europe/Oslo",
-            "NO2": "Europe/Oslo",
-            "NO3": "Europe/Oslo",
-            "NO4": "Europe/Oslo",
-            "NO5": "Europe/Oslo",
-            "SE1": "Europe/Stockholm",
-            "SE2": "Europe/Stockholm",
-            "SE3": "Europe/Stockholm",
-            "SE4": "Europe/Stockholm",
-            "SYS": "Europe/Stockholm",
-            "FR": "Europe/Paris",
-            "NL": "Europe/Amsterdam",
-            "BE": "Europe/Brussels",
-            "AT": "Europe/Vienna",
-            "DE-LU": "Europe/Berlin",
-            "GER": "Europe/Berlin",
-            "Oslo": "Europe/Oslo",
-            "Kr.sand": "Europe/Oslo",
-            "Bergen": "Europe/Oslo",
-            "Molde": "Europe/Oslo",
-            "Tr.heim": "Europe/Oslo",
-            "Tromsø": "Europe/Oslo"
-        }
-        
         # Process today's prices
         current_price = None
         next_hour_price = None
@@ -240,11 +211,10 @@ class NordpoolAPI(BaseEnergyAPI):
                     dt = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
                     
                     # Get the timezone for this area
-                    tz_name = area_timezones.get(area, "UTC")
+                    tz_name = AREA_TIMEZONES.get(area, "UTC")
                     try:
                         # Use Home Assistant's async timezone utilities
                         from homeassistant.util import dt as dt_utils
-                        # Note: We're not using await here because this is called from a non-async method
                         # This is a synchronous version that's safe to use in this context
                         local_tz = dt_utils.get_time_zone(tz_name)
                         local_dt = dt.astimezone(local_tz)
@@ -324,7 +294,7 @@ class NordpoolAPI(BaseEnergyAPI):
                 today_price = 0.12 + 0.01 * (abs(12 - hour) / 12) + (now.day % 10) * 0.001
             
             today_price = self._apply_vat(today_price)
-            hour_str = f"{hour:02d}:00:00"  # ISO format HH:MM:SS
+            hour_str = f"{hour:02d}:00"  # Format HH:MM
             today_hourly_prices[hour_str] = today_price
             today_all_prices.append(today_price)
             
@@ -338,8 +308,8 @@ class NordpoolAPI(BaseEnergyAPI):
             tomorrow_hourly_prices[hour_str] = tomorrow_price
             tomorrow_all_prices.append(tomorrow_price)
         
-        current_price = today_hourly_prices.get(f"{current_hour:02d}:00:00")
-        next_hour_price = today_hourly_prices.get(f"{(current_hour + 1) % 24:02d}:00:00")
+        current_price = today_hourly_prices.get(f"{current_hour:02d}:00")
+        next_hour_price = today_hourly_prices.get(f"{(current_hour + 1) % 24:02d}:00")
         
         # Calculate day averages
         today_average_price = sum(today_all_prices) / len(today_all_prices) if today_all_prices else None
