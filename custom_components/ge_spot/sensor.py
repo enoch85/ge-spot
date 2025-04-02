@@ -9,8 +9,6 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
 )
 
-from .utils.currency_utils import get_subunit_name, convert_to_subunit
-
 from .const import (
     DOMAIN,
     ATTR_CURRENCY,
@@ -40,6 +38,7 @@ from .const import (
     CONF_DISPLAY_UNIT,
     DEFAULT_DISPLAY_UNIT,
     DISPLAY_UNIT_CENTS,
+    CURRENCY_SUBUNIT_NAMES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,13 +64,13 @@ class BaseElectricityPriceSensor(SensorEntity):
         
         # Set the correct unit based on display_unit configuration
         if self._display_unit == DISPLAY_UNIT_CENTS:
-            subunit = get_subunit_name(self._currency)
+            subunit = CURRENCY_SUBUNIT_NAMES.get(self._currency, "cents")
             self._attr_native_unit_of_measurement = f"{subunit}/kWh"
         else:
             self._attr_native_unit_of_measurement = f"{self._currency}/kWh"
             
         self._attr_suggested_display_precision = self._precision
-        
+    
     @property
     def available(self):
         """Return if entity is available."""
