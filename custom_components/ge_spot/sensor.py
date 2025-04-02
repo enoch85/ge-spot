@@ -1,5 +1,6 @@
 """Support for electricity price sensors."""
 import logging
+import datetime
 from typing import Any, Dict, Optional
 
 from homeassistant.components.sensor import (
@@ -34,6 +35,9 @@ from .const import (
     SENSOR_TYPE_TOMORROW_AVG,
     SENSOR_TYPE_TOMORROW_PEAK,
     SENSOR_TYPE_TOMORROW_OFF_PEAK,
+    CONF_DISPLAY_UNIT,
+    DEFAULT_DISPLAY_UNIT,
+    DISPLAY_UNIT_CENTS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,10 +56,19 @@ class BaseElectricityPriceSensor(SensorEntity):
         self._vat = config_data.get(ATTR_VAT, 0)
         self._precision = config_data.get("precision", 3)
         self._sensor_type = sensor_type
+        self._display_unit = config_data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
         
         self._attr_name = f"Electricity {name_suffix} {self._area}"
         self._attr_unique_id = f"electricity_{sensor_type}_{self._area}_{self._currency}".lower()
-        self._attr_native_unit_of_measurement = f"{self._currency}/kWh"
+        
+        # Set the correct unit based on display_unit configuration
+        if self._display_unit == DISPLAY_UNIT_CENTS:
+            from ..utils.currency_utils import get_subunit_name
+            subunit = get_subunit_name(self._currency)
+            self._attr_native_unit_of_measurement = f"{subunit}/kWh"
+        else:
+            self._attr_native_unit_of_measurement = f"{self._currency}/kWh"
+            
         self._attr_suggested_display_precision = self._precision
         
     @property
@@ -130,9 +143,13 @@ class NextHourPriceSensor(BaseElectricityPriceSensor):
         """Return the native value of the sensor."""
         if self.coordinator.data is None or "adapter" not in self.coordinator.data:
             return None
-        adapter = self.coordinator.data["adapter"]
-        now = self.coordinator.hass.states.get("sensor.date_time").last_changed
+            
+        # Use Home Assistant's dt_util to get the current time
+        from homeassistant.util import dt as dt_util
+        now = dt_util.now()
         next_hour = now.replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
+        
+        adapter = self.coordinator.data["adapter"]
         return adapter.get_current_price(reference_time=next_hour)
 
 
