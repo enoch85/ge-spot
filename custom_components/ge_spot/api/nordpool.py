@@ -4,7 +4,7 @@ import datetime
 import asyncio
 from .base import BaseEnergyAPI
 from ..utils.currency_utils import convert_to_subunit, convert_energy_price
-from ..const import AREA_TIMEZONES, REGION_TO_CURRENCY
+from ..const import AREA_TIMEZONES, REGION_TO_CURRENCY, CONF_DISPLAY_UNIT, DISPLAY_UNIT_CENTS
 from .nordpool_utils import process_day_data, generate_simulated_data
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +28,11 @@ class NordpoolAPI(BaseEnergyAPI):
             if specific_currency:
                 self._currency = specific_currency
                 _LOGGER.debug(f"Using area-specific currency for {area}: {self._currency}")
+                
+            # Set price_in_cents based on display unit configuration
+            if self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS:
+                self.config["price_in_cents"] = True
+                _LOGGER.debug(f"Using cents/öre for display (price_in_cents=True)")
             
             currency = "EUR"  # Default currency for the API request
             
