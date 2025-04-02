@@ -28,11 +28,13 @@ class NordpoolAPI(BaseEnergyAPI):
             if specific_currency:
                 self._currency = specific_currency
                 _LOGGER.debug(f"Using area-specific currency for {area}: {self._currency}")
+            else:
+                _LOGGER.debug(f"No specific currency found for area {area}, using default: {self._currency}")
                 
             # Set price_in_cents based on display unit configuration
             if self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS:
                 self.config["price_in_cents"] = True
-                _LOGGER.debug(f"Using cents/öre for display (price_in_cents=True)")
+                _LOGGER.debug(f"Using subunit display (price_in_cents=True) for currency: {self._currency} - {CURRENCY_SUBUNIT_NAMES.get(self._currency, 'cents')}")
             
             currency = "EUR"  # Default currency for the API request
             
