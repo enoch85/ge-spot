@@ -1,5 +1,6 @@
+"""Integration for electricity spot prices."""
 import logging
-import datetime
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -9,22 +10,15 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from .const import (
     DOMAIN,
     CONF_SOURCE,
+    CONF_AREA,
     CONF_UPDATE_INTERVAL,
-    CONF_ENABLE_FALLBACK,
-    SOURCE_ENERGI_DATA_SERVICE,
-    SOURCE_NORDPOOL,
-    SOURCE_ENTSO_E,
-    SOURCE_EPEX,
-    SOURCE_OMIE,
-    SOURCE_AEMO,
+    CONF_CURRENCY,
     DEFAULT_UPDATE_INTERVAL,
-    DEFAULT_ENABLE_FALLBACK,
 )
-from .coordinator import GSpotDataUpdateCoordinator
+from .coordinator import ElectricityPriceCoordinator
 
-# Import API handlers
-from .api.energi_data import EnergiDataServiceAPI
-from .api.nordpool import NordpoolAPI
+# Import API handlers (as needed based on source)
+from .api.base import BaseEnergyAPI
 
 PLATFORMS = [Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)
@@ -33,9 +27,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up from a config entry."""
     # Get configuration
     source_type = entry.data.get(CONF_SOURCE)
+    area = entry.data.get(CONF_AREA)
+    currency = entry.data.get(CONF_CURRENCY)
     
-    _LOGGER.debug(f"Setting up integration with source_type: {source_type}")
-    _LOGGER.debug(f"Config entry data: {entry.data}")
+    _LOGGER.debug(f"Setting up integration with source_type: {source_type}, area: {area}")
     
     if not source_type:
         _LOGGER.error(f"Invalid source type: {source_type}. Check your configuration.")
@@ -54,18 +49,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
     )
     
-    # Get fallback preference (prefer options over data, with fallback to default)
-    enable_fallback = entry.options.get(
-        CONF_ENABLE_FALLBACK,
-        entry.data.get(CONF_ENABLE_FALLBACK, DEFAULT_ENABLE_FALLBACK)
-    )
-    
     # Create a data coordinator
-    coordinator = GSpotDataUpdateCoordinator(
+    coordinator = ElectricityPriceCoordinator(
         hass,
+        f"electricity_prices_{area}",
+        timedelta(minutes=update_interval),
         api,
-        update_interval,
-        enable_fallback,
+        area,
+        currency,
     )
     
     # Fetch initial data
@@ -90,7 +81,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Close API session
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    await coordinator.close()
+    await coordinator.api.close()
     
     # Remove entry from data
     if unload_ok:
@@ -104,30 +95,7 @@ async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 def create_api_handler(source_type, config, options=None):
     """Create the appropriate API handler based on source type."""
-    # Merge config and options, with options taking precedence
-    combined_config = dict(config)
-    if options:
-        combined_config.update(options)
-    
-    _LOGGER.debug(f"Creating API handler for source_type: {source_type}")
-    
-    if source_type == SOURCE_ENERGI_DATA_SERVICE:
-        return EnergiDataServiceAPI(combined_config)
-    elif source_type == SOURCE_NORDPOOL:
-        return NordpoolAPI(combined_config)
-    elif source_type == SOURCE_ENTSO_E:
-        # Import here to avoid circular imports
-        from .api.entsoe import EntsoEAPI
-        return EntsoEAPI(combined_config)
-    elif source_type == SOURCE_EPEX:
-        from .api.epex import EpexAPI
-        return EpexAPI(combined_config)
-    elif source_type == SOURCE_OMIE:
-        from .api.omie import OmieAPI
-        return OmieAPI(combined_config)
-    elif source_type == SOURCE_AEMO:
-        from .api.aemo import AemoAPI
-        return AemoAPI(combined_config)
-    else:
-        _LOGGER.error(f"Unknown source type: {source_type}")
-        return None
+    # Implementation will vary based on your API modules
+    # This is a placeholder for the actual implementation
+    # You should import and return the appropriate API class instance
+    return BaseEnergyAPI(config)
