@@ -27,6 +27,9 @@ from .const import (
     ATTR_OFF_PEAK_2,
     ATTR_PEAK,
     ATTR_LAST_UPDATED,
+    ATTR_DATA_SOURCE,
+    ATTR_FALLBACK_USED,
+    ATTR_RAW_API_DATA,
     SENSOR_TYPE_CURRENT,
     SENSOR_TYPE_NEXT,
     SENSOR_TYPE_DAY_AVG,
@@ -91,12 +94,27 @@ class BaseElectricityPriceSensor(SensorEntity):
         if not self.coordinator.data:
             return {}
             
-        return {
+        attrs = {
             ATTR_CURRENCY: self._currency,
             ATTR_AREA: self._area,
             ATTR_VAT: self._vat,
             ATTR_LAST_UPDATED: self.coordinator.data.get(ATTR_LAST_UPDATED),
+            # Add data source and fallback information
+            ATTR_DATA_SOURCE: self.coordinator.data.get(ATTR_DATA_SOURCE),
+            ATTR_FALLBACK_USED: self.coordinator.data.get(ATTR_FALLBACK_USED, False),
         }
+        
+        # Add fallback information if available
+        if "fallback_info" in self.coordinator.data:
+            attrs["fallback_info"] = self.coordinator.data["fallback_info"]
+            
+        # Add raw values if available
+        if "raw_values" in self.coordinator.data:
+            raw_values = self.coordinator.data["raw_values"]
+            if "today" in raw_values and self._sensor_type in raw_values["today"]:
+                attrs["raw_value"] = raw_values["today"][self._sensor_type]
+                
+        return attrs
         
     async def async_added_to_hass(self):
         """When entity is added to hass."""
@@ -137,6 +155,13 @@ class CurrentPriceSensor(BaseElectricityPriceSensor):
             ATTR_RAW_TODAY: self.coordinator.data.get(ATTR_RAW_TODAY, []),
             ATTR_RAW_TOMORROW: self.coordinator.data.get(ATTR_RAW_TOMORROW, []),
         })
+        
+        # Add raw API data if available and if debugging enabled
+        if self.coordinator.data.get("raw_api_data"):
+            # Only include raw API data for the current price sensor
+            # as it would make all sensors too verbose
+            attrs["raw_api_data"] = self.coordinator.data.get("raw_api_data")
+            
         return attrs
 
 
