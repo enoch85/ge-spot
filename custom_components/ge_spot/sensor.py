@@ -1,7 +1,7 @@
 """Support for electricity price sensors."""
 import logging
 import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -43,9 +43,30 @@ from .const import (
     DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES,
     REGION_TO_CURRENCY,
+    NORDPOOL_AREAS,
+    ENERGI_DATA_AREAS,
+    ENTSOE_AREAS,
+    EPEX_AREAS,
+    OMIE_AREAS,
+    AEMO_AREAS,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+def get_area_friendly_name(area_code):
+    """Get a friendly name for the area code from the appropriate mapping."""
+    # Check each area dictionary for the code
+    all_areas = {
+        **NORDPOOL_AREAS,
+        **ENERGI_DATA_AREAS,
+        **ENTSOE_AREAS,
+        **EPEX_AREAS,
+        **OMIE_AREAS,
+        **AEMO_AREAS
+    }
+    
+    # Return the friendly name if found, otherwise return the code
+    return all_areas.get(area_code, area_code)
 
 class BaseElectricityPriceSensor(SensorEntity):
     """Base sensor for electricity prices."""
@@ -70,7 +91,10 @@ class BaseElectricityPriceSensor(SensorEntity):
             self._currency = area_specific_currency
             _LOGGER.debug(f"Corrected currency for {self._area} to {self._currency}")
         
-        self._attr_name = f"Electricity {name_suffix} {self._area}"
+        # Get friendly area name instead of code
+        friendly_area_name = get_area_friendly_name(self._area)
+        
+        self._attr_name = f"Electricity {name_suffix} {friendly_area_name}"
         self._attr_unique_id = f"electricity_{sensor_type}_{self._area}_{self._currency}".lower()
         
         # Set the correct unit based on display_unit configuration
@@ -90,7 +114,7 @@ class BaseElectricityPriceSensor(SensorEntity):
     
     @property
     def extra_state_attributes(self):
-        """Return the state attributes."""
+        """Return the state attributes with reduced size."""
         if not self.coordinator.data:
             return {}
             
@@ -99,21 +123,32 @@ class BaseElectricityPriceSensor(SensorEntity):
             ATTR_AREA: self._area,
             ATTR_VAT: self._vat,
             ATTR_LAST_UPDATED: self.coordinator.data.get(ATTR_LAST_UPDATED),
-            # Add data source and fallback information
             ATTR_DATA_SOURCE: self.coordinator.data.get(ATTR_DATA_SOURCE),
             ATTR_FALLBACK_USED: self.coordinator.data.get(ATTR_FALLBACK_USED, False),
         }
         
-        # Add fallback information if available
+        # Add compact fallback information
         if "fallback_info" in self.coordinator.data:
-            attrs["fallback_info"] = self.coordinator.data["fallback_info"]
+            fallback_info = self.coordinator.data["fallback_info"]
+            # Only include essential fallback information
+            compact_fallback = {
+                "primary_source": fallback_info.get("primary_source"),
+                "active_source": fallback_info.get("active_source"),
+                "fallback_used": fallback_info.get("fallback_used")
+            }
+            attrs["fallback_info"] = compact_fallback
             
-        # Add raw values if available
+        # Add raw values if available but keep it minimal
         if "raw_values" in self.coordinator.data:
             raw_values = self.coordinator.data["raw_values"]
             if "today" in raw_values and self._sensor_type in raw_values["today"]:
-                attrs["raw_value"] = raw_values["today"][self._sensor_type]
-                
+                # Only include final value, not all conversion steps
+                raw_value = raw_values["today"][self._sensor_type]
+                if isinstance(raw_value, dict) and "final" in raw_value:
+                    attrs["raw_value"] = raw_value["final"]
+                else:
+                    attrs["raw_value"] = raw_value
+                    
         return attrs
         
     async def async_added_to_hass(self):
@@ -143,26 +178,56 @@ class CurrentPriceSensor(BaseElectricityPriceSensor):
     
     @property
     def extra_state_attributes(self):
-        """Return the state attributes."""
+        """Return the state attributes with reduced size for the current price sensor."""
         attrs = super().extra_state_attributes
         if not self.coordinator.data:
             return attrs
             
+        # Include today's prices but limit raw data
         attrs.update({
             ATTR_TODAY: self.coordinator.data.get(ATTR_TODAY, []),
             ATTR_TOMORROW: self.coordinator.data.get(ATTR_TOMORROW, []),
             ATTR_TOMORROW_VALID: self.coordinator.data.get(ATTR_TOMORROW_VALID, False),
-            ATTR_RAW_TODAY: self.coordinator.data.get(ATTR_RAW_TODAY, []),
-            ATTR_RAW_TOMORROW: self.coordinator.data.get(ATTR_RAW_TOMORROW, []),
         })
         
-        # Add raw API data if available and if debugging enabled
-        if self.coordinator.data.get("raw_api_data"):
-            # Only include raw API data for the current price sensor
-            # as it would make all sensors too verbose
-            attrs["raw_api_data"] = self.coordinator.data.get("raw_api_data")
+        # Include only simplified versions of raw data
+        if self.coordinator.data.get(ATTR_RAW_TODAY):
+            # Limit to a reasonable number of entries
+            attrs[ATTR_RAW_TODAY] = self._simplify_raw_data(
+                self.coordinator.data.get(ATTR_RAW_TODAY, [])
+            )
+            
+        if self.coordinator.data.get(ATTR_RAW_TOMORROW):
+            attrs[ATTR_RAW_TOMORROW] = self._simplify_raw_data(
+                self.coordinator.data.get(ATTR_RAW_TOMORROW, [])
+            )
             
         return attrs
+        
+    def _simplify_raw_data(self, raw_data):
+        """Simplify raw data to reduce attribute size."""
+        if not raw_data or not isinstance(raw_data, list):
+            return []
+            
+        # Limit to a maximum of 24 entries (one per hour)
+        if len(raw_data) > 24:
+            _LOGGER.debug(f"Limiting raw data from {len(raw_data)} to 24 entries")
+            raw_data = raw_data[:24]
+            
+        # Simplify each entry to just the essential fields
+        simplified = []
+        for entry in raw_data:
+            if not isinstance(entry, dict):
+                continue
+                
+            simple_entry = {
+                "start": entry.get("start"),
+                "end": entry.get("end"),
+                "price": entry.get("price")
+            }
+            simplified.append(simple_entry)
+            
+        return simplified
 
 
 class NextHourPriceSensor(BaseElectricityPriceSensor):
