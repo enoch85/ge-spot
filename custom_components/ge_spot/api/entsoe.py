@@ -71,7 +71,7 @@ class EntsoEAPI(BaseEnergyAPI):
                 
         return None
             
-    def _process_data(self, data):
+    async def _process_data(self, data):
         """Process the data from ENTSO-E."""
         if not data:
             return None
