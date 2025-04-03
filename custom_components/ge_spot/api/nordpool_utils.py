@@ -17,6 +17,7 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
     next_hour_price = None
     hourly_prices = {}
     all_prices = []
+    raw_values = {}  # Store raw values before conversion
     
     try:
         # Process based on the new API format
@@ -84,14 +85,30 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 _LOGGER.warning(f"Price is not a number: {price} (type: {type(price)})")
                 continue
             
+            # Store the raw price value before any conversions
+            raw_price = price
+            
+            # Log the raw value for debugging
+            _LOGGER.debug(f"Raw price value from API: {raw_price} EUR/MWh")
+            
             # Convert from EUR/MWh to SEK/kWh with the updated conversion function
             price = convert_energy_price(price, from_unit="MWh", to_unit="kWh", vat=0)
+            _LOGGER.debug(f"After energy unit conversion: {price} EUR/kWh")
+            
+            # Store the value after unit conversion but before VAT
+            pre_vat_price = price
+            
             if apply_vat_func:
                 price = apply_vat_func(price)
+                _LOGGER.debug(f"After VAT application: {price} EUR/kWh")
+            
+            # Store the value after VAT but before potential subunit conversion
+            post_vat_price = price
             
             # Convert to subunit (e.g., öre) if enabled
             if use_subunit:
                 price = convert_to_subunit(price, currency)
+                _LOGGER.debug(f"After subunit conversion: {price} {currency}/kWh")
             
             # Parse the hour from the start_time
             try:
@@ -112,11 +129,25 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 if current_hour is not None and hour == current_hour:
                     current_price = price
                     _LOGGER.debug(f"Found current hour price for {hour}: {price}")
+                    # Store raw value for current price
+                    raw_values["current_price"] = {
+                        "raw": raw_price,
+                        "unit_converted": pre_vat_price,
+                        "with_vat": post_vat_price,
+                        "final": price
+                    }
                     
                 # Check if this is next hour
                 if current_hour is not None and hour == (current_hour + 1) % 24:
                     next_hour_price = price
                     _LOGGER.debug(f"Found next hour price for hour {(current_hour + 1) % 24}: {price}")
+                    # Store raw value for next hour price
+                    raw_values["next_hour_price"] = {
+                        "raw": raw_price,
+                        "unit_converted": pre_vat_price,
+                        "with_vat": post_vat_price,
+                        "final": price
+                    }
                     
             except (ValueError, TypeError) as e:
                 _LOGGER.error(f"Error parsing datetime {start_time}: {e}")
@@ -138,6 +169,22 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
         peak_price = max(all_prices) if all_prices else None
         off_peak_price = min(all_prices) if all_prices else None
         
+        # Store raw values for statistics
+        raw_values["day_average_price"] = {
+            "value": day_average_price,
+            "calculation": "average of all hourly prices"
+        }
+        
+        raw_values["peak_price"] = {
+            "value": peak_price,
+            "calculation": "maximum of all hourly prices"
+        }
+        
+        raw_values["off_peak_price"] = {
+            "value": off_peak_price,
+            "calculation": "minimum of all hourly prices"
+        }
+        
         return {
             "current_price": current_price,
             "next_hour_price": next_hour_price,
@@ -145,6 +192,7 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
             "peak_price": peak_price,
             "off_peak_price": off_peak_price,
             "hourly_prices": hourly_prices,
+            "raw_values": raw_values
         }
     except Exception as e:
         _LOGGER.error(f"Error processing Nordpool data: {e}", exc_info=True)
@@ -157,6 +205,7 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
     # Create simulated hourly prices for today
     today_hourly_prices = {}
     today_all_prices = []
+    raw_values = {}  # Store raw values
     
     # Create simulated hourly prices for tomorrow
     tomorrow_hourly_prices = {}
@@ -169,11 +218,20 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
         
         # Today's prices
         if is_peak:
-            today_price = 0.18 + 0.02 * (hour % 3) + (now.day % 10) * 0.001
+            raw_price = 0.18 + 0.02 * (hour % 3) + (now.day % 10) * 0.001
         else:
-            today_price = 0.12 + 0.01 * (abs(12 - hour) / 12) + (now.day % 10) * 0.001
+            raw_price = 0.12 + 0.01 * (abs(12 - hour) / 12) + (now.day % 10) * 0.001
         
-        today_price = apply_vat_func(today_price)
+        # Store raw value before VAT
+        pre_vat_price = raw_price
+        
+        # Apply VAT
+        today_price = apply_vat_func(raw_price)
+        
+        # Store value after VAT
+        post_vat_price = today_price
+        
+        # Apply subunit conversion if needed
         if use_subunit:
             today_price = convert_to_subunit(today_price, currency)
             
@@ -181,13 +239,29 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
         today_hourly_prices[hour_str] = today_price
         today_all_prices.append(today_price)
         
+        # Store raw values for current and next hour
+        if hour == current_hour:
+            raw_values["current_price"] = {
+                "raw": raw_price,
+                "with_vat": post_vat_price,
+                "final": today_price,
+                "simulated": True
+            }
+        elif hour == (current_hour + 1) % 24:
+            raw_values["next_hour_price"] = {
+                "raw": raw_price,
+                "with_vat": post_vat_price,
+                "final": today_price,
+                "simulated": True
+            }
+        
         # Tomorrow's prices (slightly different pattern)
         if is_peak:
-            tomorrow_price = 0.19 + 0.015 * (hour % 3) + ((now.day + 1) % 10) * 0.001
+            tomorrow_raw_price = 0.19 + 0.015 * (hour % 3) + ((now.day + 1) % 10) * 0.001
         else:
-            tomorrow_price = 0.13 + 0.008 * (abs(12 - hour) / 12) + ((now.day + 1) % 10) * 0.001
+            tomorrow_raw_price = 0.13 + 0.008 * (abs(12 - hour) / 12) + ((now.day + 1) % 10) * 0.001
         
-        tomorrow_price = apply_vat_func(tomorrow_price)
+        tomorrow_price = apply_vat_func(tomorrow_raw_price)
         if use_subunit:
             tomorrow_price = convert_to_subunit(tomorrow_price, currency)
             
@@ -208,6 +282,25 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
     tomorrow_peak_price = max(tomorrow_all_prices) if tomorrow_all_prices else None
     tomorrow_off_peak_price = min(tomorrow_all_prices) if tomorrow_all_prices else None
     
+    # Store raw values for statistics
+    raw_values["day_average_price"] = {
+        "value": today_average_price,
+        "calculation": "average of all hourly prices",
+        "simulated": True
+    }
+    
+    raw_values["peak_price"] = {
+        "value": today_peak_price,
+        "calculation": "maximum of all hourly prices",
+        "simulated": True
+    }
+    
+    raw_values["off_peak_price"] = {
+        "value": today_off_peak_price,
+        "calculation": "minimum of all hourly prices",
+        "simulated": True
+    }
+    
     _LOGGER.debug(f"Generated simulated data with current price: {current_price}, next hour: {next_hour_price}")
     
     return {
@@ -222,5 +315,6 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
         "tomorrow_off_peak_price": tomorrow_off_peak_price,
         "tomorrow_hourly_prices": tomorrow_hourly_prices,
         "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "raw_values": raw_values,
         "simulated": True,  # Flag to indicate this is simulated data
     }
