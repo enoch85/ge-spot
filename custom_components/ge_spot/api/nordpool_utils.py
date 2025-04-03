@@ -1,13 +1,13 @@
 """Utility functions for Nordpool API."""
 import logging
 import datetime
-from ..utils.currency_utils import convert_energy_price
+from ..utils.currency_utils import async_convert_energy_price
 from ..utils.timezone_utils import convert_to_local_time
 from ..const import CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY
 
 _LOGGER = logging.getLogger(__name__)
 
-def process_day_data(data, area, current_hour=None, use_subunit=False, currency="EUR", apply_vat_func=None):
+async def process_day_data(data, area, current_hour=None, use_subunit=False, currency="EUR", apply_vat_func=None, session=None):
     """Process price data for a single day with improved currency handling."""
     if not data or "multiAreaEntries" not in data:
         _LOGGER.debug("No valid data provided to process_day_data")
@@ -122,11 +122,10 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
             
             # Store the raw price value before any conversions
             raw_price = price
-            
             _LOGGER.debug(f"Raw price value from API: {raw_price} {api_currency}/MWh for {start_time}")
             
-            # Use the comprehensive conversion function
-            final_price = convert_energy_price(
+            # Use the comprehensive conversion function (async version)
+            final_price = await async_convert_energy_price(
                 price=raw_price,
                 from_unit="MWh",
                 to_unit="kWh",
@@ -134,7 +133,8 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 to_currency=target_currency,
                 vat=vat_rate,
                 to_subunit=use_subunit,
-                exchange_rate=exchange_rate
+                exchange_rate=exchange_rate,
+                session=session
             )
             
             # Parse the hour from the start_time
