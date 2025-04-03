@@ -1,6 +1,7 @@
 """Utility functions for currency and unit conversions."""
 import logging
 from typing import Dict, Optional
+import asyncio
 
 from ..const import (
     REGION_TO_CURRENCY,
@@ -8,6 +9,7 @@ from ..const import (
     CURRENCY_SUBUNIT_NAMES,
     ENERGY_UNIT_CONVERSION
 )
+from .exchange_service import get_exchange_service
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,10 +73,58 @@ def mwh_to_kwh(price):
     return result
 
 
-# New comprehensive conversion function
-def convert_energy_price(price, from_unit="MWh", to_unit="kWh", 
-                        from_currency="EUR", to_currency=None, vat=0,
-                        to_subunit=False, exchange_rate=None):
+async def async_convert_currency(amount, from_currency, to_currency, session=None):
+    """Convert currency asynchronously using exchange service."""
+    if from_currency == to_currency or amount is None:
+        return amount
+        
+    try:
+        service = await get_exchange_service(session)
+        result = await service.convert(amount, from_currency, to_currency)
+        _LOGGER.debug(f"Currency conversion: {amount} {from_currency} → {result} {to_currency}")
+        return result
+    except Exception as e:
+        _LOGGER.error(f"Error in currency conversion: {e}")
+        # Fall back to the built-in rates
+        return _fallback_convert_currency(amount, from_currency, to_currency)
+
+
+def _fallback_convert_currency(amount, from_currency, to_currency):
+    """Fallback currency conversion using fixed rates when exchange service fails."""
+    from .exchange_service import FALLBACK_RATES
+    
+    if from_currency == to_currency or amount is None:
+        return amount
+        
+    try:
+        # EUR to other currency
+        if from_currency == "EUR" and to_currency in FALLBACK_RATES:
+            result = amount * FALLBACK_RATES[to_currency]
+            _LOGGER.debug(f"Fallback conversion: {amount} {from_currency} → {result} {to_currency}")
+            return result
+            
+        # Other currency to EUR
+        if to_currency == "EUR" and from_currency in FALLBACK_RATES:
+            result = amount / FALLBACK_RATES[from_currency]
+            _LOGGER.debug(f"Fallback conversion: {amount} {from_currency} → {result} {to_currency}")
+            return result
+            
+        # Between two non-EUR currencies (via EUR)
+        if from_currency in FALLBACK_RATES and to_currency in FALLBACK_RATES:
+            eur_value = amount / FALLBACK_RATES[from_currency]
+            result = eur_value * FALLBACK_RATES[to_currency]
+            _LOGGER.debug(f"Fallback conversion: {amount} {from_currency} → {result} {to_currency} (via EUR)")
+            return result
+    except Exception as e:
+        _LOGGER.error(f"Error in fallback currency conversion: {e}")
+    
+    _LOGGER.warning(f"No exchange rate found for {from_currency} to {to_currency}, returning original amount")
+    return amount
+
+
+async def async_convert_energy_price(price, from_unit="MWh", to_unit="kWh", 
+                              from_currency="EUR", to_currency=None, vat=0,
+                              to_subunit=False, exchange_rate=None, session=None):
     """
     Comprehensive energy price conversion function.
     
@@ -87,6 +137,7 @@ def convert_energy_price(price, from_unit="MWh", to_unit="kWh",
         vat: VAT rate to apply (0-1)
         to_subunit: Whether to convert to subunit (e.g., SEK → öre)
         exchange_rate: Optional explicit exchange rate to use
+        session: Optional aiohttp session to use
         
     Returns:
         Converted price value
@@ -106,11 +157,11 @@ def convert_energy_price(price, from_unit="MWh", to_unit="kWh",
         if exchange_rate is not None:
             # Use provided exchange rate
             price = price * exchange_rate
-            _LOGGER.debug(f"Currency conversion using explicit rate: {original_price} {from_currency}/{from_unit} → {price} {to_currency}/{from_unit} (rate: {exchange_rate})")
+            _LOGGER.debug(f"Currency conversion using provided rate: {original_price} {from_currency}/{from_unit} → {price} {to_currency}/{from_unit} (rate: {exchange_rate})")
         else:
-            # Use built-in exchange rates
-            price = convert_currency(price, from_currency, to_currency)
-            _LOGGER.debug(f"Currency conversion: {original_price} {from_currency}/{from_unit} → {price} {to_currency}/{from_unit}")
+            # Use exchange service
+            price = await async_convert_currency(price, from_currency, to_currency, session)
+            _LOGGER.debug(f"Currency conversion via service: {original_price} {from_currency}/{from_unit} → {price} {to_currency}/{from_unit}")
     
     # Step 3: Convert between energy units (e.g., MWh → kWh)
     original_unit_price = price
@@ -138,42 +189,4 @@ def convert_energy_price(price, from_unit="MWh", to_unit="kWh",
         currency_str = get_subunit_name(currency_str)
     _LOGGER.debug(f"Complete conversion: {original_price} {from_currency}/{from_unit} → {price} {currency_str}/{to_unit}")
     
-    return price
-
-
-# Exchange rates for common currencies from EUR
-# These are fallbacks if the ECB API is unavailable
-EXCHANGE_RATES = {
-    "SEK": 11.3,  # 1 EUR = 11.3 SEK
-    "NOK": 11.7,  # 1 EUR = 11.7 NOK
-    "DKK": 7.46,  # 1 EUR = 7.46 DKK
-    "GBP": 0.85,  # 1 EUR = 0.85 GBP
-    "AUD": 1.64,  # 1 EUR = 1.64 AUD
-}
-
-def convert_currency(price, from_currency, to_currency):
-    """Convert between currencies using fixed rates."""
-    if price is None or from_currency == to_currency:
-        return price
-        
-    # EUR to other currency
-    if from_currency == "EUR" and to_currency in EXCHANGE_RATES:
-        result = price * EXCHANGE_RATES[to_currency]
-        _LOGGER.debug(f"Converting {price} {from_currency} to {result} {to_currency}")
-        return result
-        
-    # Other currency to EUR
-    if to_currency == "EUR" and from_currency in EXCHANGE_RATES:
-        result = price / EXCHANGE_RATES[from_currency]
-        _LOGGER.debug(f"Converting {price} {from_currency} to {result} {to_currency}")
-        return result
-        
-    # Between two non-EUR currencies (via EUR)
-    if from_currency in EXCHANGE_RATES and to_currency in EXCHANGE_RATES:
-        eur_value = price / EXCHANGE_RATES[from_currency]
-        result = eur_value * EXCHANGE_RATES[to_currency]
-        _LOGGER.debug(f"Converting {price} {from_currency} to {result} {to_currency} (via EUR)")
-        return result
-        
-    _LOGGER.warning(f"No exchange rate found for {from_currency} to {to_currency}")
     return price
