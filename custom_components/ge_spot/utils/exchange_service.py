@@ -13,6 +13,16 @@ _LOGGER = logging.getLogger(__name__)
 # European Central Bank (ECB) exchange rates API
 ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
 
+# Fallback exchange rates if API fails
+FALLBACK_RATES = {
+    "EUR": 1.0,
+    "SEK": 11.3,  # 1 EUR = 11.3 SEK
+    "NOK": 11.7,  # 1 EUR = 11.7 NOK
+    "DKK": 7.46,  # 1 EUR = 7.46 DKK
+    "GBP": 0.85,  # 1 EUR = 0.85 GBP
+    "AUD": 1.64,  # 1 EUR = 1.64 AUD
+}
+
 class ExchangeRateService:
     """Service to fetch and cache currency exchange rates."""
     
@@ -32,8 +42,12 @@ class ExchangeRateService:
     
     def _get_default_cache_path(self):
         """Get default path for cache file."""
-        home_dir = os.path.expanduser("~")
-        return os.path.join(home_dir, ".ge_spot_exchange_rates.json")
+        try:
+            home_dir = os.path.expanduser("~")
+            return os.path.join(home_dir, ".ge_spot_exchange_rates.json")
+        except Exception:
+            # Fallback for environments where home directory might not be available
+            return "/tmp/ge_spot_exchange_rates.json"
     
     async def _ensure_session(self):
         """Ensure we have an aiohttp session."""
@@ -161,21 +175,10 @@ class ExchangeRateService:
                 return self.rates
             elif not self.rates:
                 # If we failed to fetch and have no cached rates, use fallback defaults
-                self.rates = self._get_fallback_rates()
+                self.rates = FALLBACK_RATES.copy()
                 _LOGGER.warning("Using fallback exchange rates")
             
         return self.rates
-    
-    def _get_fallback_rates(self):
-        """Get fallback exchange rates if all else fails."""
-        return {
-            "EUR": 1.0,
-            "SEK": 11.3,
-            "NOK": 11.7,
-            "DKK": 7.46,
-            "GBP": 0.85,
-            "AUD": 1.64
-        }
     
     async def convert(self, amount, from_currency, to_currency):
         """Convert an amount from one currency to another.
@@ -199,15 +202,22 @@ class ExchangeRateService:
             
         # Check if we have the rates
         if from_currency not in rates or to_currency not in rates:
-            _LOGGER.warning(f"Missing exchange rates for {from_currency} → {to_currency}")
-            return amount
+            _LOGGER.warning(f"Missing exchange rates for {from_currency} → {to_currency}, using fallback rates")
             
-        # Convert: from_amount / from_rate * to_rate
-        from_rate = rates[from_currency]
-        to_rate = rates[to_currency]
+            # Try fallback rates if official rates not available
+            if from_currency in FALLBACK_RATES and to_currency in FALLBACK_RATES:
+                from_rate = FALLBACK_RATES[from_currency]
+                to_rate = FALLBACK_RATES[to_currency]
+            else:
+                _LOGGER.error(f"No exchange rate found for {from_currency} → {to_currency}, returning original amount")
+                return amount
+        else:
+            from_rate = rates[from_currency]
+            to_rate = rates[to_currency]
         
+        # Convert: from_amount / from_rate * to_rate
         result = amount / from_rate * to_rate
-        _LOGGER.info(f"Currency conversion: {amount} {from_currency} → {result} {to_currency} (rates: {from_currency}={from_rate}, {to_currency}={to_rate})")
+        _LOGGER.debug(f"Currency conversion: {amount} {from_currency} → {result} {to_currency} (rates: {from_currency}={from_rate}, {to_currency}={to_rate})")
         
         return result
 
