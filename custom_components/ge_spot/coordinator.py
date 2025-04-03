@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .price_adapter import ElectricityPriceAdapter
 from .const import (
+    Attributes,
     ATTR_CURRENT_PRICE,
     ATTR_TODAY,
     ATTR_TOMORROW,
@@ -54,7 +55,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
         self._last_successful_data = None
         self._fallback_apis = fallback_apis or []
         self._enable_fallback = enable_fallback
-        self._active_source = None
+        self._active_source = api.__class__.__name__ if api else None
         self._fallback_used = False
         self._attempted_sources = []  # Track all sources that were attempted
     
@@ -65,16 +66,19 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
             
             # Reset tracking variables
             self._fallback_used = False
-            self._active_source = self.api.__class__.__name__
-            self._attempted_sources = [self._active_source]
+            self._active_source = self.api.__class__.__name__ if self.api else None
+            self._attempted_sources = [self._active_source] if self._active_source else []
             
             # Fetch today's data from primary source
             _LOGGER.info(f"Attempting to fetch data from primary source: {self._active_source}")
-            today_data = await self.api.fetch_day_ahead_prices(
-                self.area, 
-                self.currency,
-                dt_util.now()
-            )
+            today_data = None
+            
+            if self.api:
+                today_data = await self.api.fetch_day_ahead_prices(
+                    self.area, 
+                    self.currency,
+                    dt_util.now()
+                )
             
             # If primary API failed and fallback is enabled, try fallback APIs
             if not today_data and self._enable_fallback and self._fallback_apis:
@@ -119,25 +123,22 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
             if now.hour >= 13:
                 try:
                     # First try from the same source that provided today's data
+                    api_to_use = None
                     if self._fallback_used:
                         # We already used a fallback API for today's data, use the same for tomorrow
                         for fallback_api in self._fallback_apis:
                             if fallback_api.__class__.__name__ == self._active_source:
-                                tomorrow_source = self._active_source
-                                tomorrow_attempted_sources.append(tomorrow_source)
-                                _LOGGER.info(f"Attempting to fetch tomorrow's data from same fallback source: {tomorrow_source}")
-                                tomorrow_data = await fallback_api.fetch_day_ahead_prices(
-                                    self.area,
-                                    self.currency,
-                                    dt_util.now() + timedelta(days=1)
-                                )
+                                api_to_use = fallback_api
                                 break
                     else:
                         # Use primary API for tomorrow's data
-                        tomorrow_source = self.api.__class__.__name__
+                        api_to_use = self.api
+                        
+                    if api_to_use:
+                        tomorrow_source = api_to_use.__class__.__name__
                         tomorrow_attempted_sources.append(tomorrow_source)
-                        _LOGGER.info(f"Attempting to fetch tomorrow's data from primary source: {tomorrow_source}")
-                        tomorrow_data = await self.api.fetch_day_ahead_prices(
+                        _LOGGER.info(f"Attempting to fetch tomorrow's data from same source: {tomorrow_source}")
+                        tomorrow_data = await api_to_use.fetch_day_ahead_prices(
                             self.area,
                             self.currency,
                             dt_util.now() + timedelta(days=1)
@@ -249,11 +250,13 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                     "peak": None
                 }
             
-            # Build fallback information - streamlined version
+            # Build fallback information
+            primary_source = self.api.__class__.__name__ if self.api else None
             fallback_info = {
-                "primary_source": self.api.__class__.__name__,
+                "primary_source": primary_source,
                 "active_source": self._active_source,
-                "fallback_used": self._fallback_used
+                "fallback_used": self._fallback_used,
+                "attempted_sources": self._attempted_sources
             }
             
             # Calculate next update time
@@ -281,7 +284,6 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 "next_update": next_update.isoformat(),
                 ATTR_DATA_SOURCE: self._active_source,
                 ATTR_FALLBACK_USED: self._fallback_used,
-                # Don't include full raw API data in the attributes
                 "raw_values": raw_values,
                 "fallback_info": fallback_info
             }
