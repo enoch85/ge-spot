@@ -1,0 +1,6 @@
+aiohttp>=3.8.0
+beautifulsoup4>=4.11.0
+homeassistant>=2023.8.0
+voluptuous>=0.13.0
+xmltodict>=0.13.0
+PyJWT>=2.6.0
