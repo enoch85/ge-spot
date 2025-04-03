@@ -3,7 +3,7 @@ import logging
 import datetime
 import asyncio
 from .base import BaseEnergyAPI
-from ..utils.currency_utils import convert_to_subunit, convert_energy_price
+from ..utils.currency_utils import async_convert_energy_price
 from .nordpool_utils import process_day_data
 
 # Import constants directly from the module
@@ -117,7 +117,7 @@ class NordpoolAPI(BaseEnergyAPI):
             _LOGGER.error(f"Error in _fetch_data: {str(e)}", exc_info=True)
             return None
             
-    def _process_data(self, raw_data):
+    async def _process_data(self, raw_data):
         """Process the data from Nordpool."""
         if not raw_data:
             _LOGGER.error("No data in Nordpool response")
@@ -147,9 +147,15 @@ class NordpoolAPI(BaseEnergyAPI):
         # Process today's data
         try:
             _LOGGER.debug(f"Processing today's data for area: {area}")
-            today_processed = process_day_data(today_data, area, current_hour, 
-                                              self.config.get("price_in_cents", False), 
-                                              self._currency, self._apply_vat)
+            today_processed = await process_day_data(
+                today_data, 
+                area, 
+                current_hour, 
+                self.config.get("price_in_cents", False), 
+                self._currency, 
+                self._apply_vat,
+                self.session
+            )
             if today_processed:
                 # Add today's data to result
                 result.update({
@@ -172,9 +178,15 @@ class NordpoolAPI(BaseEnergyAPI):
         if tomorrow_data and "multiAreaEntries" in tomorrow_data:
             try:
                 _LOGGER.debug(f"Processing tomorrow's data for area: {area}")
-                tomorrow_processed = process_day_data(tomorrow_data, area, None,
-                                                    self.config.get("price_in_cents", False),
-                                                    self._currency, self._apply_vat)
+                tomorrow_processed = await process_day_data(
+                    tomorrow_data, 
+                    area, 
+                    None,
+                    self.config.get("price_in_cents", False),
+                    self._currency, 
+                    self._apply_vat,
+                    self.session
+                )
                 if tomorrow_processed:
                     # Add tomorrow's data to result
                     result.update({
@@ -189,5 +201,8 @@ class NordpoolAPI(BaseEnergyAPI):
             except Exception as e:
                 _LOGGER.warning(f"Error processing tomorrow's Nordpool data: {str(e)}", exc_info=True)
                 # Continue even if tomorrow's data fails
+        
+        # Add raw API data for debugging
+        result["raw_api_response"] = raw_data
         
         return result
