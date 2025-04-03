@@ -103,7 +103,7 @@ class BaseEnergyAPI(ABC):
                 
             # Process the data into a consistent format
             _LOGGER.debug(f"Processing raw data for {area}")
-            processed_data = self._process_data(raw_data)
+            processed_data = await self._process_data(raw_data)
             
             if processed_data:
                 # Store the raw, unmodified API response
@@ -190,7 +190,7 @@ class BaseEnergyAPI(ABC):
         pass
         
     @abstractmethod
-    def _process_data(self, raw_data):
+    async def _process_data(self, raw_data):
         """Process raw price data into a consistent format.
         
         The expected output format is a dictionary with keys like:
