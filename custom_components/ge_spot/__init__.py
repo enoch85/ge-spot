@@ -14,6 +14,7 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     CONF_CURRENCY,
     DEFAULT_UPDATE_INTERVAL,
+    REGION_TO_CURRENCY,
 )
 from .coordinator import ElectricityPriceCoordinator
 
@@ -26,9 +27,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Get configuration
     source_type = entry.data.get(CONF_SOURCE)
     area = entry.data.get(CONF_AREA)
-    currency = entry.data.get(CONF_CURRENCY)
     
-    _LOGGER.debug(f"Setting up integration with source_type: {source_type}, area: {area}")
+    # Get currency based on region
+    currency = entry.data.get(CONF_CURRENCY, REGION_TO_CURRENCY.get(area, "EUR"))
+    
+    _LOGGER.debug(f"Setting up integration with source_type: {source_type}, area: {area}, currency: {currency}")
     
     if not source_type:
         _LOGGER.error(f"Invalid source type: {source_type}. Check your configuration.")
