@@ -51,7 +51,7 @@ class AemoAPI(BaseEnergyAPI):
                 
         return None
             
-    def _process_data(self, data):
+    async def _process_data(self, data):
         """Process the data from AEMO."""
         # Note: As AEMO's API format might differ, this implementation may need adjustment
         # This is a placeholder implementation based on assumed API response format
