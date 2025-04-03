@@ -76,7 +76,7 @@ class ExchangeRateService:
                 rate = float(cube.attrib.get("rate"))
                 rates[currency] = rate
             
-            # Include NOK, SEK, DKK if not in ECB data
+            # Include fallback rates for Nordic currencies if not in ECB data
             if "SEK" not in rates:
                 rates["SEK"] = 10.72  # Fallback rate
             if "NOK" not in rates:
