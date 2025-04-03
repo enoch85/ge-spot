@@ -1,21 +1,14 @@
 """Utility functions for Nordpool API."""
 import logging
 import datetime
+from ..utils.currency_utils import async_convert_energy_price
 from ..utils.timezone_utils import convert_to_local_time
 from ..const import CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY
 
 _LOGGER = logging.getLogger(__name__)
 
-# Define the exchange rates directly (can be replaced with dynamic service later)
-EXCHANGE_RATES = {
-    "SEK": 10.72411,  # 1 EUR = 10.72411 SEK
-    "NOK": 11.7,      # 1 EUR = 11.7 NOK
-    "DKK": 7.46,      # 1 EUR = 7.46 DKK
-    "EUR": 1.0
-}
-
 async def process_day_data(data, area, current_hour=None, use_subunit=False, currency="EUR", apply_vat_func=None, session=None):
-    """Process price data for a single day with direct currency handling."""
+    """Process price data for a single day with improved currency handling."""
     if not data or "multiAreaEntries" not in data:
         _LOGGER.debug("No valid data provided to process_day_data")
         return None
@@ -49,6 +42,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
             if not entry_per_area or not isinstance(entry_per_area, dict):
                 continue
             
+            # Add all areas from this entry to the available_areas set
             available_areas.update(entry_per_area.keys())
             
             if area in entry_per_area:
@@ -60,27 +54,28 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
             
         # Get target currency based on area
         target_currency = REGION_TO_CURRENCY.get(area, currency)
+        
         _LOGGER.debug(f"Using target currency {target_currency} for area {area}")
         
-        # Get exchange rate from data or use our fixed rates
-        exchange_rate = EXCHANGE_RATES.get(target_currency, 1.0)
+        # Get exchange rate from API data if available
+        exchange_rate = None
         if "exchangeRate" in data:
             try:
-                api_exchange_rate = float(data["exchangeRate"])
-                if api_exchange_rate > 0:
-                    exchange_rate = api_exchange_rate
-                    _LOGGER.debug(f"Using exchange rate from API: {exchange_rate}")
+                exchange_rate = float(data["exchangeRate"])
+                _LOGGER.debug(f"Using exchange rate from API data: {exchange_rate}")
             except (ValueError, TypeError):
                 _LOGGER.warning(f"Invalid exchange rate in API data: {data.get('exchangeRate')}")
         
-        # Source currency from API or default to EUR
+        # If there's a currency specified in API data, use it
         api_currency = data.get("currency", "EUR")
         _LOGGER.debug(f"API data currency: {api_currency}")
         
-        # Extract VAT rate
+        # Extract VAT rate from apply_vat_func for logging
         vat_rate = 0.0
-        if apply_vat_func and hasattr(apply_vat_func, "__self__") and hasattr(apply_vat_func.__self__, "vat"):
-            vat_rate = apply_vat_func.__self__.vat
+        if apply_vat_func:
+            # Extract vat rate from the function for logging
+            if hasattr(apply_vat_func, "__self__") and hasattr(apply_vat_func.__self__, "vat"):
+                vat_rate = apply_vat_func.__self__.vat
         
         for entry in entries:
             if not isinstance(entry, dict):
@@ -89,12 +84,12 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
             start_time = entry.get("deliveryStart")
             end_time = entry.get("deliveryEnd")
             if not start_time or not end_time:
-                _LOGGER.warning(f"Missing deliveryStart/End in entry")
+                _LOGGER.warning(f"Missing deliveryStart/End in entry: {entry.keys() if isinstance(entry, dict) else 'not a dict'}")
                 continue
             
             entry_per_area = entry.get("entryPerArea")
             if not entry_per_area or not isinstance(entry_per_area, dict):
-                _LOGGER.warning(f"Missing or invalid entryPerArea in entry")
+                _LOGGER.warning(f"Missing or invalid entryPerArea in entry: {entry.keys() if isinstance(entry, dict) else 'not a dict'}")
                 continue
             
             # Check if this area exists in the entryPerArea data
@@ -107,7 +102,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
                 _LOGGER.debug(f"No price found for area '{area}' in this entry")
                 continue
             
-            # Store in raw prices list
+            # Store in raw prices list exactly as in your example format
             raw_prices.append({
                 "start": start_time,
                 "end": end_time,
@@ -129,29 +124,18 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
             raw_price = price
             _LOGGER.debug(f"Raw price value from API: {raw_price} {api_currency}/MWh for {start_time}")
             
-            # DIRECT CONVERSION APPROACH
-            # Step 1: Convert currency (EUR to target currency)
-            price_in_target_currency = raw_price * exchange_rate
-            _LOGGER.debug(f"Step 1 - Currency conversion: {raw_price} {api_currency}/MWh → {price_in_target_currency} {target_currency}/MWh")
-            
-            # Step 2: Convert from MWh to kWh (divide by 1000)
-            price_per_kwh = price_in_target_currency / 1000
-            _LOGGER.debug(f"Step 2 - Energy unit conversion: {price_in_target_currency} {target_currency}/MWh → {price_per_kwh} {target_currency}/kWh")
-            
-            # Step 3: Apply VAT if needed
-            if vat_rate > 0:
-                price_with_vat = price_per_kwh * (1 + vat_rate)
-                _LOGGER.debug(f"Step 3 - VAT application: {price_per_kwh} {target_currency}/kWh → {price_with_vat} {target_currency}/kWh (VAT: {vat_rate:.2%})")
-            else:
-                price_with_vat = price_per_kwh
-            
-            # Step 4: Convert to subunit if requested
-            if use_subunit:
-                final_price = price_with_vat * 100  # e.g., SEK to öre
-                subunit_name = CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents")
-                _LOGGER.debug(f"Step 4 - Subunit conversion: {price_with_vat} {target_currency}/kWh → {final_price} {subunit_name}/kWh")
-            else:
-                final_price = price_with_vat
+            # Use the comprehensive conversion function (async version)
+            final_price = await async_convert_energy_price(
+                price=raw_price,
+                from_unit="MWh",
+                to_unit="kWh",
+                from_currency=api_currency,
+                to_currency=target_currency,
+                vat=vat_rate,
+                to_subunit=use_subunit,
+                exchange_rate=exchange_rate,
+                session=session
+            )
             
             # Parse the hour from the start_time
             try:
@@ -163,7 +147,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
                 
                 hour = local_dt.hour
                 
-                # Format time in HH:MM format
+                # Format time in HH:MM format (like website)
                 hour_str = f"{hour:02d}:00"
                 hourly_prices[hour_str] = final_price
                 all_prices.append(final_price)
@@ -172,7 +156,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
                 if current_hour is not None and hour == current_hour:
                     current_price = final_price
                     _LOGGER.debug(f"Current hour ({hour}) price: {final_price}")
-                    # Store raw value for current price
+                    # Store detailed conversion steps for current price
                     raw_values["current_price"] = {
                         "raw": raw_price,
                         "unit": f"{api_currency}/MWh",
@@ -185,7 +169,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
                 if current_hour is not None and hour == (current_hour + 1) % 24:
                     next_hour_price = final_price
                     _LOGGER.debug(f"Next hour ({(current_hour + 1) % 24}) price: {final_price}")
-                    # Store raw value for next hour price
+                    # Store detailed conversion steps for next hour price
                     raw_values["next_hour_price"] = {
                         "raw": raw_price,
                         "unit": f"{api_currency}/MWh",
