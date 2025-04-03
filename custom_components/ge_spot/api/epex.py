@@ -17,7 +17,7 @@ class EpexAPI(BaseEnergyAPI):
         _LOGGER.error("EPEX API is not implemented - public API not available")
         return None
         
-    def _process_data(self, data):
+    async def _process_data(self, data):
         """Process the data from EPEX SPOT."""
         if not data:
             _LOGGER.error("No data received from EPEX API")
