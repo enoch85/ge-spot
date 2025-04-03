@@ -1,13 +1,14 @@
 """Utility functions for Nordpool API."""
 import logging
 import datetime
-from ..utils.currency_utils import convert_to_subunit, convert_energy_price
+from ..utils.currency_utils import convert_to_subunit, convert_energy_price, mwh_to_kwh, convert_nordpool_price
 from ..utils.timezone_utils import convert_to_local_time
+from ..const import CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY
 
 _LOGGER = logging.getLogger(__name__)
 
 def process_day_data(data, area, current_hour=None, use_subunit=False, currency="EUR", apply_vat_func=None):
-    """Process price data for a single day."""
+    """Process price data for a single day with improved currency handling."""
     if not data or "multiAreaEntries" not in data:
         _LOGGER.debug("No valid data provided to process_day_data")
         return None
@@ -20,7 +21,7 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
     raw_values = {}  # Store raw values before conversion
     
     try:
-        # Process based on the new API format
+        # Process based on the API format
         entries = data.get("multiAreaEntries", [])
         if not entries:
             _LOGGER.debug("Empty multiAreaEntries in Nordpool data")
@@ -50,6 +51,11 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
             _LOGGER.error(f"Area '{area}' not found in any entry. Available areas: {sorted(available_areas)}")
             return None
             
+        # Get target currency based on area
+        target_currency = REGION_TO_CURRENCY.get(area, currency)
+        
+        _LOGGER.debug(f"Using target currency {target_currency} for area {area}")
+        
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
@@ -88,27 +94,29 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
             # Store the raw price value before any conversions
             raw_price = price
             
-            # Log the raw value for debugging
             _LOGGER.debug(f"Raw price value from API: {raw_price} EUR/MWh")
             
-            # Convert from EUR/MWh to SEK/kWh with the updated conversion function
-            price = convert_energy_price(price, from_unit="MWh", to_unit="kWh", vat=0)
-            _LOGGER.debug(f"After energy unit conversion: {price} EUR/kWh")
+            # Step 1: Convert from MWh to kWh - dividing by 1000
+            price_per_kwh = mwh_to_kwh(price)
+            _LOGGER.debug(f"Converted from MWh to kWh: {raw_price} EUR/MWh → {price_per_kwh} EUR/kWh")
             
-            # Store the value after unit conversion but before VAT
-            pre_vat_price = price
-            
+            # Step 2: Apply VAT
+            vat_rate = 0.0
             if apply_vat_func:
-                price = apply_vat_func(price)
-                _LOGGER.debug(f"After VAT application: {price} EUR/kWh")
+                # Extract vat rate from the function for logging
+                # This is a bit of a hack but we need the rate for logging
+                if hasattr(apply_vat_func, "__self__") and hasattr(apply_vat_func.__self__, "vat"):
+                    vat_rate = apply_vat_func.__self__.vat
+                price_with_vat = apply_vat_func(price_per_kwh)
+                _LOGGER.debug(f"Applied VAT {vat_rate:.2%}: {price_per_kwh} → {price_with_vat}")
+            else:
+                price_with_vat = price_per_kwh
             
-            # Store the value after VAT but before potential subunit conversion
-            post_vat_price = price
-            
-            # Convert to subunit (e.g., öre) if enabled
+            # Step 3: Convert to subunit if requested
+            final_price = price_with_vat
             if use_subunit:
-                price = convert_to_subunit(price, currency)
-                _LOGGER.debug(f"After subunit conversion: {price} {currency}/kWh")
+                final_price = convert_to_subunit(price_with_vat, target_currency)
+                _LOGGER.debug(f"Converted to subunit: {price_with_vat} {target_currency} → {final_price} {CURRENCY_SUBUNIT_NAMES.get(target_currency, 'cents')}")
             
             # Parse the hour from the start_time
             try:
@@ -122,31 +130,37 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 
                 # Format time in HH:MM format (like website)
                 hour_str = f"{hour:02d}:00"
-                hourly_prices[hour_str] = price
-                all_prices.append(price)
+                hourly_prices[hour_str] = final_price
+                all_prices.append(final_price)
                 
                 # Check if this is current hour
                 if current_hour is not None and hour == current_hour:
-                    current_price = price
-                    _LOGGER.debug(f"Found current hour price for {hour}: {price}")
-                    # Store raw value for current price
+                    current_price = final_price
+                    _LOGGER.debug(f"Found current hour price for {hour}: {final_price}")
+                    # Store detailed conversion steps for current price
                     raw_values["current_price"] = {
                         "raw": raw_price,
-                        "unit_converted": pre_vat_price,
-                        "with_vat": post_vat_price,
-                        "final": price
+                        "unit": "EUR/MWh",
+                        "per_kwh": price_per_kwh,
+                        "with_vat": price_with_vat,
+                        "final": final_price,
+                        "currency": target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
+                        "vat_rate": vat_rate
                     }
                     
                 # Check if this is next hour
                 if current_hour is not None and hour == (current_hour + 1) % 24:
-                    next_hour_price = price
-                    _LOGGER.debug(f"Found next hour price for hour {(current_hour + 1) % 24}: {price}")
-                    # Store raw value for next hour price
+                    next_hour_price = final_price
+                    _LOGGER.debug(f"Found next hour price for hour {(current_hour + 1) % 24}: {final_price}")
+                    # Store detailed conversion steps for next hour price
                     raw_values["next_hour_price"] = {
                         "raw": raw_price,
-                        "unit_converted": pre_vat_price,
-                        "with_vat": post_vat_price,
-                        "final": price
+                        "unit": "EUR/MWh",
+                        "per_kwh": price_per_kwh,
+                        "with_vat": price_with_vat,
+                        "final": final_price,
+                        "currency": target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
+                        "vat_rate": vat_rate
                     }
                     
             except (ValueError, TypeError) as e:
@@ -154,13 +168,12 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
                 continue
         
         if not hourly_prices:
-            _LOGGER.warning(f"No hourly prices found in Nordpool data for area {area}")
+            _LOGGER.warning(f"No hourly prices found in data for area {area}")
             return None
             
         # Check if we have all 24 hours
         if len(hourly_prices) < 24:
             _LOGGER.warning(f"Incomplete hourly prices for area {area}: found {len(hourly_prices)}/24 hours")
-            # Continue anyway, we'll use what we have
             
         # Calculate day average
         day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
@@ -195,7 +208,7 @@ def process_day_data(data, area, current_hour=None, use_subunit=False, currency=
             "raw_values": raw_values
         }
     except Exception as e:
-        _LOGGER.error(f"Error processing Nordpool data: {e}", exc_info=True)
+        _LOGGER.error(f"Error processing data: {e}", exc_info=True)
         return None
 
 def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
@@ -211,29 +224,42 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
     tomorrow_hourly_prices = {}
     tomorrow_all_prices = []
     
+    # Get actual VAT rate for logging
+    vat_rate = 0.0
+    if hasattr(apply_vat_func, "__self__") and hasattr(apply_vat_func.__self__, "vat"):
+        vat_rate = apply_vat_func.__self__.vat
+    
+    # Target currency based on currency parameter
+    target_currency = currency
+    _LOGGER.debug(f"Using currency {target_currency} for simulated data")
+    
     # Generate prices with realistic patterns for today and tomorrow
     for hour in range(24):
         # Base price with time-based variation
         is_peak = (7 <= hour <= 9) or (18 <= hour <= 21)
         
-        # Today's prices
+        # Today's prices - DIRECT IN MWh FOR REALISM
         if is_peak:
-            raw_price = 0.18 + 0.02 * (hour % 3) + (now.day % 10) * 0.001
+            raw_price = 180 + 20 * (hour % 3) + (now.day % 10) * 1
         else:
-            raw_price = 0.12 + 0.01 * (abs(12 - hour) / 12) + (now.day % 10) * 0.001
+            raw_price = 120 + 10 * (abs(12 - hour) / 13) + (now.day % 10) * 1
         
-        # Store raw value before VAT
-        pre_vat_price = raw_price
+        # Store raw value before any conversion
+        _LOGGER.debug(f"Simulated raw price: {raw_price} EUR/MWh for hour {hour}")
+        
+        # Convert from MWh to kWh
+        price_per_kwh = mwh_to_kwh(raw_price)
+        _LOGGER.debug(f"Converted to kWh: {raw_price} EUR/MWh → {price_per_kwh} EUR/kWh")
         
         # Apply VAT
-        today_price = apply_vat_func(raw_price)
+        price_with_vat = apply_vat_func(price_per_kwh)
+        _LOGGER.debug(f"Applied VAT {vat_rate:.2%}: {price_per_kwh} → {price_with_vat}")
         
-        # Store value after VAT
-        post_vat_price = today_price
-        
-        # Apply subunit conversion if needed
+        # Convert to subunit if requested
+        today_price = price_with_vat
         if use_subunit:
-            today_price = convert_to_subunit(today_price, currency)
+            today_price = convert_to_subunit(price_with_vat, target_currency)
+            _LOGGER.debug(f"Converted to subunit: {price_with_vat} {target_currency} → {today_price} {CURRENCY_SUBUNIT_NAMES.get(target_currency, 'cents')}")
             
         hour_str = f"{hour:02d}:00"  # Format HH:MM
         today_hourly_prices[hour_str] = today_price
@@ -243,27 +269,42 @@ def generate_simulated_data(now, apply_vat_func, currency, use_subunit=False):
         if hour == current_hour:
             raw_values["current_price"] = {
                 "raw": raw_price,
-                "with_vat": post_vat_price,
+                "unit": "EUR/MWh",
+                "per_kwh": price_per_kwh,
+                "with_vat": price_with_vat,
                 "final": today_price,
+                "currency": target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
+                "vat_rate": vat_rate,
                 "simulated": True
             }
         elif hour == (current_hour + 1) % 24:
             raw_values["next_hour_price"] = {
                 "raw": raw_price,
-                "with_vat": post_vat_price,
+                "unit": "EUR/MWh",
+                "per_kwh": price_per_kwh,
+                "with_vat": price_with_vat,
                 "final": today_price,
+                "currency": target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
+                "vat_rate": vat_rate,
                 "simulated": True
             }
         
-        # Tomorrow's prices (slightly different pattern)
+        # Tomorrow's prices (slightly different pattern) - DIRECT IN MWh FOR REALISM
         if is_peak:
-            tomorrow_raw_price = 0.19 + 0.015 * (hour % 3) + ((now.day + 1) % 10) * 0.001
+            tomorrow_raw_price = 190 + 15 * (hour % 3) + ((now.day + 1) % 10) * 1
         else:
-            tomorrow_raw_price = 0.13 + 0.008 * (abs(12 - hour) / 12) + ((now.day + 1) % 10) * 0.001
+            tomorrow_raw_price = 130 + 8 * (abs(12 - hour) / 12) + ((now.day + 1) % 10) * 1
         
-        tomorrow_price = apply_vat_func(tomorrow_raw_price)
+        # Convert to kWh
+        tomorrow_price_per_kwh = mwh_to_kwh(tomorrow_raw_price)
+        
+        # Apply VAT
+        tomorrow_price_with_vat = apply_vat_func(tomorrow_price_per_kwh)
+        
+        # Convert to subunit if requested
+        tomorrow_price = tomorrow_price_with_vat
         if use_subunit:
-            tomorrow_price = convert_to_subunit(tomorrow_price, currency)
+            tomorrow_price = convert_to_subunit(tomorrow_price_with_vat, target_currency)
             
         tomorrow_hourly_prices[hour_str] = tomorrow_price
         tomorrow_all_prices.append(tomorrow_price)
