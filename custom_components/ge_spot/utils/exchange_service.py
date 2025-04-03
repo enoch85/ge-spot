@@ -9,6 +9,8 @@ import os
 import time
 from typing import Dict, Optional
 
+from ..utils.error_handler import retry_async
+
 _LOGGER = logging.getLogger(__name__)
 
 # European Central Bank (ECB) exchange rates API
@@ -44,6 +46,7 @@ class ExchangeRateService:
             await self.session.close()
             self.session = None
     
+    @retry_async(max_attempts=3, base_delay=2.0)
     async def _fetch_ecb_rates(self):
         """Fetch exchange rates from European Central Bank API."""
         await self._ensure_session()
