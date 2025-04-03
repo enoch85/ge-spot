@@ -58,18 +58,14 @@ class BaseElectricityPriceSensor(SensorEntity):
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):
         """Initialize the base sensor."""
         self.coordinator = coordinator
-        self._currency = config_data.get(ATTR_CURRENCY)
         self._area = config_data.get(ATTR_AREA)
         self._vat = config_data.get(ATTR_VAT, 0)
         self._precision = config_data.get("precision", 3)
         self._sensor_type = sensor_type
         self._display_unit = config_data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
         
-        # Ensure correct currency is used for specific areas
-        area_specific_currency = REGION_TO_CURRENCY.get(self._area)
-        if area_specific_currency and not self._currency:
-            self._currency = area_specific_currency
-            _LOGGER.debug(f"Corrected currency for {self._area} to {self._currency}")
+        # Get currency from region
+        self._currency = config_data.get(ATTR_CURRENCY, REGION_TO_CURRENCY.get(self._area))
         
         # Use the area code directly for the sensor name - no friendly name translation
         self._attr_name = f"Electricity {name_suffix} {self._area}"
@@ -192,7 +188,6 @@ class NextHourPriceSensor(BaseElectricityPriceSensor):
             return None
             
         # Use Home Assistant's dt_util to get the current time
-        from homeassistant.util import dt as dt_util
         now = dt_util.now()
         next_hour = now.replace(minute=0, second=0, microsecond=0) + datetime.timedelta(hours=1)
         
@@ -320,10 +315,13 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     area = config_entry.data.get(ATTR_AREA)
     vat = config_entry.data.get(ATTR_VAT, 0)
     
+    # Determine currency based on area
+    currency = config_entry.data.get(ATTR_CURRENCY, REGION_TO_CURRENCY.get(area))
+    
     config_data = {
         ATTR_AREA: area,
         ATTR_VAT: vat,
-        ATTR_CURRENCY: config_entry.data.get("currency"),
+        ATTR_CURRENCY: currency,
         CONF_DISPLAY_UNIT: config_entry.options.get(
             CONF_DISPLAY_UNIT, 
             config_entry.data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
