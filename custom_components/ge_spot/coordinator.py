@@ -177,20 +177,25 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 all_data.append(today_data)
             if tomorrow_data:
                 all_data.append(tomorrow_data)
-                
-            # Extract raw API data for attributes
-            raw_api_data = {}
-            if "raw_api_response" in today_data:
-                raw_api_data["today"] = today_data["raw_api_response"]
-            if tomorrow_data and "raw_api_response" in tomorrow_data:
-                raw_api_data["tomorrow"] = tomorrow_data["raw_api_response"]
             
-            # Extract raw values for attributes
-            raw_values = {}
-            if "raw_values" in today_data:
-                raw_values["today"] = today_data["raw_values"]
-            if tomorrow_data and "raw_values" in tomorrow_data:
-                raw_values["tomorrow"] = tomorrow_data["raw_values"]
+            # Extract raw API data for logging (not storing in attributes)
+            if "raw_api_response" in today_data:
+                _LOGGER.debug(
+                    "Raw API response for today (%s): %s bytes of data",
+                    self._active_source,
+                    len(str(today_data["raw_api_response"]))
+                )
+                # Remove raw API response to prevent attribute size issues
+                today_data.pop("raw_api_response", None)
+
+            if tomorrow_data and "raw_api_response" in tomorrow_data:
+                _LOGGER.debug(
+                    "Raw API response for tomorrow (%s): %s bytes of data",
+                    tomorrow_source,
+                    len(str(tomorrow_data["raw_api_response"]))
+                )
+                # Remove raw API response to prevent attribute size issues
+                tomorrow_data.pop("raw_api_response", None)
                 
             # Create adapter with processed data
             _LOGGER.info("Creating price adapter with fetched data")
@@ -244,21 +249,24 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                     "peak": None
                 }
             
-            # Build fallback information
+            # Build fallback information - streamlined version
             fallback_info = {
                 "primary_source": self.api.__class__.__name__,
                 "active_source": self._active_source,
-                "fallback_used": self._fallback_used,
-                "attempted_sources": self._attempted_sources,
-                "today_source": self._active_source,
-                "tomorrow_source": tomorrow_source,
-                "tomorrow_attempted_sources": tomorrow_attempted_sources
+                "fallback_used": self._fallback_used
             }
             
             # Calculate next update time
             next_update = dt_util.now() + self.update_interval
             
-            # Return data that will be passed to sensors
+            # Extract essential raw values
+            raw_values = {}
+            if "raw_values" in today_data:
+                raw_values["today"] = today_data["raw_values"]
+            if tomorrow_data and "raw_values" in tomorrow_data:
+                raw_values["tomorrow"] = tomorrow_data["raw_values"]
+            
+            # Return data that will be passed to sensors - without large raw data
             result = {
                 "adapter": self.adapter,
                 ATTR_CURRENT_PRICE: self.adapter.get_current_price(),
@@ -273,7 +281,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 "next_update": next_update.isoformat(),
                 ATTR_DATA_SOURCE: self._active_source,
                 ATTR_FALLBACK_USED: self._fallback_used,
-                ATTR_RAW_API_DATA: raw_api_data,
+                # Don't include full raw API data in the attributes
                 "raw_values": raw_values,
                 "fallback_info": fallback_info
             }
