@@ -1,6 +1,7 @@
 """Currency exchange rate service for GE-Spot."""
 import logging
 import aiohttp
+import aiofiles
 import xml.etree.ElementTree as ET
 import datetime
 import json
@@ -90,8 +91,8 @@ class ExchangeRateService:
             _LOGGER.error(f"Error parsing ECB XML: {e}")
             return None
     
-    def _load_cache(self):
-        """Load exchange rates from cache file."""
+    async def _load_cache(self):
+        """Load exchange rates from cache file asynchronously."""
         if not os.path.exists(self.cache_file):
             return False
         
@@ -104,8 +105,9 @@ class ExchangeRateService:
                 _LOGGER.debug(f"Exchange rate cache is too old ({age:.1f}s > {self.cache_ttl}s)")
                 return False
             
-            with open(self.cache_file, "r") as f:
-                data = json.load(f)
+            async with aiofiles.open(self.cache_file, "r") as f:
+                content = await f.read()
+                data = json.loads(content)
                 
             if not data or "rates" not in data:
                 return False
@@ -119,8 +121,8 @@ class ExchangeRateService:
             _LOGGER.error(f"Error loading exchange rate cache: {e}")
             return False
     
-    def _save_cache(self):
-        """Save exchange rates to cache file."""
+    async def _save_cache(self):
+        """Save exchange rates to cache file asynchronously."""
         if not self.rates:
             return False
             
@@ -131,8 +133,8 @@ class ExchangeRateService:
                 "date": datetime.datetime.now().isoformat()
             }
             
-            with open(self.cache_file, "w") as f:
-                json.dump(data, f)
+            async with aiofiles.open(self.cache_file, "w") as f:
+                await f.write(json.dumps(data))
                 
             _LOGGER.debug(f"Saved exchange rates to {self.cache_file}")
             return True
@@ -147,7 +149,7 @@ class ExchangeRateService:
         # Try to load from cache if we don't have rates or if they're stale
         if not self.rates or now - self.last_update > self.cache_ttl or force_refresh:
             # Try to load from cache first (unless forced refresh)
-            if not force_refresh and self._load_cache():
+            if not force_refresh and await self._load_cache():
                 return self.rates
                 
             # Fetch fresh rates if cache is unavailable or too old
@@ -155,7 +157,7 @@ class ExchangeRateService:
             if fresh_rates:
                 self.rates = fresh_rates
                 self.last_update = now
-                self._save_cache()
+                await self._save_cache()
                 return self.rates
             elif not self.rates:
                 # If failed to fetch and have no cached rates, use fallback defaults
@@ -168,7 +170,7 @@ class ExchangeRateService:
                     "AUD": 1.64
                 }
                 _LOGGER.warning("Using fallback exchange rates")
-            
+        
         return self.rates
     
     async def convert(self, amount, from_currency, to_currency):
