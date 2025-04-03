@@ -41,7 +41,7 @@ async def handle_area_config(flow, user_input, source_name, areas_dict, default_
         # Update the stored data with area and other configs
         data = {**flow._data, **user_input}
         _LOGGER.debug(f"Creating entry with data: {data}")
-        
+
         # Save the config
         return flow.async_create_entry(
             title=f"{source_name.replace('_', ' ').title()} - {areas_dict[user_input[CONF_AREA]]}",
@@ -62,7 +62,7 @@ async def handle_area_config(flow, user_input, source_name, areas_dict, default_
     }
     # Add common options
     schema_dict.update(common_schema({}))
-    
+
     return flow.async_show_form(
         step_id=source_name,
         data_schema=vol.Schema(schema_dict),
@@ -81,7 +81,7 @@ async def handle_api_key_config(flow, user_input, source_name, areas_dict, defau
             # Update the stored data with area and other configs
             data = {**flow._data, **user_input}
             _LOGGER.debug(f"Creating entry with data: {data}")
-            
+
             # Save the config
             return flow.async_create_entry(
                 title=f"{source_name.replace('_', ' ').title()} - {areas_dict[user_input[CONF_AREA]]}",
@@ -103,7 +103,7 @@ async def handle_api_key_config(flow, user_input, source_name, areas_dict, defau
     }
     # Add common options
     schema_dict.update(common_schema({}))
-    
+
     return flow.async_show_form(
         step_id=source_name,
         data_schema=vol.Schema(schema_dict),
@@ -117,12 +117,12 @@ def get_default_values(options, data):
     defaults[CONF_VAT] = options.get(CONF_VAT, data.get(CONF_VAT, DEFAULT_VAT))
     # Update interval
     defaults[CONF_UPDATE_INTERVAL] = options.get(
-        CONF_UPDATE_INTERVAL, 
+        CONF_UPDATE_INTERVAL,
         data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
     )
     # Display unit
     defaults[CONF_DISPLAY_UNIT] = options.get(
-        CONF_DISPLAY_UNIT, 
+        CONF_DISPLAY_UNIT,
         data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
     )
     # Enable fallback
@@ -133,5 +133,5 @@ def get_default_values(options, data):
     # API key (if present)
     if "api_key" in options or "api_key" in data:
         defaults["api_key"] = options.get("api_key", data.get("api_key", ""))
-    
+
     return defaults

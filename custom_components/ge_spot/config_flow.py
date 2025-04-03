@@ -41,12 +41,12 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             # Validate user input
             source = user_input[CONF_SOURCE]
-            
+
             # Store the source type in our data
             self._data[CONF_SOURCE] = source
-            
+
             _LOGGER.debug(f"Selected source: {source}")
-            
+
             # Check for duplicate entries
             await self.async_set_unique_id(f"{source}_{user_input.get('area', '')}")
             self._abort_if_unique_id_configured()
@@ -72,7 +72,7 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_SOURCE, default=SOURCE_NORDPOOL): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=[
-                                {"value": src, "label": src.replace("_", " ").title()} 
+                                {"value": src, "label": src.replace("_", " ").title()}
                                 for src in ordered_sources
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
@@ -127,24 +127,24 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         errors = {}
-        
+
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
         # Get the source from data
         source = self._data.get(CONF_SOURCE)
         defaults = get_default_values(self._options, self._data)
-        
+
         # Common options for all sources, now including fallback option
         schema = common_schema(defaults)
-        
+
         # Add source-specific options
         if source == SOURCE_ENTSO_E:
             schema[vol.Optional(
-                "api_key", 
+                "api_key",
                 default=defaults.get("api_key", "")
             )] = cv.string
-        
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(schema),

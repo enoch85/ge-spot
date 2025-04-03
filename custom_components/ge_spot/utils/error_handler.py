@@ -10,11 +10,11 @@ T = TypeVar('T')
 
 def retry_async(max_attempts: int = 3, base_delay: float = 1.0):
     """Retry decorator for async functions with exponential backoff.
-    
+
     Args:
         max_attempts: Maximum number of attempts before giving up
         base_delay: Base delay for exponential backoff in seconds
-        
+
     Returns:
         Decorator function
     """
@@ -38,14 +38,14 @@ def retry_async(max_attempts: int = 3, base_delay: float = 1.0):
                         _LOGGER.error(
                             f"Function {func.__name__} failed after {max_attempts} attempts: {str(e)}"
                         )
-            
+
             # All attempts failed, re-raise the last error
             if last_error:
                 raise last_error
             return None
-        
+
         return cast(Callable[..., Any], wrapper)
-    
+
     return decorator
 
 class APIError(Exception):
@@ -69,12 +69,12 @@ class DataParsingError(APIError):
 
 async def handle_api_errors(func: Callable, *args, **kwargs) -> Any:
     """Execute a function and handle API errors gracefully.
-    
+
     Args:
         func: Async function to execute
         *args: Arguments to pass to the function
         **kwargs: Keyword arguments to pass to the function
-        
+
     Returns:
         Result of the function or None if an error occurred
     """

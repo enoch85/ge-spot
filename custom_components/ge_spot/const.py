@@ -62,7 +62,7 @@ class Source:
     EPEX = "epex"
     OMIE = "omie"
     AEMO = "aemo"
-    
+
     ALL = [NORDPOOL, ENERGI_DATA_SERVICE, ENTSO_E, EPEX, OMIE, AEMO]
 
 
@@ -92,7 +92,7 @@ class Attributes:
     RAW_VALUE = "raw_value"  # Raw value for a specific metric
     CONVERSION_INFO = "conversion_info"  # Information about value conversions
     CURRENCY = "currency"
-    AREA = "area" 
+    AREA = "area"
     VAT = "vat"
     TODAY = "today"
     TOMORROW = "tomorrow"
@@ -158,7 +158,7 @@ class SensorType:
     TOMORROW_AVG = "tomorrow_average_price"
     TOMORROW_PEAK = "tomorrow_peak_price"
     TOMORROW_OFF_PEAK = "tomorrow_off_peak_price"
-    
+
     ALL = [
         CURRENT, NEXT, DAY_AVG, PEAK, OFF_PEAK,
         TOMORROW_AVG, TOMORROW_PEAK, TOMORROW_OFF_PEAK
@@ -239,21 +239,21 @@ CURRENCY_SUBUNIT_NAMES = {
 
 # Nordpool delivery area mapping
 NORDPOOL_DELIVERY_AREA_MAPPING = {
-    "Oslo": "Oslo", 
-    "Kr.sand": "Kr.sand", 
+    "Oslo": "Oslo",
+    "Kr.sand": "Kr.sand",
     "Bergen": "Bergen",
-    "Molde": "Molde", 
-    "Tr.heim": "Tr.heim", 
+    "Molde": "Molde",
+    "Tr.heim": "Tr.heim",
     "Tromsø": "Tromsø",
-    "SE1": "SE1", 
-    "SE2": "SE2", 
-    "SE3": "SE3", 
+    "SE1": "SE1",
+    "SE2": "SE2",
+    "SE3": "SE3",
     "SE4": "SE4",
-    "DK1": "DK1", 
-    "DK2": "DK2", 
-    "FI": "FI", 
+    "DK1": "DK1",
+    "DK2": "DK2",
+    "FI": "FI",
     "EE": "EE",
-    "LV": "LV", 
+    "LV": "LV",
     "LT": "LT",
 }
 

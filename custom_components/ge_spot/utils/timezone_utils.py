@@ -21,10 +21,10 @@ def convert_to_local_time(dt: datetime, area: str) -> datetime:
     """Convert a datetime to the local time for a given area."""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=dt_util.UTC)
-        
+
     # Get the timezone for this area
     tz_name = AREA_TIMEZONES.get(area, "UTC")
-    
+
     try:
         # Use Home Assistant's timezone utilities
         local_tz = dt_util.get_time_zone(tz_name)
@@ -43,35 +43,35 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
     """Process raw price data into a consistent format with proper timezone handling."""
     if not raw_data:
         return []
-        
+
     periods = []
-    
+
     for item in raw_data:
         # Skip entries that don't have the required keys or aren't dictionaries
         if not isinstance(item, dict):
             _LOGGER.warning("Skipping malformed price data: not a dictionary")
             continue
-            
+
         # Check for required keys
         if not all(key in item for key in ["start", "end", "value"]):
             _LOGGER.warning(f"Skipping malformed price data: {item}")
             continue
-            
+
         # Ensure timestamps are timezone-aware
         try:
             start_time = dt_util.parse_datetime(item["start"]) if isinstance(item["start"], str) else item["start"]
             end_time = dt_util.parse_datetime(item["end"]) if isinstance(item["end"], str) else item["end"]
-            
+
             if start_time is None or end_time is None:
                 _LOGGER.warning(f"Skipping malformed price data with invalid timestamps: {item}")
                 continue
-                
+
             # Ensure timestamps have timezone info
             if start_time.tzinfo is None:
                 start_time = dt_util.as_utc(start_time)
             if end_time.tzinfo is None:
                 end_time = dt_util.as_utc(end_time)
-                
+
             # Convert to local time if specified
             if local_tz:
                 local_start = start_time.astimezone(local_tz)
@@ -79,14 +79,14 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
             else:
                 local_start = dt_util.as_local(start_time)
                 local_end = dt_util.as_local(end_time)
-            
+
             # Ensure price value is a number
             try:
                 price = float(item["value"])
             except (ValueError, TypeError):
                 _LOGGER.warning(f"Skipping malformed price data with invalid price: {item}")
                 continue
-                
+
             periods.append({
                 "start": local_start,
                 "end": local_end,
@@ -100,7 +100,7 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
         except Exception as e:
             _LOGGER.warning(f"Error processing price data {item}: {str(e)}")
             continue
-        
+
     return sorted(periods, key=lambda x: x["start"])
 
 
@@ -108,14 +108,14 @@ def find_current_price(price_data: List[Dict], reference_time: Optional[datetime
     """Find the current price for a given time."""
     if not price_data:
         return None
-        
+
     if reference_time is None:
         reference_time = dt_util.now()
-            
+
     for period in price_data:
         if period["start"] <= reference_time < period["end"]:
             return period["price"]
-                
+
     return None
 
 
@@ -126,7 +126,7 @@ def get_prices_for_day(price_data: List[Dict], day_offset: int = 0) -> List[Dict
         target_date = dt_util.as_local(
             dt_util.utcnow() + timedelta(days=day_offset)
         ).date()
-        
+
     return [p for p in price_data if p["day"] == target_date]
 
 
@@ -134,12 +134,12 @@ def get_raw_prices_for_day(day_data: List[Dict]) -> List[Dict]:
     """Format price data for Home Assistant attributes."""
     if not day_data:
         return []
-        
+
     result = []
     for period in day_data:
         if "start" not in period or "end" not in period or "price" not in period:
             continue
-            
+
         try:
             result.append({
                 "start": period["start"].isoformat(),
@@ -148,7 +148,7 @@ def get_raw_prices_for_day(day_data: List[Dict]) -> List[Dict]:
             })
         except Exception as e:
             _LOGGER.warning(f"Error formatting price period: {str(e)}")
-            
+
     return result
 
 
@@ -160,7 +160,7 @@ def get_price_list(day_data: List[Dict]) -> List[float]:
 def get_statistics(price_data: List[Dict]) -> Dict[str, Any]:
     """Calculate statistics for the price data."""
     prices = [p["price"] for p in price_data if "price" in p]
-    
+
     if not prices:
         return {
             "min": None,
@@ -170,16 +170,16 @@ def get_statistics(price_data: List[Dict]) -> Dict[str, Any]:
             "off_peak_2": None,
             "peak": None,
         }
-    
+
     # Group periods by hour ranges
     off_peak_1 = []
     peak = []
     off_peak_2 = []
-    
+
     for period in price_data:
         if "hour" not in period or "price" not in period:
             continue
-            
+
         hour = period["hour"]
         if 0 <= hour < 8:
             off_peak_1.append(period["price"])
@@ -187,7 +187,7 @@ def get_statistics(price_data: List[Dict]) -> Dict[str, Any]:
             peak.append(period["price"])
         else:  # 20-24
             off_peak_2.append(period["price"])
-    
+
     return {
         "min": min(prices) if prices else None,
         "max": max(prices) if prices else None,

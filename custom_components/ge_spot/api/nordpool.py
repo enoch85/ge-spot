@@ -4,9 +4,9 @@ import datetime
 from .base import BaseEnergyAPI
 from ..utils.currency_utils import async_convert_energy_price
 from ..const import (
-    AREA_TIMEZONES, 
-    REGION_TO_CURRENCY, 
-    CONF_DISPLAY_UNIT, 
+    AREA_TIMEZONES,
+    REGION_TO_CURRENCY,
+    CONF_DISPLAY_UNIT,
     DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES,
     NORDPOOL_DELIVERY_AREA_MAPPING,
@@ -16,22 +16,22 @@ _LOGGER = logging.getLogger(__name__)
 
 class NordpoolAPI(BaseEnergyAPI):
     """API handler for Nordpool."""
-    
+
     BASE_URL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
-    
+
     async def _fetch_data(self):
         """Fetch data from Nordpool."""
         try:
             now = self._get_now()
             today = now.strftime("%Y-%m-%d")
             tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-            
+
             area = self.config.get("area", "Oslo")
-            
+
             # Map the area names to the API's delivery area codes
             delivery_area = NORDPOOL_DELIVERY_AREA_MAPPING.get(area, area)
             _LOGGER.debug(f"Fetching Nordpool data for area: {delivery_area}")
-            
+
             # Fetch today's data
             params = {
                 "currency": "EUR",  # Always request in EUR, we'll convert later
@@ -39,52 +39,52 @@ class NordpoolAPI(BaseEnergyAPI):
                 "market": "DayAhead",
                 "deliveryArea": delivery_area
             }
-            
+
             today_data = await self._fetch_with_retry(self.BASE_URL, params=params)
-            
+
             if today_data is None:
                 _LOGGER.error(f"Failed to fetch today's data for {delivery_area}")
                 return None
-                
+
             # Fetch tomorrow's data if after 13:00 CET
             tomorrow_data = None
             now_utc = datetime.datetime.now(datetime.timezone.utc)
             now_cet = now_utc.astimezone(datetime.timezone(datetime.timedelta(hours=1)))
-            
+
             if now_cet.hour >= 13:
                 params["date"] = tomorrow
                 tomorrow_data = await self._fetch_with_retry(self.BASE_URL, params=params)
-            
+
             return {
                 "today": today_data,
                 "tomorrow": tomorrow_data,
                 "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
-            
+
         except Exception as e:
             _LOGGER.error(f"Error in _fetch_data: {str(e)}", exc_info=True)
             return None
-            
+
     async def _process_data(self, raw_data):
         """Process the data from Nordpool."""
         if not raw_data or "today" not in raw_data:
             return None
-            
+
         today_data = raw_data["today"]
         tomorrow_data = raw_data.get("tomorrow")
-        
+
         if "multiAreaEntries" not in today_data:
             _LOGGER.error("Missing multiAreaEntries in Nordpool data")
             return None
-            
+
         area = self.config.get("area", "Oslo")
         now = self._get_now()
         current_hour = now.hour
         use_subunit = self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS
-        
+
         # Determine target currency based on area
         target_currency = REGION_TO_CURRENCY.get(area, self._currency)
-        
+
         # Dictionary to store results
         result = {
             "current_price": None,
@@ -98,55 +98,55 @@ class NordpoolAPI(BaseEnergyAPI):
             "raw_tomorrow": [],
             "raw_values": {}
         }
-        
+
         # Process today's data
         entries = today_data.get("multiAreaEntries", [])
         all_prices = []
-        
+
         for entry in entries:
             if not isinstance(entry, dict) or "entryPerArea" not in entry:
                 continue
-                
+
             if area not in entry["entryPerArea"]:
                 continue
-                
+
             # Extract values
             start_time = entry.get("deliveryStart")
             end_time = entry.get("deliveryEnd")
             raw_price = entry["entryPerArea"][area]
-            
+
             # Store in raw data
             result["raw_today"].append({
                 "start": start_time,
                 "end": end_time,
                 "price": raw_price
             })
-            
+
             # Convert price
             if not isinstance(raw_price, (int, float)):
                 try:
                     raw_price = float(raw_price)
                 except (ValueError, TypeError):
                     continue
-            
+
             # Convert price using the centralized converter
             converted_price = await self._convert_price(
                 price=raw_price,
                 from_currency="EUR",
                 to_subunit=use_subunit
             )
-            
+
             # Parse hour from timestamp
             try:
                 dt = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
                 dt = dt.astimezone(datetime.timezone.utc)
                 hour = dt.hour
-                
+
                 # Store in hourly prices
                 hour_str = f"{hour:02d}:00"
                 result["hourly_prices"][hour_str] = converted_price
                 all_prices.append(converted_price)
-                
+
                 # Check if this is current or next hour
                 if hour == current_hour:
                     result["current_price"] = converted_price
@@ -166,13 +166,13 @@ class NordpoolAPI(BaseEnergyAPI):
                     }
             except (ValueError, TypeError):
                 continue
-        
+
         # Calculate statistics
         if all_prices:
             result["day_average_price"] = sum(all_prices) / len(all_prices)
             result["peak_price"] = max(all_prices)
             result["off_peak_price"] = min(all_prices)
-            
+
             # Store raw value information for statistics
             result["raw_values"]["day_average_price"] = {
                 "value": result["day_average_price"],
@@ -186,66 +186,66 @@ class NordpoolAPI(BaseEnergyAPI):
                 "value": result["off_peak_price"],
                 "calculation": "minimum of all hourly prices"
             }
-        
+
         # Process tomorrow's data if available
         if tomorrow_data and "multiAreaEntries" in tomorrow_data:
             tomorrow_entries = tomorrow_data.get("multiAreaEntries", [])
             tomorrow_prices = []
             result["tomorrow_hourly_prices"] = {}
-            
+
             for entry in tomorrow_entries:
                 if not isinstance(entry, dict) or "entryPerArea" not in entry:
                     continue
-                    
+
                 if area not in entry["entryPerArea"]:
                     continue
-                    
+
                 # Extract values
                 start_time = entry.get("deliveryStart")
                 end_time = entry.get("deliveryEnd")
                 raw_price = entry["entryPerArea"][area]
-                
+
                 # Store in raw data
                 result["raw_tomorrow"].append({
                     "start": start_time,
                     "end": end_time,
                     "price": raw_price
                 })
-                
+
                 # Convert price
                 if not isinstance(raw_price, (int, float)):
                     try:
                         raw_price = float(raw_price)
                     except (ValueError, TypeError):
                         continue
-                
+
                 # Convert price using the centralized converter
                 converted_price = await self._convert_price(
                     price=raw_price,
                     from_currency="EUR",
                     to_subunit=use_subunit
                 )
-                
+
                 # Parse hour from timestamp
                 try:
                     dt = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
                     dt = dt.astimezone(datetime.timezone.utc)
                     hour = dt.hour
-                    
+
                     # Store in hourly prices
                     hour_str = f"{hour:02d}:00"
                     result["tomorrow_hourly_prices"][hour_str] = converted_price
                     tomorrow_prices.append(converted_price)
                 except (ValueError, TypeError):
                     continue
-            
+
             # Calculate tomorrow statistics
             if tomorrow_prices:
                 result["tomorrow_average_price"] = sum(tomorrow_prices) / len(tomorrow_prices)
                 result["tomorrow_peak_price"] = max(tomorrow_prices)
                 result["tomorrow_off_peak_price"] = min(tomorrow_prices)
                 result["tomorrow_valid"] = len(tomorrow_prices) >= 20  # At least 20 hours
-                
+
                 # Store raw values for tomorrow
                 result["raw_values"]["tomorrow_average_price"] = {
                     "value": result["tomorrow_average_price"],
@@ -259,12 +259,12 @@ class NordpoolAPI(BaseEnergyAPI):
                     "value": result["tomorrow_off_peak_price"],
                     "calculation": "minimum of all tomorrow's prices"
                 }
-        
+
         # Include meta-information
         result["state_class"] = "total"
         result["currency"] = target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents")
         result["area"] = area
         result["vat"] = self.vat
         result["data_source"] = "NordpoolAPI"
-        
+
         return result
