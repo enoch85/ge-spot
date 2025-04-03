@@ -4,57 +4,139 @@
 DOMAIN = "ge_spot"
 
 # Configuration constants
-CONF_SOURCE = "source"
-CONF_AREA = "area"
-CONF_VAT = "vat"
-CONF_UPDATE_INTERVAL = "update_interval"
-CONF_DISPLAY_UNIT = "display_unit"
-CONF_ENABLE_FALLBACK = "enable_fallback"
-CONF_CURRENCY = "currency"
-CONF_PRECISION = "precision"
-CONF_API_KEY = "api_key"
-CONF_PRICE_IN_CENTS = "price_in_cents"
-CONF_CACHE_TTL = "cache_ttl"
+class Config:
+    """Configuration constants."""
+    SOURCE = "source"
+    AREA = "area"
+    VAT = "vat"
+    UPDATE_INTERVAL = "update_interval"
+    DISPLAY_UNIT = "display_unit"
+    ENABLE_FALLBACK = "enable_fallback"
+    CURRENCY = "currency"
+    PRECISION = "precision"
+    API_KEY = "api_key"
+    PRICE_IN_CENTS = "price_in_cents"
+    CACHE_TTL = "cache_ttl"
+
+
+# For backward compatibility - direct constants
+CONF_SOURCE = Config.SOURCE
+CONF_AREA = Config.AREA
+CONF_VAT = Config.VAT
+CONF_UPDATE_INTERVAL = Config.UPDATE_INTERVAL
+CONF_DISPLAY_UNIT = Config.DISPLAY_UNIT
+CONF_ENABLE_FALLBACK = Config.ENABLE_FALLBACK
+CONF_CURRENCY = Config.CURRENCY
+CONF_PRECISION = Config.PRECISION
+CONF_API_KEY = Config.API_KEY
+CONF_PRICE_IN_CENTS = Config.PRICE_IN_CENTS
+CONF_CACHE_TTL = Config.CACHE_TTL
 
 # Default configurations
-DEFAULT_NAME = "Electricity Price"
-DEFAULT_VAT = 0.0
-DEFAULT_UPDATE_INTERVAL = 60  # minutes
-DEFAULT_DISPLAY_UNIT = "decimal"  # default is decimal format (e.g., 0.15 EUR/kWh)
-DEFAULT_ENABLE_FALLBACK = True  # Enable fallback to other markets by default
-DEFAULT_PRECISION = 3
-DEFAULT_CACHE_TTL = 60  # minutes
+class Defaults:
+    """Default values."""
+    NAME = "Electricity Price"
+    VAT = 0.0
+    UPDATE_INTERVAL = 60  # minutes
+    DISPLAY_UNIT = "decimal"  # default is decimal format (e.g., 0.15 EUR/kWh)
+    ENABLE_FALLBACK = True  # Enable fallback to other markets by default
+    PRECISION = 3
+    CACHE_TTL = 60  # minutes
+
+
+# For backward compatibility - direct constants
+DEFAULT_NAME = Defaults.NAME
+DEFAULT_VAT = Defaults.VAT
+DEFAULT_UPDATE_INTERVAL = Defaults.UPDATE_INTERVAL
+DEFAULT_DISPLAY_UNIT = Defaults.DISPLAY_UNIT
+DEFAULT_ENABLE_FALLBACK = Defaults.ENABLE_FALLBACK
+DEFAULT_PRECISION = Defaults.PRECISION
+DEFAULT_CACHE_TTL = Defaults.CACHE_TTL
 
 # Available price sources
-SOURCE_ENERGI_DATA_SERVICE = "energi_data_service"
-SOURCE_NORDPOOL = "nordpool"
-SOURCE_ENTSO_E = "entsoe"
-SOURCE_EPEX = "epex"
-SOURCE_OMIE = "omie"
-SOURCE_AEMO = "aemo"
+class Source:
+    """API sources."""
+    ENERGI_DATA_SERVICE = "energi_data_service"
+    NORDPOOL = "nordpool"
+    ENTSO_E = "entsoe"
+    EPEX = "epex"
+    OMIE = "omie"
+    AEMO = "aemo"
+    
+    ALL = [NORDPOOL, ENERGI_DATA_SERVICE, ENTSO_E, EPEX, OMIE, AEMO]
+
+
+# For backward compatibility - direct constants
+SOURCE_ENERGI_DATA_SERVICE = Source.ENERGI_DATA_SERVICE
+SOURCE_NORDPOOL = Source.NORDPOOL
+SOURCE_ENTSO_E = Source.ENTSO_E
+SOURCE_EPEX = Source.EPEX
+SOURCE_OMIE = Source.OMIE
+SOURCE_AEMO = Source.AEMO
+
+# List of all sources for backward compatibility
+SOURCES = Source.ALL
 
 # New attribute names
-ATTR_DATA_SOURCE = "data_source"  # Which API provided the data
-ATTR_FALLBACK_USED = "fallback_used"  # Whether a fallback API was used
-ATTR_RAW_API_DATA = "raw_api_data"  # Raw, unprocessed API response
-ATTR_RAW_VALUES = "raw_values"  # Raw values before conversion
-ATTR_FALLBACK_INFO = "fallback_info"  # Detailed fallback information
-ATTR_USING_CACHED_DATA = "using_cached_data"  # Whether using cached data
-ATTR_ATTEMPTED_SOURCES = "attempted_sources"  # All attempted API sources
-ATTR_PRIMARY_SOURCE = "primary_source"  # Original primary source
-ATTR_ACTIVE_SOURCE = "active_source"  # Source that succeeded
-ATTR_RAW_VALUE = "raw_value"  # Raw value for a specific metric
-ATTR_CONVERSION_INFO = "conversion_info"  # Information about value conversions
+class Attributes:
+    """Sensor attributes."""
+    DATA_SOURCE = "data_source"  # Which API provided the data
+    FALLBACK_USED = "fallback_used"  # Whether a fallback API was used
+    RAW_API_DATA = "raw_api_data"  # Raw, unprocessed API response
+    RAW_VALUES = "raw_values"  # Raw values before conversion
+    FALLBACK_INFO = "fallback_info"  # Detailed fallback information
+    USING_CACHED_DATA = "using_cached_data"  # Whether using cached data
+    ATTEMPTED_SOURCES = "attempted_sources"  # All attempted API sources
+    PRIMARY_SOURCE = "primary_source"  # Original primary source
+    ACTIVE_SOURCE = "active_source"  # Source that succeeded
+    RAW_VALUE = "raw_value"  # Raw value for a specific metric
+    CONVERSION_INFO = "conversion_info"  # Information about value conversions
+    CURRENCY = "currency"
+    AREA = "area" 
+    VAT = "vat"
+    TODAY = "today"
+    TOMORROW = "tomorrow"
+    TOMORROW_VALID = "tomorrow_valid"
+    RAW_TODAY = "raw_today"
+    RAW_TOMORROW = "raw_tomorrow"
+    CURRENT_PRICE = "current_price"
+    MIN = "min"
+    MAX = "max"
+    AVERAGE = "average"
+    OFF_PEAK_1 = "off_peak_1"
+    OFF_PEAK_2 = "off_peak_2"
+    PEAK = "peak"
+    LAST_UPDATED = "last_updated"
 
-# List of all sources
-SOURCES = [
-    SOURCE_NORDPOOL,  # Reordered to put Nordpool first in the list
-    SOURCE_ENERGI_DATA_SERVICE,
-    SOURCE_ENTSO_E,
-    SOURCE_EPEX,
-    SOURCE_OMIE,
-    SOURCE_AEMO,
-]
+
+# For backward compatibility - direct constants
+ATTR_DATA_SOURCE = Attributes.DATA_SOURCE
+ATTR_FALLBACK_USED = Attributes.FALLBACK_USED
+ATTR_RAW_API_DATA = Attributes.RAW_API_DATA
+ATTR_RAW_VALUES = Attributes.RAW_VALUES
+ATTR_FALLBACK_INFO = Attributes.FALLBACK_INFO
+ATTR_USING_CACHED_DATA = Attributes.USING_CACHED_DATA
+ATTR_ATTEMPTED_SOURCES = Attributes.ATTEMPTED_SOURCES
+ATTR_PRIMARY_SOURCE = Attributes.PRIMARY_SOURCE
+ATTR_ACTIVE_SOURCE = Attributes.ACTIVE_SOURCE
+ATTR_RAW_VALUE = Attributes.RAW_VALUE
+ATTR_CONVERSION_INFO = Attributes.CONVERSION_INFO
+ATTR_CURRENCY = Attributes.CURRENCY
+ATTR_AREA = Attributes.AREA
+ATTR_VAT = Attributes.VAT
+ATTR_TODAY = Attributes.TODAY
+ATTR_TOMORROW = Attributes.TOMORROW
+ATTR_TOMORROW_VALID = Attributes.TOMORROW_VALID
+ATTR_RAW_TODAY = Attributes.RAW_TODAY
+ATTR_RAW_TOMORROW = Attributes.RAW_TOMORROW
+ATTR_CURRENT_PRICE = Attributes.CURRENT_PRICE
+ATTR_MIN = Attributes.MIN
+ATTR_MAX = Attributes.MAX
+ATTR_AVERAGE = Attributes.AVERAGE
+ATTR_OFF_PEAK_1 = Attributes.OFF_PEAK_1
+ATTR_OFF_PEAK_2 = Attributes.OFF_PEAK_2
+ATTR_PEAK = Attributes.PEAK
+ATTR_LAST_UPDATED = Attributes.LAST_UPDATED
 
 # Display unit options
 DISPLAY_UNIT_DECIMAL = "decimal"  # Example: 0.15 EUR/kWh
@@ -64,6 +146,34 @@ DISPLAY_UNITS = {
     DISPLAY_UNIT_DECIMAL: "Decimal (e.g., 0.15 EUR/kWh)",
     DISPLAY_UNIT_CENTS: "Cents/Öre (e.g., 15 cents/kWh)",
 }
+
+# Sensor types
+class SensorType:
+    """Sensor types."""
+    CURRENT = "current_price"
+    NEXT = "next_hour_price"
+    DAY_AVG = "day_average_price"
+    PEAK = "peak_price"
+    OFF_PEAK = "off_peak_price"
+    TOMORROW_AVG = "tomorrow_average_price"
+    TOMORROW_PEAK = "tomorrow_peak_price"
+    TOMORROW_OFF_PEAK = "tomorrow_off_peak_price"
+    
+    ALL = [
+        CURRENT, NEXT, DAY_AVG, PEAK, OFF_PEAK,
+        TOMORROW_AVG, TOMORROW_PEAK, TOMORROW_OFF_PEAK
+    ]
+
+
+# For backward compatibility - direct constants
+SENSOR_TYPE_CURRENT = SensorType.CURRENT
+SENSOR_TYPE_NEXT = SensorType.NEXT
+SENSOR_TYPE_DAY_AVG = SensorType.DAY_AVG
+SENSOR_TYPE_PEAK = SensorType.PEAK
+SENSOR_TYPE_OFF_PEAK = SensorType.OFF_PEAK
+SENSOR_TYPE_TOMORROW_AVG = SensorType.TOMORROW_AVG
+SENSOR_TYPE_TOMORROW_PEAK = SensorType.TOMORROW_PEAK
+SENSOR_TYPE_TOMORROW_OFF_PEAK = SensorType.TOMORROW_OFF_PEAK
 
 # Region to Currency mapping
 REGION_TO_CURRENCY = {
@@ -153,34 +263,6 @@ ENERGY_UNIT_CONVERSION = {
     "kWh": 1000,
     "Wh": 1000000,
 }
-
-# Sensor types
-SENSOR_TYPE_CURRENT = "current_price"
-SENSOR_TYPE_NEXT = "next_hour_price"
-SENSOR_TYPE_DAY_AVG = "day_average_price"
-SENSOR_TYPE_PEAK = "peak_price"
-SENSOR_TYPE_OFF_PEAK = "off_peak_price"
-SENSOR_TYPE_TOMORROW_AVG = "tomorrow_average_price"
-SENSOR_TYPE_TOMORROW_PEAK = "tomorrow_peak_price"
-SENSOR_TYPE_TOMORROW_OFF_PEAK = "tomorrow_off_peak_price"
-
-# Attribute names
-ATTR_CURRENCY = "currency"
-ATTR_AREA = "area" 
-ATTR_VAT = "vat"
-ATTR_TODAY = "today"
-ATTR_TOMORROW = "tomorrow"
-ATTR_TOMORROW_VALID = "tomorrow_valid"
-ATTR_RAW_TODAY = "raw_today"
-ATTR_RAW_TOMORROW = "raw_tomorrow"
-ATTR_CURRENT_PRICE = "current_price"
-ATTR_MIN = "min"
-ATTR_MAX = "max"
-ATTR_AVERAGE = "average"
-ATTR_OFF_PEAK_1 = "off_peak_1"
-ATTR_OFF_PEAK_2 = "off_peak_2"
-ATTR_PEAK = "peak"
-ATTR_LAST_UPDATED = "last_updated"
 
 # Nordpool areas
 NORDPOOL_AREAS = {
