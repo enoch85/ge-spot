@@ -27,12 +27,6 @@ class NordpoolAPI(BaseEnergyAPI):
             tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
             
             area = self.config.get("area", "Oslo")
-            specific_currency = REGION_TO_CURRENCY.get(area)
-            if specific_currency:
-                self._currency = specific_currency
-                
-            # Set price_in_cents based on display unit configuration
-            use_subunit = self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS
             
             # Map the area names to the API's delivery area codes
             delivery_area = NORDPOOL_DELIVERY_AREA_MAPPING.get(area, area)
@@ -89,16 +83,8 @@ class NordpoolAPI(BaseEnergyAPI):
         use_subunit = self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS
         
         # Determine target currency based on area
-        target_currency = REGION_TO_CURRENCY.get(area, "EUR")
+        target_currency = REGION_TO_CURRENCY.get(area, self._currency)
         
-        # Extract exchange rate if available in the API response
-        exchange_rate = None
-        if "exchangeRate" in today_data:
-            try:
-                exchange_rate = float(today_data["exchangeRate"])
-            except (ValueError, TypeError):
-                pass
-                
         # Dictionary to store results
         result = {
             "current_price": None,
@@ -142,23 +128,21 @@ class NordpoolAPI(BaseEnergyAPI):
                 except (ValueError, TypeError):
                     continue
             
-            # Use the unified conversion function
+            # Convert price
             converted_price = await convert_energy_price(
                 price=raw_price,
                 from_unit="MWh",
                 to_unit="kWh",
-                from_currency="EUR",  # API always returns EUR
+                from_currency="EUR",
                 to_currency=target_currency,
                 vat=self.vat,
                 to_subunit=use_subunit,
-                exchange_rate=exchange_rate,
                 session=self.session
             )
             
             # Parse hour from timestamp
             try:
                 dt = datetime.datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-                local_tz = AREA_TIMEZONES.get(area, "UTC")
                 dt = dt.astimezone(datetime.timezone.utc)
                 hour = dt.hour
                 
@@ -213,7 +197,7 @@ class NordpoolAPI(BaseEnergyAPI):
                     except (ValueError, TypeError):
                         continue
                 
-                # Use the unified conversion function
+                # Convert price
                 converted_price = await convert_energy_price(
                     price=raw_price,
                     from_unit="MWh",
@@ -222,7 +206,6 @@ class NordpoolAPI(BaseEnergyAPI):
                     to_currency=target_currency,
                     vat=self.vat,
                     to_subunit=use_subunit,
-                    exchange_rate=exchange_rate,
                     session=self.session
                 )
                 
