@@ -149,28 +149,44 @@ class CurrentPriceSensor(BaseElectricityPriceSensor):
         if not self.coordinator.data:
             return attrs
             
-        # Include all original raw price data
+        # Include essential price data but not raw API responses
         attrs.update({
             ATTR_TODAY: self.coordinator.data.get(ATTR_TODAY, []),
             ATTR_TOMORROW: self.coordinator.data.get(ATTR_TOMORROW, []),
             ATTR_TOMORROW_VALID: self.coordinator.data.get(ATTR_TOMORROW_VALID, False),
         })
         
-        # Include raw API data and raw price data in exactly the format shown in the example
+        # Log raw data for debugging instead of storing in attributes
+        if self.coordinator.data.get(ATTR_RAW_API_DATA):
+            _LOGGER.debug(
+                "Raw API data for %s (not storing in attributes): %s bytes of data", 
+                self.entity_id,
+                len(str(self.coordinator.data.get(ATTR_RAW_API_DATA)))
+            )
+        
+        # Log other large data structures
         if self.coordinator.data.get(ATTR_RAW_TODAY):
-            attrs[ATTR_RAW_TODAY] = self.coordinator.data.get(ATTR_RAW_TODAY, [])
+            _LOGGER.debug(
+                "Raw today data for %s: %s entries", 
+                self.entity_id,
+                len(self.coordinator.data.get(ATTR_RAW_TODAY, []))
+            )
             
         if self.coordinator.data.get(ATTR_RAW_TOMORROW):
-            attrs[ATTR_RAW_TOMORROW] = self.coordinator.data.get(ATTR_RAW_TOMORROW, [])
-            
-        # Add raw API data including raw prices
-        if self.coordinator.data.get(ATTR_RAW_API_DATA):
-            attrs[ATTR_RAW_API_DATA] = self.coordinator.data.get(ATTR_RAW_API_DATA)
-            
-        # Include raw prices in original format
-        if "raw_prices" in self.coordinator.data:
-            attrs["raw_prices"] = self.coordinator.data["raw_prices"]
-            
+            _LOGGER.debug(
+                "Raw tomorrow data for %s: %s entries", 
+                self.entity_id,
+                len(self.coordinator.data.get(ATTR_RAW_TOMORROW, []))
+            )
+        
+        # Add only essential fallback information
+        if "fallback_info" in self.coordinator.data:
+            attrs["fallback_info"] = {
+                "primary_source": self.coordinator.data["fallback_info"].get("primary_source"),
+                "active_source": self.coordinator.data["fallback_info"].get("active_source"),
+                "fallback_used": self.coordinator.data["fallback_info"].get("fallback_used"),
+            }
+                
         return attrs
 
 
