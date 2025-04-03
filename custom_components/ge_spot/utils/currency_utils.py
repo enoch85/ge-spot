@@ -40,17 +40,7 @@ def get_subunit_name(currency: str) -> str:
 
 
 def format_price(price: float, currency: str, use_subunit: bool = False, precision: int = 3) -> tuple:
-    """Format price with the appropriate unit and precision.
-    
-    Args:
-        price: The price value
-        currency: Currency code
-        use_subunit: Whether to use subunit (cents, öre, etc.)
-        precision: Decimal precision
-        
-    Returns:
-        Tuple of (formatted_price, unit)
-    """
+    """Format price with the appropriate unit and precision."""
     if price is None:
         return None, currency
         
@@ -71,60 +61,8 @@ def format_price(price: float, currency: str, use_subunit: bool = False, precisi
     return formatted_price, unit
 
 
-def convert_energy_price(price: float, from_unit: str = "MWh", to_unit: str = "kWh", vat: float = 0.0, currency: str = "EUR", target_currency: str = None) -> float:
-    """Convert energy price between units, currencies, and apply VAT.
-    
-    Args:
-        price: The price value
-        from_unit: Source energy unit (default MWh)
-        to_unit: Target energy unit (default kWh)
-        vat: VAT rate to apply (0.0 = no VAT)
-        currency: Source currency code
-        target_currency: Target currency code (if None, no conversion)
-        
-    Returns:
-        Converted price value
-    """
-    if price is None:
-        return None
-        
-    original_price = price
-    _LOGGER.debug(f"Starting conversion: {price} {currency}/{from_unit}")
-    
-    # Unit conversion (e.g., MWh to kWh)
-    if from_unit != to_unit:
-        from_factor = ENERGY_UNIT_CONVERSION.get(from_unit, 1)
-        to_factor = ENERGY_UNIT_CONVERSION.get(to_unit, 1)
-        
-        # For MWh to kWh, we divide by 1000
-        converted = price / 1000
-        _LOGGER.debug(f"Energy unit conversion: {price} {currency}/{from_unit} → {converted} {currency}/{to_unit}")
-    else:
-        converted = price
-        _LOGGER.debug(f"No energy unit conversion needed (from={from_unit}, to={to_unit})")
-    
-    # Currency conversion if needed
-    if target_currency and currency != target_currency:
-        # NOTE: Implement proper currency conversion rates here
-        # This is a placeholder - actual implementation would depend on having conversion rates
-        _LOGGER.debug(f"Currency conversion from {currency} to {target_currency} not implemented")
-    
-    # Apply VAT
-    result = converted
-    if vat > 0:
-        result = converted * (1 + vat)
-        _LOGGER.debug(f"Applied VAT {vat:.2%}: {converted} → {result}")
-    
-    _LOGGER.debug(f"Total conversion: {original_price} {currency}/{from_unit} → {result} {target_currency or currency}/{to_unit}")
-    
-    return result
-
-
 def mwh_to_kwh(price):
-    """Convert price from MWh to kWh.
-    
-    This is a simple division by 1000 since 1 MWh = 1000 kWh.
-    """
+    """Convert price from MWh to kWh."""
     if price is None:
         return None
     
@@ -132,56 +70,39 @@ def mwh_to_kwh(price):
     _LOGGER.debug(f"Converting {price} /MWh to {result} /kWh")
     return result
 
+# Exchange rates for common currencies from EUR
+# These are fallbacks if the ECB API is unavailable
+EXCHANGE_RATES = {
+    "SEK": 11.3,  # 1 EUR = 11.3 SEK
+    "NOK": 11.7,  # 1 EUR = 11.7 NOK
+    "DKK": 7.46,  # 1 EUR = 7.46 DKK
+    "GBP": 0.85,  # 1 EUR = 0.85 GBP
+    "AUD": 1.64,  # 1 EUR = 1.64 AUD
+}
 
-def convert_nordpool_price(price, area=None, apply_vat=True, vat_rate=0.0, 
-                          use_subunit=False, currency=None):
-    """Convert Nordpool price with proper handling.
-    
-    Args:
-        price: Raw price from Nordpool API (typically in EUR/MWh)
-        area: Area code (used to determine currency)
-        apply_vat: Whether to apply VAT
-        vat_rate: VAT rate to apply
-        use_subunit: Whether to convert to subunit (cents, öre)
-        currency: Override currency code
-    
-    Returns:
-        Converted price
-    """
-    from ..const import REGION_TO_CURRENCY, CURRENCY_SUBUNIT_MULTIPLIER, CURRENCY_SUBUNIT_NAMES
-    
-    if price is None:
-        return None
-    
-    # Step 1: Store original value for logging
-    original_price = price
-    _LOGGER.debug(f"Starting price conversion: {price} EUR/MWh")
-    
-    # Step 2: Convert from MWh to kWh (divide by 1000)
-    price = mwh_to_kwh(price)
-    _LOGGER.debug(f"After MWh to kWh conversion: {price} EUR/kWh")
-    
-    # Step 3: Apply VAT if requested
-    if apply_vat and vat_rate > 0:
-        price_before_vat = price
-        price = price * (1 + vat_rate)
-        _LOGGER.debug(f"After VAT ({vat_rate:.1%}) application: {price_before_vat} → {price}")
-    
-    # Step 4: Determine currency based on area or override
-    target_currency = currency
-    if not target_currency and area:
-        target_currency = REGION_TO_CURRENCY.get(area, "EUR")
-        _LOGGER.debug(f"Using area-specific currency for {area}: {target_currency}")
-    
-    # Step 5: Convert to subunit if requested
-    if use_subunit and target_currency:
-        multiplier = CURRENCY_SUBUNIT_MULTIPLIER.get(target_currency, 100)
-        subunit_name = CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents")
+def convert_currency(price, from_currency, to_currency):
+    """Convert between currencies using fixed rates."""
+    if price is None or from_currency == to_currency:
+        return price
         
-        price_before_subunit = price
-        price = price * multiplier
+    # EUR to other currency
+    if from_currency == "EUR" and to_currency in EXCHANGE_RATES:
+        result = price * EXCHANGE_RATES[to_currency]
+        _LOGGER.debug(f"Converting {price} {from_currency} to {result} {to_currency}")
+        return result
         
-        _LOGGER.debug(f"After subunit conversion: {price_before_subunit} {target_currency}/kWh → {price} {subunit_name}/kWh (multiplier: {multiplier})")
-    
-    _LOGGER.debug(f"Final price after all conversions: {original_price} EUR/MWh → {price}")
+    # Other currency to EUR
+    if to_currency == "EUR" and from_currency in EXCHANGE_RATES:
+        result = price / EXCHANGE_RATES[from_currency]
+        _LOGGER.debug(f"Converting {price} {from_currency} to {result} {to_currency}")
+        return result
+        
+    # Between two non-EUR currencies (via EUR)
+    if from_currency in EXCHANGE_RATES and to_currency in EXCHANGE_RATES:
+        eur_value = price / EXCHANGE_RATES[from_currency]
+        result = eur_value * EXCHANGE_RATES[to_currency]
+        _LOGGER.debug(f"Converting {price} {from_currency} to {result} {to_currency} (via EUR)")
+        return result
+        
+    _LOGGER.warning(f"No exchange rate found for {from_currency} to {to_currency}")
     return price
