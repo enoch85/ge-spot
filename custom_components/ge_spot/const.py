@@ -14,6 +14,7 @@ CONF_CURRENCY = "currency"
 CONF_PRECISION = "precision"
 CONF_API_KEY = "api_key"
 CONF_PRICE_IN_CENTS = "price_in_cents"
+CONF_CACHE_TTL = "cache_ttl"
 
 # Default configurations
 DEFAULT_NAME = "Electricity Price"
@@ -22,6 +23,7 @@ DEFAULT_UPDATE_INTERVAL = 60  # minutes
 DEFAULT_DISPLAY_UNIT = "decimal"  # default is decimal format (e.g., 0.15 EUR/kWh)
 DEFAULT_ENABLE_FALLBACK = True  # Enable fallback to other markets by default
 DEFAULT_PRECISION = 3
+DEFAULT_CACHE_TTL = 60  # minutes
 
 # Available price sources
 SOURCE_ENERGI_DATA_SERVICE = "energi_data_service"
@@ -35,6 +37,14 @@ SOURCE_AEMO = "aemo"
 ATTR_DATA_SOURCE = "data_source"  # Which API provided the data
 ATTR_FALLBACK_USED = "fallback_used"  # Whether a fallback API was used
 ATTR_RAW_API_DATA = "raw_api_data"  # Raw, unprocessed API response
+ATTR_RAW_VALUES = "raw_values"  # Raw values before conversion
+ATTR_FALLBACK_INFO = "fallback_info"  # Detailed fallback information
+ATTR_USING_CACHED_DATA = "using_cached_data"  # Whether using cached data
+ATTR_ATTEMPTED_SOURCES = "attempted_sources"  # All attempted API sources
+ATTR_PRIMARY_SOURCE = "primary_source"  # Original primary source
+ATTR_ACTIVE_SOURCE = "active_source"  # Source that succeeded
+ATTR_RAW_VALUE = "raw_value"  # Raw value for a specific metric
+ATTR_CONVERSION_INFO = "conversion_info"  # Information about value conversions
 
 # List of all sources
 SOURCES = [
