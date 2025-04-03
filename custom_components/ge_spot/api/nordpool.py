@@ -2,7 +2,7 @@
 import logging
 import datetime
 from .base import BaseEnergyAPI
-from ..utils.currency_utils import convert_energy_price
+from ..utils.currency_utils import async_convert_energy_price
 from ..const import (
     AREA_TIMEZONES, 
     REGION_TO_CURRENCY, 
@@ -96,6 +96,7 @@ class NordpoolAPI(BaseEnergyAPI):
             "last_updated": raw_data.get("timestamp"),
             "raw_today": [],
             "raw_tomorrow": [],
+            "raw_values": {}
         }
         
         # Process today's data
@@ -128,16 +129,11 @@ class NordpoolAPI(BaseEnergyAPI):
                 except (ValueError, TypeError):
                     continue
             
-            # Convert price
-            converted_price = await convert_energy_price(
+            # Convert price using the centralized converter
+            converted_price = await self._convert_price(
                 price=raw_price,
-                from_unit="MWh",
-                to_unit="kWh",
                 from_currency="EUR",
-                to_currency=target_currency,
-                vat=self.vat,
-                to_subunit=use_subunit,
-                session=self.session
+                to_subunit=use_subunit
             )
             
             # Parse hour from timestamp
@@ -154,8 +150,20 @@ class NordpoolAPI(BaseEnergyAPI):
                 # Check if this is current or next hour
                 if hour == current_hour:
                     result["current_price"] = converted_price
+                    # Store raw value information
+                    result["raw_values"]["current_price"] = {
+                        "raw": raw_price,
+                        "unit": "EUR/MWh",
+                        "converted": converted_price
+                    }
                 elif hour == (current_hour + 1) % 24:
                     result["next_hour_price"] = converted_price
+                    # Store raw value information
+                    result["raw_values"]["next_hour_price"] = {
+                        "raw": raw_price,
+                        "unit": "EUR/MWh",
+                        "converted": converted_price
+                    }
             except (ValueError, TypeError):
                 continue
         
@@ -164,6 +172,20 @@ class NordpoolAPI(BaseEnergyAPI):
             result["day_average_price"] = sum(all_prices) / len(all_prices)
             result["peak_price"] = max(all_prices)
             result["off_peak_price"] = min(all_prices)
+            
+            # Store raw value information for statistics
+            result["raw_values"]["day_average_price"] = {
+                "value": result["day_average_price"],
+                "calculation": "average of all hourly prices"
+            }
+            result["raw_values"]["peak_price"] = {
+                "value": result["peak_price"],
+                "calculation": "maximum of all hourly prices"
+            }
+            result["raw_values"]["off_peak_price"] = {
+                "value": result["off_peak_price"],
+                "calculation": "minimum of all hourly prices"
+            }
         
         # Process tomorrow's data if available
         if tomorrow_data and "multiAreaEntries" in tomorrow_data:
@@ -197,16 +219,11 @@ class NordpoolAPI(BaseEnergyAPI):
                     except (ValueError, TypeError):
                         continue
                 
-                # Convert price
-                converted_price = await convert_energy_price(
+                # Convert price using the centralized converter
+                converted_price = await self._convert_price(
                     price=raw_price,
-                    from_unit="MWh",
-                    to_unit="kWh",
                     from_currency="EUR",
-                    to_currency=target_currency,
-                    vat=self.vat,
-                    to_subunit=use_subunit,
-                    session=self.session
+                    to_subunit=use_subunit
                 )
                 
                 # Parse hour from timestamp
@@ -228,6 +245,20 @@ class NordpoolAPI(BaseEnergyAPI):
                 result["tomorrow_peak_price"] = max(tomorrow_prices)
                 result["tomorrow_off_peak_price"] = min(tomorrow_prices)
                 result["tomorrow_valid"] = len(tomorrow_prices) >= 20  # At least 20 hours
+                
+                # Store raw values for tomorrow
+                result["raw_values"]["tomorrow_average_price"] = {
+                    "value": result["tomorrow_average_price"],
+                    "calculation": "average of all tomorrow's prices"
+                }
+                result["raw_values"]["tomorrow_peak_price"] = {
+                    "value": result["tomorrow_peak_price"],
+                    "calculation": "maximum of all tomorrow's prices"
+                }
+                result["raw_values"]["tomorrow_off_peak_price"] = {
+                    "value": result["tomorrow_off_peak_price"],
+                    "calculation": "minimum of all tomorrow's prices"
+                }
         
         # Include meta-information
         result["state_class"] = "total"
