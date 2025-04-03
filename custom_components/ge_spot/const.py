@@ -31,6 +31,11 @@ SOURCE_EPEX = "epex"
 SOURCE_OMIE = "omie"
 SOURCE_AEMO = "aemo"
 
+# New attribute names
+ATTR_DATA_SOURCE = "data_source"  # Which API provided the data
+ATTR_FALLBACK_USED = "fallback_used"  # Whether a fallback API was used
+ATTR_RAW_API_DATA = "raw_api_data"  # Raw, unprocessed API response
+
 # List of all sources
 SOURCES = [
     SOURCE_NORDPOOL,  # Reordered to put Nordpool first in the list
