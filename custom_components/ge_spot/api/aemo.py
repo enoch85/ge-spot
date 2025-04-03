@@ -57,68 +57,14 @@ class AemoAPI(BaseEnergyAPI):
         # This is a placeholder implementation based on assumed API response format
         
         if not data:
-            _LOGGER.warning("No data received from AEMO, using simulation")
-            return self._generate_simulated_data()
+            _LOGGER.error("No data received from AEMO API")
+            return None
             
         try:
             # This is a placeholder - actual implementation would depend on AEMO's data format
-            _LOGGER.warning("AEMO API processing is a placeholder - using simulated data")
-            return self._generate_simulated_data()
+            _LOGGER.error("AEMO API processing is not implemented - raw API format not known")
+            return None
             
         except Exception as e:
             _LOGGER.error(f"Error processing AEMO data: {e}")
-            return self._generate_simulated_data()
-            
-    def _generate_simulated_data(self):
-        """Generate simulated data for AEMO when actual data processing fails."""
-        now = self._get_now()
-        current_hour = now.hour
-        
-        # Create simulated hourly prices
-        hourly_prices = {}
-        all_prices = []
-        
-        use_cents = self.config.get("price_in_cents", False)
-        
-        # Australia has typically higher electricity prices
-        # Simulate with realistic patterns
-        for hour in range(24):
-            # Base price with daily and hourly variations
-            # Morning peak (7-9) and evening peak (17-21)
-            is_peak = (7 <= hour <= 9) or (17 <= hour <= 21)
-            
-            if is_peak:
-                price = 0.32 + 0.05 * (hour % 4) / 4 + (now.day % 10) * 0.002
-            else:
-                price = 0.25 + 0.02 * (abs(13 - hour) / 13) + (now.day % 10) * 0.002
-            
-            price = self._apply_vat(price)
-            
-            # Convert to cents if needed
-            if use_cents:
-                price = convert_to_subunit(price, self._currency)
-                
-            hour_str = f"{hour:02d}:00"
-            hourly_prices[hour_str] = price
-            all_prices.append(price)
-        
-        current_price = hourly_prices.get(f"{current_hour:02d}:00")
-        next_hour_price = hourly_prices.get(f"{(current_hour + 1) % 24:02d}:00")
-        
-        # Calculate day average
-        day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
-        
-        # Find peak and off-peak prices
-        peak_price = max(all_prices) if all_prices else None
-        off_peak_price = min(all_prices) if all_prices else None
-        
-        return {
-            "current_price": current_price,
-            "next_hour_price": next_hour_price,
-            "day_average_price": day_average_price,
-            "peak_price": peak_price,
-            "off_peak_price": off_peak_price,
-            "hourly_prices": hourly_prices,
-            "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "simulated": True,  # Flag to indicate this is simulated data
-        }
+            return None
