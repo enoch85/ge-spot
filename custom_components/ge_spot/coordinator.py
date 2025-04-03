@@ -61,7 +61,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from API endpoint."""
         try:
-            _LOGGER.debug(f"Updating data for area {self.area} with currency {self.currency}")
+            _LOGGER.info(f"Updating data for area {self.area} with currency {self.currency}")
             
             # Reset tracking variables
             self._fallback_used = False
@@ -69,7 +69,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
             self._attempted_sources = [self._active_source]
             
             # Fetch today's data from primary source
-            _LOGGER.debug(f"Attempting to fetch data from primary source: {self._active_source}")
+            _LOGGER.info(f"Attempting to fetch data from primary source: {self._active_source}")
             today_data = await self.api.fetch_day_ahead_prices(
                 self.area, 
                 self.currency,
@@ -78,10 +78,10 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
             
             # If primary API failed and fallback is enabled, try fallback APIs
             if not today_data and self._enable_fallback and self._fallback_apis:
-                _LOGGER.debug("Primary API failed, attempting fallback sources")
+                _LOGGER.info("Primary API failed, attempting fallback sources")
                 for fallback_api in self._fallback_apis:
                     fallback_name = fallback_api.__class__.__name__
-                    _LOGGER.debug(f"Trying fallback API: {fallback_name}")
+                    _LOGGER.info(f"Trying fallback API: {fallback_name}")
                     self._fallback_used = True
                     self._active_source = fallback_name
                     self._attempted_sources.append(fallback_name)
@@ -125,7 +125,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                             if fallback_api.__class__.__name__ == self._active_source:
                                 tomorrow_source = self._active_source
                                 tomorrow_attempted_sources.append(tomorrow_source)
-                                _LOGGER.debug(f"Attempting to fetch tomorrow's data from same fallback source: {tomorrow_source}")
+                                _LOGGER.info(f"Attempting to fetch tomorrow's data from same fallback source: {tomorrow_source}")
                                 tomorrow_data = await fallback_api.fetch_day_ahead_prices(
                                     self.area,
                                     self.currency,
@@ -136,7 +136,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                         # Use primary API for tomorrow's data
                         tomorrow_source = self.api.__class__.__name__
                         tomorrow_attempted_sources.append(tomorrow_source)
-                        _LOGGER.debug(f"Attempting to fetch tomorrow's data from primary source: {tomorrow_source}")
+                        _LOGGER.info(f"Attempting to fetch tomorrow's data from primary source: {tomorrow_source}")
                         tomorrow_data = await self.api.fetch_day_ahead_prices(
                             self.area,
                             self.currency,
@@ -144,7 +144,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                         )
                     
                     if tomorrow_data:
-                        _LOGGER.debug(f"Successfully fetched tomorrow's price data from {tomorrow_source}")
+                        _LOGGER.info(f"Successfully fetched tomorrow's price data from {tomorrow_source}")
                     else:
                         _LOGGER.warning(f"Tomorrow's price data not available from {tomorrow_source}")
                         
@@ -153,7 +153,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                             for fallback_api in self._fallback_apis:
                                 fallback_name = fallback_api.__class__.__name__
                                 if fallback_name != self._active_source:  # Don't retry the same fallback
-                                    _LOGGER.debug(f"Trying fallback API for tomorrow's data: {fallback_name}")
+                                    _LOGGER.info(f"Trying fallback API for tomorrow's data: {fallback_name}")
                                     tomorrow_attempted_sources.append(fallback_name)
                                     
                                     tomorrow_data = await fallback_api.fetch_day_ahead_prices(
@@ -169,7 +169,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 except Exception as err:
                     _LOGGER.warning(f"Failed to fetch tomorrow's prices: {err}")
             else:
-                _LOGGER.debug(f"Not fetching tomorrow's data yet, current hour: {now.hour}")
+                _LOGGER.info(f"Not fetching tomorrow's data yet, current hour: {now.hour}")
             
             # Combine the data
             all_data = []
@@ -193,7 +193,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 raw_values["tomorrow"] = tomorrow_data["raw_values"]
                 
             # Create adapter with processed data
-            _LOGGER.debug("Creating price adapter with fetched data")
+            _LOGGER.info("Creating price adapter with fetched data")
             self.adapter = ElectricityPriceAdapter(self.hass, all_data)
             
             if not self.adapter:
@@ -255,6 +255,9 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 "tomorrow_attempted_sources": tomorrow_attempted_sources
             }
             
+            # Calculate next update time
+            next_update = dt_util.now() + self.update_interval
+            
             # Return data that will be passed to sensors
             result = {
                 "adapter": self.adapter,
@@ -267,6 +270,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 "tomorrow_stats": tomorrow_stats,
                 ATTR_TOMORROW_VALID: self.adapter.is_tomorrow_valid(),
                 ATTR_LAST_UPDATED: dt_util.now().isoformat(),
+                "next_update": next_update.isoformat(),
                 ATTR_DATA_SOURCE: self._active_source,
                 ATTR_FALLBACK_USED: self._fallback_used,
                 ATTR_RAW_API_DATA: raw_api_data,
@@ -274,7 +278,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 "fallback_info": fallback_info
             }
             
-            _LOGGER.debug(f"Successfully updated data with current price: {result[ATTR_CURRENT_PRICE]}")
+            _LOGGER.info(f"Successfully updated data with current price: {result[ATTR_CURRENT_PRICE]}")
             self._last_successful_data = result
             return result
             
