@@ -70,6 +70,37 @@ def mwh_to_kwh(price):
     _LOGGER.debug(f"Converting {price} /MWh to {result} /kWh")
     return result
 
+
+def convert_energy_price(price, from_unit="MWh", to_unit="kWh", vat=0):
+    """Convert energy price between different units and optionally apply VAT.
+    
+    Args:
+        price: The price value to convert
+        from_unit: Source unit (e.g., "MWh")
+        to_unit: Target unit (e.g., "kWh")
+        vat: VAT rate to apply (0-1)
+        
+    Returns:
+        Converted price value
+    """
+    if price is None:
+        return None
+        
+    # Get conversion factors
+    from_factor = ENERGY_UNIT_CONVERSION.get(from_unit, 1)
+    to_factor = ENERGY_UNIT_CONVERSION.get(to_unit, 1)
+    
+    # Convert between units
+    result = price * (to_factor / from_factor)
+    
+    # Apply VAT if specified
+    if vat != 0:
+        result = result * (1 + vat)
+        
+    _LOGGER.debug(f"Converting {price} {from_unit} to {result} {to_unit} (VAT: {vat:.2%})")
+    return result
+
+
 # Exchange rates for common currencies from EUR
 # These are fallbacks if the ECB API is unavailable
 EXCHANGE_RATES = {
