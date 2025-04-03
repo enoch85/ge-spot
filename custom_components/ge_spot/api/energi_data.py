@@ -3,7 +3,8 @@ import datetime
 import json
 import asyncio
 from .base import BaseEnergyAPI
-from ..utils.currency_utils import convert_to_subunit, convert_energy_price
+from ..utils.currency_utils import async_convert_energy_price
+from ..const import REGION_TO_CURRENCY, CURRENCY_SUBUNIT_NAMES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
                 
         return None
             
-    def _process_data(self, data):
+    async def _process_data(self, data):
         """Process the data from Energi Data Service."""
         if not data or "records" not in data or not data["records"]:
             return None
@@ -74,20 +75,60 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
         next_hour_price = None
         hourly_prices = {}
         all_prices = []
+        raw_values = {}
+        raw_prices = []
         
         use_cents = self.config.get("price_in_cents", False)
+        area = self.config.get("area", "DK1")
+        target_currency = REGION_TO_CURRENCY.get(area, "DKK")  # Default to DKK for Danish data
+        
+        # Extract exchange rate if available
+        exchange_rate = None
+        if "currency" in data and data["currency"] != target_currency:
+            api_currency = data.get("currency", "DKK")
+            if "exchangeRate" in data:
+                try:
+                    exchange_rate = float(data["exchangeRate"])
+                    _LOGGER.debug(f"Using exchange rate from API: {exchange_rate}")
+                except (ValueError, TypeError):
+                    _LOGGER.warning(f"Invalid exchange rate in API data: {data.get('exchangeRate')}")
+        else:
+            api_currency = "DKK"  # Default for this API
+        
+        vat_rate = self.vat  # Extract VAT from self
         
         for record in records:
             hour_dk = datetime.datetime.fromisoformat(record["HourDK"].replace("Z", "+00:00"))
             
-            # Convert from DKK/MWh to DKK/kWh
-            price = convert_energy_price(record["SpotPriceDKK"], from_unit="MWh", to_unit="kWh", vat=0)
-            price = self._apply_vat(price)
+            # Store raw price from API
+            raw_price = record.get("SpotPriceDKK", 0)
+            if not isinstance(raw_price, (int, float)):
+                try:
+                    raw_price = float(raw_price)
+                except (ValueError, TypeError):
+                    _LOGGER.warning(f"Invalid price value: {raw_price}")
+                    continue
             
-            # Convert to subunit if needed (øre instead of DKK)
-            if use_cents:
-                price = convert_to_subunit(price, self._currency)
-                
+            # Store the record in raw prices list
+            raw_prices.append({
+                "start": hour_dk.isoformat(),
+                "end": (hour_dk + datetime.timedelta(hours=1)).isoformat(),
+                "price": raw_price
+            })
+            
+            # Use comprehensive conversion function
+            price = await async_convert_energy_price(
+                price=raw_price,
+                from_unit="MWh",
+                to_unit="kWh",
+                from_currency=api_currency,
+                to_currency=target_currency,
+                vat=vat_rate,
+                to_subunit=use_cents,
+                exchange_rate=exchange_rate,
+                session=self.session
+            )
+            
             all_prices.append(price)
             
             # Store in hourly prices
@@ -97,11 +138,25 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
             # Check if this is current hour
             if hour_dk.hour == current_hour.hour and hour_dk.day == current_hour.day:
                 current_price = price
+                raw_values["current_price"] = {
+                    "raw": raw_price,
+                    "unit": f"{api_currency}/MWh",
+                    "final": price,
+                    "currency": target_currency if not use_cents else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
+                    "vat_rate": vat_rate
+                }
                 
             # Check if this is next hour
             next_hour = current_hour + datetime.timedelta(hours=1)
             if hour_dk.hour == next_hour.hour and hour_dk.day == next_hour.day:
                 next_hour_price = price
+                raw_values["next_hour_price"] = {
+                    "raw": raw_price,
+                    "unit": f"{api_currency}/MWh",
+                    "final": price,
+                    "currency": target_currency if not use_cents else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
+                    "vat_rate": vat_rate
+                }
         
         # Calculate day average
         day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
@@ -110,6 +165,22 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
         peak_price = max(all_prices) if all_prices else None
         off_peak_price = min(all_prices) if all_prices else None
         
+        # Store raw values for statistics
+        raw_values["day_average_price"] = {
+            "value": day_average_price,
+            "calculation": "average of all hourly prices"
+        }
+        
+        raw_values["peak_price"] = {
+            "value": peak_price,
+            "calculation": "maximum of all hourly prices"
+        }
+        
+        raw_values["off_peak_price"] = {
+            "value": off_peak_price,
+            "calculation": "minimum of all hourly prices"
+        }
+        
         return {
             "current_price": current_price,
             "next_hour_price": next_hour_price,
@@ -117,5 +188,8 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
             "peak_price": peak_price,
             "off_peak_price": off_peak_price,
             "hourly_prices": hourly_prices,
+            "raw_values": raw_values,
+            "raw_prices": raw_prices,
             "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "raw_api_response": data  # Store raw API response
         }
