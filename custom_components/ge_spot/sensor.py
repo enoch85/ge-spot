@@ -222,4 +222,123 @@ class PeakPriceSensor(BaseElectricityPriceSensor):
         """Initialize the peak price sensor."""
         super().__init__(coordinator, config_data, "peak", "Peak Price")
     
-    @prope
+    @property
+    def native_value(self):
+        """Return the native value of the sensor."""
+        if not self.coordinator.data or "today_stats" not in self.coordinator.data:
+            return None
+        return self.coordinator.data["today_stats"].get(ATTR_MAX)
+
+
+class OffPeakPriceSensor(BaseElectricityPriceSensor):
+    """Sensor for off-peak electricity price."""
+    
+    def __init__(self, coordinator, config_data):
+        """Initialize the off-peak price sensor."""
+        super().__init__(coordinator, config_data, "off_peak", "Off-Peak Price")
+    
+    @property
+    def native_value(self):
+        """Return the native value of the sensor."""
+        if not self.coordinator.data or "today_stats" not in self.coordinator.data:
+            return None
+        return self.coordinator.data["today_stats"].get(ATTR_MIN)
+
+
+class TomorrowAveragePriceSensor(BaseElectricityPriceSensor):
+    """Sensor for tomorrow's average electricity price."""
+    
+    def __init__(self, coordinator, config_data):
+        """Initialize the tomorrow average price sensor."""
+        super().__init__(coordinator, config_data, "tomorrow_average", "Tomorrow Average")
+    
+    @property
+    def native_value(self):
+        """Return the native value of the sensor."""
+        if not self.coordinator.data or "tomorrow_stats" not in self.coordinator.data:
+            return None
+        return self.coordinator.data["tomorrow_stats"].get(ATTR_AVERAGE)
+    
+    @property
+    def available(self):
+        """Return if entity is available."""
+        if not super().available:
+            return False
+        # Only available if tomorrow data is valid
+        return self.coordinator.data.get(ATTR_TOMORROW_VALID, False)
+
+
+class TomorrowPeakPriceSensor(BaseElectricityPriceSensor):
+    """Sensor for tomorrow's peak electricity price."""
+    
+    def __init__(self, coordinator, config_data):
+        """Initialize the tomorrow peak price sensor."""
+        super().__init__(coordinator, config_data, "tomorrow_peak", "Tomorrow Peak")
+    
+    @property
+    def native_value(self):
+        """Return the native value of the sensor."""
+        if not self.coordinator.data or "tomorrow_stats" not in self.coordinator.data:
+            return None
+        return self.coordinator.data["tomorrow_stats"].get(ATTR_MAX)
+    
+    @property
+    def available(self):
+        """Return if entity is available."""
+        if not super().available:
+            return False
+        # Only available if tomorrow data is valid
+        return self.coordinator.data.get(ATTR_TOMORROW_VALID, False)
+
+
+class TomorrowOffPeakPriceSensor(BaseElectricityPriceSensor):
+    """Sensor for tomorrow's off-peak electricity price."""
+    
+    def __init__(self, coordinator, config_data):
+        """Initialize the tomorrow off-peak price sensor."""
+        super().__init__(coordinator, config_data, "tomorrow_off_peak", "Tomorrow Off-Peak")
+    
+    @property
+    def native_value(self):
+        """Return the native value of the sensor."""
+        if not self.coordinator.data or "tomorrow_stats" not in self.coordinator.data:
+            return None
+        return self.coordinator.data["tomorrow_stats"].get(ATTR_MIN)
+    
+    @property
+    def available(self):
+        """Return if entity is available."""
+        if not super().available:
+            return False
+        # Only available if tomorrow data is valid
+        return self.coordinator.data.get(ATTR_TOMORROW_VALID, False)
+
+
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    """Set up the electricity price sensors from config entries."""
+    coordinator = hass.data[DOMAIN][config_entry.entry_id]
+    area = config_entry.data.get(ATTR_AREA)
+    vat = config_entry.data.get(ATTR_VAT, 0)
+    
+    config_data = {
+        ATTR_AREA: area,
+        ATTR_VAT: vat,
+        ATTR_CURRENCY: config_entry.data.get("currency"),
+        CONF_DISPLAY_UNIT: config_entry.options.get(
+            CONF_DISPLAY_UNIT, 
+            config_entry.data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
+        ),
+    }
+    
+    entities = [
+        CurrentPriceSensor(coordinator, config_data),
+        NextHourPriceSensor(coordinator, config_data),
+        DayAveragePriceSensor(coordinator, config_data),
+        PeakPriceSensor(coordinator, config_data),
+        OffPeakPriceSensor(coordinator, config_data),
+        TomorrowAveragePriceSensor(coordinator, config_data),
+        TomorrowPeakPriceSensor(coordinator, config_data),
+        TomorrowOffPeakPriceSensor(coordinator, config_data),
+    ]
+    
+    async_add_entities(entities)
