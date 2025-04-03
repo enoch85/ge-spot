@@ -59,7 +59,7 @@ class OmieAPI(BaseEnergyAPI):
                 
         return None
             
-    def _process_data(self, data):
+    async def _process_data(self, data):
         """Process the data from OMIE."""
         if not data:
             return None
