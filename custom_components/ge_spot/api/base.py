@@ -106,8 +106,15 @@ class BaseEnergyAPI(ABC):
             processed_data = await self._process_data(raw_data)
             
             if processed_data:
-                # Store the raw, unmodified API response
-                processed_data["raw_api_response"] = raw_data
+                # Log the raw API response but don't store it in processed data
+                if "raw_api_response" in processed_data:
+                    _LOGGER.debug(
+                        "Raw API response for %s: %s bytes of data", 
+                        self.__class__.__name__,
+                        len(str(processed_data["raw_api_response"]))
+                    )
+                    # Remove raw API response to prevent attribute size issues
+                    processed_data.pop("raw_api_response", None)
                 
                 # Add source information
                 processed_data["data_source"] = self.__class__.__name__
