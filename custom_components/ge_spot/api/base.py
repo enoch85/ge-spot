@@ -7,6 +7,13 @@ from abc import ABC, abstractmethod
 
 from homeassistant.util import dt as dt_util
 
+from ..utils.currency_utils import async_convert_energy_price
+from ..const import (
+    REGION_TO_CURRENCY,
+    CURRENCY_SUBUNIT_NAMES,
+    ENERGY_UNIT_CONVERSION
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 class BaseEnergyAPI(ABC):
@@ -18,7 +25,7 @@ class BaseEnergyAPI(ABC):
         self.session = None
         self.vat = config.get("vat", 0.0)
         self._currency = config.get("currency", "EUR")
-        self._area = None
+        self._area = config.get("area")
         self._date_str = None
         self._last_fetched = None
         self._last_successful_fetch = None
@@ -69,18 +76,12 @@ class BaseEnergyAPI(ABC):
             cache_key = f"{self.__class__.__name__}_{area}_{currency}_{date_str}"
             
             # Check if we have a valid cached response
-            current_time = datetime.datetime.now()
-            if cache_key in self._cache:
-                cache_entry = self._cache[cache_key]
-                cache_age = (current_time - cache_entry['timestamp']).total_seconds() / 60
-                
-                if cache_age < self._cache_ttl:
-                    _LOGGER.debug(f"Using cached data for {cache_key} (age: {cache_age:.1f} min, TTL: {self._cache_ttl} min)")
-                    return cache_entry['data']
-                else:
-                    _LOGGER.debug(f"Cached data expired for {cache_key} (age: {cache_age:.1f} min, TTL: {self._cache_ttl} min)")
+            cached_data = await self._check_cache(cache_key)
+            if cached_data:
+                return cached_data
             
             # Check rate limiting
+            current_time = datetime.datetime.now()
             if self._should_skip_fetch(current_time):
                 _LOGGER.debug(f"Skipping fetch for {area} on {date_str} due to rate limiting")
                 if cache_key in self._cache:
@@ -95,7 +96,8 @@ class BaseEnergyAPI(ABC):
             _LOGGER.debug(f"Fetching data for {area} on {date_str} with currency {currency}")
             raw_data = await self._fetch_data()
             
-            _LOGGER.debug(f"API {self.__class__.__name__} raw response: {str(raw_data)[:1000]}...")
+            if raw_data:
+                _LOGGER.debug(f"API {self.__class__.__name__} raw response received")
             
             if not raw_data:
                 _LOGGER.error(f"No data received from API for {area} on {date_str}")
@@ -142,6 +144,22 @@ class BaseEnergyAPI(ABC):
         except Exception as e:
             _LOGGER.error(f"Error fetching day-ahead prices: {str(e)}", exc_info=True)
             return None
+    
+    async def _check_cache(self, cache_key):
+        """Check if we have a valid cached response."""
+        current_time = datetime.datetime.now()
+        
+        if cache_key in self._cache:
+            cache_entry = self._cache[cache_key]
+            cache_age = (current_time - cache_entry['timestamp']).total_seconds() / 60
+            
+            if cache_age < self._cache_ttl:
+                _LOGGER.debug(f"Using cached data for {cache_key} (age: {cache_age:.1f} min, TTL: {self._cache_ttl} min)")
+                return cache_entry['data']
+            else:
+                _LOGGER.debug(f"Cached data expired for {cache_key} (age: {cache_age:.1f} min, TTL: {self._cache_ttl} min)")
+        
+        return None
     
     def _log_conversions(self, processed_data):
         """Log value conversions for debugging purposes."""
@@ -211,22 +229,24 @@ class BaseEnergyAPI(ABC):
         """
         pass
     
-    def _apply_vat(self, price):
-        """Apply VAT to price."""
+    async def _convert_price(self, price, from_currency="EUR", from_unit="MWh", to_subunit=None):
+        """Convert price using centralized conversion logic."""
         if price is None:
             return None
         
-        # Store the raw value before VAT application
-        raw_value = price
+        use_subunit = to_subunit if to_subunit is not None else self.config.get("price_in_cents", False)
         
-        # Apply VAT
-        result = price * (1 + self.vat)
-        
-        # Log the conversion for debugging
-        _LOGGER.debug(f"Applied VAT {self.vat:.2%}: {raw_value} → {result}")
-        
-        return result
-        
+        return await async_convert_energy_price(
+            price=price,
+            from_unit=from_unit,
+            to_unit="kWh",
+            from_currency=from_currency,
+            to_currency=self._currency,
+            vat=self.vat,
+            to_subunit=use_subunit,
+            session=self.session
+        )
+    
     def _get_now(self):
         """Get current datetime. Separate method for easier testing."""
         return datetime.datetime.now()
