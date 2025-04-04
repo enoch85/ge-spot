@@ -153,13 +153,12 @@ DISPLAY_UNITS = {
     DISPLAY_UNIT_CENTS: "Cents/Öre (e.g., 15 cents/kWh)",
 }
 
-# Update interval options
+# Update interval options with longer durations
 UPDATE_INTERVAL_OPTIONS = [
-    {"value": 15, "label": "15 minutes"},
-    {"value": 30, "label": "30 minutes"},
-    {"value": 60, "label": "1 hour (recommended)"},
-    {"value": 120, "label": "2 hours"},
-    {"value": 240, "label": "4 hours"},
+    {"value": 60, "label": "1 hour"},
+    {"value": 360, "label": "6 hours"},
+    {"value": 720, "label": "12 hours"},
+    {"value": 1440, "label": "24 hours"},
 ]
 
 # Sensor types
@@ -305,24 +304,104 @@ ENERGI_DATA_AREAS = {
     "DK2": "Denmark (DK2)",
 }
 
+# ENTSO-E area mapping from our area codes to ENTSO-E area codes
+ENTSOE_AREA_MAPPING = {
+    # Nordic regions
+    "SE1": "10Y1001A1001A44P",
+    "SE2": "10Y1001A1001A45N",
+    "SE3": "10Y1001A1001A46L",
+    "SE4": "10Y1001A1001A47J",
+    "DK1": "10YDK-1--------W",
+    "DK2": "10YDK-2--------M",
+    "NO1": "10YNO-1--------2",
+    "NO2": "10YNO-2--------T",
+    "NO3": "10YNO-3--------J",
+    "NO4": "10YNO-4--------9",
+    "NO5": "10Y1001A1001A48H",
+    "FI": "10YFI-1--------U",
+    "EE": "10Y1001A1001A39I",
+    "LV": "10YLV-1001A00074",
+    "LT": "10YLT-1001A0008Q",
+    
+    # Central Europe
+    "DE": "10Y1001A1001A83F",
+    "DE-LU": "10Y1001A1001A82H",
+    "AT": "10YAT-APG------L",
+    "BE": "10YBE----------2",
+    "NL": "10YNL----------L",
+    "FR": "10YFR-RTE------C",
+    "LU": "10YLU-CEGEDEL-NQ",
+    "GB": "10YGB----------A",
+    "IE": "10YIE-1001A00010",
+    "ES": "10YES-REE------0",
+    "PT": "10YPT-REN------W",
+    "CH": "10YCH-SWISSGRIDZ",
+    "IT": "10YIT-GRTN-----B",
+    "CZ": "10YCZ-CEPS-----N",
+    "PL": "10YPL-AREA-----S",
+    "SI": "10YSI-ELES-----O",
+    "SK": "10YSK-SEPS-----K",
+    "HU": "10YHU-MAVIR----U",
+    "RO": "10YRO-TEL------P",
+    "BG": "10YCA-BULGARIA-R",
+    "GR": "10YGR-HTSO-----Y",
+    "HR": "10YHR-HEP------M",
+    "RS": "10YCS-SERBIATSOV"
+}
+
 # ENTSO-E areas
 ENTSOE_AREAS = {
-    "10YDK-1--------W": "Denmark (DK1)",
-    "10YDK-2--------M": "Denmark (DK2)",
-    "10YSE-1--------K": "Sweden (SE1)",
-    "10YSE-2--------8": "Sweden (SE2)",
-    "10YSE-3--------J": "Sweden (SE3)",
-    "10YSE-4--------9": "Sweden (SE4)",
-    "10YFI-1--------U": "Finland",
-    "10YNO-1--------2": "Norway (NO1)",
-    "10YNO-2--------T": "Norway (NO2)",
-    "10YNO-3--------J": "Norway (NO3)",
-    "10YNO-4--------9": "Norway (NO4)",
-    "10Y1001A1001A83F": "Germany",
-    "10YFR-RTE------C": "France",
-    "10YBE----------2": "Belgium",
-    "10YNL----------L": "Netherlands",
-    "10YAT-APG------L": "Austria",
+    # Nordic regions
+    "SE1": "Sweden (SE1)",
+    "SE2": "Sweden (SE2)",
+    "SE3": "Sweden (SE3)",
+    "SE4": "Sweden (SE4)",
+    "DK1": "Denmark (DK1)",
+    "DK2": "Denmark (DK2)",
+    "NO1": "Norway (NO1)",
+    "NO2": "Norway (NO2)",
+    "NO3": "Norway (NO3)",
+    "NO4": "Norway (NO4)",
+    "NO5": "Norway (NO5)",
+    "FI": "Finland",
+    "EE": "Estonia",
+    "LV": "Latvia",
+    "LT": "Lithuania",
+    
+    # Central Europe
+    "DE": "Germany",
+    "DE-LU": "Germany-Luxembourg",
+    "AT": "Austria",
+    "BE": "Belgium",
+    "NL": "Netherlands",
+    "FR": "France",
+    "LU": "Luxembourg",
+    "GB": "Great Britain",
+    "IE": "Ireland",
+    "ES": "Spain",
+    "PT": "Portugal",
+    "CH": "Switzerland",
+    "IT": "Italy",
+    "CZ": "Czech Republic",
+    "PL": "Poland",
+    "SI": "Slovenia",
+    "SK": "Slovakia",
+    "HU": "Hungary",
+    "RO": "Romania",
+    "BG": "Bulgaria",
+    "GR": "Greece",
+    "HR": "Croatia",
+    "RS": "Serbia",
+    
+    # These require ENTSO-E codes to be used directly
+    "10YBA-JPCC-----D": "Bosnia Herzegovina",
+    "10YCS-CG-TSO---S": "Montenegro",
+    "10YMK-MEPSO----8": "North Macedonia",
+    "10YAL-KESH-----5": "Albania",
+    "10Y1001C--00003F": "Ukraine",
+    "10YTR-TEIAS----W": "Turkey",
+    "10YCY-1001A0003J": "Cyprus",
+    "10Y1001A1001A93C": "Malta"
 }
 
 # EPEX areas
