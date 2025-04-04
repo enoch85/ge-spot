@@ -9,7 +9,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN, CONF_AREA, CONF_VAT, CONF_UPDATE_INTERVAL,
-    CONF_DISPLAY_UNIT, CONF_ENABLE_FALLBACK, CONF_SOURCE_PRIORITY,
+    CONF_DISPLAY_UNIT, CONF_SOURCE_PRIORITY,
     NORDPOOL_AREAS, ENERGI_DATA_AREAS, ENTSOE_AREAS, EPEX_AREAS, OMIE_AREAS, AEMO_AREAS,
     DEFAULT_AREAS, SOURCE_NORDPOOL, SOURCE_ENERGI_DATA_SERVICE, SOURCE_ENTSO_E, 
     SOURCE_EPEX, SOURCE_OMIE, SOURCE_AEMO
@@ -105,6 +105,7 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             # Get list of sources that support this area
             self._supported_sources = get_sources_for_region(area)
+            _LOGGER.info(f"Supported sources for {area}: {self._supported_sources}")
             
             if not self._supported_sources:
                 errors[CONF_AREA] = "no_sources_for_region"
@@ -143,6 +144,10 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
+            # Convert VAT from percentage to decimal if present
+            if CONF_VAT in user_input:
+                user_input[CONF_VAT] = user_input[CONF_VAT] / 100
+                
             # Store source priority
             self._data[CONF_SOURCE_PRIORITY] = user_input[CONF_SOURCE_PRIORITY]
             
@@ -150,7 +155,9 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_VAT] = user_input.get(CONF_VAT, 0)
             self._data[CONF_UPDATE_INTERVAL] = user_input.get(CONF_UPDATE_INTERVAL, 60)
             self._data[CONF_DISPLAY_UNIT] = user_input.get(CONF_DISPLAY_UNIT, "decimal")
-            self._data[CONF_ENABLE_FALLBACK] = user_input.get(CONF_ENABLE_FALLBACK, True)
+            
+            # Always enable fallback (removed from UI)
+            self._data[CONF_ENABLE_FALLBACK] = True
             
             # Check if any source requires an API key
             requires_api_key = any(source == "entsoe" for source in self._data[CONF_SOURCE_PRIORITY])
@@ -183,7 +190,7 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         {"value": source, "label": source.replace("_", " ").title()}
                         for source in self._supported_sources
                     ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    mode=selector.SelectSelectorMode.LIST,
                     multiple=True,
                 )
             ),
@@ -254,6 +261,10 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
         errors = {}
 
         if user_input is not None:
+            # Convert VAT from percentage to decimal if present
+            if CONF_VAT in user_input:
+                user_input[CONF_VAT] = user_input[CONF_VAT] / 100
+                
             # Handle source priority updates if present
             if CONF_SOURCE_PRIORITY in user_input:
                 updated_data = dict(self._data)
@@ -264,6 +275,9 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                     self.hass.config_entries.async_get_entry(self.entry_id),
                     data=updated_data
                 )
+            
+            # Always enable fallback (removed from UI)
+            user_input[CONF_ENABLE_FALLBACK] = True
             
             # Handle normal options
             return self.async_create_entry(title="", data=user_input)
@@ -284,7 +298,7 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                     {"value": source, "label": source.replace("_", " ").title()}
                     for source in self._supported_sources
                 ],
-                mode=selector.SelectSelectorMode.DROPDOWN,
+                mode=selector.SelectSelectorMode.LIST,
                 multiple=True,
             )
         )
