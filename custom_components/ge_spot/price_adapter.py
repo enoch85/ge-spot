@@ -131,7 +131,15 @@ class ElectricityPriceAdapter:
 
     def get_day_statistics(self, day_offset: int = 0) -> Dict[str, Any]:
         """Calculate statistics for a particular day."""
-        return get_statistics(self.get_prices_for_day(day_offset))
+        from .utils.debug_utils import log_statistics
+        
+        day_data = self.get_prices_for_day(day_offset)
+        stats = get_statistics(day_data)
+        
+        # Log calculation details
+        log_statistics(stats, day_offset)
+        
+        return stats
 
     def is_tomorrow_valid(self) -> bool:
         """Check if tomorrow's data is available."""
