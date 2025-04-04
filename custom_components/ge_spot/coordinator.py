@@ -22,6 +22,7 @@ from .const import (
 )
 from .api import create_apis_for_region
 from .utils.debug_utils import log_raw_data
+from .utils.api_validator import ApiValidator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         self.config = config
         self.adapter = None
         self._last_successful_data = None
+        self._last_primary_check = None
         
         # Create prioritized APIs for this region
         source_priority = config.get(CONF_SOURCE_PRIORITY)
@@ -72,35 +74,73 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             # Fetch data from APIs in priority order
             today_data = None
             
-            for api in self._apis:
-                api_name = api.__class__.__name__
-                api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, []) 
-                               if s.lower() in api_name.lower()), "unknown")
+            # First, try to restore primary source if using fallback
+            if hasattr(self, '_last_successful_data') and self._last_successful_data and self._fallback_used:
+                # Only check primary source if enough time has passed
+                now = datetime.datetime.now()
+                check_primary = True
                 
-                _LOGGER.info(f"Attempting to fetch data from {api_name} ({api_type})")
-                self._attempted_sources.append(api_type)
+                if hasattr(self, '_last_primary_check'):
+                    time_since_check = (now - self._last_primary_check).total_seconds() / 60
+                    if time_since_check < self.update_interval.total_seconds() / 60:
+                        check_primary = False
                 
-                try:
-                    # Pass Home Assistant instance to the API for timezone handling
-                    data = await api.fetch_day_ahead_prices(
-                        self.area,
-                        self.currency,
-                        dt_util.now(),
-                        self.hass
-                    )
+                if check_primary:
+                    self._last_primary_check = now
+                    # Try primary source first
+                    primary_source = self.config.get(CONF_SOURCE_PRIORITY, [])[0]
+                    primary_api = next((api for api in self._apis 
+                                    if primary_source.lower() in api.__class__.__name__.lower()), None)
                     
-                    if data:
-                        today_data = data
-                        self._active_source = api_type
-                        self._active_api = api
-                        if len(self._attempted_sources) > 1:
-                            self._fallback_used = True
-                        _LOGGER.info(f"Successfully retrieved data from {api_name}")
-                        break
-                    else:
-                        _LOGGER.warning(f"No data retrieved from {api_name}")
-                except Exception as e:
-                    _LOGGER.error(f"Error fetching data from {api_name}: {e}")
+                    if primary_api and primary_api != self._active_api:
+                        _LOGGER.debug(f"Checking if primary source {primary_source} is available again")
+                        try:
+                            data = await primary_api.fetch_day_ahead_prices(
+                                self.area, self.currency, dt_util.now(), self.hass
+                            )
+                            
+                            if data and ApiValidator.is_data_adequate(data):
+                                _LOGGER.info(f"Primary source {primary_source} is available again, switching back")
+                                today_data = data
+                                self._active_source = primary_source
+                                self._active_api = primary_api
+                                self._fallback_used = False
+                                self._attempted_sources = [primary_source]
+                        except Exception as e:
+                            _LOGGER.debug(f"Primary source {primary_source} still unavailable: {e}")
+
+            # Try all sources if primary source check didn't succeed
+            if not today_data:
+                for api in self._apis:
+                    api_name = api.__class__.__name__
+                    api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, []) 
+                                if s.lower() in api_name.lower()), "unknown")
+                    
+                    _LOGGER.info(f"Attempting to fetch data from {api_name} ({api_type})")
+                    self._attempted_sources.append(api_type)
+                    
+                    try:
+                        # Pass Home Assistant instance to the API for timezone handling
+                        data = await api.fetch_day_ahead_prices(
+                            self.area,
+                            self.currency,
+                            dt_util.now(),
+                            self.hass
+                        )
+                        
+                        # Check if data is adequate, not just present
+                        if data and ApiValidator.is_data_adequate(data):
+                            today_data = data
+                            self._active_source = api_type
+                            self._active_api = api
+                            if len(self._attempted_sources) > 1:
+                                self._fallback_used = True
+                            _LOGGER.info(f"Successfully retrieved adequate data from {api_name}")
+                            break
+                        else:
+                            _LOGGER.warning(f"No data or inadequate data retrieved from {api_name}")
+                    except Exception as e:
+                        _LOGGER.error(f"Error fetching data from {api_name}: {e}")
 
             # If no today data could be fetched, check if we have cached data for today
             if not today_data:
