@@ -41,10 +41,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         config.update(entry.options)
 
     # Get update interval (prefer options over data, with fallback to default)
-    update_interval = entry.options.get(
+    # Convert update interval to integer to avoid TypeError
+    update_interval = int(entry.options.get(
         CONF_UPDATE_INTERVAL,
         entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-    )
+    ))
 
     # Create a data coordinator
     coordinator = RegionPriceCoordinator(
