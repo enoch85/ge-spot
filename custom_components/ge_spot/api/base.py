@@ -13,7 +13,8 @@ from ..utils.timezone_utils import localize_datetime
 from ..const import (
     REGION_TO_CURRENCY,
     CURRENCY_SUBUNIT_NAMES,
-    ENERGY_UNIT_CONVERSION
+    ENERGY_UNIT_CONVERSION,
+    CONF_API_KEY
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +54,55 @@ class BaseEnergyAPI(ABC):
                 _LOGGER.error(f"Error closing session: {str(e)}")
             finally:
                 self.session = None
+
+    async def validate_api_key(self, api_key=None):
+        """Validate an API key.
+        
+        Args:
+            api_key: Optional API key to validate (uses stored key if not provided)
+            
+        Returns:
+            bool: True if the API key is valid, False otherwise
+        """
+        # Use provided key or get from config
+        key_to_validate = api_key or self.config.get(CONF_API_KEY) or self.config.get("api_key")
+        
+        if not key_to_validate:
+            _LOGGER.warning("No API key to validate")
+            return False
+            
+        try:
+            # Implementation depends on the specific API
+            _LOGGER.debug(f"Validating API key (starting with {key_to_validate[:5]}...)")
+            
+            # Default implementation - will be overridden by subclasses
+            # Simply try to fetch data with the key
+            test_config = dict(self.config)
+            test_config[CONF_API_KEY] = key_to_validate
+            
+            # Create a temporary instance with the test config
+            temp_instance = self.__class__(test_config)
+            if hasattr(self, "session") and self.session:
+                temp_instance.session = self.session
+                
+            # Try to fetch data
+            result = await temp_instance._fetch_data()
+            
+            # Close the temporary instance if needed
+            if temp_instance != self and hasattr(temp_instance, "close"):
+                await temp_instance.close()
+                
+            # Check if we got a valid response
+            if result:
+                _LOGGER.info("API key validation successful")
+                return True
+            else:
+                _LOGGER.warning("API key validation failed: No data returned")
+                return False
+                
+        except Exception as e:
+            _LOGGER.error(f"API key validation error: {e}")
+            return False
 
     async def fetch_day_ahead_prices(self, area, currency, date, hass=None):
         """Fetch day-ahead prices for a specific area and date."""
