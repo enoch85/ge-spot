@@ -11,7 +11,8 @@ from .const import (
     DOMAIN, CONF_AREA, CONF_VAT, CONF_UPDATE_INTERVAL,
     CONF_DISPLAY_UNIT, CONF_ENABLE_FALLBACK, CONF_SOURCE_PRIORITY,
     NORDPOOL_AREAS, ENERGI_DATA_AREAS, ENTSOE_AREAS, EPEX_AREAS, OMIE_AREAS, AEMO_AREAS,
-    DEFAULT_AREAS
+    DEFAULT_AREAS, SOURCE_NORDPOOL, SOURCE_ENERGI_DATA_SERVICE, SOURCE_ENTSO_E, 
+    SOURCE_EPEX, SOURCE_OMIE, SOURCE_AEMO
 )
 from .config_utils import (
     common_schema, get_default_values
@@ -20,14 +21,61 @@ from .api import get_sources_for_region
 
 _LOGGER = logging.getLogger(__name__)
 
-# Combine all areas to create a unified region list
-ALL_REGIONS = {}
-ALL_REGIONS.update(NORDPOOL_AREAS)
-ALL_REGIONS.update(ENERGI_DATA_AREAS)
-ALL_REGIONS.update(ENTSOE_AREAS)
-ALL_REGIONS.update(EPEX_AREAS)
-ALL_REGIONS.update(OMIE_AREAS)
-ALL_REGIONS.update(AEMO_AREAS)
+# Define a list of API sources in priority order for UI display
+API_SOURCE_PRIORITIES = [
+    SOURCE_NORDPOOL,      # Highest priority
+    SOURCE_ENTSO_E,
+    SOURCE_ENERGI_DATA_SERVICE, 
+    SOURCE_EPEX,
+    SOURCE_OMIE,
+    SOURCE_AEMO           # Lowest priority
+]
+
+# Mapping of source to area dictionaries
+SOURCE_AREA_MAPS = {
+    SOURCE_NORDPOOL: NORDPOOL_AREAS,
+    SOURCE_ENERGI_DATA_SERVICE: ENERGI_DATA_AREAS,
+    SOURCE_ENTSO_E: ENTSOE_AREAS,
+    SOURCE_EPEX: EPEX_AREAS,
+    SOURCE_OMIE: OMIE_AREAS,
+    SOURCE_AEMO: AEMO_AREAS,
+}
+
+def get_deduplicated_regions():
+    """Get a deduplicated list of regions by display name."""
+    # 1. Create a mapping of display_name → list of region info tuples
+    display_name_map = {}
+    
+    # First, collect all regions from all sources
+    for source, area_dict in SOURCE_AREA_MAPS.items():
+        source_priority = API_SOURCE_PRIORITIES.index(source) if source in API_SOURCE_PRIORITIES else 999
+        for region_code, display_name in area_dict.items():
+            # Normalize display name to handle different capitalizations
+            normalized_name = display_name.lower()
+            
+            if normalized_name not in display_name_map:
+                display_name_map[normalized_name] = []
+                
+            # Store tuple of (source_priority, region_code, display_name, source)
+            display_name_map[normalized_name].append((
+                source_priority, region_code, display_name, source
+            ))
+    
+    # 2. Now create a deduplicated regions dictionary
+    deduplicated_regions = {}
+    
+    for name_variants in display_name_map.values():
+        # Sort by source priority (lower number = higher priority)
+        sorted_variants = sorted(name_variants)
+        
+        # Choose the preferred region code based on source priority
+        for priority, region_code, display_name, source in sorted_variants:
+            # Only include if the region is supported by at least one API
+            if get_sources_for_region(region_code):
+                deduplicated_regions[region_code] = display_name
+                break
+    
+    return deduplicated_regions
 
 class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for GE-Spot integration."""
@@ -68,11 +116,8 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Proceed to source priority step
                 return await self.async_step_source_priority()
 
-        # Get regions with at least one source
-        available_regions = {}
-        for region, name in sorted(ALL_REGIONS.items(), key=lambda x: x[1]):
-            if get_sources_for_region(region):
-                available_regions[region] = name
+        # Get regions with at least one source, properly deduplicated
+        available_regions = get_deduplicated_regions()
 
         # Show region selection form
         return self.async_show_form(
@@ -83,7 +128,7 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         selector.SelectSelectorConfig(
                             options=[
                                 {"value": area, "label": name}
-                                for area, name in available_regions.items()
+                                for area, name in sorted(available_regions.items(), key=lambda x: x[1])
                             ],
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
@@ -113,9 +158,20 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if requires_api_key:
                 return await self.async_step_api_keys()
             else:
+                # Get the display name for the region
+                region_code = self._data[CONF_AREA]
+                region_name = None
+                for source, area_dict in SOURCE_AREA_MAPS.items():
+                    if region_code in area_dict:
+                        region_name = area_dict[region_code]
+                        break
+                
+                if not region_name:
+                    region_name = region_code
+                
                 # All done, create the config entry
                 return self.async_create_entry(
-                    title=f"GE-Spot - {ALL_REGIONS.get(self._data[CONF_AREA], self._data[CONF_AREA])}",
+                    title=f"GE-Spot - {region_name}",
                     data=self._data,
                 )
 
@@ -152,9 +208,20 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if api_key:  # Only store non-empty keys
                     self._data[f"{source}_api_key"] = api_key
             
+            # Get the display name for the region for the title
+            region_code = self._data[CONF_AREA]
+            region_name = None
+            for source, area_dict in SOURCE_AREA_MAPS.items():
+                if region_code in area_dict:
+                    region_name = area_dict[region_code]
+                    break
+            
+            if not region_name:
+                region_name = region_code
+                
             # Create the config entry
             return self.async_create_entry(
-                title=f"GE-Spot - {ALL_REGIONS.get(self._data[CONF_AREA], self._data[CONF_AREA])}",
+                title=f"GE-Spot - {region_name}",
                 data=self._data,
             )
 
