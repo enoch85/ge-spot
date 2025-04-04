@@ -14,12 +14,13 @@ from .const import (
     DEFAULT_AREAS, SOURCE_NORDPOOL, SOURCE_ENERGI_DATA_SERVICE, SOURCE_ENTSO_E, 
     SOURCE_EPEX, SOURCE_OMIE, SOURCE_AEMO,
     DISPLAY_UNIT_DECIMAL, DISPLAY_UNIT_CENTS, DISPLAY_UNITS,
-    UPDATE_INTERVAL_OPTIONS
+    UPDATE_INTERVAL_OPTIONS, ENTSOE_AREA_MAPPING
 )
 from .config_utils import (
     common_schema, get_default_values
 )
 from .api import get_sources_for_region
+from .api.entsoe import EntsoEAPI
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -188,8 +189,13 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Always enable fallback
                 self._data[CONF_ENABLE_FALLBACK] = True
                 
-                # Check if any source requires an API key - use SOURCE_ENTSO_E constant
-                requires_api_key = any(source == SOURCE_ENTSO_E for source in self._data[CONF_SOURCE_PRIORITY])
+                # Check if ENTSO-E requires an API key for this area
+                area = self._data.get(CONF_AREA)
+                requires_api_key = False
+                
+                if SOURCE_ENTSO_E in self._data[CONF_SOURCE_PRIORITY] and area not in ENTSOE_AREA_MAPPING:
+                    # Only require API key for unsupported regions
+                    requires_api_key = True
                 
                 if requires_api_key:
                     return await self.async_step_api_keys()
@@ -257,13 +263,13 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_UPDATE_INTERVAL, default=60): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=string_update_interval_options,
-                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        mode=selector.SelectSelectorMode.RADIO,  # Changed to RADIO
                     )
                 ),
                 vol.Optional(CONF_DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=display_unit_options,
-                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        mode=selector.SelectSelectorMode.RADIO,  # Changed to RADIO
                         multiple=False,
                     )
                 ),
@@ -321,9 +327,15 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             schema_dict = {}
             
-            # Add fields for each source that requires an API key - use SOURCE_ENTSO_E constant
+            # Add fields for each source that requires an API key
+            area = self._data.get(CONF_AREA)
+            
+            # Make API key optional if area is supported by ENTSO-E mapping
             if SOURCE_ENTSO_E in self._data[CONF_SOURCE_PRIORITY]:
-                schema_dict[vol.Required(f"{SOURCE_ENTSO_E}_api_key")] = cv.string
+                if area in ENTSOE_AREA_MAPPING:
+                    schema_dict[vol.Optional(f"{SOURCE_ENTSO_E}_api_key")] = cv.string
+                else:
+                    schema_dict[vol.Required(f"{SOURCE_ENTSO_E}_api_key")] = cv.string
 
             return self.async_show_form(
                 step_id="api_keys",
@@ -417,13 +429,13 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=string_update_interval_options,
-                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        mode=selector.SelectSelectorMode.RADIO,  # Changed to RADIO
                     )
                 ),
                 vol.Optional(CONF_DISPLAY_UNIT, default=current_display_unit): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=display_unit_options,
-                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        mode=selector.SelectSelectorMode.RADIO,  # Changed to RADIO
                         multiple=False,
                     )
                 ),
@@ -454,8 +466,12 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 )
             )
 
-            # Add API key fields for sources that require it - use SOURCE_ENTSO_E constant
+            # Add API key fields for sources that require it
             if SOURCE_ENTSO_E in self._supported_sources:
+                # Check if area is supported by ENTSO-E
+                is_supported = self._area in ENTSOE_AREA_MAPPING
+                
+                # Make API key optional if area is supported
                 schema[vol.Optional(
                     f"{SOURCE_ENTSO_E}_api_key",
                     default=self._data.get(f"{SOURCE_ENTSO_E}_api_key", "")
