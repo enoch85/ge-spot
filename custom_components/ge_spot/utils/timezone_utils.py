@@ -8,6 +8,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
 
 from ..const import AREA_TIMEZONES
+from .price_utils import get_price_statistics
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -247,19 +248,12 @@ def get_price_list(day_data: List[Dict]) -> List[float]:
 
 def get_statistics(price_data: List[Dict]) -> Dict[str, Any]:
     """Calculate statistics for the price data."""
-    prices = [p["price"] for p in price_data if "price" in p]
-
-    if not prices:
-        return {
-            "min": None,
-            "max": None,
-            "average": None,
-            "off_peak_1": None,
-            "off_peak_2": None,
-            "peak": None,
-        }
-
-    # Group periods by hour ranges
+    from ..utils.price_utils import get_price_statistics
+    
+    # Get basic statistics including min/max with timestamps
+    stats = get_price_statistics(price_data)
+    
+    # Add time-of-day based categorization
     off_peak_1 = []
     peak = []
     off_peak_2 = []
@@ -276,14 +270,14 @@ def get_statistics(price_data: List[Dict]) -> Dict[str, Any]:
         else:  # 20-24
             off_peak_2.append(period["price"])
 
-    return {
-        "min": min(prices) if prices else None,
-        "max": max(prices) if prices else None,
-        "average": sum(prices) / len(prices) if prices else None,
+    # Add time-of-day averages
+    stats.update({
         "off_peak_1": sum(off_peak_1) / len(off_peak_1) if off_peak_1 else None,
         "off_peak_2": sum(off_peak_2) / len(off_peak_2) if off_peak_2 else None,
         "peak": sum(peak) / len(peak) if peak else None,
-    }
+    })
+    
+    return stats
 
 
 def is_tomorrow_valid(price_data: List[Dict], hass: Optional[HomeAssistant] = None) -> bool:
