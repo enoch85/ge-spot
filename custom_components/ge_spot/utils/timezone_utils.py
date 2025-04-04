@@ -16,11 +16,11 @@ _LOGGER = logging.getLogger(__name__)
 def parse_datetime(timestamp: Union[str, datetime]) -> datetime:
     """Parse various timestamp formats into a consistent datetime object.
     
-    Args:
-        timestamp: Either a datetime string in various formats or a datetime object
-        
-    Returns:
-        A timezone-aware datetime object
+    Handles various API timestamp formats:
+    - ISO format with Z suffix
+    - ISO format with explicit offset
+    - ISO format without timezone
+    - Already a datetime object
     """
     # Already a datetime object
     if isinstance(timestamp, datetime):
@@ -33,6 +33,7 @@ def parse_datetime(timestamp: Union[str, datetime]) -> datetime:
         # Handle UTC indicator (Z)
         if isinstance(timestamp, str) and timestamp.endswith('Z'):
             dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            _LOGGER.debug(f"Parsed UTC timestamp: {timestamp} → {dt.isoformat()}")
             return dt
             
         # Handle explicit timezone offset or standard ISO format
@@ -56,13 +57,18 @@ def ensure_timezone_aware(dt_obj: datetime) -> datetime:
 
 def localize_datetime(dt: datetime, hass: Optional[HomeAssistant] = None) -> datetime:
     """Convert datetime to Home Assistant's configured timezone."""
+    if dt is None:
+        return dt_util.now()
+        
     dt = ensure_timezone_aware(dt)
     
     # Get HA timezone (most accurate)
-    if hass and hass.config.time_zone:
-        tz = dt_util.get_time_zone(hass.config.time_zone)
-        if tz:
-            return dt.astimezone(tz)
+    if hass:
+        local_tz = hass.config.time_zone
+        if local_tz:
+            tz = dt_util.get_time_zone(local_tz)
+            if tz:
+                return dt.astimezone(tz)
     
     # Fall back to dt_util's handling
     return dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
@@ -70,7 +76,8 @@ def localize_datetime(dt: datetime, hass: Optional[HomeAssistant] = None) -> dat
 
 def convert_to_local_time(dt: datetime, area: str) -> datetime:
     """Convert a datetime to the local time for a given area."""
-    dt = ensure_timezone_aware(dt)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=dt_util.UTC)
     
     # Get the timezone for this area
     tz_name = AREA_TIMEZONES.get(area)
@@ -110,6 +117,7 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
     if reference_time is None:
         reference_time = dt_util.now()
     
+    # Ensure timezone-aware comparison
     reference_time = ensure_timezone_aware(reference_time)
     
     _LOGGER.debug(f"Finding price for time: {reference_time.isoformat()} among {len(periods)} periods")
@@ -136,7 +144,7 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
         start = first_period.get("start")
         if start:
             start = ensure_timezone_aware(start)
-            _LOGGER.warning(f"No matching period found for {reference_time.isoformat()}. First period: {start.isoformat()}")
+            _LOGGER.warning(f"No matching period found for {reference_time.isoformat()}. First period: {start.isoformat() if start else 'unknown'}")
     
     return None
 
