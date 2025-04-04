@@ -241,8 +241,19 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         multiple=True,
                     )
                 ),
+                # Add description text field (non-interactive) to explain how priority works
+                vol.Optional("priority_info", default=""): selector.TextSelector(
+                    selector.TextSelectorConfig(
+                        type=selector.TextSelectorType.TEXT,
+                        multiline=True,
+                        suffix="Priority is determined by order: first selected = highest priority",
+                        readonly=True,
+                    )
+                ),
                 vol.Optional(CONF_VAT, default=0): vol.All(
-                    vol.Coerce(float), vol.Range(min=0, max=100)
+                    vol.Coerce(float), 
+                    vol.Range(min=0, max=100),
+                    msg="Enter VAT percentage (0-100)"
                 ),
                 vol.Optional(CONF_UPDATE_INTERVAL, default=60): selector.SelectSelector(
                     selector.SelectSelectorConfig(
@@ -400,7 +411,9 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
             # Create schema for options
             schema = {
                 vol.Optional(CONF_VAT, default=defaults.get(CONF_VAT, 0) * 100): vol.All(
-                    vol.Coerce(float), vol.Range(min=0, max=100)
+                    vol.Coerce(float), 
+                    vol.Range(min=0, max=100),
+                    msg="Enter VAT percentage (0-100)"
                 ),
                 vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): selector.SelectSelector(
                     selector.SelectSelectorConfig(
@@ -430,6 +443,16 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                     ],
                     mode=selector.SelectSelectorMode.LIST,
                     multiple=True,
+                )
+            )
+            
+            # Add description text to explain priority
+            schema[vol.Optional("priority_info", default="")] = selector.TextSelector(
+                selector.TextSelectorConfig(
+                    type=selector.TextSelectorType.TEXT,
+                    multiline=True,
+                    suffix="Priority is determined by order: first selected = highest priority",
+                    readonly=True,
                 )
             )
 
