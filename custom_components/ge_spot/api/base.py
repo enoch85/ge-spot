@@ -241,7 +241,7 @@ class BaseEnergyAPI(ABC):
         """
         pass
 
-    async def _convert_price(self, price, from_currency="EUR", from_unit="MWh", to_subunit=None):
+    async def _convert_price(self, price, from_currency="EUR", from_unit="MWh", to_subunit=None, exchange_rate=None):
         """Convert price using centralized conversion logic."""
         if price is None:
             return None
@@ -266,7 +266,8 @@ class BaseEnergyAPI(ABC):
             to_currency=self._currency,
             vat=self.vat,
             to_subunit=use_subunit,
-            session=session
+            session=session,
+            exchange_rate=exchange_rate
         )
         
         # Log details
