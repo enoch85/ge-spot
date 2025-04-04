@@ -216,11 +216,19 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Create config schema for source priority
         try:
-            # Convert integer values to strings for selector
-            string_interval_options = [
-                {"value": str(option["value"]), "label": option["label"]}
-                for option in UPDATE_INTERVAL_OPTIONS
-            ]
+            # Convert values to strings for the selector
+            string_update_interval_options = []
+            for option in UPDATE_INTERVAL_OPTIONS:
+                # Ensure value is a string
+                new_option = option.copy()
+                if "value" in new_option and not isinstance(new_option["value"], str):
+                    new_option["value"] = str(new_option["value"])
+                string_update_interval_options.append(new_option)
+
+            # Create display unit options from DISPLAY_UNITS
+            display_unit_options = []
+            for key, label in DISPLAY_UNITS.items():
+                display_unit_options.append({"value": key, "label": label})
 
             schema_dict = {
                 vol.Required(CONF_SOURCE_PRIORITY, default=self._supported_sources): selector.SelectSelector(
@@ -238,17 +246,15 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Optional(CONF_UPDATE_INTERVAL, default=60): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=string_interval_options,
+                        options=string_update_interval_options,
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
                 vol.Optional(CONF_DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=[
-                            {"value": k, "label": v}
-                            for k, v in DISPLAY_UNITS.items()
-                        ],
-                        mode=selector.SelectSelectorMode.RADIO,
+                        options=display_unit_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        multiple=False,
                     )
                 ),
             }
@@ -377,11 +383,19 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 self._data.get(CONF_DISPLAY_UNIT, DISPLAY_UNIT_DECIMAL)
             )
 
-            # Convert integer values to strings for selector
-            string_interval_options = [
-                {"value": str(option["value"]), "label": option["label"]}
-                for option in UPDATE_INTERVAL_OPTIONS
-            ]
+            # Convert values to strings for the selector
+            string_update_interval_options = []
+            for option in UPDATE_INTERVAL_OPTIONS:
+                # Ensure value is a string
+                new_option = option.copy()
+                if "value" in new_option and not isinstance(new_option["value"], str):
+                    new_option["value"] = str(new_option["value"])
+                string_update_interval_options.append(new_option)
+
+            # Create display unit options from DISPLAY_UNITS
+            display_unit_options = []
+            for key, label in DISPLAY_UNITS.items():
+                display_unit_options.append({"value": key, "label": label})
 
             # Create schema for options
             schema = {
@@ -390,17 +404,15 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 ),
                 vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=string_interval_options,
+                        options=string_update_interval_options,
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
                 vol.Optional(CONF_DISPLAY_UNIT, default=current_display_unit): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=[
-                            {"value": k, "label": v}
-                            for k, v in DISPLAY_UNITS.items()
-                        ],
-                        mode=selector.SelectSelectorMode.RADIO,
+                        options=display_unit_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        multiple=False,
                     )
                 ),
             }
