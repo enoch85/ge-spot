@@ -79,6 +79,17 @@ class BaseElectricityPriceSensor(SensorEntity):
             "is_using_fallback": self.coordinator.data.get(ATTR_IS_USING_FALLBACK, False),
         }
 
+        # Add exchange rate information if available
+        if "raw_values" in self.coordinator.data and "current_price" in self.coordinator.data["raw_values"]:
+            raw_price_info = self.coordinator.data["raw_values"]["current_price"]
+            if isinstance(raw_price_info, dict):
+                # Add raw currency
+                if "unit" in raw_price_info:
+                    attrs["current_raw_currency"] = raw_price_info["unit"]
+                # Add exchange rate used
+                if "exchange_rate" in raw_price_info:
+                    attrs["current_exchange_rate"] = raw_price_info["exchange_rate"]
+
         # Add source information if available
         if "source_info" in self.coordinator.data:
             attrs["source_info"] = self.coordinator.data["source_info"]
