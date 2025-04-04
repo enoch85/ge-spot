@@ -1,0 +1,65 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure GE-Spot",
+        "description": "Select your price area",
+        "data": {
+          "area": "Price Area"
+        }
+      },
+      "source_priority": {
+        "title": "Configure Data Sources",
+        "description": "Select which sources to use for price data in priority order",
+        "data": {
+          "source_priority": "Source Priority",
+          "vat": "VAT Rate",
+          "update_interval": "Update Interval",
+          "display_unit": "Display Format"
+        }
+      },
+      "api_keys": {
+        "title": "API Keys",
+        "description": "Enter API keys for selected sources",
+        "data": {
+          "entsoe_api_key": "ENTSO-E API Key"
+        }
+      }
+    },
+    "error": {
+      "no_sources_for_region": "No data sources available for this region",
+      "error_sources_for_region": "Error retrieving sources for region",
+      "api_key_required": "API key is required",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This price area is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "GE-Spot Options",
+        "description": "Configure price settings",
+        "data": {
+          "source_priority": "Source Priority",
+          "vat": "VAT Rate",
+          "update_interval": "Update Interval",
+          "display_unit": "Display Format",
+          "entsoe_api_key": "ENTSO-E API Key"
+        }
+      }
+    }
+  },
+  "selector": {
+    "update_interval": {
+      "options": {
+        "15": "15 minutes",
+        "30": "30 minutes",
+        "60": "1 hour (recommended)",
+        "120": "2 hours",
+        "240": "4 hours"
+      }
+    }
+  }
+}
