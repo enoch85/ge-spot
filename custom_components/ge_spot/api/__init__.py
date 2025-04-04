@@ -1,6 +1,6 @@
 """API modules for the energy prices integration."""
 import logging
-from typing import Dict, Optional, Type
+from typing import Dict, Optional, Type, List, Set
 
 from ..const import (
     SOURCE_NORDPOOL,
@@ -9,12 +9,38 @@ from ..const import (
     SOURCE_EPEX,
     SOURCE_OMIE,
     SOURCE_AEMO,
+    NORDPOOL_AREAS,
+    ENERGI_DATA_AREAS,
+    ENTSOE_AREAS,
+    EPEX_AREAS,
+    OMIE_AREAS,
+    AEMO_AREAS,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
+# Mapping of which source supports which regions
+SOURCE_REGION_SUPPORT = {
+    SOURCE_NORDPOOL: set(NORDPOOL_AREAS.keys()),
+    SOURCE_ENERGI_DATA_SERVICE: set(ENERGI_DATA_AREAS.keys()),
+    SOURCE_ENTSO_E: set(ENTSOE_AREAS.keys()),
+    SOURCE_EPEX: set(EPEX_AREAS.keys()),
+    SOURCE_OMIE: set(OMIE_AREAS.keys()),
+    SOURCE_AEMO: set(AEMO_AREAS.keys()),
+}
+
+# Source reliability ratings (higher is better)
+SOURCE_RELIABILITY = {
+    SOURCE_NORDPOOL: 10,  # Most reliable
+    SOURCE_ENERGI_DATA_SERVICE: 8,
+    SOURCE_ENTSO_E: 7,
+    SOURCE_EPEX: 7,
+    SOURCE_OMIE: 6,
+    SOURCE_AEMO: 6,
+}
+
 class ApiRegistry:
-    """Registry for API handlers."""
+    """Registry for API handlers with region-based discovery."""
 
     def __init__(self):
         """Initialize the registry."""
@@ -36,6 +62,50 @@ class ApiRegistry:
         except Exception as e:
             _LOGGER.error(f"Error creating API instance for {source_type}: {e}")
             return None
+            
+    def get_sources_for_region(self, region: str) -> List[str]:
+        """Get list of sources that support a given region, ordered by reliability."""
+        supported_sources = []
+        
+        for source, regions in SOURCE_REGION_SUPPORT.items():
+            if region in regions:
+                supported_sources.append(source)
+                
+        # Sort by reliability (highest first)
+        return sorted(supported_sources, 
+                    key=lambda s: SOURCE_RELIABILITY.get(s, 0), 
+                    reverse=True)
+                
+    def create_apis_for_region(self, region: str, config: dict, 
+                            source_priority: Optional[List[str]] = None) -> List:
+        """Create API instances for all sources supporting a region.
+        
+        Args:
+            region: The region code
+            config: Configuration dictionary
+            source_priority: Optional custom source priority order
+            
+        Returns:
+            List of API instances in priority order
+        """
+        if source_priority:
+            # Use custom priority order
+            sources = [s for s in source_priority if region in SOURCE_REGION_SUPPORT.get(s, set())]
+        else:
+            # Use default order by reliability
+            sources = self.get_sources_for_region(region)
+
+        # Create a copy of the config with the area set
+        config_with_area = dict(config)
+        config_with_area["area"] = region
+            
+        apis = []
+        for source in sources:
+            api = self.create(source, config_with_area)
+            if api:
+                apis.append(api)
+                
+        return apis
 
 # Global registry
 registry = ApiRegistry()
@@ -64,6 +134,15 @@ register_apis()
 def create_api(source_type: str, config: dict):
     """Create an API instance."""
     return registry.create(source_type, config)
+
+def get_sources_for_region(region: str) -> List[str]:
+    """Get sources supporting a region in priority order."""
+    return registry.get_sources_for_region(region)
+    
+def create_apis_for_region(region: str, config: dict, 
+                        source_priority: Optional[List[str]] = None) -> List:
+    """Create prioritized API instances for a region."""
+    return registry.create_apis_for_region(region, config, source_priority)
 
 def get_fallback_apis(primary_source: str, config: dict):
     """Get list of fallback API instances for a primary source."""
