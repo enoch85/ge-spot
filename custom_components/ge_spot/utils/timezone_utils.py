@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
@@ -13,65 +13,56 @@ from .price_utils import get_price_statistics
 _LOGGER = logging.getLogger(__name__)
 
 
-def parse_datetime(timestamp_str: str) -> datetime:
-    """Parse a datetime string without timezone assumptions.
+def parse_datetime(timestamp: Union[str, datetime]) -> datetime:
+    """Parse various timestamp formats into a consistent datetime object.
     
-    Handles various API timestamp formats:
-    - ISO format with Z suffix
-    - ISO format with explicit offset
-    - ISO format without timezone
+    Args:
+        timestamp: Either a datetime string in various formats or a datetime object
+        
+    Returns:
+        A timezone-aware datetime object
     """
-    if not timestamp_str:
-        return None
+    # Already a datetime object
+    if isinstance(timestamp, datetime):
+        return ensure_timezone_aware(timestamp)
+        
+    if not timestamp:
+        return dt_util.now()
         
     try:
         # Handle UTC indicator (Z)
-        if timestamp_str.endswith('Z'):
-            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-            _LOGGER.debug(f"Parsed UTC timestamp: {timestamp_str} → {dt.isoformat()}")
+        if isinstance(timestamp, str) and timestamp.endswith('Z'):
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             return dt
             
-        # Handle explicit timezone offset
-        if '+' in timestamp_str or '-' in timestamp_str:
-            dt = datetime.fromisoformat(timestamp_str)
-            _LOGGER.debug(f"Parsed timestamp with offset: {timestamp_str} → {dt.isoformat()}")
-            return dt
+        # Handle explicit timezone offset or standard ISO format
+        if isinstance(timestamp, str):
+            dt = datetime.fromisoformat(timestamp)
+            return ensure_timezone_aware(dt)
             
-        # No timezone specified - don't assume
-        dt = datetime.fromisoformat(timestamp_str)
-        if dt.tzinfo is None:
-            # Mark as UTC initially, will be converted to local later
-            dt = dt.replace(tzinfo=dt_util.UTC)
-            _LOGGER.debug(f"Added UTC timezone to naive timestamp: {timestamp_str} → {dt.isoformat()}")
-        return dt
-        
     except (ValueError, TypeError) as e:
-        _LOGGER.error(f"Error parsing datetime {timestamp_str}: {e}")
-        return dt_util.now()
+        _LOGGER.error(f"Error parsing datetime {timestamp}: {e}")
+        
+    # Default fallback
+    return dt_util.now()
 
 
 def ensure_timezone_aware(dt_obj: datetime) -> datetime:
     """Ensure a datetime object has timezone information."""
-    if dt_obj.tzinfo is None:
+    if dt_obj and dt_obj.tzinfo is None:
         return dt_obj.replace(tzinfo=dt_util.UTC)
     return dt_obj
 
 
 def localize_datetime(dt: datetime, hass: Optional[HomeAssistant] = None) -> datetime:
     """Convert datetime to Home Assistant's configured timezone."""
-    if dt is None:
-        return dt_util.now()
-        
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=dt_util.UTC)
+    dt = ensure_timezone_aware(dt)
     
     # Get HA timezone (most accurate)
-    if hass:
-        local_tz = hass.config.time_zone
-        if local_tz:
-            tz = dt_util.get_time_zone(local_tz)
-            if tz:
-                return dt.astimezone(tz)
+    if hass and hass.config.time_zone:
+        tz = dt_util.get_time_zone(hass.config.time_zone)
+        if tz:
+            return dt.astimezone(tz)
     
     # Fall back to dt_util's handling
     return dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
@@ -79,8 +70,7 @@ def localize_datetime(dt: datetime, hass: Optional[HomeAssistant] = None) -> dat
 
 def convert_to_local_time(dt: datetime, area: str) -> datetime:
     """Convert a datetime to the local time for a given area."""
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=dt_util.UTC)
+    dt = ensure_timezone_aware(dt)
     
     # Get the timezone for this area
     tz_name = AREA_TIMEZONES.get(area)
@@ -120,9 +110,7 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
     if reference_time is None:
         reference_time = dt_util.now()
     
-    # Ensure timezone-aware comparison
-    if reference_time.tzinfo is None:
-        reference_time = reference_time.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+    reference_time = ensure_timezone_aware(reference_time)
     
     _LOGGER.debug(f"Finding price for time: {reference_time.isoformat()} among {len(periods)} periods")
     
@@ -135,10 +123,8 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
             continue
             
         # Ensure timestamps are timezone-aware
-        if start.tzinfo is None:
-            start = start.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
-        if end.tzinfo is None:
-            end = end.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        start = ensure_timezone_aware(start)
+        end = ensure_timezone_aware(end)
             
         if start <= reference_time < end:
             _LOGGER.debug(f"Found period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
@@ -148,9 +134,9 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
     if periods:
         first_period = periods[0]
         start = first_period.get("start")
-        if start and start.tzinfo is None:
-            start = start.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
-        _LOGGER.warning(f"No matching period found for {reference_time.isoformat()}. First period: {start.isoformat() if start else 'unknown'}")
+        if start:
+            start = ensure_timezone_aware(start)
+            _LOGGER.warning(f"No matching period found for {reference_time.isoformat()}. First period: {start.isoformat()}")
     
     return None
 
@@ -255,8 +241,6 @@ def get_price_list(day_data: List[Dict]) -> List[float]:
 
 def get_statistics(price_data: List[Dict]) -> Dict[str, Any]:
     """Calculate statistics for the price data."""
-    from ..utils.price_utils import get_price_statistics
-    
     # Get basic statistics including min/max with timestamps
     stats = get_price_statistics(price_data)
     
