@@ -1,14 +1,17 @@
 """Price data adapter for electricity spot prices."""
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .utils.timezone_utils import (
-    process_price_data,
+    parse_datetime,
+    localize_datetime,
     find_current_price,
+    find_current_price_period,
+    process_price_data,
     get_prices_for_day,
     get_raw_prices_for_day,
     get_price_list,
@@ -26,48 +29,92 @@ class ElectricityPriceAdapter:
         self.hass = hass
         self.raw_data = raw_data or []
         self.local_tz = dt_util.get_time_zone(hass.config.time_zone)
+        _LOGGER.debug(f"Initializing price adapter with Home Assistant timezone: {self.local_tz}")
 
         # Transform raw data format if necessary
         self.processed_raw_data = []
+        
         for item in self.raw_data:
             # Skip non-dictionary items
             if not isinstance(item, dict):
                 continue
 
-            # Find price data which may be in different formats from different APIs
-            if all(key in item for key in ["start", "end", "value"]):
-                # Already in the correct format
-                self.processed_raw_data.append(item)
-            elif "current_price" in item and "hourly_prices" in item:
-                # Process hourly prices into individual periods
+            # Handle different API formats
+            if "hourly_prices" in item:
+                # Handle API response with hourly_prices dictionary
                 for hour_str, price in item.get("hourly_prices", {}).items():
                     try:
                         # Parse hour string (format: "HH:00")
                         hour = int(hour_str.split(":")[0])
-
-                        # Create a start and end time for this hour
+                        
+                        # Create timestamps for this hour in local time
                         now = dt_util.now()
-                        start_time = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-                        end_time = start_time.replace(hour=hour+1) if hour < 23 else start_time.replace(hour=0, day=start_time.day+1)
-
+                        base_date = now.date()
+                        
+                        # Determine if this is for tomorrow
+                        if "tomorrow" in item or "tomorrow_hourly_prices" in item or item.get("tomorrow_valid", False):
+                            base_date += timedelta(days=1)
+                            
+                        # Create datetime objects in local timezone
+                        start_time = dt_util.as_local(dt_util.start_of_local_day(base_date))
+                        start_time = start_time.replace(hour=hour)
+                        end_time = start_time + timedelta(hours=1)
+                        
                         self.processed_raw_data.append({
                             "start": start_time.isoformat(),
                             "end": end_time.isoformat(),
                             "value": price
                         })
-                    except (ValueError, IndexError) as e:
+                    except Exception as e:
                         _LOGGER.warning(f"Error processing hourly price {hour_str}: {e}")
+            
+            elif "raw_today" in item:
+                # Process raw_today entries
+                for entry in item.get("raw_today", []):
+                    if isinstance(entry, dict) and "start" in entry and "price" in entry:
+                        self.processed_raw_data.append({
+                            "start": entry["start"],
+                            "end": entry.get("end"),
+                            "value": entry["price"]
+                        })
+                        
+                # Process raw_tomorrow entries if available
+                for entry in item.get("raw_tomorrow", []):
+                    if isinstance(entry, dict) and "start" in entry and "price" in entry:
+                        self.processed_raw_data.append({
+                            "start": entry["start"],
+                            "end": entry.get("end"),
+                            "value": entry["price"]
+                        })
+            
+            # Find price data in various formats
+            elif all(key in item for key in ["start", "end", "value"]):
+                # Already in the correct format
+                self.processed_raw_data.append(item)
+            elif all(key in item for key in ["start", "end", "price"]):
+                # Convert price to value key for consistency
+                modified_item = dict(item)
+                modified_item["value"] = modified_item.pop("price")
+                self.processed_raw_data.append(modified_item)
 
-        # Process data into periods
+        _LOGGER.debug(f"Processed {len(self.processed_raw_data)} raw data entries")
+                
+        # Process data into periods with proper timezone handling
         self.price_periods = process_price_data(self.processed_raw_data, self.local_tz)
+        _LOGGER.debug(f"Created {len(self.price_periods)} price periods")
 
     def get_current_price(self, reference_time: Optional[datetime] = None) -> Optional[float]:
         """Get price for the current period."""
-        return find_current_price(self.price_periods, reference_time)
+        if reference_time is None:
+            reference_time = dt_util.now()
+            _LOGGER.debug(f"Using current time as reference: {reference_time.isoformat()}")
+        
+        period = find_current_price_period(self.price_periods, reference_time)
+        return period["price"] if period else None
 
     def get_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
         """Get all prices for a specific day (today + offset)."""
-        return get_prices_for_day(self.price_periods, day_offset)
+        return get_prices_for_day(self.price_periods, day_offset, self.hass)
 
     def get_raw_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
         """Get raw price data formatted for Home Assistant attributes."""
@@ -88,4 +135,4 @@ class ElectricityPriceAdapter:
 
     def is_tomorrow_valid(self) -> bool:
         """Check if tomorrow's data is available."""
-        return is_tomorrow_valid(self.price_periods)
+        return is_tomorrow_valid(self.price_periods, self.hass)
