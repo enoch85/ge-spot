@@ -20,9 +20,10 @@ This custom integration allows you to fetch day-ahead electricity spot prices fr
 - Source-agnostic sensors that provide consistent entity IDs regardless of data source
 - Tomorrow's prices available after 13:00 CET (when published)
 - Automatic fallback between data sources for the same region for increased reliability
+- Seamless timezone handling to ensure correct hourly price display regardless of API source
+- Currency conversion with dynamic exchange rates from the European Central Bank
 - Timestamps in ISO format for compatibility with other systems
-- Robust currency and unit conversion with dynamic exchange rates
-- Eight sensor types for each source:
+- Eight sensor types for each configured region:
   - Current hour price
   - Next hour price
   - Day average price
@@ -31,6 +32,64 @@ This custom integration allows you to fetch day-ahead electricity spot prices fr
   - Tomorrow average price
   - Tomorrow peak price (highest of tomorrow)
   - Tomorrow off-peak price (lowest of tomorrow)
+
+## Multi-Source API & Fallback System
+
+GE-Spot uses a robust multi-source approach to ensure reliable price data:
+
+```mermaid
+flowchart TD
+    Config[User Configuration] --> Coordinator
+    
+    subgraph Coordinator["Data Coordinator"]
+        Priority[Source Priority List]
+        FetchLoop["Try Each API in Priority Order"]
+        Cache["Cached Data"]
+        
+        Priority --> FetchLoop
+        FetchLoop --> |Success| DataStore["Store Current Data"]
+        FetchLoop --> |All Failed| Fallback["Use Cached Data"]
+        Cache --> Fallback
+        DataStore --> Cache
+    end
+    
+    Coordinator --> Sensors
+
+    subgraph APIGroup["API Sources"]
+        Nordpool["Nordpool API"]
+        ENTSOE["ENTSO-E API"]
+        EPEX["EPEX API"]
+        EDS["Energi Data Service API"]
+        OMIE["OMIE API"]
+        AEMO["AEMO API"]
+    end
+    
+    FetchLoop --> APIGroup
+```
+
+- **Source Prioritization**: You control the order in which APIs are tried
+- **Automatic Fallback**: If the primary source fails, the system tries alternative sources automatically
+- **Transparent Attribution**: Sensor attributes show which API provided the data
+- **Data Caching**: Previously fetched data serves as a last-resort fallback if all APIs fail
+
+## Timezone Handling
+
+The integration normalizes timestamps from different APIs to ensure correct hourly prices:
+
+```mermaid
+flowchart TD
+    API["API Response with Timestamps"] --> Parser["Timestamp Parser"]
+    Parser --> Normalizer["Timezone Normalizer"]
+    Normalizer --> Converter["Convert to Local Time"]
+    HAConfig["Home Assistant Timezone"] --> Converter
+    AreaTZ["Region-specific Timezone"] --> Converter
+    Converter --> Matcher["Match Price to Current Hour"]
+    Matcher --> Sensor["Current Price Sensor"]
+```
+
+- **Timezone Awareness**: Handles UTC, local time, and timezone-naive timestamps correctly
+- **Region-specific Handling**: Applies appropriate timezone for each price area
+- **Home Assistant Integration**: Uses your Home Assistant timezone setting for consistent display
 
 ## Price Conversion Logic
 
@@ -68,20 +127,20 @@ flowchart TD
     RegionMap[Region to Currency Mapping] --> Convert
 ```
 
-The conversion process follows these steps:
+The price conversion follows this detailed process:
 
 ```mermaid
 sequenceDiagram
     participant API as API Source
-    participant Handler as API Handler
+    participant Processor as Price Processor
     participant Converter as Currency Utils
     participant Exchange as Exchange Service
     participant Cache as Exchange Rate Cache
     participant ECB as ECB API
     
-    API->>Handler: Raw Price Data (e.g., 158.67 EUR/MWh)
+    API->>Processor: Raw Price Data (e.g., 158.67 EUR/MWh)
     
-    Handler->>Converter: convert_energy_price()
+    Processor->>Converter: async_convert_energy_price()
     
     Converter->>Exchange: Get exchange rates
     Exchange->>Cache: Check for cached rates
@@ -106,8 +165,8 @@ sequenceDiagram
     Note over Converter: Step 3: Apply VAT<br>(if configured)
     Note over Converter: Step 4: Convert to Subunit<br>(e.g., SEK → öre, multiply by 100)
     
-    Converter-->>Handler: Final Price
-    Handler-->>Handler: Store price in standardized format
+    Converter-->>Processor: Final Price
+    Processor-->>Processor: Store price in standardized format
 ```
 
 For example, converting from 69.16 EUR/MWh to öre/kWh for SE4 (with exchange rate 10.72):
@@ -132,17 +191,60 @@ For example, converting from 69.16 EUR/MWh to öre/kWh for SE4 (with exchange ra
 1. Copy the `ge_spot` directory from this repository to your Home Assistant's `custom_components` directory
 2. Restart Home Assistant
 
+## Currency Conversion
+
+GE-Spot makes currency conversion simple and reliable:
+
+```mermaid
+flowchart LR
+    subgraph Input["Input Price"]
+        RawPrice["69.16 EUR/MWh"]
+    end
+    
+    subgraph Conversion["Conversion Process"]
+        Currency["Currency Conversion\n69.16 EUR → 741.40 SEK"]
+        Unit["Unit Conversion\n741.40 SEK/MWh → 0.7414 SEK/kWh"]
+        VAT["VAT Application\n0.7414 → 0.9268 SEK/kWh\n(with 25% VAT)"]
+        Subunit["Subunit Conversion\n0.9268 SEK → 92.68 öre\n(if configured)"]
+        
+        Currency --> Unit
+        Unit --> VAT
+        VAT --> Subunit
+    end
+    
+    subgraph ExchangeRates["Exchange Rate Sources"]
+        ECB["European Central Bank API"]
+        Cache["Local Cache (24h validity)"]
+        Fallback["Fallback Rates"]
+        
+        ECB --> Cache
+        Cache --> |If expired or unavailable| Fallback
+    end
+    
+    Input --> Conversion
+    Currency <--> ExchangeRates
+    Conversion --> Output["Output Price"]
+    
+    UserConfig["User Configuration\n- Target Currency\n- VAT Rate\n- Display Format"] --> Conversion
+```
+
+- **Automatic Currency Detection**: Appropriate currency selected based on region
+- **Dynamic Exchange Rates**: Fresh rates from the European Central Bank
+- **Smart Caching**: Reduces API calls while maintaining accuracy
+- **Fallback Rates**: Works even during network outages
+- **Display Flexibility**: Show prices in main units (EUR/kWh) or subunits (cents/kWh, öre/kWh)
+
 ## Setup & Configuration
 
 After installation:
 
 1. Go to Configuration → Integrations
 2. Click "Add Integration" and search for "GE-Spot: Global Electricity Spot Prices"
-3. Select the desired price source (Nordpool recommended)
-4. Choose your region/area
+3. Select your region/area
+4. Configure your preferred source priority (the order used for fallbacks)
 5. Set your preferred VAT rate and update interval
-6. For ENTSO-E, you'll need to provide an API key
-7. Enable "Fallback" to automatically use alternative data sources if the primary source fails
+6. For ENTSO-E, you'll need to provide an API key when prompted
+7. Choose display format (decimal or subunit like cents/öre)
 
 ## Usage Examples
 
@@ -151,13 +253,13 @@ After installation:
 ```yaml
 type: entities
 entities:
-  - entity: sensor.electricity_current
+  - entity: sensor.gespot_current_price_se4
     name: Current Electricity Price
-  - entity: sensor.electricity_next_hour
+  - entity: sensor.gespot_next_hour_price_se4
     name: Next Hour Price
-  - entity: sensor.electricity_day_average
+  - entity: sensor.gespot_day_average_price_se4
     name: Today's Average
-  - entity: sensor.electricity_tomorrow_average
+  - entity: sensor.gespot_tomorrow_average_price_se4
     name: Tomorrow's Average
 ```
 
@@ -168,10 +270,10 @@ automation:
   - alias: Turn on water heater when prices are low
     trigger:
       - platform: state
-        entity_id: sensor.electricity_current
+        entity_id: sensor.gespot_current_price_se4
     condition:
       - condition: template
-        value_template: "{{ states('sensor.electricity_current')|float < states('sensor.electricity_day_average')|float * 0.8 }}"
+        value_template: "{{ states('sensor.gespot_current_price_se4')|float < states('sensor.gespot_day_average_price_se4')|float * 0.8 }}"
     action:
       - service: switch.turn_on
         entity_id: switch.water_heater
@@ -185,7 +287,6 @@ If you experience issues:
 - Verify that your selected region/area is correct
 - For ENTSO-E, confirm your API key is entered correctly
 - Try increasing the update interval if you're experiencing frequent timeouts
-- Enable the fallback option for increased reliability
 - Check sensor attributes to see if data is coming from a fallback source or cache
 
 ## Contributing
