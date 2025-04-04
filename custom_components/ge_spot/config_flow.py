@@ -222,19 +222,15 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Create config schema for source priority
         try:
-            # Convert values to strings for the selector
-            string_update_interval_options = []
+            # Set up options for update interval
+            update_interval_options = {}
             for option in UPDATE_INTERVAL_OPTIONS:
-                # Ensure value is a string
-                new_option = option.copy()
-                if "value" in new_option and not isinstance(new_option["value"], str):
-                    new_option["value"] = str(new_option["value"])
-                string_update_interval_options.append(new_option)
-
-            # Create display unit options from DISPLAY_UNITS
-            display_unit_options = []
+                update_interval_options[int(option["value"])] = option["label"]
+            
+            # Set up options for display unit
+            display_unit_options = {}
             for key, label in DISPLAY_UNITS.items():
-                display_unit_options.append({"value": key, "label": label})
+                display_unit_options[key] = label
 
             schema_dict = {
                 vol.Required(CONF_SOURCE_PRIORITY, default=self._supported_sources): selector.SelectSelector(
@@ -260,19 +256,8 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Range(min=0, max=100),
                     msg="Enter VAT percentage (0-100)"
                 ),
-                vol.Optional(CONF_UPDATE_INTERVAL, default=60): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=string_update_interval_options,
-                        mode=selector.SelectSelectorMode.RADIO,  # Changed to RADIO
-                    )
-                ),
-                vol.Optional(CONF_DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=display_unit_options,
-                        mode=selector.SelectSelectorMode.RADIO,  # Changed to RADIO
-                        multiple=False,
-                    )
-                ),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=60): vol.In(update_interval_options),
+                vol.Optional(CONF_DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): vol.In(display_unit_options),
             }
 
             return self.async_show_form(
@@ -405,19 +390,15 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 self._data.get(CONF_DISPLAY_UNIT, DISPLAY_UNIT_DECIMAL)
             )
 
-            # Convert values to strings for the selector
-            string_update_interval_options = []
+            # Set up options for update interval as a dictionary for vol.In
+            update_interval_options = {}
             for option in UPDATE_INTERVAL_OPTIONS:
-                # Ensure value is a string
-                new_option = option.copy()
-                if "value" in new_option and not isinstance(new_option["value"], str):
-                    new_option["value"] = str(new_option["value"])
-                string_update_interval_options.append(new_option)
+                update_interval_options[int(option["value"])] = option["label"]
 
-            # Create display unit options from DISPLAY_UNITS
-            display_unit_options = []
+            # Set up options for display unit as a dictionary for vol.In
+            display_unit_options = {}
             for key, label in DISPLAY_UNITS.items():
-                display_unit_options.append({"value": key, "label": label})
+                display_unit_options[key] = label
 
             # Create schema for options
             schema = {
@@ -426,19 +407,10 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                     vol.Range(min=0, max=100),
                     msg="Enter VAT percentage (0-100)"
                 ),
-                vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=string_update_interval_options,
-                        mode=selector.SelectSelectorMode.RADIO,  # Changed to RADIO
-                    )
-                ),
-                vol.Optional(CONF_DISPLAY_UNIT, default=current_display_unit): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=display_unit_options,
-                        mode=selector.SelectSelectorMode.RADIO,  # Changed to RADIO
-                        multiple=False,
-                    )
-                ),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): 
+                    vol.In(update_interval_options),
+                vol.Optional(CONF_DISPLAY_UNIT, default=current_display_unit): 
+                    vol.In(display_unit_options),
             }
             
             # Add source priority selection
