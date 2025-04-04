@@ -242,12 +242,11 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 ),
                 # Add description text field (non-interactive) to explain how priority works
-                vol.Optional("priority_info", default=""): selector.TextSelector(
+                vol.Optional("priority_info", default="Priority is determined by order: first selected = highest priority"): selector.TextSelector(
                     selector.TextSelectorConfig(
                         type=selector.TextSelectorType.TEXT,
                         multiline=True,
                         suffix="Priority is determined by order: first selected = highest priority",
-                        readonly=True,
                     )
                 ),
                 vol.Optional(CONF_VAT, default=0): vol.All(
@@ -447,12 +446,11 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
             )
             
             # Add description text to explain priority
-            schema[vol.Optional("priority_info", default="")] = selector.TextSelector(
+            schema[vol.Optional("priority_info", default="Priority is determined by order: first selected = highest priority")] = selector.TextSelector(
                 selector.TextSelectorConfig(
                     type=selector.TextSelectorType.TEXT,
                     multiline=True,
                     suffix="Priority is determined by order: first selected = highest priority",
-                    readonly=True,
                 )
             )
 
