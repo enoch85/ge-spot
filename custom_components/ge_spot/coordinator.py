@@ -14,11 +14,14 @@ from .const import (
     DOMAIN,
     CONF_AREA,
     CONF_SOURCE_PRIORITY,
+    CONF_API_KEY,
     ATTR_LAST_UPDATED,
     ATTR_DATA_SOURCE,
     ATTR_FALLBACK_USED,
     ATTR_AVAILABLE_FALLBACKS,
     ATTR_IS_USING_FALLBACK,
+    ATTR_API_KEY_STATUS,
+    SOURCE_ENTSO_E,
 )
 from .api import create_apis_for_region
 from .utils.debug_utils import log_raw_data
@@ -58,6 +61,51 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         self._active_api = None
         self._fallback_used = False
         self._attempted_sources = []
+
+    async def check_api_key_status(self):
+        """Check status of configured API keys and report in attributes."""
+        api_key_status = {}
+        
+        # Check for ENTSO-E API key
+        if SOURCE_ENTSO_E in self.config.get(CONF_SOURCE_PRIORITY, []):
+            api_key = self.config.get(CONF_API_KEY)
+            
+            if api_key:
+                # Try to find the ENTSO-E API instance
+                entsoe_api = next((api for api in self._apis 
+                              if SOURCE_ENTSO_E.lower() in api.__class__.__name__.lower()), None)
+                
+                if entsoe_api and hasattr(entsoe_api, "validate_api_key"):
+                    try:
+                        is_valid = await entsoe_api.validate_api_key(api_key)
+                        api_key_status[SOURCE_ENTSO_E] = {
+                            "configured": True,
+                            "valid": is_valid,
+                            "status": "valid" if is_valid else "invalid"
+                        }
+                        _LOGGER.debug(f"ENTSO-E API key status: {api_key_status[SOURCE_ENTSO_E]}")
+                    except Exception as e:
+                        _LOGGER.error(f"Error validating ENTSO-E API key: {e}")
+                        api_key_status[SOURCE_ENTSO_E] = {
+                            "configured": True,
+                            "valid": False,
+                            "status": "error",
+                            "error": str(e)
+                        }
+                else:
+                    api_key_status[SOURCE_ENTSO_E] = {
+                        "configured": True,
+                        "valid": None,
+                        "status": "unknown"
+                    }
+            else:
+                api_key_status[SOURCE_ENTSO_E] = {
+                    "configured": False,
+                    "valid": None,
+                    "status": "not_configured"
+                }
+        
+        return api_key_status
 
     async def _async_update_data(self):
         """Fetch data from appropriate API for this region."""
@@ -175,6 +223,11 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     }
                     self._last_successful_data[ATTR_FALLBACK_USED] = True
                     self._last_successful_data[ATTR_IS_USING_FALLBACK] = True
+                    
+                    # Check API key status
+                    api_key_status = await self.check_api_key_status()
+                    self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
+                    
                     return self._last_successful_data
                 elif not today_data:
                     return None
@@ -257,6 +310,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             if not self.adapter:
                 _LOGGER.error("Failed to create price adapter")
                 if self._last_successful_data:
+                    # Check API key status
+                    api_key_status = await self.check_api_key_status()
+                    self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
                     return self._last_successful_data
                 return None
 
@@ -288,6 +344,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             # Calculate next update time
             next_update = dt_util.now() + self.update_interval
 
+            # Check API key status
+            api_key_status = await self.check_api_key_status()
+
             # Return data that will be passed to sensors
             result = {
                 "adapter": self.adapter,
@@ -303,6 +362,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 ATTR_FALLBACK_USED: self._fallback_used,
                 ATTR_IS_USING_FALLBACK: self._fallback_used,
                 ATTR_AVAILABLE_FALLBACKS: available_fallbacks,
+                ATTR_API_KEY_STATUS: api_key_status,
                 "source_info": source_info,
                 "timezone": str(self.hass.config.time_zone)
             }
@@ -315,6 +375,11 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             _LOGGER.error(f"Error fetching electricity price data: {err}")
             if self._last_successful_data:
                 _LOGGER.warning("Using cached data from last successful update")
+                
+                # Check API key status
+                api_key_status = await self.check_api_key_status()
+                self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
+                
                 return self._last_successful_data
             raise
             
