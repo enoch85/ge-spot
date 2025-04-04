@@ -13,38 +13,11 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
-    ATTR_CURRENCY,
-    ATTR_AREA,
-    ATTR_VAT,
-    ATTR_TODAY,
-    ATTR_TOMORROW,
-    ATTR_TOMORROW_VALID,
-    ATTR_RAW_TODAY,
-    ATTR_RAW_TOMORROW,
-    ATTR_CURRENT_PRICE,
-    ATTR_MIN,
-    ATTR_MAX,
-    ATTR_AVERAGE,
-    ATTR_OFF_PEAK_1,
-    ATTR_OFF_PEAK_2,
-    ATTR_PEAK,
-    ATTR_LAST_UPDATED,
-    ATTR_DATA_SOURCE,
-    ATTR_FALLBACK_USED,
-    ATTR_RAW_API_DATA,
-    SENSOR_TYPE_CURRENT,
-    SENSOR_TYPE_NEXT,
-    SENSOR_TYPE_DAY_AVG,
-    SENSOR_TYPE_PEAK,
-    SENSOR_TYPE_OFF_PEAK,
-    SENSOR_TYPE_TOMORROW_AVG,
-    SENSOR_TYPE_TOMORROW_PEAK,
-    SENSOR_TYPE_TOMORROW_OFF_PEAK,
-    CONF_DISPLAY_UNIT,
-    DEFAULT_DISPLAY_UNIT,
-    DISPLAY_UNIT_CENTS,
-    CURRENCY_SUBUNIT_NAMES,
-    REGION_TO_CURRENCY,
+    ATTR_CURRENCY, ATTR_AREA, ATTR_VAT, ATTR_LAST_UPDATED,
+    ATTR_DATA_SOURCE, ATTR_FALLBACK_USED, ATTR_MIN, ATTR_MAX,
+    ATTR_TODAY, ATTR_TOMORROW, ATTR_TOMORROW_VALID,
+    CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT, DISPLAY_UNIT_CENTS,
+    CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,15 +40,19 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Get currency from region
         self._currency = config_data.get(ATTR_CURRENCY, REGION_TO_CURRENCY.get(self._area))
 
-        # Use the area code directly for the sensor name - no friendly name translation
-        self._attr_name = f"Electricity {name_suffix} {self._area}"
-        self._attr_unique_id = f"electricity_{sensor_type}_{self._area}_{self._currency}".lower()
+        # Create standardized entity_id
+        self.entity_id = f"sensor.gespot_{sensor_type.lower()}_{self._area.lower()}"
+        
+        # Create standardized name
+        self._attr_name = f"GE-Spot {name_suffix} {self._area}"
+        
+        # Create standardized unique_id
+        self._attr_unique_id = f"gespot_{sensor_type}_{self._area}".lower()
 
-        # Set the correct unit based on display_unit configuration
+        # Set unit based on display_unit configuration
         if self._display_unit == DISPLAY_UNIT_CENTS:
             subunit = CURRENCY_SUBUNIT_NAMES.get(self._currency, "cents")
             self._attr_native_unit_of_measurement = f"{subunit}/kWh"
-            _LOGGER.debug(f"Using subunit {subunit} for currency {self._currency}")
         else:
             self._attr_native_unit_of_measurement = f"{self._currency}/kWh"
 
@@ -101,19 +78,13 @@ class BaseElectricityPriceSensor(SensorEntity):
             ATTR_FALLBACK_USED: self.coordinator.data.get(ATTR_FALLBACK_USED, False),
         }
 
+        # Add source information if available
+        if "source_info" in self.coordinator.data:
+            attrs["source_info"] = self.coordinator.data["source_info"]
+
         # Add next update time
         if "next_update" in self.coordinator.data:
             attrs["next_update"] = self.coordinator.data.get("next_update")
-
-        # Add fallback information if available
-        if "fallback_info" in self.coordinator.data:
-            attrs["fallback_info"] = self.coordinator.data["fallback_info"]
-
-        # Add raw values if available
-        if "raw_values" in self.coordinator.data:
-            raw_values = self.coordinator.data["raw_values"]
-            if "today" in raw_values and self._sensor_type in raw_values["today"]:
-                attrs["raw_value"] = raw_values["today"][self._sensor_type]
 
         return attrs
 
@@ -128,19 +99,69 @@ class BaseElectricityPriceSensor(SensorEntity):
         await self.coordinator.async_request_refresh()
 
 
+class PriceExtremaSensorBase(BaseElectricityPriceSensor):
+    """Base class for min/max price sensors."""
+    
+    def __init__(self, coordinator, config_data, sensor_type, name_suffix, day_offset=0, extrema_type="min"):
+        """Initialize the extrema price sensor."""
+        super().__init__(coordinator, config_data, sensor_type, name_suffix)
+        self._day_offset = day_offset  # 0 for today, 1 for tomorrow
+        self._extrema_type = extrema_type  # "min" or "max"
+        self._stats_key = "today_stats" if day_offset == 0 else "tomorrow_stats"
+        
+    @property
+    def available(self):
+        """Return if entity is available."""
+        if not super().available:
+            return False
+            
+        # For tomorrow sensors, check if tomorrow data is valid
+        if self._day_offset > 0 and not self.coordinator.data.get(ATTR_TOMORROW_VALID, False):
+            return False
+            
+        return True
+        
+    @property
+    def native_value(self):
+        """Return the native value of the sensor."""
+        if not self.coordinator.data or self._stats_key not in self.coordinator.data:
+            return None
+            
+        # Get min or max based on extrema_type
+        attr_key = "min" if self._extrema_type == "min" else "max"
+        const_attr = ATTR_MIN if self._extrema_type == "min" else ATTR_MAX
+        
+        return self.coordinator.data[self._stats_key].get(attr_key) or self.coordinator.data[self._stats_key].get(const_attr)
+        
+    @property
+    def extra_state_attributes(self):
+        """Return the state attributes."""
+        attrs = super().extra_state_attributes
+        
+        if not self.coordinator.data or self._stats_key not in self.coordinator.data:
+            return attrs
+            
+        # Add timestamp for extrema price
+        timestamp_key = f"{self._extrema_type}_timestamp"
+        if timestamp_key in self.coordinator.data[self._stats_key]:
+            attrs["timestamp"] = self.coordinator.data[self._stats_key][timestamp_key]
+            
+        return attrs
+
+
 class CurrentPriceSensor(BaseElectricityPriceSensor):
     """Sensor for current electricity price."""
 
     def __init__(self, coordinator, config_data):
         """Initialize the current price sensor."""
-        super().__init__(coordinator, config_data, "current", "Current Price")
+        super().__init__(coordinator, config_data, "current_price", "Current Price")
 
     @property
     def native_value(self):
         """Return the native value of the sensor."""
         if self.coordinator.data is None:
             return None
-        return self.coordinator.data.get(ATTR_CURRENT_PRICE)
+        return self.coordinator.data.get("current_price")
 
     @property
     def extra_state_attributes(self):
@@ -149,44 +170,13 @@ class CurrentPriceSensor(BaseElectricityPriceSensor):
         if not self.coordinator.data:
             return attrs
 
-        # Include essential price data but not raw API responses
+        # Include essential price data
         attrs.update({
             ATTR_TODAY: self.coordinator.data.get(ATTR_TODAY, []),
             ATTR_TOMORROW: self.coordinator.data.get(ATTR_TOMORROW, []),
             ATTR_TOMORROW_VALID: self.coordinator.data.get(ATTR_TOMORROW_VALID, False),
         })
-
-        # Log raw data for debugging instead of storing in attributes
-        if self.coordinator.data.get(ATTR_RAW_API_DATA):
-            _LOGGER.debug(
-                "Raw API data for %s (not storing in attributes): %s bytes of data",
-                self.entity_id,
-                len(str(self.coordinator.data.get(ATTR_RAW_API_DATA)))
-            )
-
-        # Log other large data structures
-        if self.coordinator.data.get(ATTR_RAW_TODAY):
-            _LOGGER.debug(
-                "Raw today data for %s: %s entries",
-                self.entity_id,
-                len(self.coordinator.data.get(ATTR_RAW_TODAY, []))
-            )
-
-        if self.coordinator.data.get(ATTR_RAW_TOMORROW):
-            _LOGGER.debug(
-                "Raw tomorrow data for %s: %s entries",
-                self.entity_id,
-                len(self.coordinator.data.get(ATTR_RAW_TOMORROW, []))
-            )
-
-        # Add only essential fallback information
-        if "fallback_info" in self.coordinator.data:
-            attrs["fallback_info"] = {
-                "primary_source": self.coordinator.data["fallback_info"].get("primary_source"),
-                "active_source": self.coordinator.data["fallback_info"].get("active_source"),
-                "fallback_used": self.coordinator.data["fallback_info"].get("fallback_used"),
-            }
-
+        
         return attrs
 
 
@@ -195,7 +185,7 @@ class NextHourPriceSensor(BaseElectricityPriceSensor):
 
     def __init__(self, coordinator, config_data):
         """Initialize the next hour price sensor."""
-        super().__init__(coordinator, config_data, "next_hour", "Next Hour Price")
+        super().__init__(coordinator, config_data, "next_hour_price", "Next Hour Price")
 
     @property
     def native_value(self):
@@ -216,44 +206,42 @@ class DayAveragePriceSensor(BaseElectricityPriceSensor):
 
     def __init__(self, coordinator, config_data):
         """Initialize the day average price sensor."""
-        super().__init__(coordinator, config_data, "day_average", "Day Average")
+        super().__init__(coordinator, config_data, "day_average_price", "Day Average")
 
     @property
     def native_value(self):
         """Return the native value of the sensor."""
         if not self.coordinator.data or "today_stats" not in self.coordinator.data:
             return None
-        return self.coordinator.data["today_stats"].get(ATTR_AVERAGE)
+        return self.coordinator.data["today_stats"].get("average")
 
 
-class PeakPriceSensor(BaseElectricityPriceSensor):
+class PeakPriceSensor(PriceExtremaSensorBase):
     """Sensor for peak electricity price."""
-
     def __init__(self, coordinator, config_data):
         """Initialize the peak price sensor."""
-        super().__init__(coordinator, config_data, "peak", "Peak Price")
+        super().__init__(
+            coordinator, 
+            config_data, 
+            "peak_price", 
+            "Peak Price",
+            day_offset=0,
+            extrema_type="max"
+        )
 
-    @property
-    def native_value(self):
-        """Return the native value of the sensor."""
-        if not self.coordinator.data or "today_stats" not in self.coordinator.data:
-            return None
-        return self.coordinator.data["today_stats"].get(ATTR_MAX)
 
-
-class OffPeakPriceSensor(BaseElectricityPriceSensor):
+class OffPeakPriceSensor(PriceExtremaSensorBase):
     """Sensor for off-peak electricity price."""
-
     def __init__(self, coordinator, config_data):
         """Initialize the off-peak price sensor."""
-        super().__init__(coordinator, config_data, "off_peak", "Off-Peak Price")
-
-    @property
-    def native_value(self):
-        """Return the native value of the sensor."""
-        if not self.coordinator.data or "today_stats" not in self.coordinator.data:
-            return None
-        return self.coordinator.data["today_stats"].get(ATTR_MIN)
+        super().__init__(
+            coordinator, 
+            config_data, 
+            "off_peak_price", 
+            "Off-Peak Price",
+            day_offset=0,
+            extrema_type="min"
+        )
 
 
 class TomorrowAveragePriceSensor(BaseElectricityPriceSensor):
@@ -261,14 +249,14 @@ class TomorrowAveragePriceSensor(BaseElectricityPriceSensor):
 
     def __init__(self, coordinator, config_data):
         """Initialize the tomorrow average price sensor."""
-        super().__init__(coordinator, config_data, "tomorrow_average", "Tomorrow Average")
+        super().__init__(coordinator, config_data, "tomorrow_average_price", "Tomorrow Average")
 
     @property
     def native_value(self):
         """Return the native value of the sensor."""
         if not self.coordinator.data or "tomorrow_stats" not in self.coordinator.data:
             return None
-        return self.coordinator.data["tomorrow_stats"].get(ATTR_AVERAGE)
+        return self.coordinator.data["tomorrow_stats"].get("average")
 
     @property
     def available(self):
@@ -279,50 +267,32 @@ class TomorrowAveragePriceSensor(BaseElectricityPriceSensor):
         return self.coordinator.data.get(ATTR_TOMORROW_VALID, False)
 
 
-class TomorrowPeakPriceSensor(BaseElectricityPriceSensor):
+class TomorrowPeakPriceSensor(PriceExtremaSensorBase):
     """Sensor for tomorrow's peak electricity price."""
-
     def __init__(self, coordinator, config_data):
         """Initialize the tomorrow peak price sensor."""
-        super().__init__(coordinator, config_data, "tomorrow_peak", "Tomorrow Peak")
-
-    @property
-    def native_value(self):
-        """Return the native value of the sensor."""
-        if not self.coordinator.data or "tomorrow_stats" not in self.coordinator.data:
-            return None
-        return self.coordinator.data["tomorrow_stats"].get(ATTR_MAX)
-
-    @property
-    def available(self):
-        """Return if entity is available."""
-        if not super().available:
-            return False
-        # Only available if tomorrow data is valid
-        return self.coordinator.data.get(ATTR_TOMORROW_VALID, False)
+        super().__init__(
+            coordinator, 
+            config_data, 
+            "tomorrow_peak_price", 
+            "Tomorrow Peak",
+            day_offset=1,
+            extrema_type="max"
+        )
 
 
-class TomorrowOffPeakPriceSensor(BaseElectricityPriceSensor):
+class TomorrowOffPeakPriceSensor(PriceExtremaSensorBase):
     """Sensor for tomorrow's off-peak electricity price."""
-
     def __init__(self, coordinator, config_data):
         """Initialize the tomorrow off-peak price sensor."""
-        super().__init__(coordinator, config_data, "tomorrow_off_peak", "Tomorrow Off-Peak")
-
-    @property
-    def native_value(self):
-        """Return the native value of the sensor."""
-        if not self.coordinator.data or "tomorrow_stats" not in self.coordinator.data:
-            return None
-        return self.coordinator.data["tomorrow_stats"].get(ATTR_MIN)
-
-    @property
-    def available(self):
-        """Return if entity is available."""
-        if not super().available:
-            return False
-        # Only available if tomorrow data is valid
-        return self.coordinator.data.get(ATTR_TOMORROW_VALID, False)
+        super().__init__(
+            coordinator, 
+            config_data, 
+            "tomorrow_off_peak_price", 
+            "Tomorrow Off-Peak",
+            day_offset=1,
+            extrema_type="min"
+        )
 
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
