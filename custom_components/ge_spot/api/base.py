@@ -247,8 +247,18 @@ class BaseEnergyAPI(ABC):
             return None
 
         use_subunit = to_subunit if to_subunit is not None else self.config.get("price_in_cents", False)
+        
+        from ..utils.debug_utils import log_conversion
+        from ..utils.currency_utils import async_convert_energy_price
 
-        return await async_convert_energy_price(
+        # Store original for logging
+        original_price = price
+        
+        # Get exchange rate if available (for logging)
+        session = getattr(self, "session", None)
+
+        # Perform conversion
+        converted_price = await async_convert_energy_price(
             price=price,
             from_unit=from_unit,
             to_unit="kWh",
@@ -256,8 +266,21 @@ class BaseEnergyAPI(ABC):
             to_currency=self._currency,
             vat=self.vat,
             to_subunit=use_subunit,
-            session=self.session
+            session=session
         )
+        
+        # Log details
+        log_conversion(
+            original=original_price,
+            converted=converted_price,
+            from_currency=from_currency,
+            to_currency=self._currency,
+            from_unit=from_unit,
+            to_unit="kWh",
+            vat=self.vat
+        )
+            
+        return converted_price
 
     def _get_now(self):
         """Get current datetime in Home Assistant's timezone if available."""
@@ -340,3 +363,20 @@ class BaseEnergyAPI(ABC):
                 raise
 
         return None
+
+    def _apply_vat(self, price, vat_rate=None):
+        """Apply VAT to a price value."""
+        if price is None:
+            return None
+            
+        # Use provided VAT rate or fall back to instance VAT
+        vat = vat_rate if vat_rate is not None else self.vat
+        
+        if vat > 0:
+            original_price = price
+            price = price * (1 + vat)
+            _LOGGER.debug(f"Applied VAT {vat:.2%}: {original_price} → {price}")
+        else:
+            _LOGGER.debug(f"No VAT applied (rate: {vat:.2%})")
+            
+        return price
