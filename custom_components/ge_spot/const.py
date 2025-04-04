@@ -109,6 +109,8 @@ class Attributes:
     OFF_PEAK_2 = "off_peak_2"
     PEAK = "peak"
     LAST_UPDATED = "last_updated"
+    AVAILABLE_FALLBACKS = "available_fallbacks"  # List of available fallback sources
+    IS_USING_FALLBACK = "is_using_fallback"  # Whether currently using a fallback
 
 
 # For backward compatibility - direct constants
@@ -139,6 +141,8 @@ ATTR_OFF_PEAK_1 = Attributes.OFF_PEAK_1
 ATTR_OFF_PEAK_2 = Attributes.OFF_PEAK_2
 ATTR_PEAK = Attributes.PEAK
 ATTR_LAST_UPDATED = Attributes.LAST_UPDATED
+ATTR_AVAILABLE_FALLBACKS = Attributes.AVAILABLE_FALLBACKS
+ATTR_IS_USING_FALLBACK = Attributes.IS_USING_FALLBACK
 
 # Display unit options
 DISPLAY_UNIT_DECIMAL = "decimal"  # Example: 0.15 EUR/kWh
@@ -148,6 +152,15 @@ DISPLAY_UNITS = {
     DISPLAY_UNIT_DECIMAL: "Decimal (e.g., 0.15 EUR/kWh)",
     DISPLAY_UNIT_CENTS: "Cents/Öre (e.g., 15 cents/kWh)",
 }
+
+# Update interval options
+UPDATE_INTERVAL_OPTIONS = [
+    {"value": 15, "label": "15 minutes"},
+    {"value": 30, "label": "30 minutes"},
+    {"value": 60, "label": "1 hour (recommended)"},
+    {"value": 120, "label": "2 hours"},
+    {"value": 240, "label": "4 hours"},
+]
 
 # Sensor types
 class SensorType:
