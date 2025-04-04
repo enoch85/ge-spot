@@ -14,7 +14,8 @@ from homeassistant.util import dt as dt_util
 from .const import (
     DOMAIN,
     ATTR_CURRENCY, ATTR_AREA, ATTR_VAT, ATTR_LAST_UPDATED,
-    ATTR_DATA_SOURCE, ATTR_FALLBACK_USED, ATTR_MIN, ATTR_MAX,
+    ATTR_DATA_SOURCE, ATTR_FALLBACK_USED, ATTR_IS_USING_FALLBACK,
+    ATTR_AVAILABLE_FALLBACKS, ATTR_MIN, ATTR_MAX,
     ATTR_TODAY, ATTR_TOMORROW, ATTR_TOMORROW_VALID,
     CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT, DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY,
@@ -75,12 +76,16 @@ class BaseElectricityPriceSensor(SensorEntity):
             ATTR_VAT: self._vat,
             ATTR_LAST_UPDATED: self.coordinator.data.get(ATTR_LAST_UPDATED),
             ATTR_DATA_SOURCE: self.coordinator.data.get(ATTR_DATA_SOURCE),
-            ATTR_FALLBACK_USED: self.coordinator.data.get(ATTR_FALLBACK_USED, False),
+            "is_using_fallback": self.coordinator.data.get(ATTR_IS_USING_FALLBACK, False),
         }
 
         # Add source information if available
         if "source_info" in self.coordinator.data:
             attrs["source_info"] = self.coordinator.data["source_info"]
+
+        # Add available fallbacks information
+        if ATTR_AVAILABLE_FALLBACKS in self.coordinator.data:
+            attrs["available_fallbacks"] = self.coordinator.data[ATTR_AVAILABLE_FALLBACKS]
 
         # Add next update time
         if "next_update" in self.coordinator.data:
