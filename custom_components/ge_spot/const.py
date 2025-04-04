@@ -17,6 +17,7 @@ class Config:
     API_KEY = "api_key"
     PRICE_IN_CENTS = "price_in_cents"
     CACHE_TTL = "cache_ttl"
+    SOURCE_PRIORITY = "source_priority"
 
 
 # For backward compatibility - direct constants
@@ -31,6 +32,7 @@ CONF_PRECISION = Config.PRECISION
 CONF_API_KEY = Config.API_KEY
 CONF_PRICE_IN_CENTS = Config.PRICE_IN_CENTS
 CONF_CACHE_TTL = Config.CACHE_TTL
+CONF_SOURCE_PRIORITY = Config.SOURCE_PRIORITY
 
 # Default configurations
 class Defaults:
@@ -267,17 +269,17 @@ ENERGY_UNIT_CONVERSION = {
 # Nordpool areas
 NORDPOOL_AREAS = {
     "Oslo": "Norway (Oslo)",
-    "Kr.sand": "Norway (Kristiansand)",
+    "Kr.sand": "Norway (Kr.sand)",
     "Bergen": "Norway (Bergen)",
     "Molde": "Norway (Molde)",
-    "Tr.heim": "Norway (Trondheim)",
+    "Tr.heim": "Norway (Tr.heim)",
     "Tromsø": "Norway (Tromsø)",
-    "SE1": "Sweden (North)",
-    "SE2": "Sweden (North-Central)",
-    "SE3": "Sweden (South-Central)",
-    "SE4": "Sweden (South)",
-    "DK1": "Denmark (West)",
-    "DK2": "Denmark (East)",
+    "SE1": "Sweden (SE1)",
+    "SE2": "Sweden (SE2)",
+    "SE3": "Sweden (SE3)",
+    "SE4": "Sweden (SE4)",
+    "DK1": "Denmark (DK1)",
+    "DK2": "Denmark (DK2)",
     "FI": "Finland",
     "EE": "Estonia",
     "LV": "Latvia",
@@ -286,8 +288,8 @@ NORDPOOL_AREAS = {
 
 # Energi Data Service areas
 ENERGI_DATA_AREAS = {
-    "DK1": "Denmark (West)",
-    "DK2": "Denmark (East)",
+    "DK1": "Denmark (DK1)",
+    "DK2": "Denmark (DK2)",
 }
 
 # ENTSO-E areas
@@ -327,11 +329,11 @@ OMIE_AREAS = {
 
 # AEMO areas
 AEMO_AREAS = {
-    "NSW1": "New South Wales",
-    "QLD1": "Queensland",
-    "SA1": "South Australia",
-    "TAS1": "Tasmania",
-    "VIC1": "Victoria",
+    "NSW1": "New South Wales (NSW1)",
+    "QLD1": "Queensland (QLD1)",
+    "SA1": "South Australia (SA1)",
+    "TAS1": "Tasmania (TAS1)",
+    "VIC1": "Victoria (VIC1)",
 }
 
 # Area to timezone mapping - useful for multiple API handlers
@@ -364,4 +366,14 @@ AREA_TIMEZONES = {
     "Molde": "Europe/Oslo",
     "Tr.heim": "Europe/Oslo",
     "Tromsø": "Europe/Oslo"
+}
+
+# Default areas for each source
+DEFAULT_AREAS = {
+    SOURCE_NORDPOOL: "SE4",
+    SOURCE_ENERGI_DATA_SERVICE: "DK1",
+    SOURCE_ENTSO_E: "10YSE-4--------9",  # SE4
+    SOURCE_EPEX: "DE-LU",
+    SOURCE_OMIE: "ES",
+    SOURCE_AEMO: "NSW1",
 }
