@@ -6,7 +6,7 @@ This custom integration allows you to fetch day-ahead electricity spot prices fr
 
 ## Supported Price Sources
 
-- **Nordpool** (🔥 Recommended) - Prices for Nordic and Baltic countries
+- **Nordpool** - Prices for Nordic and Baltic countries
 - **Energi Data Service** - Prices for Denmark
 - **ENTSO-E** - European Network of Transmission System Operators for Electricity (requires API key)
 - **EPEX SPOT** - European Power Exchange for Central Europe
