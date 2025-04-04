@@ -111,6 +111,7 @@ class Attributes:
     LAST_UPDATED = "last_updated"
     AVAILABLE_FALLBACKS = "available_fallbacks"  # List of available fallback sources
     IS_USING_FALLBACK = "is_using_fallback"  # Whether currently using a fallback
+    API_KEY_STATUS = "api_key_status"  # Status of API key (valid/invalid)
 
 
 # For backward compatibility - direct constants
@@ -143,6 +144,7 @@ ATTR_PEAK = Attributes.PEAK
 ATTR_LAST_UPDATED = Attributes.LAST_UPDATED
 ATTR_AVAILABLE_FALLBACKS = Attributes.AVAILABLE_FALLBACKS
 ATTR_IS_USING_FALLBACK = Attributes.IS_USING_FALLBACK
+ATTR_API_KEY_STATUS = Attributes.API_KEY_STATUS
 
 # Display unit options
 DISPLAY_UNIT_DECIMAL = "decimal"  # Example: 0.15 EUR/kWh
@@ -468,4 +470,24 @@ DEFAULT_AREAS = {
     SOURCE_EPEX: "DE-LU",
     SOURCE_OMIE: "ES",
     SOURCE_AEMO: "NSW1",
+}
+
+# Error message constants
+class ErrorMessages:
+    """Error message constants."""
+    INVALID_API_KEY = "invalid_api_key"
+    API_KEY_REQUIRED = "api_key_required"
+    API_CREATION_FAILED = "api_creation_failed"
+    NO_SOURCES_FOR_REGION = "no_sources_for_region"
+    ERROR_SOURCES_FOR_REGION = "error_sources_for_region"
+    UNKNOWN = "unknown"
+
+# Translation strings
+TRANSLATIONS = {
+    ErrorMessages.INVALID_API_KEY: "API key validation failed. Please check your key and try again.",
+    ErrorMessages.API_KEY_REQUIRED: "API key is required for this source.",
+    ErrorMessages.API_CREATION_FAILED: "Failed to create API instance. Please try again.",
+    ErrorMessages.NO_SOURCES_FOR_REGION: "No data sources available for this region.",
+    ErrorMessages.ERROR_SOURCES_FOR_REGION: "Error retrieving sources for region.",
+    ErrorMessages.UNKNOWN: "An unexpected error occurred.",
 }
