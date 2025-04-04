@@ -28,8 +28,12 @@ class EntsoEAPI(BaseEnergyAPI):
         period_start = today.strftime("%Y%m%d0000")
         period_end = tomorrow.strftime("%Y%m%d0000")
 
-        # Get area code - map our area code to ENTSO-E area code
-        area = self.config.get("area", "SE4")
+        # Get area code - map our area code to ENTSO-E area code without default
+        area = self.config.get("area")
+        if not area:
+            _LOGGER.error("No area provided in configuration")
+            return None
+            
         entsoe_area = ENTSOE_AREA_MAPPING.get(area, area)
         
         _LOGGER.debug(f"Using ENTSO-E area code {entsoe_area} for area {area}")
