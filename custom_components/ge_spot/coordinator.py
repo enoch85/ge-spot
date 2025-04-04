@@ -14,11 +14,11 @@ from .const import (
     DOMAIN,
     CONF_AREA,
     CONF_SOURCE_PRIORITY,
-    CONF_ENABLE_FALLBACK,
-    DEFAULT_ENABLE_FALLBACK,
     ATTR_LAST_UPDATED,
     ATTR_DATA_SOURCE,
     ATTR_FALLBACK_USED,
+    ATTR_AVAILABLE_FALLBACKS,
+    ATTR_IS_USING_FALLBACK,
 )
 from .api import create_apis_for_region
 from .utils.debug_utils import log_raw_data
@@ -52,7 +52,6 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         # Create prioritized APIs for this region
         source_priority = config.get(CONF_SOURCE_PRIORITY)
         self._apis = create_apis_for_region(area, config, source_priority)
-        self._enable_fallback = config.get(CONF_ENABLE_FALLBACK, DEFAULT_ENABLE_FALLBACK)
         self._active_source = None
         self._active_api = None
         self._fallback_used = False
@@ -114,6 +113,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                         "cache_timestamp": self._last_successful_data.get(ATTR_LAST_UPDATED, "unknown")
                     }
                     self._last_successful_data[ATTR_FALLBACK_USED] = True
+                    self._last_successful_data[ATTR_IS_USING_FALLBACK] = True
                     return self._last_successful_data
                 return None
 
@@ -150,32 +150,32 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     else:
                         _LOGGER.warning(f"Tomorrow's price data not available from {self._active_source}")
                         
-                        # Try fallbacks for tomorrow data if enabled
-                        if self._enable_fallback:
-                            for api in self._apis:
-                                if api == self._active_api:
-                                    continue  # Skip the already-tried active API
-                                    
-                                api_name = api.__class__.__name__
-                                api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, []) 
-                                               if s.lower() in api_name.lower()), "unknown")
+                        # Try fallbacks for tomorrow data
+                        for api in self._apis:
+                            if api == self._active_api:
+                                continue  # Skip the already-tried active API
                                 
-                                _LOGGER.info(f"Trying fallback for tomorrow's data: {api_name}")
+                            api_name = api.__class__.__name__
+                            api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, []) 
+                                           if s.lower() in api_name.lower()), "unknown")
+                            
+                            _LOGGER.info(f"Trying fallback for tomorrow's data: {api_name}")
+                            
+                            try:
+                                tomorrow_data = await api.fetch_day_ahead_prices(
+                                    self.area,
+                                    self.currency,
+                                    dt_util.now() + timedelta(days=1),
+                                    self.hass
+                                )
                                 
-                                try:
-                                    tomorrow_data = await api.fetch_day_ahead_prices(
-                                        self.area,
-                                        self.currency,
-                                        dt_util.now() + timedelta(days=1),
-                                        self.hass
-                                    )
-                                    
-                                    if tomorrow_data:
-                                        tomorrow_source = api_type
-                                        _LOGGER.info(f"Successfully retrieved tomorrow's data from fallback API: {api_name}")
-                                        break
-                                except Exception as e:
-                                    _LOGGER.error(f"Error fetching tomorrow's data from {api_name}: {e}")
+                                if tomorrow_data:
+                                    tomorrow_source = api_type
+                                    _LOGGER.info(f"Successfully retrieved tomorrow's data from fallback API: {api_name}")
+                                    self._fallback_used = True
+                                    break
+                            except Exception as e:
+                                _LOGGER.error(f"Error fetching tomorrow's data from {api_name}: {e}")
                 except Exception as e:
                     _LOGGER.warning(f"Failed to fetch tomorrow's prices: {e}")
             else:
@@ -202,13 +202,24 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             today_stats = self.adapter.get_day_statistics(0)
             tomorrow_stats = self.adapter.get_day_statistics(1) if tomorrow_data else None
 
+            # Get available fallbacks (sources after the primary)
+            available_fallbacks = []
+            if len(self._apis) > 1:
+                for api in self._apis[1:]:
+                    api_name = api.__class__.__name__
+                    api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, []) 
+                                   if s.lower() in api_name.lower()), "unknown")
+                    available_fallbacks.append(api_type)
+
             # Build information about data sources
             source_info = {
                 "primary_source": self.config.get(CONF_SOURCE_PRIORITY, [])[0] if self.config.get(CONF_SOURCE_PRIORITY) else None,
                 "active_source": self._active_source,
                 "tomorrow_source": tomorrow_source,
                 "fallback_used": self._fallback_used,
+                "is_using_fallback": self._fallback_used,
                 "attempted_sources": self._attempted_sources,
+                "available_fallbacks": available_fallbacks,
                 "timezone": str(self.hass.config.time_zone)
             }
 
@@ -228,6 +239,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 "next_update": next_update.isoformat(),
                 ATTR_DATA_SOURCE: self._active_source,
                 ATTR_FALLBACK_USED: self._fallback_used,
+                ATTR_IS_USING_FALLBACK: self._fallback_used,
+                ATTR_AVAILABLE_FALLBACKS: available_fallbacks,
                 "source_info": source_info,
                 "timezone": str(self.hass.config.time_zone)
             }
