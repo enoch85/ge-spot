@@ -9,10 +9,12 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     DOMAIN, CONF_AREA, CONF_VAT, CONF_UPDATE_INTERVAL,
-    CONF_DISPLAY_UNIT, CONF_SOURCE_PRIORITY,
+    CONF_DISPLAY_UNIT, CONF_SOURCE_PRIORITY, CONF_ENABLE_FALLBACK,
     NORDPOOL_AREAS, ENERGI_DATA_AREAS, ENTSOE_AREAS, EPEX_AREAS, OMIE_AREAS, AEMO_AREAS,
     DEFAULT_AREAS, SOURCE_NORDPOOL, SOURCE_ENERGI_DATA_SERVICE, SOURCE_ENTSO_E, 
-    SOURCE_EPEX, SOURCE_OMIE, SOURCE_AEMO
+    SOURCE_EPEX, SOURCE_OMIE, SOURCE_AEMO,
+    DISPLAY_UNIT_DECIMAL, DISPLAY_UNIT_CENTS, DISPLAY_UNITS,
+    UPDATE_INTERVAL_OPTIONS
 )
 from .config_utils import (
     common_schema, get_default_values
@@ -181,9 +183,9 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 # Add additional config
                 self._data[CONF_VAT] = user_input.get(CONF_VAT, 0)
                 self._data[CONF_UPDATE_INTERVAL] = user_input.get(CONF_UPDATE_INTERVAL, 60)
-                self._data[CONF_DISPLAY_UNIT] = user_input.get(CONF_DISPLAY_UNIT, "decimal")
+                self._data[CONF_DISPLAY_UNIT] = user_input.get(CONF_DISPLAY_UNIT, DISPLAY_UNIT_DECIMAL)
                 
-                # Always enable fallback (removed from UI)
+                # Always enable fallback
                 self._data[CONF_ENABLE_FALLBACK] = True
                 
                 # Check if any source requires an API key - use SOURCE_ENTSO_E constant
@@ -225,10 +227,25 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         multiple=True,
                     )
                 ),
+                vol.Optional(CONF_VAT, default=0): vol.All(
+                    vol.Coerce(float), vol.Range(min=0, max=100)
+                ),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=60): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=UPDATE_INTERVAL_OPTIONS,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(CONF_DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": k, "label": v}
+                            for k, v in DISPLAY_UNITS.items()
+                        ],
+                        mode=selector.SelectSelectorMode.RADIO,
+                    )
+                ),
             }
-            
-            # Add common options
-            schema_dict.update(common_schema({}))
 
             return self.async_show_form(
                 step_id="source_priority",
@@ -336,7 +353,7 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                         data=updated_data
                     )
                 
-                # Always enable fallback (removed from UI)
+                # Always enable fallback
                 user_input[CONF_ENABLE_FALLBACK] = True
                 
                 # Handle normal options
@@ -348,8 +365,33 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
         try:
             defaults = get_default_values(self._options, self._data)
 
-            # Common options schema
-            schema = common_schema(defaults)
+            # Get current display unit setting with fallback
+            current_display_unit = self._options.get(
+                CONF_DISPLAY_UNIT, 
+                self._data.get(CONF_DISPLAY_UNIT, DISPLAY_UNIT_DECIMAL)
+            )
+
+            # Create schema for options
+            schema = {
+                vol.Optional(CONF_VAT, default=defaults.get(CONF_VAT, 0) * 100): vol.All(
+                    vol.Coerce(float), vol.Range(min=0, max=100)
+                ),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=UPDATE_INTERVAL_OPTIONS,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(CONF_DISPLAY_UNIT, default=current_display_unit): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": k, "label": v}
+                            for k, v in DISPLAY_UNITS.items()
+                        ],
+                        mode=selector.SelectSelectorMode.RADIO,
+                    )
+                ),
+            }
             
             # Add source priority selection
             current_priority = self._data.get(CONF_SOURCE_PRIORITY, self._supported_sources)
