@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 _LOGGER = logging.getLogger(__name__)
 
-def log_conversion(original: float, converted: float, 
+def log_conversion(original: float, converted: float,
                   from_currency: str, to_currency: str,
                   from_unit: str, to_unit: str,
                   vat: float, exchange_rate: Optional[float] = None) -> None:

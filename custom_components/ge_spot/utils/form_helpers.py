@@ -14,14 +14,14 @@ _LOGGER = logging.getLogger(__name__)
 
 class FormHelper:
     """Helper class for creating consistent form selectors."""
-    
+
     @staticmethod
     def create_api_key_selector(required: bool = False) -> selector.TextSelector:
         """Create a properly structured API key selector.
-        
+
         Args:
             required: Whether the field is required
-            
+
         Returns:
             A TextSelector for API keys
         """
@@ -31,14 +31,14 @@ class FormHelper:
                 autocomplete="off"
             )
         )
-    
+
     @staticmethod
     def create_source_priority_selector(sources: List[str]) -> selector.SelectSelector:
         """Create a source priority selector.
-        
+
         Args:
             sources: List of available source values
-            
+
         Returns:
             A SelectSelector for priority ordering
         """
@@ -52,11 +52,11 @@ class FormHelper:
                 multiple=True,
             )
         )
-    
+
     @staticmethod
     def create_update_interval_selector() -> selector.SelectSelector:
         """Create update interval selector.
-        
+
         Returns:
             A SelectSelector for update interval
         """
@@ -66,11 +66,11 @@ class FormHelper:
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
         )
-    
+
     @staticmethod
     def create_display_unit_selector() -> selector.SelectSelector:
         """Create display unit selector.
-        
+
         Returns:
             A SelectSelector for display unit
         """
@@ -83,14 +83,14 @@ class FormHelper:
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
         )
-    
+
     @staticmethod
     def create_area_selector(areas: Dict[str, str]) -> selector.SelectSelector:
         """Create area selector.
-        
+
         Args:
             areas: Dictionary mapping area codes to display names
-            
+
         Returns:
             A SelectSelector for areas
         """
@@ -103,14 +103,14 @@ class FormHelper:
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
         )
-    
+
     @staticmethod
     def create_info_text(text: str) -> selector.TextSelector:
         """Create an informational text field.
-        
+
         Args:
             text: The informational text to display
-            
+
         Returns:
             A TextSelector configured as read-only info text
         """

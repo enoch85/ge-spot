@@ -33,9 +33,9 @@ class EntsoEAPI(BaseEnergyAPI):
         if not area:
             _LOGGER.error("No area provided in configuration")
             return None
-            
+
         entsoe_area = ENTSOE_AREA_MAPPING.get(area, area)
-        
+
         _LOGGER.debug(f"Using ENTSO-E area code {entsoe_area} for area {area}")
 
         params = {
@@ -51,12 +51,12 @@ class EntsoEAPI(BaseEnergyAPI):
 
         # Use the fetch_with_retry method from BaseEnergyAPI
         response = await self._fetch_with_retry(self.BASE_URL, params=params)
-        
+
         # Check for authentication errors in the response
         if isinstance(response, str) and "Not authorized" in response:
             _LOGGER.error(f"ENTSO-E API authentication failed: Not authorized. Check your API key.")
             return None
-            
+
         return response
 
     async def _process_data(self, data):
@@ -91,12 +91,12 @@ class EntsoEAPI(BaseEnergyAPI):
                 for point in points:
                     position = int(point.find("ns:position", ns).text)
                     price = float(point.find("ns:price.amount", ns).text)
-                    
+
                     # Store raw price data
                     start_hour = (position - 1)
                     start_time = now.replace(hour=start_hour, minute=0, second=0, microsecond=0)
                     end_time = start_time + datetime.timedelta(hours=1)
-                    
+
                     raw_prices.append({
                         "start": start_time.isoformat(),
                         "end": end_time.isoformat(),
@@ -178,21 +178,21 @@ class EntsoEAPI(BaseEnergyAPI):
         except Exception as e:
             _LOGGER.error(f"Error processing ENTSO-E data: {e}")
             return None
-            
+
     @staticmethod
     def is_area_supported(area: str) -> bool:
         """Check if an area is supported by ENTSO-E."""
         return area in ENTSOE_AREA_MAPPING
-        
+
     @staticmethod
     async def validate_api_key(api_key, area, session=None):
         """Validate an API key by making a test request.
-        
+
         Args:
             api_key: The ENTSO-E API key to validate
             area: The area code to test with
             session: Optional aiohttp session
-            
+
         Returns:
             bool: True if the API key is valid, False otherwise
         """
@@ -203,18 +203,18 @@ class EntsoEAPI(BaseEnergyAPI):
                 "api_key": api_key
             }
             api = EntsoEAPI(config)
-            
+
             # Use provided session if available
             if session:
                 api.session = session
-                
+
             # Try to fetch some data with the provided key
             result = await api._fetch_data()
-            
+
             # Close session if we created one
             if not session and api.session:
                 await api.close()
-                
+
             # Check if we got a valid response
             if result and not isinstance(result, str):
                 return True
@@ -224,7 +224,7 @@ class EntsoEAPI(BaseEnergyAPI):
             else:
                 _LOGGER.error("API key validation failed: No data returned")
                 return False
-                
+
         except Exception as e:
             _LOGGER.error(f"API key validation error: {e}")
             return False

@@ -23,16 +23,16 @@ def common_schema(defaults):
         except (ValueError, TypeError):
             _LOGGER.warning(f"Invalid VAT value: {vat_value}, using default")
             vat_percentage = DEFAULT_VAT * 100
-            
+
         update_interval = defaults.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         display_unit = defaults.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
-        
+
         return {
             vol.Optional(CONF_VAT, default=vat_percentage): vol.All(
                 vol.Coerce(float), vol.Range(min=0, max=100),
                 description={
                     "suggested_value": vat_percentage,
-                    "suffix": "%", 
+                    "suffix": "%",
                     "name": "VAT Rate",
                     "description": "Value added tax (VAT) to apply to prices (0-100%)"
                 }
@@ -74,7 +74,7 @@ async def handle_area_config(flow, user_input, source_name, areas_dict, default_
             # Convert VAT from percentage to decimal
             if CONF_VAT in user_input:
                 user_input[CONF_VAT] = user_input[CONF_VAT] / 100
-                
+
             # Update the stored data with area and other configs
             data = {**flow._data, **user_input}
             _LOGGER.debug(f"Creating entry with data: {data}")
@@ -132,7 +132,7 @@ async def handle_api_key_config(flow, user_input, source_name, areas_dict, defau
                 # Convert VAT from percentage to decimal
                 if CONF_VAT in user_input:
                     user_input[CONF_VAT] = user_input[CONF_VAT] / 100
-                    
+
                 # Update the stored data with area and other configs
                 data = {**flow._data, **user_input}
                 _LOGGER.debug(f"Creating entry with data: {data}")
@@ -187,7 +187,7 @@ def get_default_values(options, data):
         # VAT - convert from decimal to percentage
         vat_decimal = options.get(CONF_VAT, data.get(CONF_VAT, DEFAULT_VAT))
         defaults[CONF_VAT] = vat_decimal
-        
+
         # Update interval
         defaults[CONF_UPDATE_INTERVAL] = options.get(
             CONF_UPDATE_INTERVAL,
@@ -198,7 +198,7 @@ def get_default_values(options, data):
             CONF_DISPLAY_UNIT,
             data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
         )
-        
+
         # API key (if present)
         if "api_key" in options or "api_key" in data:
             defaults["api_key"] = options.get("api_key", data.get("api_key", ""))

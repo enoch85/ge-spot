@@ -57,41 +57,41 @@ class BaseEnergyAPI(ABC):
 
     async def validate_api_key(self, api_key=None):
         """Validate an API key.
-        
+
         Args:
             api_key: Optional API key to validate (uses stored key if not provided)
-            
+
         Returns:
             bool: True if the API key is valid, False otherwise
         """
         # Use provided key or get from config
         key_to_validate = api_key or self.config.get(CONF_API_KEY) or self.config.get("api_key")
-        
+
         if not key_to_validate:
             _LOGGER.warning("No API key to validate")
             return False
-            
+
         try:
             # Implementation depends on the specific API
             _LOGGER.debug(f"Validating API key (starting with {key_to_validate[:5]}...)")
-            
+
             # Default implementation - will be overridden by subclasses
             # Simply try to fetch data with the key
             test_config = dict(self.config)
             test_config[CONF_API_KEY] = key_to_validate
-            
+
             # Create a temporary instance with the test config
             temp_instance = self.__class__(test_config)
             if hasattr(self, "session") and self.session:
                 temp_instance.session = self.session
-                
+
             # Try to fetch data
             result = await temp_instance._fetch_data()
-            
+
             # Close the temporary instance if needed
             if temp_instance != self and hasattr(temp_instance, "close"):
                 await temp_instance.close()
-                
+
             # Check if we got a valid response
             if result:
                 _LOGGER.info("API key validation successful")
@@ -99,7 +99,7 @@ class BaseEnergyAPI(ABC):
             else:
                 _LOGGER.warning("API key validation failed: No data returned")
                 return False
-                
+
         except Exception as e:
             _LOGGER.error(f"API key validation error: {e}")
             return False
@@ -297,13 +297,13 @@ class BaseEnergyAPI(ABC):
             return None
 
         use_subunit = to_subunit if to_subunit is not None else self.config.get("price_in_cents", False)
-        
+
         from ..utils.debug_utils import log_conversion
         from ..utils.currency_utils import async_convert_energy_price
 
         # Store original for logging
         original_price = price
-        
+
         # Get exchange rate if available (for logging)
         session = getattr(self, "session", None)
 
@@ -319,7 +319,7 @@ class BaseEnergyAPI(ABC):
             session=session,
             exchange_rate=exchange_rate
         )
-        
+
         # Log details
         log_conversion(
             original=original_price,
@@ -330,7 +330,7 @@ class BaseEnergyAPI(ABC):
             to_unit="kWh",
             vat=self.vat
         )
-            
+
         return converted_price
 
     def _get_now(self):
@@ -419,15 +419,15 @@ class BaseEnergyAPI(ABC):
         """Apply VAT to a price value."""
         if price is None:
             return None
-            
+
         # Use provided VAT rate or fall back to instance VAT
         vat = vat_rate if vat_rate is not None else self.vat
-        
+
         if vat > 0:
             original_price = price
             price = price * (1 + vat)
             _LOGGER.debug(f"Applied VAT {vat:.2%}: {original_price} → {price}")
         else:
             _LOGGER.debug(f"No VAT applied (rate: {vat:.2%})")
-            
+
         return price

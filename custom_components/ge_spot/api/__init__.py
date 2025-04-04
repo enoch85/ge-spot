@@ -62,29 +62,29 @@ class ApiRegistry:
         except Exception as e:
             _LOGGER.error(f"Error creating API instance for {source_type}: {e}")
             return None
-            
+
     def get_sources_for_region(self, region: str) -> List[str]:
         """Get list of sources that support a given region, ordered by reliability."""
         supported_sources = []
-        
+
         for source, regions in SOURCE_REGION_SUPPORT.items():
             if region in regions:
                 supported_sources.append(source)
-                
+
         # Sort by reliability (highest first)
-        return sorted(supported_sources, 
-                    key=lambda s: SOURCE_RELIABILITY.get(s, 0), 
+        return sorted(supported_sources,
+                    key=lambda s: SOURCE_RELIABILITY.get(s, 0),
                     reverse=True)
-                
-    def create_apis_for_region(self, region: str, config: dict, 
+
+    def create_apis_for_region(self, region: str, config: dict,
                             source_priority: Optional[List[str]] = None) -> List:
         """Create API instances for all sources supporting a region.
-        
+
         Args:
             region: The region code
             config: Configuration dictionary
             source_priority: Optional custom source priority order
-            
+
         Returns:
             List of API instances in priority order
         """
@@ -100,13 +100,13 @@ class ApiRegistry:
         # Create a copy of the config with the area set
         config_with_area = dict(config)
         config_with_area["area"] = region
-            
+
         apis = []
         for source in sources:
             api = self.create(source, config_with_area)
             if api:
                 apis.append(api)
-                
+
         return apis
 
 # Global registry
@@ -140,8 +140,8 @@ def create_api(source_type: str, config: dict):
 def get_sources_for_region(region: str) -> List[str]:
     """Get sources supporting a region in priority order."""
     return registry.get_sources_for_region(region)
-    
-def create_apis_for_region(region: str, config: dict, 
+
+def create_apis_for_region(region: str, config: dict,
                         source_priority: Optional[List[str]] = None) -> List:
     """Create prioritized API instances for a region."""
     return registry.create_apis_for_region(region, config, source_priority)

@@ -12,20 +12,20 @@ class ApiValidator:
         """Check if the data is adequate for use."""
         if not data:
             return False
-        
+
         # Must have current price
         if "current_price" not in data or data["current_price"] is None:
             _LOGGER.warning("Missing current_price in data")
             return False
-        
+
         # Must have hourly prices with at least one entry
         if "hourly_prices" not in data or not data["hourly_prices"]:
             _LOGGER.warning("Missing or empty hourly_prices in data")
             return False
-        
+
         # Check that at least one hourly price is non-None
         if not any(price is not None for price in data["hourly_prices"].values()):
             _LOGGER.warning("All hourly prices are None")
             return False
-            
+
         return True

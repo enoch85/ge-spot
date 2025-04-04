@@ -15,7 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 
 def parse_datetime(timestamp: Union[str, datetime]) -> datetime:
     """Parse various timestamp formats into a consistent datetime object.
-    
+
     Handles various API timestamp formats:
     - ISO format with Z suffix
     - ISO format with explicit offset
@@ -25,25 +25,25 @@ def parse_datetime(timestamp: Union[str, datetime]) -> datetime:
     # Already a datetime object
     if isinstance(timestamp, datetime):
         return ensure_timezone_aware(timestamp)
-        
+
     if not timestamp:
         return dt_util.now()
-        
+
     try:
         # Handle UTC indicator (Z)
         if isinstance(timestamp, str) and timestamp.endswith('Z'):
             dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
             _LOGGER.debug(f"Parsed UTC timestamp: {timestamp} → {dt.isoformat()}")
             return dt
-            
+
         # Handle explicit timezone offset or standard ISO format
         if isinstance(timestamp, str):
             dt = datetime.fromisoformat(timestamp)
             return ensure_timezone_aware(dt)
-            
+
     except (ValueError, TypeError) as e:
         _LOGGER.error(f"Error parsing datetime {timestamp}: {e}")
-        
+
     # Default fallback
     return dt_util.now()
 
@@ -59,9 +59,9 @@ def localize_datetime(dt: datetime, hass: Optional[HomeAssistant] = None) -> dat
     """Convert datetime to Home Assistant's configured timezone."""
     if dt is None:
         return dt_util.now()
-        
+
     dt = ensure_timezone_aware(dt)
-    
+
     # Get HA timezone (most accurate)
     if hass:
         local_tz = hass.config.time_zone
@@ -69,7 +69,7 @@ def localize_datetime(dt: datetime, hass: Optional[HomeAssistant] = None) -> dat
             tz = dt_util.get_time_zone(local_tz)
             if tz:
                 return dt.astimezone(tz)
-    
+
     # Fall back to dt_util's handling
     return dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
 
@@ -78,10 +78,10 @@ def convert_to_local_time(dt: datetime, area: str) -> datetime:
     """Convert a datetime to the local time for a given area."""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=dt_util.UTC)
-    
+
     # Get the timezone for this area
     tz_name = AREA_TIMEZONES.get(area)
-    
+
     # Try with Home Assistant's timezone utilities
     try:
         if tz_name:
@@ -90,7 +90,7 @@ def convert_to_local_time(dt: datetime, area: str) -> datetime:
                 return dt.astimezone(local_tz)
     except Exception as e:
         _LOGGER.warning(f"Error converting to timezone {tz_name} for area {area}: {e}")
-    
+
     # Fall back to dt_util's handling
     return dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
 
@@ -113,31 +113,31 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
     """Find price period containing reference time."""
     if not periods:
         return None
-    
+
     if reference_time is None:
         reference_time = dt_util.now()
-    
+
     # Ensure timezone-aware comparison
     reference_time = ensure_timezone_aware(reference_time)
-    
+
     _LOGGER.debug(f"Finding price for time: {reference_time.isoformat()} among {len(periods)} periods")
-    
+
     # Look for exact match only - no approximations
     for period in periods:
         start = period.get("start")
         end = period.get("end")
-        
+
         if not start or not end:
             continue
-            
+
         # Ensure timestamps are timezone-aware
         start = ensure_timezone_aware(start)
         end = ensure_timezone_aware(end)
-            
+
         if start <= reference_time < end:
             _LOGGER.debug(f"Found period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
             return period
-    
+
     # If we get here, no matching period was found
     if periods:
         first_period = periods[0]
@@ -145,7 +145,7 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
         if start:
             start = ensure_timezone_aware(start)
             _LOGGER.warning(f"No matching period found for {reference_time.isoformat()}. First period: {start.isoformat() if start else 'unknown'}")
-    
+
     return None
 
 
@@ -155,7 +155,7 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
         return []
 
     periods = []
-    
+
     for item in raw_data:
         if not isinstance(item, dict):
             continue
@@ -164,7 +164,7 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
         start_str = item.get("start") or item.get("deliveryStart")
         end_str = item.get("end") or item.get("deliveryEnd")
         price_value = item.get("price") or item.get("value")
-        
+
         if not start_str or price_value is None:
             continue
 
@@ -172,7 +172,7 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
             # Parse timestamps properly
             start_time = parse_datetime(start_str)
             end_time = parse_datetime(end_str) if end_str else start_time + timedelta(hours=1)
-            
+
             # Localize to proper timezone
             if local_tz:
                 if hasattr(local_tz, 'tzinfo') and local_tz.tzinfo:
@@ -184,11 +184,11 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
             else:
                 start_time = dt_util.as_local(start_time)
                 end_time = dt_util.as_local(end_time)
-            
+
             # Parse price value
             if not isinstance(price_value, (float, int)):
                 price_value = float(price_value)
-            
+
             periods.append({
                 "start": start_time,
                 "end": end_time,
@@ -197,7 +197,7 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
                 "hour": start_time.hour,
                 "raw": item,
             })
-            
+
         except Exception as e:
             _LOGGER.warning(f"Error processing price data: {e}")
             continue
@@ -212,10 +212,10 @@ def get_prices_for_day(price_data: List[Dict], day_offset: int = 0, hass: Option
         target_date = get_local_now(hass).date()
     else:
         target_date = dt_util.now().date()
-        
+
     if day_offset:
         target_date += timedelta(days=day_offset)
-        
+
     return [p for p in price_data if p.get("day") == target_date]
 
 
@@ -251,7 +251,7 @@ def get_statistics(price_data: List[Dict]) -> Dict[str, Any]:
     """Calculate statistics for the price data."""
     # Get basic statistics including min/max with timestamps
     stats = get_price_statistics(price_data)
-    
+
     # Add time-of-day based categorization
     off_peak_1 = []
     peak = []
@@ -275,7 +275,7 @@ def get_statistics(price_data: List[Dict]) -> Dict[str, Any]:
         "off_peak_2": sum(off_peak_2) / len(off_peak_2) if off_peak_2 else None,
         "peak": sum(peak) / len(peak) if peak else None,
     })
-    
+
     return stats
 
 

@@ -53,7 +53,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         self.adapter = None
         self._last_successful_data = None
         self._last_primary_check = None
-        
+
         # Create prioritized APIs for this region
         source_priority = config.get(CONF_SOURCE_PRIORITY)
         self._apis = create_apis_for_region(area, config, source_priority)
@@ -65,16 +65,16 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
     async def check_api_key_status(self):
         """Check status of configured API keys and report in attributes."""
         api_key_status = {}
-        
+
         # Check for ENTSO-E API key
         if SOURCE_ENTSO_E in self.config.get(CONF_SOURCE_PRIORITY, []):
             api_key = self.config.get(CONF_API_KEY)
-            
+
             if api_key:
                 # Try to find the ENTSO-E API instance
-                entsoe_api = next((api for api in self._apis 
+                entsoe_api = next((api for api in self._apis
                               if SOURCE_ENTSO_E.lower() in api.__class__.__name__.lower()), None)
-                
+
                 if entsoe_api and hasattr(entsoe_api, "validate_api_key"):
                     try:
                         is_valid = await entsoe_api.validate_api_key(api_key)
@@ -104,7 +104,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     "valid": None,
                     "status": "not_configured"
                 }
-        
+
         return api_key_status
 
     async def _async_update_data(self):
@@ -121,32 +121,32 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
             # Fetch data from APIs in priority order
             today_data = None
-            
+
             # First, try to restore primary source if using fallback
             if hasattr(self, '_last_successful_data') and self._last_successful_data and self._fallback_used:
                 # Only check primary source if enough time has passed
                 now = datetime.datetime.now()
                 check_primary = True
-                
+
                 if hasattr(self, '_last_primary_check'):
                     time_since_check = (now - self._last_primary_check).total_seconds() / 60
                     if time_since_check < self.update_interval.total_seconds() / 60:
                         check_primary = False
-                
+
                 if check_primary:
                     self._last_primary_check = now
                     # Try primary source first
                     primary_source = self.config.get(CONF_SOURCE_PRIORITY, [])[0]
-                    primary_api = next((api for api in self._apis 
+                    primary_api = next((api for api in self._apis
                                     if primary_source.lower() in api.__class__.__name__.lower()), None)
-                    
+
                     if primary_api and primary_api != self._active_api:
                         _LOGGER.debug(f"Checking if primary source {primary_source} is available again")
                         try:
                             data = await primary_api.fetch_day_ahead_prices(
                                 self.area, self.currency, dt_util.now(), self.hass
                             )
-                            
+
                             if data and ApiValidator.is_data_adequate(data):
                                 _LOGGER.info(f"Primary source {primary_source} is available again, switching back")
                                 today_data = data
@@ -161,12 +161,12 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             if not today_data:
                 for api in self._apis:
                     api_name = api.__class__.__name__
-                    api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, []) 
+                    api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, [])
                                 if s.lower() in api_name.lower()), "unknown")
-                    
+
                     _LOGGER.info(f"Attempting to fetch data from {api_name} ({api_type})")
                     self._attempted_sources.append(api_type)
-                    
+
                     try:
                         # Pass Home Assistant instance to the API for timezone handling
                         data = await api.fetch_day_ahead_prices(
@@ -175,7 +175,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                             dt_util.now(),
                             self.hass
                         )
-                        
+
                         # Check if data is adequate, not just present
                         if data and ApiValidator.is_data_adequate(data):
                             today_data = data
@@ -193,12 +193,12 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             # If no today data could be fetched, check if we have cached data for today
             if not today_data:
                 _LOGGER.error(f"Failed to fetch today's price data from any source. Attempted: {', '.join(self._attempted_sources)}")
-                
+
                 # Check if we have cached today's data that's still relevant for today
                 if self._last_successful_data and "today" in self._last_successful_data:
                     today_date = dt_util.now().date()
                     cached_today = False
-                    
+
                     # Check if cached data contains valid hours for today
                     if "adapter" in self._last_successful_data:
                         adapter = self._last_successful_data["adapter"]
@@ -208,11 +208,11 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                                 if period.get("day") == today_date:
                                     cached_today = True
                                     break
-                    
+
                     if cached_today:
                         _LOGGER.warning("Using cached data for today's prices")
                         today_data = self._last_successful_data
-                        
+
                 if not today_data and self._last_successful_data:
                     _LOGGER.warning("Using cached data from last successful update")
                     self._last_successful_data["source_info"] = {
@@ -223,11 +223,11 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     }
                     self._last_successful_data[ATTR_FALLBACK_USED] = True
                     self._last_successful_data[ATTR_IS_USING_FALLBACK] = True
-                    
+
                     # Check API key status
                     api_key_status = await self.check_api_key_status()
                     self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
-                    
+
                     return self._last_successful_data
                 elif not today_data:
                     return None
@@ -258,24 +258,24 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                         dt_util.now() + timedelta(days=1),
                         self.hass
                     )
-                    
+
                     if tomorrow_data:
                         tomorrow_source = self._active_source
                         _LOGGER.info(f"Successfully fetched tomorrow's price data from {self._active_source}")
                     else:
                         _LOGGER.warning(f"Tomorrow's price data not available from {self._active_source}")
-                        
+
                         # Try fallbacks for tomorrow data
                         for api in self._apis:
                             if api == self._active_api:
                                 continue  # Skip the already-tried active API
-                                
+
                             api_name = api.__class__.__name__
-                            api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, []) 
+                            api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, [])
                                            if s.lower() in api_name.lower()), "unknown")
-                            
+
                             _LOGGER.info(f"Trying fallback for tomorrow's data: {api_name}")
-                            
+
                             try:
                                 tomorrow_data = await api.fetch_day_ahead_prices(
                                     self.area,
@@ -283,7 +283,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                                     dt_util.now() + timedelta(days=1),
                                     self.hass
                                 )
-                                
+
                                 if tomorrow_data:
                                     tomorrow_source = api_type
                                     _LOGGER.info(f"Successfully retrieved tomorrow's data from fallback API: {api_name}")
@@ -325,7 +325,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             if len(self._apis) > 1:
                 for api in self._apis[1:]:
                     api_name = api.__class__.__name__
-                    api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, []) 
+                    api_type = next((s for s in self.config.get(CONF_SOURCE_PRIORITY, [])
                                    if s.lower() in api_name.lower()), "unknown")
                     available_fallbacks.append(api_type)
 
@@ -375,14 +375,14 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             _LOGGER.error(f"Error fetching electricity price data: {err}")
             if self._last_successful_data:
                 _LOGGER.warning("Using cached data from last successful update")
-                
+
                 # Check API key status
                 api_key_status = await self.check_api_key_status()
                 self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
-                
+
                 return self._last_successful_data
             raise
-            
+
     async def async_close(self):
         """Close all API sessions."""
         for api in self._apis:

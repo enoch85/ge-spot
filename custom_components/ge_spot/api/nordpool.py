@@ -79,12 +79,12 @@ class NordpoolAPI(BaseEnergyAPI):
             return None
 
         area = self.config.get("area", "Oslo")
-        
+
         # Get current time from Home Assistant in local timezone
         now = self._get_now()
         current_hour = now.hour
         _LOGGER.debug(f"Current local time: {now.isoformat()}, hour: {current_hour}")
-        
+
         use_subunit = self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS
 
         # Determine target currency based on area
@@ -146,7 +146,7 @@ class NordpoolAPI(BaseEnergyAPI):
             try:
                 # Parse the datetime correctly without timezone assumptions
                 dt = parse_datetime(start_time)
-                
+
                 # Convert to HA's local timezone
                 local_dt = dt
                 if hasattr(self, "hass"):
@@ -154,7 +154,7 @@ class NordpoolAPI(BaseEnergyAPI):
                 else:
                     from homeassistant.util import dt as dt_util
                     local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
-                
+
                 # Debug timestamp conversion
                 _LOGGER.debug(f"Parsed timestamp '{start_time}' → local: {local_dt.isoformat()}, hour: {local_dt.hour}")
 
@@ -187,7 +187,7 @@ class NordpoolAPI(BaseEnergyAPI):
                         "local_time": local_dt.isoformat(),
                         "exchange_rate": exchange_rate
                     }
-                    
+
                 # Check if this is next hour
                 elif hour == (current_hour + 1) % 24:
                     result["next_hour_price"] = converted_price
@@ -272,7 +272,7 @@ class NordpoolAPI(BaseEnergyAPI):
                 try:
                     # Parse the datetime correctly
                     dt = parse_datetime(start_time)
-                    
+
                     # Convert to local time
                     local_dt = dt
                     if hasattr(self, "hass"):
@@ -294,7 +294,7 @@ class NordpoolAPI(BaseEnergyAPI):
                     hour_str = f"{hour:02d}:00"
                     result["tomorrow_hourly_prices"][hour_str] = converted_price
                     tomorrow_prices.append(converted_price)
-                    
+
                 except (ValueError, TypeError) as e:
                     _LOGGER.error(f"Error processing tomorrow timestamp {start_time}: {e}")
                     continue

@@ -133,7 +133,7 @@ ENTSOE_AREA_MAPPING = {
     "EE": "10Y1001A1001A39I",
     "LV": "10YLV-1001A00074",
     "LT": "10YLT-1001A0008Q",
-    
+
     # Central Europe
     "DE": "10Y1001A1001A83F",
     "DE-LU": "10Y1001A1001A82H",
@@ -183,7 +183,7 @@ ENTSOE_AREA_MAPPING = {
     "RS": "10YCS-SERBIATSOV",
     "XK": "10Y1001C--00100H",
     "MD": "10Y1001A1001A990",
-    
+
     # Eastern Europe and Caucasus
     "UA": "10Y1001C--00003F",
     "UA-IPS": "10Y1001C--000182",
@@ -191,7 +191,7 @@ ENTSOE_AREA_MAPPING = {
     "AM": "10Y1001A1001B004",
     "GE": "10Y1001A1001B012",
     "AZ": "10Y1001A1001B05V",
-    
+
     # Multi-country areas
     "CZ-DE-SK-LT-SE4": "10Y1001C--00038X"
 }
@@ -218,7 +218,7 @@ ENTSOE_AREAS = {
     "EE": "Estonia",
     "LV": "Latvia",
     "LT": "Lithuania",
-    
+
     # Central Europe
     "DE": "Germany",
     "DE-LU": "Germany-Luxembourg",
@@ -268,7 +268,7 @@ ENTSOE_AREAS = {
     "RS": "Serbia",
     "XK": "Kosovo",
     "MD": "Moldova",
-    
+
     # Eastern Europe and Caucasus
     "UA": "Ukraine",
     "UA-IPS": "Ukraine (IPS)",
@@ -276,10 +276,10 @@ ENTSOE_AREAS = {
     "AM": "Armenia",
     "GE": "Georgia",
     "AZ": "Azerbaijan",
-    
+
     # Multi-country areas
     "CZ-DE-SK-LT-SE4": "Czech-Germany-Slovakia-Lithuania-Sweden4",
-    
+
     # These require ENTSO-E codes to be used directly
     "10YBA-JPCC-----D": "Bosnia Herzegovina",
     "10YCS-CG-TSO---S": "Montenegro",
