@@ -17,8 +17,10 @@ from .const import (
     ATTR_DATA_SOURCE, ATTR_FALLBACK_USED, ATTR_IS_USING_FALLBACK,
     ATTR_AVAILABLE_FALLBACKS, ATTR_MIN, ATTR_MAX,
     ATTR_TODAY, ATTR_TOMORROW, ATTR_TOMORROW_VALID,
+    ATTR_API_KEY_STATUS,
     CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT, DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY,
+    SOURCE_ENTSO_E,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -192,6 +194,19 @@ class CurrentPriceSensor(BaseElectricityPriceSensor):
             ATTR_TOMORROW: self.coordinator.data.get(ATTR_TOMORROW, []),
             ATTR_TOMORROW_VALID: self.coordinator.data.get(ATTR_TOMORROW_VALID, False),
         })
+        
+        # Add API key status if available
+        if ATTR_API_KEY_STATUS in self.coordinator.data:
+            api_key_status = self.coordinator.data.get(ATTR_API_KEY_STATUS, {})
+            
+            # Add ENTSO-E API key status if relevant
+            if SOURCE_ENTSO_E in api_key_status:
+                status = api_key_status[SOURCE_ENTSO_E]
+                attrs["entso_e_api_key"] = {
+                    "configured": status.get("configured", False),
+                    "status": status.get("status", "unknown"),
+                    "valid": status.get("valid", None)
+                }
         
         return attrs
 
