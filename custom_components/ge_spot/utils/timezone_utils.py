@@ -126,6 +126,7 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
     
     _LOGGER.debug(f"Finding price for time: {reference_time.isoformat()} among {len(periods)} periods")
     
+    # Look for exact match only - no approximations
     for period in periods:
         start = period.get("start")
         end = period.get("end")
@@ -143,8 +144,14 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
             _LOGGER.debug(f"Found period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
             return period
     
+    # If we get here, no matching period was found
     if periods:
-        _LOGGER.warning(f"No matching period found. First period: {periods[0]['start'].isoformat()}")
+        first_period = periods[0]
+        start = first_period.get("start")
+        if start and start.tzinfo is None:
+            start = start.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        _LOGGER.warning(f"No matching period found for {reference_time.isoformat()}. First period: {start.isoformat() if start else 'unknown'}")
+    
     return None
 
 
