@@ -70,11 +70,18 @@ def get_deduplicated_regions():
         
         # Choose the preferred region code based on source priority
         for priority, region_code, display_name, source in sorted_variants:
-            # Only include if the region is supported by at least one API
-            if get_sources_for_region(region_code):
-                deduplicated_regions[region_code] = display_name
-                break
+            try:
+                # Only include if the region is supported by at least one API
+                supported_sources = get_sources_for_region(region_code)
+                if supported_sources:
+                    deduplicated_regions[region_code] = display_name
+                    break
+            except Exception as e:
+                _LOGGER.error(f"Error checking sources for region {region_code}: {e}")
+                # Continue to next variant rather than fail completely
+                continue
     
+    _LOGGER.debug(f"Deduplicated regions: {deduplicated_regions}")
     return deduplicated_regions
 
 class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -99,73 +106,159 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Store the area in our data
-            area = user_input[CONF_AREA]
-            self._data[CONF_AREA] = area
-            
-            # Get list of sources that support this area
-            self._supported_sources = get_sources_for_region(area)
-            _LOGGER.info(f"Supported sources for {area}: {self._supported_sources}")
-            
-            if not self._supported_sources:
-                errors[CONF_AREA] = "no_sources_for_region"
-            else:
-                # Check for duplicate entries
-                await self.async_set_unique_id(f"gespot_{area}")
-                self._abort_if_unique_id_configured()
+            try:
+                # Store the area in our data
+                area = user_input[CONF_AREA]
+                self._data[CONF_AREA] = area
                 
-                # Proceed to source priority step
-                return await self.async_step_source_priority()
+                # Get list of sources that support this area
+                try:
+                    self._supported_sources = get_sources_for_region(area)
+                    _LOGGER.info(f"Supported sources for {area}: {self._supported_sources}")
+                except Exception as e:
+                    _LOGGER.error(f"Error getting sources for {area}: {e}")
+                    errors[CONF_AREA] = "error_sources_for_region"
+                    self._supported_sources = []
+                
+                if not self._supported_sources and not errors:
+                    errors[CONF_AREA] = "no_sources_for_region"
+                else:
+                    # Check for duplicate entries
+                    await self.async_set_unique_id(f"gespot_{area}")
+                    self._abort_if_unique_id_configured()
+                    
+                    # Proceed to source priority step
+                    return await self.async_step_source_priority()
+            except Exception as e:
+                _LOGGER.error(f"Unexpected error in async_step_user: {e}")
+                errors["base"] = "unknown"
 
-        # Get regions with at least one source, properly deduplicated
-        available_regions = get_deduplicated_regions()
+        try:
+            # Get regions with at least one source, properly deduplicated
+            available_regions = get_deduplicated_regions()
 
-        # Show region selection form
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_AREA, default="SE4"): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=[
-                                {"value": area, "label": name}
-                                for area, name in sorted(available_regions.items(), key=lambda x: x[1])
-                            ],
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                }
-            ),
-            errors=errors,
-        )
+            # Show region selection form
+            return self.async_show_form(
+                step_id="user",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_AREA, default="SE4"): selector.SelectSelector(
+                            selector.SelectSelectorConfig(
+                                options=[
+                                    {"value": area, "label": name}
+                                    for area, name in sorted(available_regions.items(), key=lambda x: x[1])
+                                ],
+                                mode=selector.SelectSelectorMode.DROPDOWN,
+                            )
+                        ),
+                    }
+                ),
+                errors=errors,
+            )
+        except Exception as e:
+            _LOGGER.error(f"Failed to create form: {e}")
+            errors["base"] = "unknown"
+            # Provide a fallback form if we can't create the proper one
+            return self.async_show_form(
+                step_id="user",
+                data_schema=vol.Schema({vol.Required(CONF_AREA): str}),
+                errors=errors,
+            )
 
     async def async_step_source_priority(self, user_input=None):
         """Handle setting source priorities."""
         errors = {}
 
         if user_input is not None:
-            # Convert VAT from percentage to decimal if present
-            if CONF_VAT in user_input:
-                user_input[CONF_VAT] = user_input[CONF_VAT] / 100
+            try:
+                # Convert VAT from percentage to decimal if present
+                if CONF_VAT in user_input:
+                    user_input[CONF_VAT] = user_input[CONF_VAT] / 100
+                    
+                # Store source priority
+                self._data[CONF_SOURCE_PRIORITY] = user_input[CONF_SOURCE_PRIORITY]
                 
-            # Store source priority
-            self._data[CONF_SOURCE_PRIORITY] = user_input[CONF_SOURCE_PRIORITY]
+                # Add additional config
+                self._data[CONF_VAT] = user_input.get(CONF_VAT, 0)
+                self._data[CONF_UPDATE_INTERVAL] = user_input.get(CONF_UPDATE_INTERVAL, 60)
+                self._data[CONF_DISPLAY_UNIT] = user_input.get(CONF_DISPLAY_UNIT, "decimal")
+                
+                # Always enable fallback (removed from UI)
+                self._data[CONF_ENABLE_FALLBACK] = True
+                
+                # Check if any source requires an API key - use SOURCE_ENTSO_E constant
+                requires_api_key = any(source == SOURCE_ENTSO_E for source in self._data[CONF_SOURCE_PRIORITY])
+                
+                if requires_api_key:
+                    return await self.async_step_api_keys()
+                else:
+                    # Get the display name for the region
+                    region_code = self._data[CONF_AREA]
+                    region_name = None
+                    for source, area_dict in SOURCE_AREA_MAPS.items():
+                        if region_code in area_dict:
+                            region_name = area_dict[region_code]
+                            break
+                    
+                    if not region_name:
+                        region_name = region_code
+                    
+                    # All done, create the config entry
+                    return self.async_create_entry(
+                        title=f"GE-Spot - {region_name}",
+                        data=self._data,
+                    )
+            except Exception as e:
+                _LOGGER.error(f"Error in async_step_source_priority: {e}")
+                errors["base"] = "unknown"
+
+        # Create config schema for source priority
+        try:
+            schema_dict = {
+                vol.Required(CONF_SOURCE_PRIORITY, default=self._supported_sources): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": source, "label": source.replace("_", " ").title()}
+                            for source in self._supported_sources
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                        multiple=True,
+                    )
+                ),
+            }
             
-            # Add additional config
-            self._data[CONF_VAT] = user_input.get(CONF_VAT, 0)
-            self._data[CONF_UPDATE_INTERVAL] = user_input.get(CONF_UPDATE_INTERVAL, 60)
-            self._data[CONF_DISPLAY_UNIT] = user_input.get(CONF_DISPLAY_UNIT, "decimal")
-            
-            # Always enable fallback (removed from UI)
-            self._data[CONF_ENABLE_FALLBACK] = True
-            
-            # Check if any source requires an API key
-            requires_api_key = any(source == "entsoe" for source in self._data[CONF_SOURCE_PRIORITY])
-            
-            if requires_api_key:
-                return await self.async_step_api_keys()
-            else:
-                # Get the display name for the region
+            # Add common options
+            schema_dict.update(common_schema({}))
+
+            return self.async_show_form(
+                step_id="source_priority",
+                data_schema=vol.Schema(schema_dict),
+                errors=errors,
+            )
+        except Exception as e:
+            _LOGGER.error(f"Failed to create source priority form: {e}")
+            errors["base"] = "unknown"
+            # Provide a fallback schema
+            return self.async_show_form(
+                step_id="source_priority",
+                data_schema=vol.Schema({
+                    vol.Required(CONF_SOURCE_PRIORITY): str,
+                }),
+                errors=errors,
+            )
+
+    async def async_step_api_keys(self, user_input=None):
+        """Handle API key entry for sources that require it."""
+        errors = {}
+
+        if user_input is not None:
+            try:
+                # Store API keys in data
+                for source, api_key in user_input.items():
+                    if api_key:  # Only store non-empty keys
+                        self._data[f"{source}_api_key"] = api_key
+                
+                # Get the display name for the region for the title
                 region_code = self._data[CONF_AREA]
                 region_name = None
                 for source, area_dict in SOURCE_AREA_MAPS.items():
@@ -175,75 +268,37 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 
                 if not region_name:
                     region_name = region_code
-                
-                # All done, create the config entry
+                    
+                # Create the config entry
                 return self.async_create_entry(
                     title=f"GE-Spot - {region_name}",
                     data=self._data,
                 )
-
-        # Create config schema for source priority
-        schema_dict = {
-            vol.Required(CONF_SOURCE_PRIORITY, default=self._supported_sources): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        {"value": source, "label": source.replace("_", " ").title()}
-                        for source in self._supported_sources
-                    ],
-                    mode=selector.SelectSelectorMode.LIST,
-                    multiple=True,
-                )
-            ),
-        }
-        
-        # Add common options
-        schema_dict.update(common_schema({}))
-
-        return self.async_show_form(
-            step_id="source_priority",
-            data_schema=vol.Schema(schema_dict),
-            errors=errors,
-        )
-
-    async def async_step_api_keys(self, user_input=None):
-        """Handle API key entry for sources that require it."""
-        errors = {}
-
-        if user_input is not None:
-            # Store API keys in data
-            for source, api_key in user_input.items():
-                if api_key:  # Only store non-empty keys
-                    self._data[f"{source}_api_key"] = api_key
-            
-            # Get the display name for the region for the title
-            region_code = self._data[CONF_AREA]
-            region_name = None
-            for source, area_dict in SOURCE_AREA_MAPS.items():
-                if region_code in area_dict:
-                    region_name = area_dict[region_code]
-                    break
-            
-            if not region_name:
-                region_name = region_code
-                
-            # Create the config entry
-            return self.async_create_entry(
-                title=f"GE-Spot - {region_name}",
-                data=self._data,
-            )
+            except Exception as e:
+                _LOGGER.error(f"Error in async_step_api_keys: {e}")
+                errors["base"] = "unknown"
 
         # Create schema for API key entry
-        schema_dict = {}
-        
-        # Add fields for each source that requires an API key
-        if "entsoe" in self._data[CONF_SOURCE_PRIORITY]:
-            schema_dict[vol.Required("entsoe_api_key")] = cv.string
+        try:
+            schema_dict = {}
+            
+            # Add fields for each source that requires an API key - use SOURCE_ENTSO_E constant
+            if SOURCE_ENTSO_E in self._data[CONF_SOURCE_PRIORITY]:
+                schema_dict[vol.Required(f"{SOURCE_ENTSO_E}_api_key")] = cv.string
 
-        return self.async_show_form(
-            step_id="api_keys",
-            data_schema=vol.Schema(schema_dict),
-            errors=errors,
-        )
+            return self.async_show_form(
+                step_id="api_keys",
+                data_schema=vol.Schema(schema_dict),
+                errors=errors,
+            )
+        except Exception as e:
+            _LOGGER.error(f"Failed to create API keys form: {e}")
+            errors["base"] = "unknown"
+            return self.async_show_form(
+                step_id="api_keys",
+                data_schema=vol.Schema({vol.Optional("api_key"): str}),
+                errors=errors,
+            )
 
 class GSpotOptionsFlow(config_entries.OptionsFlow):
     """Handle GE-Spot options."""
@@ -254,64 +309,85 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
         self._data = dict(config_entry.data)
         self._options = dict(config_entry.options)
         self._area = self._data.get(CONF_AREA)
-        self._supported_sources = get_sources_for_region(self._area) if self._area else []
+        try:
+            self._supported_sources = get_sources_for_region(self._area) if self._area else []
+        except Exception as e:
+            _LOGGER.error(f"Error getting sources for {self._area}: {e}")
+            self._supported_sources = []
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
         errors = {}
 
         if user_input is not None:
-            # Convert VAT from percentage to decimal if present
-            if CONF_VAT in user_input:
-                user_input[CONF_VAT] = user_input[CONF_VAT] / 100
+            try:
+                # Convert VAT from percentage to decimal if present
+                if CONF_VAT in user_input:
+                    user_input[CONF_VAT] = user_input[CONF_VAT] / 100
+                    
+                # Handle source priority updates if present
+                if CONF_SOURCE_PRIORITY in user_input:
+                    updated_data = dict(self._data)
+                    updated_data[CONF_SOURCE_PRIORITY] = user_input[CONF_SOURCE_PRIORITY]
+                    
+                    # Update the config entry data
+                    self.hass.config_entries.async_update_entry(
+                        self.hass.config_entries.async_get_entry(self.entry_id),
+                        data=updated_data
+                    )
                 
-            # Handle source priority updates if present
-            if CONF_SOURCE_PRIORITY in user_input:
-                updated_data = dict(self._data)
-                updated_data[CONF_SOURCE_PRIORITY] = user_input[CONF_SOURCE_PRIORITY]
+                # Always enable fallback (removed from UI)
+                user_input[CONF_ENABLE_FALLBACK] = True
                 
-                # Update the config entry data
-                self.hass.config_entries.async_update_entry(
-                    self.hass.config_entries.async_get_entry(self.entry_id),
-                    data=updated_data
-                )
+                # Handle normal options
+                return self.async_create_entry(title="", data=user_input)
+            except Exception as e:
+                _LOGGER.error(f"Error in options flow init step: {e}")
+                errors["base"] = "unknown"
+
+        try:
+            defaults = get_default_values(self._options, self._data)
+
+            # Common options schema
+            schema = common_schema(defaults)
             
-            # Always enable fallback (removed from UI)
-            user_input[CONF_ENABLE_FALLBACK] = True
-            
-            # Handle normal options
-            return self.async_create_entry(title="", data=user_input)
-
-        defaults = get_default_values(self._options, self._data)
-
-        # Common options schema
-        schema = common_schema(defaults)
-        
-        # Add source priority selection
-        current_priority = self._data.get(CONF_SOURCE_PRIORITY, self._supported_sources)
-        schema[vol.Optional(
-            CONF_SOURCE_PRIORITY,
-            default=current_priority
-        )] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=[
-                    {"value": source, "label": source.replace("_", " ").title()}
-                    for source in self._supported_sources
-                ],
-                mode=selector.SelectSelectorMode.LIST,
-                multiple=True,
-            )
-        )
-
-        # Add API key fields for sources that require it
-        if "entsoe" in self._supported_sources:
+            # Add source priority selection
+            current_priority = self._data.get(CONF_SOURCE_PRIORITY, self._supported_sources)
             schema[vol.Optional(
-                "entsoe_api_key",
-                default=self._data.get("entsoe_api_key", "")
-            )] = cv.string
+                CONF_SOURCE_PRIORITY,
+                default=current_priority
+            )] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": source, "label": source.replace("_", " ").title()}
+                        for source in self._supported_sources
+                    ],
+                    mode=selector.SelectSelectorMode.LIST,
+                    multiple=True,
+                )
+            )
 
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(schema),
-            errors=errors,
-        )
+            # Add API key fields for sources that require it - use SOURCE_ENTSO_E constant
+            if SOURCE_ENTSO_E in self._supported_sources:
+                schema[vol.Optional(
+                    f"{SOURCE_ENTSO_E}_api_key",
+                    default=self._data.get(f"{SOURCE_ENTSO_E}_api_key", "")
+                )] = cv.string
+
+            return self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema(schema),
+                errors=errors,
+            )
+        except Exception as e:
+            _LOGGER.error(f"Failed to create options form: {e}")
+            errors["base"] = "unknown"
+            # Provide a fallback schema
+            return self.async_show_form(
+                step_id="init",
+                data_schema=vol.Schema({
+                    vol.Optional(CONF_VAT, default=0): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+                    vol.Optional(CONF_UPDATE_INTERVAL, default=60): vol.Coerce(int),
+                }),
+                errors=errors,
+            )
