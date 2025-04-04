@@ -6,8 +6,10 @@ import asyncio
 from abc import ABC, abstractmethod
 
 from homeassistant.util import dt as dt_util
+from homeassistant.core import HomeAssistant
 
 from ..utils.currency_utils import async_convert_energy_price
+from ..utils.timezone_utils import localize_datetime
 from ..const import (
     REGION_TO_CURRENCY,
     CURRENCY_SUBUNIT_NAMES,
@@ -31,6 +33,7 @@ class BaseEnergyAPI(ABC):
         self._last_successful_fetch = None
         self._cache = {}  # Cache to store API responses
         self._cache_ttl = config.get("cache_ttl", 60)  # Cache TTL in minutes
+        self.hass = None  # Will be set when used with Home Assistant
 
     async def _ensure_session(self):
         """Ensure that we have an aiohttp session."""
@@ -51,9 +54,14 @@ class BaseEnergyAPI(ABC):
             finally:
                 self.session = None
 
-    async def fetch_day_ahead_prices(self, area, currency, date):
+    async def fetch_day_ahead_prices(self, area, currency, date, hass=None):
         """Fetch day-ahead prices for a specific area and date."""
         try:
+            # Store Home Assistant instance if provided
+            if hass and isinstance(hass, HomeAssistant):
+                self.hass = hass
+                _LOGGER.debug(f"Home Assistant instance set for {self.__class__.__name__}")
+
             # Ensure we have a session
             await self._ensure_session()
 
@@ -124,6 +132,10 @@ class BaseEnergyAPI(ABC):
                 # Add raw values to processed data
                 if not "raw_values" in processed_data:
                     processed_data["raw_values"] = {}
+
+                # Include Home Assistant timezone information
+                if self.hass:
+                    processed_data["ha_timezone"] = str(self.hass.config.time_zone)
 
                 # Log conversions for debugging
                 self._log_conversions(processed_data)
@@ -248,7 +260,10 @@ class BaseEnergyAPI(ABC):
         )
 
     def _get_now(self):
-        """Get current datetime. Separate method for easier testing."""
+        """Get current datetime in Home Assistant's timezone if available."""
+        if hasattr(self, 'hass') and self.hass:
+            now_utc = dt_util.utcnow()
+            return localize_datetime(now_utc, self.hass)
         return datetime.datetime.now()
 
     async def _fetch_with_retry(self, url, params=None, max_retries=3):
