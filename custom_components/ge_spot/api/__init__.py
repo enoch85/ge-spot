@@ -95,6 +95,8 @@ class ApiRegistry:
             # Use default order by reliability
             sources = self.get_sources_for_region(region)
 
+        _LOGGER.debug(f"Creating APIs for region {region} with priority: {sources}")
+
         # Create a copy of the config with the area set
         config_with_area = dict(config)
         config_with_area["area"] = region
