@@ -102,9 +102,30 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 except Exception as e:
                     _LOGGER.error(f"Error fetching data from {api_name}: {e}")
 
+            # If no today data could be fetched, check if we have cached data for today
             if not today_data:
-                _LOGGER.error(f"Failed to fetch price data from any source. Attempted: {', '.join(self._attempted_sources)}")
-                if self._last_successful_data:
+                _LOGGER.error(f"Failed to fetch today's price data from any source. Attempted: {', '.join(self._attempted_sources)}")
+                
+                # Check if we have cached today's data that's still relevant for today
+                if self._last_successful_data and "today" in self._last_successful_data:
+                    today_date = dt_util.now().date()
+                    cached_today = False
+                    
+                    # Check if cached data contains valid hours for today
+                    if "adapter" in self._last_successful_data:
+                        adapter = self._last_successful_data["adapter"]
+                        today_prices = adapter.get_prices_for_day(0)
+                        if today_prices:
+                            for period in today_prices:
+                                if period.get("day") == today_date:
+                                    cached_today = True
+                                    break
+                    
+                    if cached_today:
+                        _LOGGER.warning("Using cached data for today's prices")
+                        today_data = self._last_successful_data
+                        
+                if not today_data and self._last_successful_data:
                     _LOGGER.warning("Using cached data from last successful update")
                     self._last_successful_data["source_info"] = {
                         "reason": "All API sources failed",
@@ -115,7 +136,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     self._last_successful_data[ATTR_FALLBACK_USED] = True
                     self._last_successful_data[ATTR_IS_USING_FALLBACK] = True
                     return self._last_successful_data
-                return None
+                elif not today_data:
+                    return None
 
             # Log raw values for debugging - raw_today contains hourly prices in JSON format
             if "raw_today" in today_data:
