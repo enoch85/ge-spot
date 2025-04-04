@@ -63,6 +63,7 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
         """Fetch data from API endpoint."""
         try:
             _LOGGER.info(f"Updating data for area {self.area} with currency {self.currency}")
+            _LOGGER.debug(f"Home Assistant timezone: {self.hass.config.time_zone}")
 
             # Reset tracking variables
             self._fallback_used = False
@@ -74,10 +75,12 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
             today_data = None
 
             if self.api:
+                # Pass Home Assistant instance to the API for timezone handling
                 today_data = await self.api.fetch_day_ahead_prices(
                     self.area,
                     self.currency,
-                    dt_util.now()
+                    dt_util.now(),
+                    self.hass
                 )
 
             # If primary API failed and fallback is enabled, try fallback APIs
@@ -93,7 +96,8 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                     today_data = await fallback_api.fetch_day_ahead_prices(
                         self.area,
                         self.currency,
-                        dt_util.now()
+                        dt_util.now(),
+                        self.hass
                     )
 
                     if today_data:
@@ -117,8 +121,10 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
             # Try to fetch tomorrow's data if after 1 PM
             tomorrow_data = None
             tomorrow_source = None
-            now = dt_util.as_local(dt_util.now())
+            now = dt_util.now()
             tomorrow_attempted_sources = []
+
+            _LOGGER.debug(f"Current local time: {now.isoformat()}, hour: {now.hour}")
 
             if now.hour >= 13:
                 try:
@@ -141,7 +147,8 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                         tomorrow_data = await api_to_use.fetch_day_ahead_prices(
                             self.area,
                             self.currency,
-                            dt_util.now() + timedelta(days=1)
+                            dt_util.now() + timedelta(days=1),
+                            self.hass
                         )
 
                     if tomorrow_data:
@@ -160,7 +167,8 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                                     tomorrow_data = await fallback_api.fetch_day_ahead_prices(
                                         self.area,
                                         self.currency,
-                                        dt_util.now() + timedelta(days=1)
+                                        dt_util.now() + timedelta(days=1),
+                                        self.hass
                                     )
 
                                     if tomorrow_data:
@@ -256,7 +264,8 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 "primary_source": primary_source,
                 "active_source": self._active_source,
                 "fallback_used": self._fallback_used,
-                "attempted_sources": self._attempted_sources
+                "attempted_sources": self._attempted_sources,
+                "timezone": str(self.hass.config.time_zone)
             }
 
             # Calculate next update time
@@ -285,7 +294,8 @@ class ElectricityPriceCoordinator(DataUpdateCoordinator):
                 ATTR_DATA_SOURCE: self._active_source,
                 ATTR_FALLBACK_USED: self._fallback_used,
                 "raw_values": raw_values,
-                "fallback_info": fallback_info
+                "fallback_info": fallback_info,
+                "timezone": str(self.hass.config.time_zone)
             }
 
             _LOGGER.info(f"Successfully updated data with current price: {result[ATTR_CURRENT_PRICE]}")
