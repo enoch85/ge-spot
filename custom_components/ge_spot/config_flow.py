@@ -14,12 +14,12 @@ from .const import (
     DEFAULT_AREAS, SOURCE_NORDPOOL, SOURCE_ENERGI_DATA_SERVICE, SOURCE_ENTSO_E, 
     SOURCE_EPEX, SOURCE_OMIE, SOURCE_AEMO,
     DISPLAY_UNIT_DECIMAL, DISPLAY_UNIT_CENTS, DISPLAY_UNITS,
-    UPDATE_INTERVAL_OPTIONS, ENTSOE_AREA_MAPPING
+    UPDATE_INTERVAL_OPTIONS, ENTSOE_AREA_MAPPING, CONF_API_KEY
 )
 from .config_utils import (
     common_schema, get_default_values
 )
-from .api import get_sources_for_region
+from .api import get_sources_for_region, create_api
 from .api.entsoe import EntsoEAPI
 
 _LOGGER = logging.getLogger(__name__)
@@ -193,8 +193,8 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 area = self._data.get(CONF_AREA)
                 requires_api_key = False
                 
-                if SOURCE_ENTSO_E in self._data[CONF_SOURCE_PRIORITY] and area not in ENTSOE_AREA_MAPPING:
-                    # Only require API key for unsupported regions
+                if SOURCE_ENTSO_E in self._data[CONF_SOURCE_PRIORITY]:
+                    # Always go to API keys step when ENTSO-E is selected
                     requires_api_key = True
                 
                 if requires_api_key:
@@ -285,25 +285,62 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 # Store API keys in data
                 for source, api_key in user_input.items():
-                    if api_key:  # Only store non-empty keys
-                        self._data[f"{source}_api_key"] = api_key
+                    if source == f"{SOURCE_ENTSO_E}_api_key" and api_key:
+                        # Validate the ENTSO-E API key if provided
+                        _LOGGER.debug(f"Validating ENTSO-E API key: {api_key[:5]}...")
+                        
+                        # Create a test config with API key
+                        test_config = {
+                            "area": self._data.get(CONF_AREA),
+                            "api_key": api_key
+                        }
+                        
+                        # Create API instance and test connection
+                        api = create_api(SOURCE_ENTSO_E, test_config)
+                        if api:
+                            try:
+                                # Test API key by attempting to fetch sample data
+                                test_area = self._data.get(CONF_AREA)
+                                test_currency = "EUR"  # Default for testing
+                                
+                                # Try to fetch some data with the provided key
+                                import datetime
+                                test_date = datetime.datetime.now()
+                                
+                                result = await api.fetch_day_ahead_prices(test_area, test_currency, test_date)
+                                
+                                if result:
+                                    _LOGGER.info(f"ENTSO-E API key validated successfully for area {test_area}")
+                                    # Store the API key in correct format
+                                    self._data[CONF_API_KEY] = api_key
+                                else:
+                                    _LOGGER.error(f"ENTSO-E API key validation failed - no data returned")
+                                    errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
+                            except Exception as e:
+                                _LOGGER.error(f"ENTSO-E API key validation failed: {e}")
+                                errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
+                        else:
+                            _LOGGER.error("Failed to create ENTSO-E API instance for validation")
+                            errors[f"{SOURCE_ENTSO_E}_api_key"] = "api_creation_failed"
                 
-                # Get the display name for the region for the title
-                region_code = self._data[CONF_AREA]
-                region_name = None
-                for source, area_dict in SOURCE_AREA_MAPS.items():
-                    if region_code in area_dict:
-                        region_name = area_dict[region_code]
-                        break
-                
-                if not region_name:
-                    region_name = region_code
+                # If no errors, proceed with config entry creation
+                if not errors:
+                    # Get the display name for the region for the title
+                    region_code = self._data[CONF_AREA]
+                    region_name = None
+                    for source, area_dict in SOURCE_AREA_MAPS.items():
+                        if region_code in area_dict:
+                            region_name = area_dict[region_code]
+                            break
                     
-                # Create the config entry
-                return self.async_create_entry(
-                    title=f"GE-Spot - {region_name}",
-                    data=self._data,
-                )
+                    if not region_name:
+                        region_name = region_code
+                        
+                    # Create the config entry
+                    return self.async_create_entry(
+                        title=f"GE-Spot - {region_name}",
+                        data=self._data,
+                    )
             except Exception as e:
                 _LOGGER.error(f"Error in async_step_api_keys: {e}")
                 errors["base"] = "unknown"
@@ -317,22 +354,45 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             
             # Make API key optional if area is supported by ENTSO-E mapping
             if SOURCE_ENTSO_E in self._data[CONF_SOURCE_PRIORITY]:
-                if area in ENTSOE_AREA_MAPPING:
-                    schema_dict[vol.Optional(f"{SOURCE_ENTSO_E}_api_key")] = cv.string
+                is_supported = area in ENTSOE_AREA_MAPPING
+                
+                # Show different message based on whether area is directly supported
+                description = (
+                    "Optional API key for ENTSO-E (recommended for better reliability)" 
+                    if is_supported else
+                    "Required API key for ENTSO-E (needed for this region)"
+                )
+                
+                # Make field required or optional based on area support
+                if is_supported:
+                    schema_dict[vol.Optional(f"{SOURCE_ENTSO_E}_api_key")] = selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.TEXT,
+                            autocomplete="off",
+                            description=description
+                        )
+                    )
                 else:
-                    schema_dict[vol.Required(f"{SOURCE_ENTSO_E}_api_key")] = cv.string
+                    schema_dict[vol.Required(f"{SOURCE_ENTSO_E}_api_key")] = selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.TEXT,
+                            autocomplete="off",
+                            description=description
+                        )
+                    )
 
             return self.async_show_form(
                 step_id="api_keys",
                 data_schema=vol.Schema(schema_dict),
                 errors=errors,
+                description_placeholders={"error_info": "API key validation failed. Please check your key or try again later."}
             )
         except Exception as e:
             _LOGGER.error(f"Failed to create API keys form: {e}")
             errors["base"] = "unknown"
             return self.async_show_form(
                 step_id="api_keys",
-                data_schema=vol.Schema({vol.Optional("api_key"): str}),
+                data_schema=vol.Schema({vol.Optional(f"{SOURCE_ENTSO_E}_api_key"): str}),
                 errors=errors,
             )
 
@@ -357,6 +417,58 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
 
         if user_input is not None:
             try:
+                # Handle API key updates if present
+                if f"{SOURCE_ENTSO_E}_api_key" in user_input and user_input[f"{SOURCE_ENTSO_E}_api_key"]:
+                    # Validate and store API key
+                    api_key = user_input[f"{SOURCE_ENTSO_E}_api_key"]
+                    valid_key = True
+                    
+                    # Only validate if key has changed
+                    if api_key != self._data.get(CONF_API_KEY, ""):
+                        _LOGGER.debug(f"Validating updated ENTSO-E API key")
+                        
+                        # Create test config with API key
+                        test_config = {
+                            "area": self._area,
+                            "api_key": api_key
+                        }
+                        
+                        # Create API instance and test connection
+                        api = create_api(SOURCE_ENTSO_E, test_config)
+                        if api:
+                            try:
+                                # Test API key by attempting to fetch data
+                                import datetime
+                                test_date = datetime.datetime.now()
+                                result = await api.fetch_day_ahead_prices(self._area, "EUR", test_date)
+                                
+                                if result:
+                                    _LOGGER.info(f"ENTSO-E API key validated successfully for area {self._area}")
+                                    # Update the stored data with the new API key
+                                    updated_data = dict(self._data)
+                                    updated_data[CONF_API_KEY] = api_key
+                                    
+                                    # Update the config entry data
+                                    self.hass.config_entries.async_update_entry(
+                                        self.hass.config_entries.async_get_entry(self.entry_id),
+                                        data=updated_data
+                                    )
+                                else:
+                                    valid_key = False
+                                    _LOGGER.error(f"ENTSO-E API key validation failed - no data returned")
+                                    errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
+                            except Exception as e:
+                                valid_key = False
+                                _LOGGER.error(f"ENTSO-E API key validation failed: {e}")
+                                errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
+                        else:
+                            valid_key = False
+                            errors[f"{SOURCE_ENTSO_E}_api_key"] = "api_creation_failed"
+                    
+                    # Remove the API key field from options to avoid duplication
+                    if valid_key and f"{SOURCE_ENTSO_E}_api_key" in user_input:
+                        user_input.pop(f"{SOURCE_ENTSO_E}_api_key")
+                
                 # Convert VAT from percentage to decimal if present
                 if CONF_VAT in user_input:
                     user_input[CONF_VAT] = user_input[CONF_VAT] / 100
@@ -375,8 +487,9 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 # Always enable fallback
                 user_input[CONF_ENABLE_FALLBACK] = True
                 
-                # Handle normal options
-                return self.async_create_entry(title="", data=user_input)
+                # If no errors, create the options entry
+                if not errors:
+                    return self.async_create_entry(title="", data=user_input)
             except Exception as e:
                 _LOGGER.error(f"Error in options flow init step: {e}")
                 errors["base"] = "unknown"
@@ -440,14 +553,21 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
 
             # Add API key fields for sources that require it
             if SOURCE_ENTSO_E in self._supported_sources:
-                # Check if area is supported by ENTSO-E
-                is_supported = self._area in ENTSOE_AREA_MAPPING
+                # Show current API key status
+                current_api_key = self._data.get(CONF_API_KEY, "")
+                api_key_status = "API key configured" if current_api_key else "No API key configured"
                 
-                # Make API key optional if area is supported
+                # Add field for ENTSO-E API key with the current status shown
                 schema[vol.Optional(
-                    f"{SOURCE_ENTSO_E}_api_key",
-                    default=self._data.get(f"{SOURCE_ENTSO_E}_api_key", "")
-                )] = cv.string
+                    f"{SOURCE_ENTSO_E}_api_key", 
+                    description=f"Current status: {api_key_status}"
+                )] = selector.TextSelector(
+                    selector.TextSelectorConfig(
+                        type=selector.TextSelectorType.TEXT,
+                        autocomplete="off",
+                        description=f"ENTSO-E API Key (Current: {api_key_status})"
+                    )
+                )
 
             return self.async_show_form(
                 step_id="init",
