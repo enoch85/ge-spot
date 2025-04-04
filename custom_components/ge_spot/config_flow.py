@@ -216,6 +216,12 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Create config schema for source priority
         try:
+            # Convert integer values to strings for selector
+            string_interval_options = [
+                {"value": str(option["value"]), "label": option["label"]}
+                for option in UPDATE_INTERVAL_OPTIONS
+            ]
+
             schema_dict = {
                 vol.Required(CONF_SOURCE_PRIORITY, default=self._supported_sources): selector.SelectSelector(
                     selector.SelectSelectorConfig(
@@ -232,7 +238,7 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 vol.Optional(CONF_UPDATE_INTERVAL, default=60): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=UPDATE_INTERVAL_OPTIONS,
+                        options=string_interval_options,
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
@@ -371,6 +377,12 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 self._data.get(CONF_DISPLAY_UNIT, DISPLAY_UNIT_DECIMAL)
             )
 
+            # Convert integer values to strings for selector
+            string_interval_options = [
+                {"value": str(option["value"]), "label": option["label"]}
+                for option in UPDATE_INTERVAL_OPTIONS
+            ]
+
             # Create schema for options
             schema = {
                 vol.Optional(CONF_VAT, default=defaults.get(CONF_VAT, 0) * 100): vol.All(
@@ -378,7 +390,7 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 ),
                 vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=UPDATE_INTERVAL_OPTIONS,
+                        options=string_interval_options,
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
