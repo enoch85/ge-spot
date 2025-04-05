@@ -5,7 +5,7 @@ from typing import Dict, Any, List, Optional
 
 from homeassistant.helpers import selector
 
-from .const import (
+from ..const import (
     DISPLAY_UNITS,
     UPDATE_INTERVAL_OPTIONS,
 )
