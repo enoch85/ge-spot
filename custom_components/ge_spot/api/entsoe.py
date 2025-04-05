@@ -25,10 +25,10 @@ class EntsoEAPI(BaseEnergyAPI):
         today = now
         tomorrow = today + datetime.timedelta(days=1)
 
-        # Format dates for ENTSO-E API - one day period
-        # ENTSO-E requires YYYYMMDDhhmm format without separators
-        period_start = today.strftime("%Y%m%d0000")
-        period_end = tomorrow.strftime("%Y%m%d0000")
+        # Format dates for ENTSO-E API
+        # Use 22:00 (10 PM) as the time part as shown in the ENTSO-E examples
+        period_start = today.strftime("%Y%m%d2200")
+        period_end = tomorrow.strftime("%Y%m%d2200")
 
         # Get area code - map our area code to ENTSO-E area code without default
         area = self.config.get("area")
@@ -143,15 +143,23 @@ class EntsoEAPI(BaseEnergyAPI):
             return None
 
         try:
+            # Updated namespace to match API response
+            ns = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
+            
             # Parse XML
             root = ET.fromstring(data)
-            ns = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:0"}
-
+            
             # Find TimeSeries elements
             time_series_elements = root.findall(".//ns:TimeSeries", ns)
 
             if not time_series_elements:
+                # Try without namespace - handle default namespace case
+                time_series_elements = root.findall(".//TimeSeries")
+                
+            if not time_series_elements:
                 _LOGGER.error("No TimeSeries elements found in ENTSO-E response")
+                # Log a sample of the XML for debugging
+                _LOGGER.debug(f"XML snippet: {data[:500]}...")
                 return None
 
             now = self._get_now()
@@ -166,12 +174,16 @@ class EntsoEAPI(BaseEnergyAPI):
 
             # Process each TimeSeries element
             for ts in time_series_elements:
-                # Get period elements
+                # Get period elements with namespace
                 period_elements = ts.findall(".//ns:Period", ns)
+                
+                # If not found with namespace, try without
+                if not period_elements:
+                    period_elements = ts.findall(".//Period")
                 
                 for period in period_elements:
                     # Get resolution (PT15M for 15 minutes, PT60M for 60 minutes)
-                    resolution_element = period.find("ns:resolution", ns)
+                    resolution_element = period.find("ns:resolution", ns) or period.find("resolution")
                     if resolution_element is None:
                         _LOGGER.warning("Missing resolution element in period")
                         continue
@@ -187,13 +199,21 @@ class EntsoEAPI(BaseEnergyAPI):
                         _LOGGER.warning(f"Unknown resolution: {resolution}, defaulting to hourly")
                     
                     # Get time interval
-                    interval = period.find("ns:timeInterval", ns)
+                    interval = period.find("ns:timeInterval", ns) or period.find("timeInterval")
                     if interval is None:
                         _LOGGER.warning("Missing timeInterval in period")
                         continue
+                    
+                    # Find start and end with or without namespace
+                    start_element = interval.find("ns:start", ns) or interval.find("start")
+                    end_element = interval.find("ns:end", ns) or interval.find("end")
+                    
+                    if start_element is None or end_element is None:
+                        _LOGGER.warning("Missing start or end in timeInterval")
+                        continue
                         
-                    start_text = interval.find("ns:start", ns).text
-                    end_text = interval.find("ns:end", ns).text
+                    start_text = start_element.text
+                    end_text = end_element.text
                     
                     try:
                         start_dt = datetime.datetime.fromisoformat(start_text.replace("Z", "+00:00"))
@@ -203,23 +223,24 @@ class EntsoEAPI(BaseEnergyAPI):
                         continue
                     
                     # Process points
-                    points = period.findall("ns:Point", ns)
+                    points = period.findall("ns:Point", ns) or period.findall("Point")
                     
                     # Create a mapping of positions to prices
                     position_price_map = {}
                     for point in points:
-                        position = int(point.find("ns:position", ns).text)
-                        price_element = point.find("ns:price.amount", ns)
+                        position_element = point.find("ns:position", ns) or point.find("position")
+                        price_element = point.find("ns:price.amount", ns) or point.find("price.amount")
                         
-                        if price_element is None:
-                            _LOGGER.warning(f"Missing price.amount in point position {position}")
+                        if position_element is None or price_element is None:
+                            _LOGGER.warning(f"Missing position or price.amount in point")
                             continue
                         
                         try:
+                            position = int(position_element.text)
                             price = float(price_element.text)
                             position_price_map[position] = price
                         except (ValueError, TypeError) as e:
-                            _LOGGER.warning(f"Invalid price value in position {position}: {e}")
+                            _LOGGER.warning(f"Invalid position or price value: {e}")
                     
                     # Calculate total positions based on resolution and time interval
                     total_minutes = int((end_dt - start_dt).total_seconds() / 60)
