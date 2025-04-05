@@ -128,7 +128,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 now = datetime.datetime.now()
                 check_primary = True
 
-                if hasattr(self, '_last_primary_check'):
+                if hasattr(self, '_last_primary_check') and self._last_primary_check:
                     time_since_check = (now - self._last_primary_check).total_seconds() / 60
                     if time_since_check < self.update_interval.total_seconds() / 60:
                         check_primary = False
@@ -212,8 +212,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     if cached_today:
                         _LOGGER.warning("Using cached data for today's prices")
                         today_data = self._last_successful_data
-
-                if not today_data and self._last_successful_data:
+            if not today_data and self._last_successful_data:
                     _LOGGER.warning("Using cached data from last successful update")
                     self._last_successful_data["source_info"] = {
                         "reason": "All API sources failed",
@@ -236,13 +235,14 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             if "raw_today" in today_data:
                 raw_today = today_data["raw_today"]
                 _LOGGER.debug(f"Raw today data for sensor.gespot_current_price_{self.area.lower()}: {len(raw_today)} entries")
-                # Log all entries in JSON format as requested
-                _LOGGER.debug(f"Complete raw today data: {json.dumps(raw_today)}")
+                # Log only first few entries to avoid log overload
+                if raw_today and len(raw_today) > 0:
+                    _LOGGER.debug(f"Sample raw today data: {raw_today[0]}")
 
             # Log detailed conversion raw values
             if "raw_values" in today_data:
                 raw_values = today_data["raw_values"]
-                _LOGGER.debug(f"Raw values (including conversion data) for {self.area}: {json.dumps(raw_values)}")
+                _LOGGER.debug(f"Raw values available for {self.area}: {list(raw_values.keys())}")
 
             # Try to fetch tomorrow's data if after 1 PM
             tomorrow_data = None
