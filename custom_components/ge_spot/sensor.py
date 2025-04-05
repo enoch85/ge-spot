@@ -207,7 +207,7 @@ class CurrentPriceSensor(BaseElectricityPriceSensor):
                     "status": status.get("status", "unknown"),
                     "valid": status.get("valid", None)
                 }
-        
+
         # Add exchange rate info
         if "exchange_rate_info" in self.coordinator.data:
             exchange_info = self.coordinator.data["exchange_rate_info"]

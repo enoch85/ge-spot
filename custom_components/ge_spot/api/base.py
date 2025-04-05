@@ -102,7 +102,7 @@ class BaseEnergyAPI(ABC):
             # Create a temporary instance with the test config
             temp_instance = self.__class__(test_config)
             temp_owns_session = False
-            
+
             # Use existing session if available to avoid creating too many
             if hasattr(self, "session") and self.session and not self.session.closed:
                 temp_instance.session = self.session
@@ -373,13 +373,13 @@ class BaseEnergyAPI(ABC):
         for attempt in range(max_retries):
             try:
                 _LOGGER.debug(f"API request attempt {attempt+1}/{max_retries}: {url}")
-                
+
                 # Add user agent to avoid 403 errors
                 headers = {
                     "User-Agent": "HomeAssistantGESpot/1.0",
                     "Accept": "application/json, text/plain, */*"
                 }
-                
+
                 async with self.session.get(url, params=params, headers=headers, timeout=30) as response:
                     if response.status != 200:
                         _LOGGER.error(f"Error fetching from URL (attempt {attempt+1}/{max_retries}): HTTP {response.status}")
@@ -404,7 +404,7 @@ class BaseEnergyAPI(ABC):
                     _LOGGER.debug(f"Response content type: {content_type}")
 
                     response_text = await response.text()
-                    
+
                     # Only log a snippet to avoid overwhelming logs
                     if len(response_text) > 1000:
                         _LOGGER.debug(f"Raw API response (first 1000 chars): {response_text[:1000]}...")
@@ -472,13 +472,13 @@ class BaseEnergyAPI(ABC):
             _LOGGER.debug(f"No VAT applied (rate: {vat:.2%})")
 
         return price
-        
-        
+
+
 # Register close_all_sessions as a shutdown task for Home Assistant
 def register_shutdown_task(hass):
     """Register session cleanup as a shutdown task."""
     if hass:
         async def _async_shutdown(_):
             await close_all_sessions()
-            
+
         hass.bus.async_listen_once("homeassistant_stop", _async_shutdown)

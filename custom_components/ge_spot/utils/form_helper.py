@@ -68,7 +68,7 @@ class FormHelper:
             except (ValueError, TypeError, KeyError):
                 _LOGGER.warning(f"Invalid update interval option format: {option}")
                 continue
-                
+
         return options
 
     @staticmethod

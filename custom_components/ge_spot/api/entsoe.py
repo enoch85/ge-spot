@@ -38,7 +38,7 @@ class EntsoEAPI(BaseEnergyAPI):
 
         # Try to use the mapped ENTSOE code if available
         entsoe_area = ENTSOE_AREA_MAPPING.get(area, area)
-        
+
         _LOGGER.debug(f"Using ENTSO-E area code {entsoe_area} for area {area}")
 
         # Build query parameters according to ENTSO-E API requirements
@@ -62,27 +62,27 @@ class EntsoEAPI(BaseEnergyAPI):
 
         try:
             await self._ensure_session()
-            
+
             if not self.session or self.session.closed:
                 _LOGGER.error("No valid session for ENTSO-E API request")
                 return None
-                
+
             url = self.BASE_URL
             response = None
             retries = 3
-            
+
             for attempt in range(retries):
                 try:
                     # Full URL with parameters for debugging (hide full API key)
                     masked_key = f"{api_key[:5]}..." if len(api_key) > 5 else "***"
                     full_url = f"{url}?securityToken={masked_key}&documentType=A44&in_Domain={entsoe_area}&out_Domain={entsoe_area}&periodStart={period_start}&periodEnd={period_end}"
                     _LOGGER.debug(f"ENTSO-E request attempt {attempt+1}: {full_url}")
-                    
+
                     async with self.session.get(url, params=params, headers=headers, timeout=60) as resp:
                         status_code = resp.status
                         content_type = resp.headers.get('Content-Type', '')
                         _LOGGER.debug(f"ENTSO-E response status: {status_code}, content-type: {content_type}")
-                        
+
                         if status_code == 200:
                             response = await resp.text()
                             _LOGGER.debug(f"ENTSO-E response: received {len(response)} bytes")
@@ -93,12 +93,12 @@ class EntsoEAPI(BaseEnergyAPI):
                                 _LOGGER.warning("ENTSO-E response does not contain expected XML document")
                                 if len(response) < 500:
                                     _LOGGER.debug(f"Response content: {response}")
-                                
+
                         elif status_code == 401 or status_code == 403:
                             error_text = await resp.text()
                             _LOGGER.error(f"ENTSO-E API authentication failed ({status_code}). Check your API key. Response: {error_text[:200]}")
                             break  # No point retrying with same credentials
-                            
+
                         else:
                             error_text = await resp.text()
                             _LOGGER.error(f"ENTSO-E API request failed with status {status_code}: {error_text[:200]}")
@@ -106,19 +106,19 @@ class EntsoEAPI(BaseEnergyAPI):
                                 delay = 2 ** attempt
                                 _LOGGER.debug(f"Retrying in {delay} seconds...")
                                 await asyncio.sleep(delay)
-                                
+
                 except asyncio.TimeoutError:
                     _LOGGER.error(f"Timeout fetching from ENTSO-E (attempt {attempt+1}/{retries})")
                     if attempt < retries - 1:
                         delay = 2 ** attempt
                         await asyncio.sleep(delay)
-                        
+
                 except Exception as e:
                     _LOGGER.error(f"Error during ENTSO-E API request (attempt {attempt+1}/{retries}): {e}")
                     if attempt < retries - 1:
                         delay = 2 ** attempt
                         await asyncio.sleep(delay)
-            
+
             # Check for authentication errors in the response
             if response:
                 if "Not authorized" in response:
@@ -127,12 +127,12 @@ class EntsoEAPI(BaseEnergyAPI):
                 elif "No matching data found" in response:
                     _LOGGER.warning(f"ENTSO-E API returned: No matching data found for the query parameters")
                     return None
-                
+
                 return response
             else:
                 _LOGGER.error("ENTSO-E API returned empty response after all retries")
                 return None
-            
+
         except Exception as e:
             _LOGGER.error(f"Failed to fetch data from ENTSO-E: {e}")
             return None
@@ -145,17 +145,17 @@ class EntsoEAPI(BaseEnergyAPI):
         try:
             # Updated namespace to match API response
             ns = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
-            
+
             # Parse XML
             root = ET.fromstring(data)
-            
+
             # Find TimeSeries elements
             time_series_elements = root.findall(".//ns:TimeSeries", ns)
 
             if not time_series_elements:
                 # Try without namespace - handle default namespace case
                 time_series_elements = root.findall(".//TimeSeries")
-                
+
             if not time_series_elements:
                 _LOGGER.error("No TimeSeries elements found in ENTSO-E response")
                 # Log a sample of the XML for debugging
@@ -176,96 +176,96 @@ class EntsoEAPI(BaseEnergyAPI):
             for ts in time_series_elements:
                 # Get period elements with namespace
                 period_elements = ts.findall(".//ns:Period", ns)
-                
+
                 # If not found with namespace, try without
                 if not period_elements:
                     period_elements = ts.findall(".//Period")
-                
+
                 for period in period_elements:
                     # Get resolution (PT15M for 15 minutes, PT60M for 60 minutes)
                     resolution_element = period.find("ns:resolution", ns) or period.find("resolution")
                     if resolution_element is None:
                         _LOGGER.warning("Missing resolution element in period")
                         continue
-                        
+
                     resolution = resolution_element.text
                     resolution_minutes = 60  # Default to hourly
-                    
+
                     if resolution == "PT15M":
                         resolution_minutes = 15
                     elif resolution == "PT60M" or resolution == "PT1H":
                         resolution_minutes = 60
                     else:
                         _LOGGER.warning(f"Unknown resolution: {resolution}, defaulting to hourly")
-                    
+
                     # Get time interval
                     interval = period.find("ns:timeInterval", ns) or period.find("timeInterval")
                     if interval is None:
                         _LOGGER.warning("Missing timeInterval in period")
                         continue
-                    
+
                     # Find start and end with or without namespace
                     start_element = interval.find("ns:start", ns) or interval.find("start")
                     end_element = interval.find("ns:end", ns) or interval.find("end")
-                    
+
                     if start_element is None or end_element is None:
                         _LOGGER.warning("Missing start or end in timeInterval")
                         continue
-                        
+
                     start_text = start_element.text
                     end_text = end_element.text
-                    
+
                     try:
                         start_dt = datetime.datetime.fromisoformat(start_text.replace("Z", "+00:00"))
                         end_dt = datetime.datetime.fromisoformat(end_text.replace("Z", "+00:00"))
                     except ValueError as e:
                         _LOGGER.error(f"Error parsing datetime: {e}")
                         continue
-                    
+
                     # Process points
                     points = period.findall("ns:Point", ns) or period.findall("Point")
-                    
+
                     # Create a mapping of positions to prices
                     position_price_map = {}
                     for point in points:
                         position_element = point.find("ns:position", ns) or point.find("position")
                         price_element = point.find("ns:price.amount", ns) or point.find("price.amount")
-                        
+
                         if position_element is None or price_element is None:
                             _LOGGER.warning(f"Missing position or price.amount in point")
                             continue
-                        
+
                         try:
                             position = int(position_element.text)
                             price = float(price_element.text)
                             position_price_map[position] = price
                         except (ValueError, TypeError) as e:
                             _LOGGER.warning(f"Invalid position or price value: {e}")
-                    
+
                     # Calculate total positions based on resolution and time interval
                     total_minutes = int((end_dt - start_dt).total_seconds() / 60)
                     expected_positions = total_minutes // resolution_minutes
-                    
+
                     # Process each position and map to actual datetime
                     for position in range(1, expected_positions + 1):
                         if position not in position_price_map:
                             _LOGGER.debug(f"Missing price data for position {position}")
                             continue
-                        
+
                         price = position_price_map[position]
-                        
+
                         # Calculate the datetime for this position
                         position_minutes = (position - 1) * resolution_minutes
                         position_time = start_dt + datetime.timedelta(minutes=position_minutes)
                         position_end = position_time + datetime.timedelta(minutes=resolution_minutes)
-                        
+
                         # Store raw price data
                         raw_prices.append({
                             "start": position_time.isoformat(),
                             "end": position_end.isoformat(),
                             "price": price
                         })
-                        
+
                         # Convert price from EUR/MWh to the appropriate currency/unit
                         converted_price = await self._convert_price(
                             price=price,
@@ -274,13 +274,13 @@ class EntsoEAPI(BaseEnergyAPI):
                             to_currency=self._currency,
                             to_subunit=use_cents
                         )
-                        
+
                         # If 15-minute resolution, average to hourly for consistent representation
                         if resolution_minutes == 15:
                             # Get the start of the hour
                             hour_start = position_time.replace(minute=0, second=0, microsecond=0)
                             hour_key = hour_start.strftime("%Y-%m-%d %H:00")
-                            
+
                             # Initialize or update hourly average
                             if hour_key not in hourly_prices:
                                 hourly_prices[hour_key] = {"sum": converted_price, "count": 1}
@@ -291,10 +291,10 @@ class EntsoEAPI(BaseEnergyAPI):
                             # For hourly data, store directly
                             hour_key = position_time.strftime("%Y-%m-%d %H:00")
                             hourly_prices[hour_key] = {"sum": converted_price, "count": 1}
-                        
+
                         # Store in all_prices list for later statistics
                         all_prices.append(converted_price)
-            
+
             # Process hourly prices to calculate final values
             final_hourly_prices = {}
             for hour_key, data in hourly_prices.items():
@@ -302,7 +302,7 @@ class EntsoEAPI(BaseEnergyAPI):
                 dt = datetime.datetime.strptime(hour_key, "%Y-%m-%d %H:00")
                 hour_str = f"{dt.hour:02d}:00"
                 final_hourly_prices[hour_str] = avg_price
-                
+
                 # Check if this is current hour
                 if dt.hour == now.hour and dt.date() == now.date():
                     current_price = avg_price
@@ -311,9 +311,9 @@ class EntsoEAPI(BaseEnergyAPI):
                         "converted": avg_price,
                         "hour": dt.hour
                     }
-                
+
                 # Check if this is next hour
-                next_hour = (now.replace(minute=0, second=0, microsecond=0) + 
+                next_hour = (now.replace(minute=0, second=0, microsecond=0) +
                             datetime.timedelta(hours=1))
                 if dt.hour == next_hour.hour and dt.date() == next_hour.date():
                     next_hour_price = avg_price
@@ -322,30 +322,30 @@ class EntsoEAPI(BaseEnergyAPI):
                         "converted": avg_price,
                         "hour": dt.hour
                     }
-            
+
             # Calculate day average
             day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
-            
+
             # Find peak and off-peak prices
             peak_price = max(all_prices) if all_prices else None
             off_peak_price = min(all_prices) if all_prices else None
-            
+
             # Store raw values for statistics
             raw_values["day_average_price"] = {
                 "value": day_average_price,
                 "calculation": "average of all hourly prices"
             }
-            
+
             raw_values["peak_price"] = {
                 "value": peak_price,
                 "calculation": "maximum of all hourly prices"
             }
-            
+
             raw_values["off_peak_price"] = {
                 "value": off_peak_price,
                 "calculation": "minimum of all hourly prices"
             }
-            
+
             return {
                 "current_price": current_price,
                 "next_hour_price": next_hour_price,
@@ -358,7 +358,7 @@ class EntsoEAPI(BaseEnergyAPI):
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "api_key_valid": True
             }
-            
+
         except ET.ParseError as e:
             _LOGGER.error(f"Error parsing ENTSO-E XML: {e}")
             # Add more context for debugging
@@ -398,7 +398,7 @@ class EntsoEAPI(BaseEnergyAPI):
             if session:
                 api.session = session
                 api._owns_session = False
-            
+
             # Try to fetch some data with the provided key
             _LOGGER.debug(f"Validating ENTSO-E API key for area {area}")
             result = await api._fetch_data()

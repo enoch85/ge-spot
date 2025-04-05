@@ -21,7 +21,7 @@ async def validate_entso_e_api_key(api_key, area, session=None):
         if session:
             api.session = session
             api._owns_session = False
-        
+
         # Try to fetch some data with the provided key
         _LOGGER.debug(f"Validating ENTSO-E API key for area {area}")
         result = await api._fetch_data()
@@ -58,5 +58,5 @@ def get_entso_e_api_key_description(area):
         if is_supported else
         "Required API key for ENTSO-E (needed for this region)"
     )
-    
+
     return description

@@ -79,10 +79,10 @@ def get_source_priority_schema(supported_sources):
 def get_api_keys_schema(area, existing_api_key=None):
     """Return schema for API keys step."""
     schema_dict = {}
-    
+
     # Make API key optional if area is supported by ENTSO-E mapping
     is_supported = area in ENTSOE_AREA_MAPPING
-    
+
     # Show different field based on whether area is directly supported
     if is_supported:
         schema_dict[vol.Optional(f"{SOURCE_ENTSO_E}_api_key")] = FormHelper.create_api_key_selector()

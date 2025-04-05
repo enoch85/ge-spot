@@ -34,7 +34,7 @@ class GSpotOptionsFlow(OptionsFlow):
         self._options = dict(config_entry.options)
         self._area = self._data.get(CONF_AREA)
         self._errors = {}
-        
+
         try:
             self._supported_sources = get_sources_for_region(self._area) if self._area else []
         except Exception as e:
@@ -52,17 +52,17 @@ class GSpotOptionsFlow(OptionsFlow):
                     # Validate and store API key
                     api_key = user_input[f"{SOURCE_ENTSO_E}_api_key"]
                     valid_key = True
-                    
+
                     # Only validate if key has changed
                     if api_key != self._data.get(CONF_API_KEY, ""):
                         _LOGGER.debug(f"Validating updated ENTSO-E API key")
-                        
+
                         valid_key = await validate_entso_e_api_key(
-                            api_key, 
+                            api_key,
                             self._area,
                             None  # No existing session
                         )
-                        
+
                         if valid_key:
                             # Update the stored data with the new API key
                             updated_data = dict(self._data)
@@ -74,7 +74,7 @@ class GSpotOptionsFlow(OptionsFlow):
                             )
                         else:
                             self._errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
-                    
+
                     # Remove the API key field from options to avoid duplication
                     if valid_key and f"{SOURCE_ENTSO_E}_api_key" in user_input:
                         user_input.pop(f"{SOURCE_ENTSO_E}_api_key")
@@ -108,10 +108,10 @@ class GSpotOptionsFlow(OptionsFlow):
         try:
             # Get default values from existing data
             defaults = get_default_values(self._options, self._data)
-            
+
             # Build schema for options form
             schema = get_options_schema(defaults, self._supported_sources)
-            
+
             # Show options form
             return self.async_show_form(
                 step_id="init",
@@ -121,7 +121,7 @@ class GSpotOptionsFlow(OptionsFlow):
         except Exception as e:
             _LOGGER.error(f"Failed to create options form: {e}")
             self._errors["base"] = "unknown"
-            
+
             # Provide a fallback schema
             return self.async_show_form(
                 step_id="init",

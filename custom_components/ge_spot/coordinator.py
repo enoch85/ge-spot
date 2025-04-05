@@ -347,7 +347,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
             # Check API key status
             api_key_status = await self.check_api_key_status()
-            
+
             # Get exchange rate info
             try:
                 from .utils.exchange_service import get_exchange_service

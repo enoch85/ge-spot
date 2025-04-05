@@ -187,28 +187,28 @@ class ExchangeRateService:
         _LOGGER.debug(f"Currency conversion: {amount} {from_currency} → {result} {to_currency} (rates: {from_rate}, {to_rate})")
 
         return result
-        
+
     def get_exchange_rate_info(self, from_currency="EUR", to_currency=None):
         """Get exchange rate information between two currencies.
-        
+
         Args:
             from_currency: Source currency
             to_currency: Target currency
-            
+
         Returns:
             Dict with timestamp, rate, and formatted rate information
         """
         # Format timestamp
         last_updated_iso = datetime.datetime.fromtimestamp(
             self.last_update, datetime.timezone.utc).isoformat() if self.last_update else None
-        
+
         # If no rates available or missing currencies
         if not self.rates or from_currency not in self.rates:
             return {
                 "timestamp": last_updated_iso,
                 "rates": None
             }
-            
+
         if to_currency and to_currency not in self.rates:
             _LOGGER.warning(f"Currency {to_currency} not found in exchange rates")
             return {
@@ -216,13 +216,13 @@ class ExchangeRateService:
                 "rates": None,
                 "error": f"Currency {to_currency} not found"
             }
-        
+
         # Calculate exchange rate
         if to_currency:
             from_rate = self.rates[from_currency]
             to_rate = self.rates[to_currency]
             exchange_rate = to_rate / from_rate
-            
+
             return {
                 "timestamp": last_updated_iso,
                 "rate": exchange_rate,
@@ -235,12 +235,12 @@ class ExchangeRateService:
                 "base": from_currency,
                 "rates": {}
             }
-            
+
             for currency, rate in self.rates.items():
                 if currency != from_currency:
                     converted_rate = rate / self.rates[from_currency]
                     result["rates"][currency] = converted_rate
-                    
+
             return result
 
 # Global instance for reuse
