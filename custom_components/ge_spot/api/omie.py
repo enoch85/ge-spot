@@ -1,143 +1,212 @@
-import logging
-import datetime
+"""API Client for OMIE (Operador del Mercado Ibérico de Energía)."""
+
 import asyncio
-import csv
-import io
-from .base import BaseEnergyAPI
-from ..utils.currency_utils import convert_to_subunit, convert_energy_price
+import logging
+from datetime import datetime, timedelta, date
+from typing import Dict, Optional
+
+import aiohttp
+import pytz # For timezone handling
+
+# Import external libraries
+from omiedata.omie_data import OMIEData
+# Import pandas for type checking, required by omiedata
+try:
+    import pandas as pd
+except ImportError:
+    # Handle missing pandas - omiedata won't work without it.
+    # The error will be properly raised later if needed.
+    pd = None
+
+
+# Import from ge-spot's own modules
+from ..const import (
+    TIMEZONE_IBERIAN, # Use defined constant for the timezone
+    CURRENCY_EUR,     # Use defined constant for the currency
+    PRICE_PRECISION,  # Use defined constant for rounding
+    API_TIMEOUT,      # Can be used for timeout if executor job supports it (not directly here)
+    ENERGY_KILO_WATT_HOUR,
+    ENERGY_MEGA_WATT_HOUR, # Used conceptually for conversion
+)
+from ..errors import CannotConnect, InvalidAuth # Use existing error classes
 
 _LOGGER = logging.getLogger(__name__)
 
-class OmieAPI(BaseEnergyAPI):
-    """API handler for OMIE (Iberian Market)."""
+# Factor for converting from MWh to kWh
+MWH_TO_KWH_FACTOR = 1000.0
 
-    BASE_URL = "https://www.omie.es/en/file-download"
+class OMIEApiClient:
+    """API Client for fetching spot prices from OMIE using the 'omiedata' library."""
 
-    async def _fetch_data(self):
-        """Fetch data from OMIE."""
-        now = self._get_now()
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        hass, # Home Assistant instance, required for async_add_executor_job
+    ) -> None:
+        """
+        Initialize the OMIE API client.
 
-        # Format date for OMIE API
-        year = now.year
-        month = now.month
-        day = now.day
-
-        params = {
-            "parents[0]": "marginalpdbc",
-            "filename": f"marginalpdbc_{year}_{month:02d}_{day:02d}.1",
-        }
-
-        _LOGGER.debug(f"Fetching OMIE with params: {params}")
-
-        url = self.BASE_URL
-
-        # Add retry mechanism
-        retry_count = 3
-        for attempt in range(retry_count):
-            try:
-                async with self.session.get(url, params=params, timeout=30) as response:
-                    if response.status != 200:
-                        _LOGGER.error(f"Error fetching from OMIE (attempt {attempt+1}/{retry_count}): {response.status}")
-                        if attempt < retry_count - 1:
-                            await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                            continue
-                        return None
-
-                    return await response.text()
-            except asyncio.TimeoutError:
-                _LOGGER.error(f"Timeout fetching from OMIE (attempt {attempt+1}/{retry_count})")
-                if attempt < retry_count - 1:
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                    continue
-                raise
-            except Exception as e:
-                _LOGGER.error(f"Error fetching from OMIE (attempt {attempt+1}/{retry_count}): {e}")
-                if attempt < retry_count - 1:
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
-                    continue
-                raise
-
-        return None
-
-    async def _process_data(self, data):
-        """Process the data from OMIE."""
-        if not data:
-            return None
-
+        Args:
+            session: aiohttp client session (may not be used directly for OMIE calls now).
+            hass: Home Assistant instance.
+        """
+        self._session = session # Kept for consistency, but not used directly here
+        self._hass = hass
+        self._omie = OMIEData() # Instantiate the omiedata client
+        # Get the pytz timezone object from the constant
         try:
-            # Parse CSV-like data from OMIE
-            reader = csv.reader(io.StringIO(data), delimiter=';')
+            self._iberian_tz = pytz.timezone(TIMEZONE_IBERIAN)
+        except pytz.UnknownTimeZoneError:
+            _LOGGER.error("Unknown timezone specified for Iberian market: %s. Falling back to UTC.", TIMEZONE_IBERIAN)
+            self._iberian_tz = pytz.utc # Fallback, but should not happen with "Europe/Madrid"
 
-            # Skip header rows (OMIE format has multiple header rows)
-            rows = list(reader)
+    def _sync_get_and_process_omie_data(self, target_date: date) -> Optional[Dict[datetime, float]]:
+        """
+        Synchronous method to fetch and process OMIE data for a given date.
+        Intended to be run within hass.async_add_executor_job.
 
-            # Find the data rows - OMIE format varies, so we need to find the actual data
-            data_rows = []
-            for row in rows:
-                # Look for rows with hour and price data
-                if len(row) >= 3 and row[0].isdigit():
-                    data_rows.append(row)
+        Args:
+            target_date: The date for which to fetch prices.
 
-            if not data_rows:
-                _LOGGER.error("No valid data rows found in OMIE response")
-                return None
+        Returns:
+            A dictionary mapping UTC datetime objects to prices in EUR/kWh,
+            or an empty dictionary if no data is available yet,
+            or None if a critical error prevented processing (should ideally raise).
 
-            now = self._get_now()
-            current_hour = now.hour
+        Raises:
+            CannotConnect: If connection or data retrieval/processing fails critically.
+        """
+        # Check if pandas is available (dependency of omiedata)
+        if pd is None:
+            _LOGGER.error("Pandas library not found. Please ensure 'omiedata' dependencies are installed.")
+            raise CannotConnect("Missing dependency (pandas) for OMIE data processing.")
 
-            hourly_prices = {}
-            all_prices = []
-            current_price = None
-            next_hour_price = None
+        _LOGGER.debug("Executing synchronous OMIE data fetch for date: %s", target_date)
+        prices_dict: Dict[datetime, float] = {}
+        try:
+            # Use the omiedata library to fetch prices
+            # query_marginal_price returns a pandas DataFrame
+            # with timestamps (index) in local time (CET/CEST)
+            df_prices = self._omie.query_marginal_price(
+                start_date=target_date, end_date=target_date
+            )
 
-            area = self.config.get("area", "ES")  # Default to Spain
-            area_index = 1 if area == "ES" else 2  # Spain is column 1, Portugal is column 2
-            use_cents = self.config.get("price_in_cents", False)
+            if df_prices is None or df_prices.empty:
+                _LOGGER.warning("No OMIE marginal price data returned for %s.", target_date)
+                # It's normal for data to be missing early in the day before publication.
+                # Return an empty dict to signal "no data yet".
+                return {}
 
-            for row in data_rows:
+            # Verify that the index is a DatetimeIndex and handle timezones robustly
+            if not isinstance(df_prices.index, pd.DatetimeIndex):
+                 _LOGGER.error("OMIE data index is not a DatetimeIndex for %s.", target_date)
+                 raise CannotConnect(f"Unexpected data format from OMIE for {target_date}")
+
+            if df_prices.index.tz is None:
+                _LOGGER.warning("OMIE data index is timezone naive for %s. Assuming Iberian time.", target_date)
+                # Try to localize to Iberian time if timezone is missing
                 try:
-                    hour = int(row[0]) - 1  # OMIE hours are 1-24
-                    price_str = row[area_index].replace(",", ".")
+                    df_prices.index = df_prices.index.tz_localize(self._iberian_tz)
+                except Exception as tz_err:
+                    _LOGGER.error("Failed to localize OMIE timestamp index for %s: %s", target_date, tz_err)
+                    raise CannotConnect(f"Could not handle timezone for OMIE data on {target_date}") from tz_err
+            elif str(df_prices.index.tz) != TIMEZONE_IBERIAN:
+                 _LOGGER.warning(
+                     "OMIE data index has unexpected timezone '%s' for %s. Attempting conversion from %s.",
+                     df_prices.index.tz, target_date, TIMEZONE_IBERIAN
+                 )
+                 # Try to convert to the expected timezone before UTC conversion
+                 try:
+                     df_prices.index = df_prices.index.tz_convert(self._iberian_tz)
+                 except Exception as tz_err:
+                     _LOGGER.error("Failed to convert OMIE timestamp index timezone for %s: %s", target_date, tz_err)
+                     raise CannotConnect(f"Could not handle timezone conversion for OMIE data on {target_date}") from tz_err
 
-                    # Convert from EUR/MWh to EUR/kWh with utility function
-                    price = convert_energy_price(float(price_str), from_unit="MWh", to_unit="kWh", vat=0)
-                    price = self._apply_vat(price)
+            # Process each hour from the DataFrame
+            for timestamp_local, row in df_prices.iterrows():
+                price_mwh = row.get("price") # Get the price for the hour
 
-                    # Convert to cents if needed
-                    if use_cents:
-                        price = convert_to_subunit(price, self._currency)
+                if price_mwh is not None and isinstance(price_mwh, (int, float)):
+                    # Convert the local timestamp (CET/CEST) to UTC
+                    # timestamp_local is now guaranteed to be a timezone-aware pandas Timestamp
+                    timestamp_utc = timestamp_local.tz_convert(pytz.utc).to_pydatetime() # Convert to standard datetime
 
-                    hour_str = f"{hour:02d}:00"
-                    hourly_prices[hour_str] = price
-                    all_prices.append(price)
+                    # Convert price from EUR/MWh to EUR/kWh
+                    price_kwh = round(price_mwh / MWH_TO_KWH_FACTOR, PRICE_PRECISION)
 
-                    if hour == current_hour:
-                        current_price = price
+                    # Store in dictionary with UTC timestamp as key
+                    prices_dict[timestamp_utc] = price_kwh
+                else:
+                    _LOGGER.warning(
+                        "Missing or invalid price value (%s) for timestamp %s on %s.",
+                        price_mwh,
+                        timestamp_local.strftime("%Y-%m-%d %H:%M:%S %Z%z"), # Include timezone in log
+                        target_date,
+                    )
 
-                    if hour == (current_hour + 1) % 24:
-                        next_hour_price = price
-
-                except (ValueError, IndexError) as e:
-                    _LOGGER.warning(f"Error parsing OMIE row {row}: {e}")
-                    continue
-
-            # Calculate day average
-            day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
-
-            # Find peak and off-peak prices
-            peak_price = max(all_prices) if all_prices else None
-            off_peak_price = min(all_prices) if all_prices else None
-
-            return {
-                "current_price": current_price,
-                "next_hour_price": next_hour_price,
-                "day_average_price": day_average_price,
-                "peak_price": peak_price,
-                "off_peak_price": off_peak_price,
-                "hourly_prices": hourly_prices,
-                "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            }
+            _LOGGER.info(
+                "Successfully fetched and processed %d OMIE spot prices for %s.",
+                len(prices_dict),
+                target_date,
+            )
+            return prices_dict
 
         except Exception as e:
-            _LOGGER.error(f"Error processing OMIE data: {e}")
-            return None
+            # Catch all other errors from the library or processing
+            _LOGGER.error("Failed to fetch or process OMIE data for %s: %s", target_date, e, exc_info=True)
+            # Map to CannotConnect or a more specific error if needed
+            raise CannotConnect(f"Failed to get OMIE data for {target_date}: {e!s}") from e
+
+
+    async def async_get_spot_prices(self) -> Dict[datetime, float]:
+        """
+        Fetch spot prices for the next day from OMIE (asynchronously).
+
+        Uses omiedata library running in executor thread pool.
+
+        Returns:
+            A dictionary mapping UTC datetime objects to spot prices in EUR/kWh.
+            Returns an empty dictionary if data is not available yet or an error occurs
+            that is handled within the sync processing (like no data found).
+
+        Raises:
+            CannotConnect: If the background task fails critically (e.g., dependency missing,
+                           major processing error, unexpected exception during await).
+            TimeoutError: If the background task times out (less likely without explicit timeout).
+        """
+        _LOGGER.debug("Requesting asynchronous fetch of tomorrow's OMIE spot prices.")
+        prices: Dict[datetime, float] = {}
+        try:
+            # Determine tomorrow's date based on the current time in the Iberian timezone
+            # This ensures we query for the correct day according to OMIE's publication time.
+            today_local = datetime.now(self._iberian_tz).date()
+            target_date = today_local + timedelta(days=1)
+            _LOGGER.debug("Target date for OMIE prices: %s", target_date)
+
+            # Run the synchronous data fetching and processing in Home Assistant's executor thread pool
+            # to avoid blocking the async event loop. API_TIMEOUT is not used directly here.
+            result = await self._hass.async_add_executor_job(
+                self._sync_get_and_process_omie_data, target_date
+            )
+
+            # If _sync_get_and_process_omie_data returns None or raises an error,
+            # it will be handled by the except blocks below. If it returns
+            # a dictionary (even empty), it's assigned to 'prices'.
+            if result is not None: # Should always return dict now, but check for safety
+                prices = result
+
+        except CannotConnect as e:
+             # The error was already logged in the synchronous function. Re-raise.
+             _LOGGER.warning("Could not connect or fetch OMIE data: %s", e)
+             raise # Let the calling code (e.g., GEApiClient) handle this
+        except TimeoutError:
+             # If the executor job were to time out (unlikely without specific timeout)
+             _LOGGER.error("Timeout occurred while fetching OMIE data for target date %s", target_date)
+             raise CannotConnect("Timeout while fetching OMIE data") from None # Re-raise as CannotConnect
+        except Exception as e:
+            # Catch unexpected errors during the async operation itself
+            _LOGGER.exception("Unexpected error during async OMIE price fetching: %s", e)
+            raise CannotConnect(f"Unexpected error fetching OMIE prices: {e!s}") from e
+
+        # Return the fetched price list (can be empty if no data was found yet)
+        return prices
