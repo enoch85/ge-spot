@@ -4,6 +4,7 @@ import datetime
 import aiohttp
 import asyncio
 from abc import ABC, abstractmethod
+import weakref
 
 from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
@@ -18,6 +19,18 @@ from ..const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Global session registry to prevent session leaks
+_SESSION_REGISTRY = weakref.WeakSet()
+
+async def close_all_sessions():
+    """Close all registered sessions."""
+    for session in list(_SESSION_REGISTRY):
+        if not session.closed:
+            try:
+                await session.close()
+            except Exception as e:
+                _LOGGER.error(f"Error closing session: {e}")
 
 class BaseEnergyAPI(ABC):
     """Base class for energy price APIs with robust error handling."""
@@ -35,25 +48,31 @@ class BaseEnergyAPI(ABC):
         self._cache = {}  # Cache to store API responses
         self._cache_ttl = config.get("cache_ttl", 60)  # Cache TTL in minutes
         self.hass = None  # Will be set when used with Home Assistant
+        self._owns_session = False  # Track if we created the session
 
     async def _ensure_session(self):
         """Ensure that we have an aiohttp session."""
         try:
-            if self.session is None:
+            if self.session is None or self.session.closed:
                 _LOGGER.debug(f"Creating new aiohttp session for {self.__class__.__name__}")
                 self.session = aiohttp.ClientSession()
+                self._owns_session = True
+                # Register the session for potential cleanup
+                _SESSION_REGISTRY.add(self.session)
         except Exception as e:
             _LOGGER.error(f"Error creating session in {self.__class__.__name__}: {str(e)}")
 
     async def close(self):
-        """Close the session."""
-        if self.session:
+        """Close the session if we own it."""
+        if self.session and self._owns_session and not self.session.closed:
             try:
                 await self.session.close()
+                _LOGGER.debug(f"Closed session for {self.__class__.__name__}")
             except Exception as e:
                 _LOGGER.error(f"Error closing session: {str(e)}")
             finally:
                 self.session = None
+                self._owns_session = False
 
     async def validate_api_key(self, api_key=None):
         """Validate an API key.
@@ -82,14 +101,21 @@ class BaseEnergyAPI(ABC):
 
             # Create a temporary instance with the test config
             temp_instance = self.__class__(test_config)
-            if hasattr(self, "session") and self.session:
+            temp_owns_session = False
+            
+            # Use existing session if available to avoid creating too many
+            if hasattr(self, "session") and self.session and not self.session.closed:
                 temp_instance.session = self.session
+            else:
+                # Create a session for validation if needed
+                await temp_instance._ensure_session()
+                temp_owns_session = True
 
             # Try to fetch data
             result = await temp_instance._fetch_data()
 
-            # Close the temporary instance if needed
-            if temp_instance != self and hasattr(temp_instance, "close"):
+            # Close the temporary instance session if we created it
+            if temp_owns_session and hasattr(temp_instance, "close"):
                 await temp_instance.close()
 
             # Check if we got a valid response
@@ -115,7 +141,7 @@ class BaseEnergyAPI(ABC):
             # Ensure we have a session
             await self._ensure_session()
 
-            if not self.session:
+            if not self.session or self.session.closed:
                 _LOGGER.error(f"Could not create session for {self.__class__.__name__}")
                 return None
 
@@ -206,7 +232,6 @@ class BaseEnergyAPI(ABC):
         except Exception as e:
             _LOGGER.error(f"Error fetching day-ahead prices: {str(e)}", exc_info=True)
             return None
-
     async def _check_cache(self, cache_key):
         """Check if we have a valid cached response."""
         current_time = datetime.datetime.now()
@@ -304,9 +329,6 @@ class BaseEnergyAPI(ABC):
         # Store original for logging
         original_price = price
 
-        # Get exchange rate if available (for logging)
-        session = getattr(self, "session", None)
-
         # Perform conversion
         converted_price = await async_convert_energy_price(
             price=price,
@@ -316,7 +338,7 @@ class BaseEnergyAPI(ABC):
             to_currency=self._currency,
             vat=self.vat,
             to_subunit=use_subunit,
-            session=session,
+            session=self.session,
             exchange_rate=exchange_rate
         )
 
@@ -344,14 +366,21 @@ class BaseEnergyAPI(ABC):
         """Fetch data from URL with retry mechanism."""
         await self._ensure_session()
 
-        if not self.session:
+        if not self.session or self.session.closed:
             _LOGGER.error("No session available for API request")
             return None
 
         for attempt in range(max_retries):
             try:
-                _LOGGER.debug(f"API request attempt {attempt+1}/{max_retries}: {url} with params {params}")
-                async with self.session.get(url, params=params, timeout=30) as response:
+                _LOGGER.debug(f"API request attempt {attempt+1}/{max_retries}: {url}")
+                
+                # Add user agent to avoid 403 errors
+                headers = {
+                    "User-Agent": "HomeAssistantGESpot/1.0",
+                    "Accept": "application/json, text/plain, */*"
+                }
+                
+                async with self.session.get(url, params=params, headers=headers, timeout=30) as response:
                     if response.status != 200:
                         _LOGGER.error(f"Error fetching from URL (attempt {attempt+1}/{max_retries}): HTTP {response.status}")
 
@@ -375,12 +404,17 @@ class BaseEnergyAPI(ABC):
                     _LOGGER.debug(f"Response content type: {content_type}")
 
                     response_text = await response.text()
-                    _LOGGER.debug(f"Raw API response (first 1000 chars): {response_text[:1000]}")
+                    
+                    # Only log a snippet to avoid overwhelming logs
+                    if len(response_text) > 1000:
+                        _LOGGER.debug(f"Raw API response (first 1000 chars): {response_text[:1000]}...")
+                    else:
+                        _LOGGER.debug(f"Raw API response: {response_text}")
 
                     if 'application/json' in content_type:
                         try:
                             json_data = await response.json()
-                            _LOGGER.debug(f"Parsed JSON data with {len(str(json_data))} characters")
+                            _LOGGER.debug(f"Parsed JSON data successfully")
                             return json_data
                         except Exception as e:
                             _LOGGER.error(f"Failed to parse response as JSON: {e}")
@@ -400,6 +434,13 @@ class BaseEnergyAPI(ABC):
 
             except asyncio.TimeoutError:
                 _LOGGER.error(f"Timeout fetching from URL (attempt {attempt+1}/{max_retries})")
+                if attempt < max_retries - 1:
+                    retry_delay = 2 ** attempt  # Exponential backoff
+                    await asyncio.sleep(retry_delay)
+                    continue
+                raise
+            except aiohttp.ClientConnectorError as e:
+                _LOGGER.error(f"Connection error fetching from URL (attempt {attempt+1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     retry_delay = 2 ** attempt  # Exponential backoff
                     await asyncio.sleep(retry_delay)
@@ -431,3 +472,13 @@ class BaseEnergyAPI(ABC):
             _LOGGER.debug(f"No VAT applied (rate: {vat:.2%})")
 
         return price
+        
+        
+# Register close_all_sessions as a shutdown task for Home Assistant
+def register_shutdown_task(hass):
+    """Register session cleanup as a shutdown task."""
+    if hass:
+        async def _async_shutdown(_):
+            await close_all_sessions()
+            
+        hass.bus.async_listen_once("homeassistant_stop", _async_shutdown)
