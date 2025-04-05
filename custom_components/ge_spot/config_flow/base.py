@@ -23,13 +23,13 @@ _LOGGER = logging.getLogger(__name__)
 
 class GSpotConfigFlowBase:
     """Base class for GE-Spot config flows."""
-    
+
     def __init__(self):
         """Initialize the base config flow."""
         self._data = {}
         self._supported_sources = []
         self._errors = {}
-    
+
     async def async_step_user(self, user_input=None) -> FlowResult:
         """Handle a flow initialized by the user."""
         self._errors = {}
@@ -64,7 +64,7 @@ class GSpotConfigFlowBase:
         try:
             # Get regions with at least one source, properly deduplicated
             available_regions = get_deduplicated_regions()
-            
+
             # Show region selection form
             return self.async_show_form(
                 step_id="user",
@@ -80,7 +80,7 @@ class GSpotConfigFlowBase:
                 data_schema=vol.Schema({vol.Required(CONF_AREA): str}),
                 errors=self._errors,
             )
-    
+
     async def async_step_source_priority(self, user_input=None) -> FlowResult:
         """Handle setting source priorities."""
         self._errors = {}
@@ -118,7 +118,7 @@ class GSpotConfigFlowBase:
             data_schema=get_source_priority_schema(self._supported_sources),
             errors=self._errors,
         )
-    
+
     async def async_step_api_keys(self, user_input=None) -> FlowResult:
         """Handle API key entry for sources that require it."""
         self._errors = {}
@@ -130,13 +130,13 @@ class GSpotConfigFlowBase:
                     if source == f"{SOURCE_ENTSO_E}_api_key" and api_key:
                         # Validate the ENTSO-E API key if provided
                         _LOGGER.debug(f"Validating ENTSO-E API key: {api_key[:5]}...")
-                        
+
                         valid_key = await validate_entso_e_api_key(
-                            api_key, 
+                            api_key,
                             self._data.get(CONF_AREA),
                             None  # No existing session
                         )
-                        
+
                         if valid_key:
                             # Store the API key in correct format
                             self._data[CONF_API_KEY] = api_key
@@ -161,26 +161,26 @@ class GSpotConfigFlowBase:
             errors=self._errors,
             description_placeholders={"description": description}
         )
-    
+
     def _create_entry(self) -> FlowResult:
         """Create the config entry."""
         # Get region name for entry title
         area = self._data.get(CONF_AREA)
         region_name = self._get_region_name(area)
-        
+
         return self.async_create_entry(
             title=f"GE-Spot - {region_name}",
             data=self._data,
         )
-    
+
     def _get_region_name(self, region_code):
         """Get display name for a region code."""
         from .utils import SOURCE_AREA_MAPS
-        
+
         region_name = None
         for source, area_dict in SOURCE_AREA_MAPS.items():
             if region_code in area_dict:
                 region_name = area_dict[region_code]
                 break
-        
+
         return region_name or region_code
