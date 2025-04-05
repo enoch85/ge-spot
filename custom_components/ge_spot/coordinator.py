@@ -212,24 +212,25 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     if cached_today:
                         _LOGGER.warning("Using cached data for today's prices")
                         today_data = self._last_successful_data
+
             if not today_data and self._last_successful_data:
-                    _LOGGER.warning("Using cached data from last successful update")
-                    self._last_successful_data["source_info"] = {
-                        "reason": "All API sources failed",
-                        "attempted_sources": self._attempted_sources,
-                        "using_cached_data": True,
-                        "cache_timestamp": self._last_successful_data.get(ATTR_LAST_UPDATED, "unknown")
-                    }
-                    self._last_successful_data[ATTR_FALLBACK_USED] = True
-                    self._last_successful_data[ATTR_IS_USING_FALLBACK] = True
+                _LOGGER.warning("Using cached data from last successful update")
+                self._last_successful_data["source_info"] = {
+                    "reason": "All API sources failed",
+                    "attempted_sources": self._attempted_sources,
+                    "using_cached_data": True,
+                    "cache_timestamp": self._last_successful_data.get(ATTR_LAST_UPDATED, "unknown")
+                }
+                self._last_successful_data[ATTR_FALLBACK_USED] = True
+                self._last_successful_data[ATTR_IS_USING_FALLBACK] = True
 
-                    # Check API key status
-                    api_key_status = await self.check_api_key_status()
-                    self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
+                # Check API key status
+                api_key_status = await self.check_api_key_status()
+                self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
 
-                    return self._last_successful_data
-                elif not today_data:
-                    return None
+                return self._last_successful_data
+            elif not today_data:
+                return None
 
             # Log raw values for debugging - raw_today contains hourly prices in JSON format
             if "raw_today" in today_data:
