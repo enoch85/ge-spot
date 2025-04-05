@@ -1,9 +1,8 @@
 """Config flow for GE-Spot integration."""
 import logging
-from typing import Dict, Any, Optional
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, OptionsFlow
+from homeassistant.config_entries import ConfigFlow
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
@@ -14,11 +13,19 @@ from .const import (
     CONF_API_KEY,
     SOURCE_ENTSO_E,
 )
-from .api import get_sources_for_region, create_api
-from .config_flow.utils import get_deduplicated_regions, SOURCE_AREA_MAPS
-from .config_flow.schemas import get_user_schema, get_source_priority_schema, get_api_keys_schema
-from .config_flow.validators import validate_entso_e_api_key, get_entso_e_api_key_description
-from .config_flow.options import GSpotOptionsFlow
+from .api import get_sources_for_region
+
+# Import required functions from config_flow package
+from .config_flow import (
+    get_deduplicated_regions,
+    SOURCE_AREA_MAPS,
+    validate_entso_e_api_key,
+    get_entso_e_api_key_description,
+    get_user_schema,
+    get_source_priority_schema,
+    get_api_keys_schema,
+    GSpotOptionsFlow
+)
 
 _LOGGER = logging.getLogger(__name__)
 
