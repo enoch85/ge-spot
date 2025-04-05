@@ -1,6 +1,5 @@
 """Form helper utilities for GE-Spot integration."""
 import logging
-import voluptuous as vol
 from typing import Dict, Any, List, Optional
 
 from homeassistant.helpers import selector
@@ -60,11 +59,17 @@ class FormHelper:
         Returns:
             A SelectSelector for update interval
         """
-        # Convert integer values to strings to avoid selector errors
-        options = [
-            {"value": str(option["value"]), "label": option["label"]}
-            for option in UPDATE_INTERVAL_OPTIONS
-        ]
+        # Ensure values are integers, not strings
+        options = []
+        for option in UPDATE_INTERVAL_OPTIONS:
+            # Handle both string and integer values
+            try:
+                value = int(option["value"])
+                options.append({"value": value, "label": option["label"]})
+            except (ValueError, TypeError, KeyError):
+                _LOGGER.warning(f"Invalid update interval option format: {option}")
+                continue
+                
         return selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=options,
@@ -123,6 +128,5 @@ class FormHelper:
             selector.TextSelectorConfig(
                 type=selector.TextSelectorType.TEXT,
                 multiline=True,
-                suffix=text,
             )
         )
