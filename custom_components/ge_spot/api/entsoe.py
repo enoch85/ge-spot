@@ -26,9 +26,9 @@ class EntsoEAPI(BaseEnergyAPI):
         tomorrow = today + datetime.timedelta(days=1)
 
         # Format dates for ENTSO-E API
-        # Use 22:00 (10 PM) as the time part as shown in the ENTSO-E examples
-        period_start = today.strftime("%Y%m%d2200")
-        period_end = tomorrow.strftime("%Y%m%d2200")
+        # Use 01:00 (1 AM) as the time part as shown in the ENTSO-E examples
+        period_start = today.strftime("%Y%m%d0100")
+        period_end = tomorrow.strftime("%Y%m%d0100")
 
         # Get area code - map our area code to ENTSO-E area code without default
         area = self.config.get("area")
