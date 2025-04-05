@@ -82,12 +82,20 @@ def get_api_keys_schema(area, existing_api_key=None):
 
     # Make API key optional if area is supported by ENTSO-E mapping
     is_supported = area in ENTSOE_AREA_MAPPING
+    has_existing = existing_api_key is not None
 
-    # Show different field based on whether area is directly supported
-    if is_supported:
-        schema_dict[vol.Optional(f"{SOURCE_ENTSO_E}_api_key")] = FormHelper.create_api_key_selector()
-    else:
-        schema_dict[vol.Required(f"{SOURCE_ENTSO_E}_api_key")] = FormHelper.create_api_key_selector()
+    # Prepare field - optional for supported areas or if we have an existing key
+    description = None
+    if has_existing:
+        description = "Leave empty to use existing key"
+    
+    # Create field with appropriate defaults and description
+    field = vol.Optional(f"{SOURCE_ENTSO_E}_api_key", 
+                        description=description,
+                        default=existing_api_key)
+    
+    # Use the FormHelper to create the API key selector
+    schema_dict[field] = FormHelper.create_api_key_selector()
 
     return vol.Schema(schema_dict)
 
