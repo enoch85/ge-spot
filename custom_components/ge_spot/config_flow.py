@@ -12,7 +12,7 @@ from .utils.form_helper import FormHelper
 
 from .const import (
     DOMAIN, CONF_AREA, CONF_VAT, CONF_UPDATE_INTERVAL,
-    CONF_DISPLAY_UNIT, CONF_SOURCE_PRIORITY, CONF_ENABLE_FALLBACK,
+    CONF_DISPLAY_UNIT, CONF_SOURCE_PRIORITY,
     NORDPOOL_AREAS, ENERGI_DATA_AREAS, ENTSOE_AREAS, EPEX_AREAS, OMIE_AREAS, AEMO_AREAS,
     DEFAULT_AREAS, SOURCE_NORDPOOL, SOURCE_ENERGI_DATA_SERVICE, SOURCE_ENTSO_E,
     SOURCE_EPEX, SOURCE_OMIE, SOURCE_AEMO,
@@ -183,8 +183,6 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data[CONF_VAT] = user_input.get(CONF_VAT, 0)
                 self._data[CONF_UPDATE_INTERVAL] = user_input.get(CONF_UPDATE_INTERVAL, 60)
                 self._data[CONF_DISPLAY_UNIT] = user_input.get(CONF_DISPLAY_UNIT, DISPLAY_UNIT_DECIMAL)
-                # Always enable fallback
-                self._data[CONF_ENABLE_FALLBACK] = True
 
                 # Check if ENTSO-E requires an API key for this area
                 area = self._data.get(CONF_AREA)
@@ -438,9 +436,6 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                         self.hass.config_entries.async_get_entry(self.entry_id),
                         data=updated_data
                     )
-
-                # Always enable fallback
-                user_input[CONF_ENABLE_FALLBACK] = True
 
                 # If no errors, create the options entry
                 if not errors:
