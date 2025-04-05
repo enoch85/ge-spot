@@ -116,113 +116,204 @@ class EntsoEAPI(BaseEnergyAPI):
             ns = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:0"}
 
             # Find TimeSeries elements
-            time_series = root.findall(".//ns:TimeSeries", ns)
+            time_series_elements = root.findall(".//ns:TimeSeries", ns)
+
+            if not time_series_elements:
+                _LOGGER.error("No TimeSeries elements found in ENTSO-E response")
+                return None
 
             now = self._get_now()
-            current_hour = now.hour
-
             hourly_prices = {}
             all_prices = []
+            raw_prices = []
             current_price = None
             next_hour_price = None
             raw_values = {}
-            raw_prices = []
 
             use_cents = self.config.get("price_in_cents", False)
 
-            for ts in time_series:
-                # Find Point elements with price data
-                points = ts.findall(".//ns:Point", ns)
-
-                for point in points:
-                    position = int(point.find("ns:position", ns).text)
-                    price = float(point.find("ns:price.amount", ns).text)
-
-                    # Store raw price data
-                    start_hour = (position - 1)
-                    start_time = now.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-                    end_time = start_time + datetime.timedelta(hours=1)
-
-                    raw_prices.append({
-                        "start": start_time.isoformat(),
-                        "end": end_time.isoformat(),
-                        "price": price
-                    })
-
-                    # Convert from EUR/MWh to the appropriate currency/unit
-                    converted_price = await self._convert_price(
-                        price=price,
-                        from_unit="MWh",
-                        to_unit="kWh",
-                        from_currency="EUR",
-                        to_currency=self._currency,
-                        to_subunit=use_cents
-                    )
-
-                    # Calculate the hour based on position (1-24)
-                    hour = (position - 1)
-                    hour_str = f"{hour:02d}:00"
-
-                    hourly_prices[hour_str] = converted_price
-                    all_prices.append(converted_price)
-
-                    if hour == current_hour:
-                        current_price = converted_price
-                        raw_values["current_price"] = {
-                            "raw": price,
-                            "converted": converted_price,
-                            "hour": hour
-                        }
-
-                    if hour == (current_hour + 1) % 24:
-                        next_hour_price = converted_price
-                        raw_values["next_hour_price"] = {
-                            "raw": price,
-                            "converted": converted_price,
-                            "hour": (current_hour + 1) % 24
-                        }
-
+            # Process each TimeSeries element
+            for ts in time_series_elements:
+                # Get period elements
+                period_elements = ts.findall(".//ns:Period", ns)
+                
+                for period in period_elements:
+                    # Get resolution (PT15M for 15 minutes, PT60M for 60 minutes)
+                    resolution_element = period.find("ns:resolution", ns)
+                    if resolution_element is None:
+                        _LOGGER.warning("Missing resolution element in period")
+                        continue
+                        
+                    resolution = resolution_element.text
+                    resolution_minutes = 60  # Default to hourly
+                    
+                    if resolution == "PT15M":
+                        resolution_minutes = 15
+                    elif resolution == "PT60M" or resolution == "PT1H":
+                        resolution_minutes = 60
+                    else:
+                        _LOGGER.warning(f"Unknown resolution: {resolution}, defaulting to hourly")
+                    
+                    # Get time interval
+                    interval = period.find("ns:timeInterval", ns)
+                    if interval is None:
+                        _LOGGER.warning("Missing timeInterval in period")
+                        continue
+                        
+                    start_text = interval.find("ns:start", ns).text
+                    end_text = interval.find("ns:end", ns).text
+                    
+                    try:
+                        start_dt = datetime.datetime.fromisoformat(start_text.replace("Z", "+00:00"))
+                        end_dt = datetime.datetime.fromisoformat(end_text.replace("Z", "+00:00"))
+                    except ValueError as e:
+                        _LOGGER.error(f"Error parsing datetime: {e}")
+                        continue
+                    
+                    # Process points
+                    points = period.findall("ns:Point", ns)
+                    
+                    # Create a mapping of positions to prices
+                    position_price_map = {}
+                    for point in points:
+                        position = int(point.find("ns:position", ns).text)
+                        price_element = point.find("ns:price.amount", ns)
+                        
+                        if price_element is None:
+                            _LOGGER.warning(f"Missing price.amount in point position {position}")
+                            continue
+                        
+                        try:
+                            price = float(price_element.text)
+                            position_price_map[position] = price
+                        except (ValueError, TypeError) as e:
+                            _LOGGER.warning(f"Invalid price value in position {position}: {e}")
+                    
+                    # Calculate total positions based on resolution and time interval
+                    total_minutes = int((end_dt - start_dt).total_seconds() / 60)
+                    expected_positions = total_minutes // resolution_minutes
+                    
+                    # Process each position and map to actual datetime
+                    for position in range(1, expected_positions + 1):
+                        if position not in position_price_map:
+                            _LOGGER.debug(f"Missing price data for position {position}")
+                            continue
+                        
+                        price = position_price_map[position]
+                        
+                        # Calculate the datetime for this position
+                        position_minutes = (position - 1) * resolution_minutes
+                        position_time = start_dt + datetime.timedelta(minutes=position_minutes)
+                        position_end = position_time + datetime.timedelta(minutes=resolution_minutes)
+                        
+                        # Store raw price data
+                        raw_prices.append({
+                            "start": position_time.isoformat(),
+                            "end": position_end.isoformat(),
+                            "price": price
+                        })
+                        
+                        # Convert price from EUR/MWh to the appropriate currency/unit
+                        converted_price = await self._convert_price(
+                            price=price,
+                            from_unit="MWh",
+                            from_currency="EUR",
+                            to_currency=self._currency,
+                            to_subunit=use_cents
+                        )
+                        
+                        # If 15-minute resolution, average to hourly for consistent representation
+                        if resolution_minutes == 15:
+                            # Get the start of the hour
+                            hour_start = position_time.replace(minute=0, second=0, microsecond=0)
+                            hour_key = hour_start.strftime("%Y-%m-%d %H:00")
+                            
+                            # Initialize or update hourly average
+                            if hour_key not in hourly_prices:
+                                hourly_prices[hour_key] = {"sum": converted_price, "count": 1}
+                            else:
+                                hourly_prices[hour_key]["sum"] += converted_price
+                                hourly_prices[hour_key]["count"] += 1
+                        else:
+                            # For hourly data, store directly
+                            hour_key = position_time.strftime("%Y-%m-%d %H:00")
+                            hourly_prices[hour_key] = {"sum": converted_price, "count": 1}
+                        
+                        # Store in all_prices list for later statistics
+                        all_prices.append(converted_price)
+            
+            # Process hourly prices to calculate final values
+            final_hourly_prices = {}
+            for hour_key, data in hourly_prices.items():
+                avg_price = data["sum"] / data["count"]
+                dt = datetime.datetime.strptime(hour_key, "%Y-%m-%d %H:00")
+                hour_str = f"{dt.hour:02d}:00"
+                final_hourly_prices[hour_str] = avg_price
+                
+                # Check if this is current hour
+                if dt.hour == now.hour and dt.date() == now.date():
+                    current_price = avg_price
+                    raw_values["current_price"] = {
+                        "raw": data["sum"] / data["count"],  # Average raw price
+                        "converted": avg_price,
+                        "hour": dt.hour
+                    }
+                
+                # Check if this is next hour
+                next_hour = (now.replace(minute=0, second=0, microsecond=0) + 
+                            datetime.timedelta(hours=1))
+                if dt.hour == next_hour.hour and dt.date() == next_hour.date():
+                    next_hour_price = avg_price
+                    raw_values["next_hour_price"] = {
+                        "raw": data["sum"] / data["count"],  # Average raw price
+                        "converted": avg_price,
+                        "hour": dt.hour
+                    }
+            
             # Calculate day average
             day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
-
+            
             # Find peak and off-peak prices
             peak_price = max(all_prices) if all_prices else None
             off_peak_price = min(all_prices) if all_prices else None
-
+            
             # Store raw values for statistics
             raw_values["day_average_price"] = {
                 "value": day_average_price,
                 "calculation": "average of all hourly prices"
             }
-
+            
             raw_values["peak_price"] = {
                 "value": peak_price,
                 "calculation": "maximum of all hourly prices"
             }
-
+            
             raw_values["off_peak_price"] = {
                 "value": off_peak_price,
                 "calculation": "minimum of all hourly prices"
             }
-
+            
             return {
                 "current_price": current_price,
                 "next_hour_price": next_hour_price,
                 "day_average_price": day_average_price,
                 "peak_price": peak_price,
                 "off_peak_price": off_peak_price,
-                "hourly_prices": hourly_prices,
+                "hourly_prices": final_hourly_prices,
                 "raw_prices": raw_prices,
                 "raw_values": raw_values,
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "api_key_valid": True  # Indicate that the API key is valid
+                "api_key_valid": True
             }
-
+            
         except ET.ParseError as e:
             _LOGGER.error(f"Error parsing ENTSO-E XML: {e}")
+            # Add more context for debugging
+            if data and len(data) > 200:
+                _LOGGER.debug(f"First 200 chars of XML: {data[:200]}...")
             return None
         except Exception as e:
-            _LOGGER.error(f"Error processing ENTSO-E data: {e}")
+            _LOGGER.error(f"Error processing ENTSO-E data: {e}", exc_info=True)
             return None
 
     @staticmethod
