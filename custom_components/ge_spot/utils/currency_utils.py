@@ -99,44 +99,31 @@ async def convert_energy_price(price, from_unit="MWh", to_unit="kWh",
     # Store original value for logging
     original_price = price
 
-    # Step 1: Get energy unit conversion factors
-    from_factor = ENERGY_UNIT_CONVERSION.get(from_unit, 1)
-    to_factor = ENERGY_UNIT_CONVERSION.get(to_unit, 1)
-
-    # Step 2: Apply currency conversion if needed
-    if from_currency != to_currency and to_currency is not None:
-        if exchange_rate is not None:
-            # Use explicit exchange rate
-            price = price * exchange_rate
-            _LOGGER.debug(f"Currency conversion (explicit rate): {original_price} {from_currency} → {price} {to_currency} (rate: {exchange_rate})")
-        else:
-            # Use exchange service
-            try:
-                service = await get_exchange_service(session)
-                price = await service.convert(price, from_currency, to_currency)
-                _LOGGER.debug(f"Currency conversion (service): {original_price} {from_currency} → {price} {to_currency}")
-            except Exception as e:
-                _LOGGER.error(f"Currency conversion failed: {e}")
-                # Give up on conversion if we can't get an exchange rate
-                to_currency = from_currency
-
-    # Step 3: Convert energy units (MWh to kWh)
+    # Step 1: Convert energy units (MWh to kWh)
     if from_unit == "MWh" and to_unit == "kWh":
         price = price / 1000
         _LOGGER.debug(f"Energy unit conversion: {original_price} {from_currency}/{from_unit} → {price} {to_currency or from_currency}/{to_unit}")
 
-    # Step 4: Apply VAT
-    if vat > 0:
-        vat_multiplier = 1 + vat
-        pre_vat = price
-        price = price * vat_multiplier
-        _LOGGER.debug(f"VAT application: {pre_vat} → {price} (rate: {vat:.2%})")
+    # Step 2: Apply currency conversion if needed
+    if from_currency != to_currency and to_currency is not None:
+        # Always use exchange service for reliable rates
+        try:
+            service = await get_exchange_service(session)
+            price = await service.convert(price, from_currency, to_currency)
+            _LOGGER.debug(f"Currency conversion: {original_price} {from_currency} → {price} {to_currency}")
+        except Exception as e:
+            _LOGGER.error(f"Currency conversion failed: {e}")
+            raise ValueError(f"Failed to convert {from_currency} to {to_currency}: {e}")
 
-    # Step 5: Convert to subunit if requested
+    # Step 3: Apply VAT
+    if vat > 0:
+        price = price * (1 + vat)
+        _LOGGER.debug(f"VAT application: {original_price} → {price} (rate: {vat:.2%})")
+
+    # Step 4: Convert to subunit if requested
     if to_subunit:
-        pre_subunit = price
         price = convert_to_subunit(price, to_currency or from_currency)
-        _LOGGER.debug(f"Subunit conversion: {pre_subunit} → {price}")
+        _LOGGER.debug(f"Subunit conversion: {original_price} → {price}")
 
     return price
 
