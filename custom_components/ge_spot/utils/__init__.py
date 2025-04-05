@@ -6,6 +6,7 @@ from .currency_utils import (
     get_subunit_name,
     format_price,
     convert_energy_price,
+    async_convert_energy_price,
     REGION_TO_CURRENCY,
     CURRENCY_SUBUNIT_MULTIPLIER,
     CURRENCY_SUBUNIT_NAMES,
