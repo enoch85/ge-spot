@@ -214,9 +214,6 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         try:
             # Create config schema for source priority
-            update_interval_options = {int(option["value"]): option["label"] for option in UPDATE_INTERVAL_OPTIONS}
-            display_unit_options = {key: label for key, label in DISPLAY_UNITS.items()}
-
             schema_dict = {
                 vol.Required(CONF_SOURCE_PRIORITY, default=self._supported_sources): selector.SelectSelector(
                     selector.SelectSelectorConfig(
@@ -233,16 +230,30 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     selector.TextSelectorConfig(
                         type=selector.TextSelectorType.TEXT,
                         multiline=True,
-                        suffix="Priority is determined by order: first selected = highest priority",
                     )
                 ),
                 vol.Optional(CONF_VAT, default=0): vol.All(
                     vol.Coerce(float),
                     vol.Range(min=0, max=100),
-                    msg="Enter VAT percentage (0-100)"
                 ),
-                vol.Optional(CONF_UPDATE_INTERVAL, default=60): vol.In(update_interval_options),
-                vol.Optional(CONF_DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): vol.In(display_unit_options),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=60): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": int(option["value"]), "label": option["label"]}
+                            for option in UPDATE_INTERVAL_OPTIONS
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(CONF_DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": key, "label": value}
+                            for key, value in DISPLAY_UNITS.items()
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
             }
 
             return self.async_show_form(
@@ -298,6 +309,10 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             except Exception as e:
                                 _LOGGER.error(f"ENTSO-E API key validation failed: {e}")
                                 errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
+                            finally:
+                                # Close API session
+                                if hasattr(api, 'close'):
+                                    await api.close()
                         else:
                             _LOGGER.error("Failed to create ENTSO-E API instance for validation")
                             errors[f"{SOURCE_ENTSO_E}_api_key"] = "api_creation_failed"
@@ -417,6 +432,10 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                                 valid_key = False
                                 _LOGGER.error(f"ENTSO-E API key validation failed: {e}")
                                 errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
+                            finally:
+                                # Close API session
+                                if hasattr(api, 'close'):
+                                    await api.close()
                         else:
                             valid_key = False
                             errors[f"{SOURCE_ENTSO_E}_api_key"] = "api_creation_failed"
@@ -457,12 +476,25 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(CONF_VAT, default=defaults.get(CONF_VAT, 0) * 100): vol.All(
                     vol.Coerce(float),
                     vol.Range(min=0, max=100),
-                    msg="Enter VAT percentage (0-100)"
                 ),
-                vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)):
-                    FormHelper.create_update_interval_selector(),
-                vol.Optional(CONF_DISPLAY_UNIT, default=current_display_unit):
-                    FormHelper.create_display_unit_selector(),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": int(option["value"]), "label": option["label"]}
+                            for option in UPDATE_INTERVAL_OPTIONS
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(CONF_DISPLAY_UNIT, default=current_display_unit): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": key, "label": value}
+                            for key, value in DISPLAY_UNITS.items()
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
             }
 
             # Add source priority selection
@@ -486,7 +518,6 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                 selector.TextSelectorConfig(
                     type=selector.TextSelectorType.TEXT,
                     multiline=True,
-                    suffix="Priority is determined by order: first selected = highest priority",
                 )
             )
 
