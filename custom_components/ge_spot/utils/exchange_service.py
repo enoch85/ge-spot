@@ -9,6 +9,7 @@ import os
 import time
 from typing import Dict, Optional
 
+from ..const import CURRENCY_SUBUNIT_MULTIPLIER, CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY
 from ..utils.error_handler import retry_async
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,21 +73,14 @@ class ExchangeRateService:
                 "ecb": "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"
             }
 
-            rates = {"EUR": 1.0}  # Base currency is EUR
+            # ECB always uses EUR as the base currency
+            rates = {"EUR": 1.0}
 
             # Find exchange rates in the XML
             for cube in root.findall(".//ecb:Cube[@currency]", ns):
                 currency = cube.attrib.get("currency")
                 rate = float(cube.attrib.get("rate"))
                 rates[currency] = rate
-
-            # Include fallback rates for Nordic currencies if not in ECB data
-            if "SEK" not in rates:
-                rates["SEK"] = 10.72  # Fallback rate
-            if "NOK" not in rates:
-                rates["NOK"] = 11.7   # Fallback rate
-            if "DKK" not in rates:
-                rates["DKK"] = 7.46   # Fallback rate
 
             _LOGGER.info(f"Fetched {len(rates)-1} exchange rates")
             return rates
@@ -163,16 +157,9 @@ class ExchangeRateService:
                 await self._save_cache()
                 return self.rates
             elif not self.rates:
-                # If failed to fetch and have no cached rates, use fallback defaults
-                self.rates = {
-                    "EUR": 1.0,
-                    "SEK": 10.72,
-                    "NOK": 11.7,
-                    "DKK": 7.46,
-                    "GBP": 0.85,
-                    "AUD": 1.64
-                }
-                _LOGGER.warning("Using fallback exchange rates")
+                # If failed to fetch and have no cached rates, log error and raise exception
+                _LOGGER.error("Failed to fetch exchange rates and no cache available")
+                raise ValueError("Could not retrieve exchange rates")
 
         return self.rates
 
@@ -189,8 +176,8 @@ class ExchangeRateService:
 
         # Check if we have the rates
         if from_currency not in rates or to_currency not in rates:
-            _LOGGER.warning(f"Missing exchange rates for {from_currency} → {to_currency}")
-            return amount  # Return original amount if we can't convert
+            _LOGGER.error(f"Missing exchange rates for {from_currency} → {to_currency}")
+            raise ValueError(f"Missing exchange rates for {from_currency} → {to_currency}")
 
         # EUR-based conversion: amount / from_rate * to_rate
         from_rate = rates[from_currency]
