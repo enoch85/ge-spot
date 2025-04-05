@@ -53,29 +53,23 @@ class FormHelper:
         )
 
     @staticmethod
-    def create_update_interval_selector() -> selector.SelectSelector:
+    def create_update_interval_selector() -> Dict[int, str]:
         """Create update interval selector.
 
         Returns:
-            A SelectSelector for update interval
+            A dictionary mapping interval values to labels for vol.In()
         """
-        # Ensure values are integers, not strings
-        options = []
+        # Create a dictionary mapping of interval values to labels
+        options = {}
         for option in UPDATE_INTERVAL_OPTIONS:
-            # Handle both string and integer values
             try:
                 value = int(option["value"])
-                options.append({"value": value, "label": option["label"]})
+                options[value] = option["label"]
             except (ValueError, TypeError, KeyError):
                 _LOGGER.warning(f"Invalid update interval option format: {option}")
                 continue
                 
-        return selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=options,
-                mode=selector.SelectSelectorMode.DROPDOWN,
-            )
-        )
+        return options
 
     @staticmethod
     def create_display_unit_selector() -> selector.SelectSelector:
