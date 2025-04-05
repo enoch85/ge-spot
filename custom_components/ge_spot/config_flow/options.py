@@ -47,12 +47,16 @@ class GSpotOptionsFlow(OptionsFlow):
 
         if user_input is not None:
             try:
+                # Find existing API key from this or other entries
+                existing_api_key = await self._find_existing_api_key(SOURCE_ENTSO_E)
+                
                 # Handle API key updates if present
                 if f"{SOURCE_ENTSO_E}_api_key" in user_input and user_input[f"{SOURCE_ENTSO_E}_api_key"]:
-                    # Validate and store API key
+                    # If empty field but we have an existing key, use that
                     api_key = user_input[f"{SOURCE_ENTSO_E}_api_key"]
-                    valid_key = True
-
+                    if not api_key and existing_api_key:
+                        api_key = existing_api_key
+                        
                     # Only validate if key has changed
                     if api_key != self._data.get(CONF_API_KEY, ""):
                         _LOGGER.debug(f"Validating updated ENTSO-E API key")
@@ -76,7 +80,7 @@ class GSpotOptionsFlow(OptionsFlow):
                             self._errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
 
                     # Remove the API key field from options to avoid duplication
-                    if valid_key and f"{SOURCE_ENTSO_E}_api_key" in user_input:
+                    if f"{SOURCE_ENTSO_E}_api_key" in user_input:
                         user_input.pop(f"{SOURCE_ENTSO_E}_api_key")
 
                 # Convert VAT from percentage to decimal if present
@@ -131,3 +135,21 @@ class GSpotOptionsFlow(OptionsFlow):
                 }),
                 errors=self._errors,
             )
+            
+    async def _find_existing_api_key(self, source_type):
+        """Find existing API key in this or other config entries."""
+        # First check the current entry's data
+        if CONF_API_KEY in self._data and self._data.get(CONF_API_KEY):
+            return self._data.get(CONF_API_KEY)
+            
+        # Then check other entries
+        existing_entries = self.hass.config_entries.async_entries(DOMAIN)
+        for entry in existing_entries:
+            if entry.entry_id == self.entry_id:
+                continue  # Skip current entry
+                
+            if CONF_API_KEY in entry.data and entry.data.get(CONF_API_KEY):
+                # Verify it's for the requested source type
+                if source_type in entry.data.get(CONF_SOURCE_PRIORITY, []):
+                    return entry.data.get(CONF_API_KEY)
+        return None
