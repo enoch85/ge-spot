@@ -8,7 +8,6 @@ class Config:
     VAT = "vat"
     UPDATE_INTERVAL = "update_interval"
     DISPLAY_UNIT = "display_unit"
-    ENABLE_FALLBACK = "enable_fallback"
     CURRENCY = "currency"
     PRECISION = "precision"
     API_KEY = "api_key"
@@ -23,7 +22,6 @@ CONF_AREA = Config.AREA
 CONF_VAT = Config.VAT
 CONF_UPDATE_INTERVAL = Config.UPDATE_INTERVAL
 CONF_DISPLAY_UNIT = Config.DISPLAY_UNIT
-CONF_ENABLE_FALLBACK = Config.ENABLE_FALLBACK
 CONF_CURRENCY = Config.CURRENCY
 CONF_PRECISION = Config.PRECISION
 CONF_API_KEY = Config.API_KEY
