@@ -207,6 +207,16 @@ class CurrentPriceSensor(BaseElectricityPriceSensor):
                     "status": status.get("status", "unknown"),
                     "valid": status.get("valid", None)
                 }
+        
+        # Add exchange rate info
+        if "exchange_rate_info" in self.coordinator.data:
+            exchange_info = self.coordinator.data["exchange_rate_info"]
+            if exchange_info and "timestamp" in exchange_info:
+                attrs["exchange_service_timestamp"] = exchange_info.get("timestamp")
+                if "formatted" in exchange_info:
+                    attrs["exchange_service_rate"] = exchange_info.get("formatted")
+                elif "rate" in exchange_info:
+                    attrs["exchange_service_rate"] = f"1 EUR = {exchange_info['rate']:.4f} {self._currency}"
 
         return attrs
 
