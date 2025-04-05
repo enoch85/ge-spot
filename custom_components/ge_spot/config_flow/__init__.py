@@ -9,6 +9,7 @@ from .schemas import (
     get_default_values
 )
 from .options import GSpotOptionsFlow
+from .implementation import GSpotConfigFlow
 
 # This makes imports in the main config_flow.py cleaner and ensures
 # all symbols are properly exported from this package
