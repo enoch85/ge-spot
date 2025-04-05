@@ -23,9 +23,14 @@ class ApiValidator:
             _LOGGER.warning("Missing or empty hourly_prices in data")
             return False
 
-        # Check that at least one hourly price is non-None
-        if not any(price is not None for price in data["hourly_prices"].values()):
-            _LOGGER.warning("All hourly prices are None")
+        # Check that hourly_prices is a dictionary
+        if not isinstance(data["hourly_prices"], dict):
+            _LOGGER.warning("hourly_prices is not a dictionary")
+            return False
+
+        # Check that at least one hourly price is non-None and is a valid number
+        if not any(isinstance(price, (int, float)) and price is not None for price in data["hourly_prices"].values()):
+            _LOGGER.warning("All hourly prices are None or not valid numbers")
             return False
 
         return True
