@@ -25,6 +25,7 @@ class EntsoEAPI(BaseEnergyAPI):
         tomorrow = today + datetime.timedelta(days=1)
 
         # Format dates for ENTSO-E API - one day period
+        # ENTSO-E requires YYYYMMDDhhmm format without separators
         period_start = today.strftime("%Y%m%d0000")
         period_end = tomorrow.strftime("%Y%m%d0000")
 
@@ -39,6 +40,7 @@ class EntsoEAPI(BaseEnergyAPI):
         
         _LOGGER.debug(f"Using ENTSO-E area code {entsoe_area} for area {area}")
 
+        # Build query parameters according to ENTSO-E API requirements
         params = {
             "securityToken": api_key,
             "documentType": "A44",  # Day-ahead prices
@@ -48,7 +50,7 @@ class EntsoEAPI(BaseEnergyAPI):
             "periodEnd": period_end,
         }
 
-        _LOGGER.debug(f"Fetching ENTSO-E with params: periodStart={period_start}, periodEnd={period_end}, area={entsoe_area}")
+        _LOGGER.debug(f"Fetching ENTSO-E with params: periodStart={period_start}, periodEnd={period_end}, area={entsoe_area}, API key starting with {api_key[:5]}...")
 
         # Use custom headers for ENTSO-E API
         headers = {
@@ -57,9 +59,7 @@ class EntsoEAPI(BaseEnergyAPI):
             "Content-Type": "application/xml;charset=UTF-8"
         }
 
-        # Use the fetch_with_retry method with custom headers
         try:
-            # Use a separate GET request with custom parameters since this API is picky
             await self._ensure_session()
             
             if not self.session or self.session.closed:
@@ -67,27 +67,50 @@ class EntsoEAPI(BaseEnergyAPI):
                 return None
                 
             url = self.BASE_URL
-            
             response = None
             retries = 3
             
             for attempt in range(retries):
                 try:
-                    async with self.session.get(url, params=params, headers=headers, timeout=30) as resp:
-                        if resp.status == 200:
+                    # Full URL with parameters for debugging
+                    full_url = f"{url}?securityToken={api_key[:5]}...&documentType=A44&in_Domain={entsoe_area}&out_Domain={entsoe_area}&periodStart={period_start}&periodEnd={period_end}"
+                    _LOGGER.debug(f"ENTSO-E request attempt {attempt+1}: {full_url}")
+                    
+                    async with self.session.get(url, params=params, headers=headers, timeout=60) as resp:
+                        status_code = resp.status
+                        content_type = resp.headers.get('Content-Type', '')
+                        _LOGGER.debug(f"ENTSO-E response status: {status_code}, content-type: {content_type}")
+                        
+                        if status_code == 200:
                             response = await resp.text()
-                            break
-                        elif resp.status == 403:
-                            _LOGGER.error(f"ENTSO-E API authentication failed (403 Forbidden). Check your API key.")
-                            # No need to retry on authentication failure
-                            break
+                            _LOGGER.debug(f"ENTSO-E response: received {len(response)} bytes")
+                            if "<Publication_MarketDocument" in response:
+                                _LOGGER.debug("ENTSO-E response contains valid XML document")
+                                break
+                            else:
+                                _LOGGER.warning("ENTSO-E response does not contain expected XML document")
+                                if len(response) < 500:
+                                    _LOGGER.debug(f"Response content: {response}")
+                                
+                        elif status_code == 401 or status_code == 403:
+                            error_text = await resp.text()
+                            _LOGGER.error(f"ENTSO-E API authentication failed ({status_code}). Check your API key. Response: {error_text[:200]}")
+                            break  # No point retrying with same credentials
+                            
                         else:
                             error_text = await resp.text()
-                            _LOGGER.error(f"ENTSO-E API request failed with status {resp.status}: {error_text[:200]}")
+                            _LOGGER.error(f"ENTSO-E API request failed with status {status_code}: {error_text[:200]}")
                             if attempt < retries - 1:
                                 delay = 2 ** attempt
                                 _LOGGER.debug(f"Retrying in {delay} seconds...")
                                 await asyncio.sleep(delay)
+                                
+                except asyncio.TimeoutError:
+                    _LOGGER.error(f"Timeout fetching from ENTSO-E (attempt {attempt+1}/{retries})")
+                    if attempt < retries - 1:
+                        delay = 2 ** attempt
+                        await asyncio.sleep(delay)
+                        
                 except Exception as e:
                     _LOGGER.error(f"Error during ENTSO-E API request (attempt {attempt+1}/{retries}): {e}")
                     if attempt < retries - 1:
@@ -95,11 +118,18 @@ class EntsoEAPI(BaseEnergyAPI):
                         await asyncio.sleep(delay)
             
             # Check for authentication errors in the response
-            if response and "Not authorized" in response:
-                _LOGGER.error(f"ENTSO-E API authentication failed: Not authorized. Check your API key.")
-                return None
+            if response:
+                if "Not authorized" in response:
+                    _LOGGER.error(f"ENTSO-E API authentication failed: Not authorized. Check your API key.")
+                    return None
+                elif "No matching data found" in response:
+                    _LOGGER.warning(f"ENTSO-E API returned: No matching data found for the query parameters")
+                    return None
                 
-            return response
+                return response
+            else:
+                _LOGGER.error("ENTSO-E API returned empty response after all retries")
+                return None
             
         except Exception as e:
             _LOGGER.error(f"Failed to fetch data from ENTSO-E: {e}")
@@ -347,6 +377,7 @@ class EntsoEAPI(BaseEnergyAPI):
                 api._owns_session = False
             
             # Try to fetch some data with the provided key
+            _LOGGER.debug(f"Validating ENTSO-E API key for area {area}")
             result = await api._fetch_data()
 
             # Close session if we created one
@@ -355,12 +386,17 @@ class EntsoEAPI(BaseEnergyAPI):
 
             # Check if we got a valid response
             if result and isinstance(result, str) and "<Publication_MarketDocument" in result:
+                _LOGGER.debug("ENTSO-E API key validation successful")
                 return True
             elif isinstance(result, str) and "Not authorized" in result:
                 _LOGGER.error("API key validation failed: Not authorized")
                 return False
+            elif isinstance(result, str) and "No matching data found" in result:
+                # This is technically a valid API key, even if there's no data
+                _LOGGER.warning("API key is valid but no data available for the specified area")
+                return True
             else:
-                _LOGGER.error("API key validation failed: No data returned")
+                _LOGGER.error("API key validation failed: No valid data returned")
                 return False
 
         except Exception as e:
