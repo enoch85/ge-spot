@@ -3,7 +3,7 @@ import datetime
 import asyncio
 import json
 from .base import BaseEnergyAPI
-from ..utils.currency_utils import convert_to_subunit, convert_energy_price
+from ..utils.currency_utils import convert_to_subunit, async_convert_energy_price
 
 _LOGGER = logging.getLogger(__name__)
 
