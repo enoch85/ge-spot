@@ -236,15 +236,12 @@ class GSpotConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Coerce(float),
                     vol.Range(min=0, max=100),
                 ),
-                vol.Optional(CONF_UPDATE_INTERVAL, default=60): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            {"value": int(option["value"]), "label": option["label"]}
-                            for option in UPDATE_INTERVAL_OPTIONS
-                        ],
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=60): vol.In({
+                    60: "1 hour",
+                    360: "6 hours",
+                    720: "12 hours",
+                    1440: "24 hours"
+                }),
                 vol.Optional(CONF_DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
@@ -477,15 +474,12 @@ class GSpotOptionsFlow(config_entries.OptionsFlow):
                     vol.Coerce(float),
                     vol.Range(min=0, max=100),
                 ),
-                vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            {"value": int(option["value"]), "label": option["label"]}
-                            for option in UPDATE_INTERVAL_OPTIONS
-                        ],
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
+                vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): vol.In({
+                    60: "1 hour",
+                    360: "6 hours",
+                    720: "12 hours",
+                    1440: "24 hours"
+                }),
                 vol.Optional(CONF_DISPLAY_UNIT, default=current_display_unit): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
