@@ -15,7 +15,7 @@ from .const import (
     SOURCE_ENTSO_E,
 )
 from .api import get_sources_for_region, create_api
-from .config_flow.utils import get_deduplicated_regions
+from .config_flow.utils import get_deduplicated_regions, SOURCE_AREA_MAPS
 from .config_flow.schemas import get_user_schema, get_source_priority_schema, get_api_keys_schema
 from .config_flow.validators import validate_entso_e_api_key, get_entso_e_api_key_description
 from .config_flow.options import GSpotOptionsFlow
@@ -29,7 +29,6 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self):
         """Initialize the config flow."""
-        super().__init__()
         self._data = {}
         self._supported_sources = []
         self._errors = {}
@@ -179,8 +178,6 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def _get_region_name(self, region_code):
         """Get display name for a region code."""
-        from .config_flow.utils import SOURCE_AREA_MAPS
-
         region_name = None
         for source, area_dict in SOURCE_AREA_MAPS.items():
             if region_code in area_dict:
