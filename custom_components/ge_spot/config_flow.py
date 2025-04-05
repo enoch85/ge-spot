@@ -8,7 +8,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
-from .form_helper import FormHelper
+from .utils.form_helpers import FormHelper
 
 from .const import (
     DOMAIN, CONF_AREA, CONF_VAT, CONF_UPDATE_INTERVAL,
