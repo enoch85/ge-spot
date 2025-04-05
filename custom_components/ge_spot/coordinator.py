@@ -347,6 +347,19 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
             # Check API key status
             api_key_status = await self.check_api_key_status()
+            
+            # Get exchange rate info
+            try:
+                from .utils.exchange_service import get_exchange_service
+                exchange_service = await get_exchange_service()
+                exchange_rate_info = exchange_service.get_exchange_rate_info("EUR", self.currency)
+                _LOGGER.debug(f"Exchange rate info: {exchange_rate_info}")
+            except Exception as e:
+                _LOGGER.error(f"Error getting exchange rate info: {e}")
+                exchange_rate_info = {
+                    "timestamp": None,
+                    "error": str(e)
+                }
 
             # Return data that will be passed to sensors
             result = {
@@ -365,7 +378,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 ATTR_AVAILABLE_FALLBACKS: available_fallbacks,
                 ATTR_API_KEY_STATUS: api_key_status,
                 "source_info": source_info,
-                "timezone": str(self.hass.config.time_zone)
+                "timezone": str(self.hass.config.time_zone),
+                "exchange_rate_info": exchange_rate_info
             }
 
             _LOGGER.info(f"Successfully updated data with current price: {result['current_price']}")
