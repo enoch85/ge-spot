@@ -24,7 +24,7 @@ class EntsoEAPI(BaseEnergyAPI):
         today = now
         tomorrow = today + datetime.timedelta(days=1)
 
-        # Format dates for ENTSO-E API
+        # Format dates for ENTSO-E API - one day period
         period_start = today.strftime("%Y%m%d0000")
         period_end = tomorrow.strftime("%Y%m%d0000")
 
@@ -34,8 +34,9 @@ class EntsoEAPI(BaseEnergyAPI):
             _LOGGER.error("No area provided in configuration")
             return None
 
+        # Try to use the mapped ENTSOE code if available
         entsoe_area = ENTSOE_AREA_MAPPING.get(area, area)
-
+        
         _LOGGER.debug(f"Using ENTSO-E area code {entsoe_area} for area {area}")
 
         params = {
@@ -47,17 +48,62 @@ class EntsoEAPI(BaseEnergyAPI):
             "periodEnd": period_end,
         }
 
-        _LOGGER.debug(f"Fetching ENTSO-E with params: {params}")
+        _LOGGER.debug(f"Fetching ENTSO-E with params: periodStart={period_start}, periodEnd={period_end}, area={entsoe_area}")
 
-        # Use the fetch_with_retry method from BaseEnergyAPI
-        response = await self._fetch_with_retry(self.BASE_URL, params=params)
+        # Use custom headers for ENTSO-E API
+        headers = {
+            "User-Agent": "HomeAssistantGESpot/1.0",
+            "Accept": "application/xml;charset=UTF-8",
+            "Content-Type": "application/xml;charset=UTF-8"
+        }
 
-        # Check for authentication errors in the response
-        if isinstance(response, str) and "Not authorized" in response:
-            _LOGGER.error(f"ENTSO-E API authentication failed: Not authorized. Check your API key.")
+        # Use the fetch_with_retry method with custom headers
+        try:
+            # Use a separate GET request with custom parameters since this API is picky
+            await self._ensure_session()
+            
+            if not self.session or self.session.closed:
+                _LOGGER.error("No valid session for ENTSO-E API request")
+                return None
+                
+            url = self.BASE_URL
+            
+            response = None
+            retries = 3
+            
+            for attempt in range(retries):
+                try:
+                    async with self.session.get(url, params=params, headers=headers, timeout=30) as resp:
+                        if resp.status == 200:
+                            response = await resp.text()
+                            break
+                        elif resp.status == 403:
+                            _LOGGER.error(f"ENTSO-E API authentication failed (403 Forbidden). Check your API key.")
+                            # No need to retry on authentication failure
+                            break
+                        else:
+                            error_text = await resp.text()
+                            _LOGGER.error(f"ENTSO-E API request failed with status {resp.status}: {error_text[:200]}")
+                            if attempt < retries - 1:
+                                delay = 2 ** attempt
+                                _LOGGER.debug(f"Retrying in {delay} seconds...")
+                                await asyncio.sleep(delay)
+                except Exception as e:
+                    _LOGGER.error(f"Error during ENTSO-E API request (attempt {attempt+1}/{retries}): {e}")
+                    if attempt < retries - 1:
+                        delay = 2 ** attempt
+                        await asyncio.sleep(delay)
+            
+            # Check for authentication errors in the response
+            if response and "Not authorized" in response:
+                _LOGGER.error(f"ENTSO-E API authentication failed: Not authorized. Check your API key.")
+                return None
+                
+            return response
+            
+        except Exception as e:
+            _LOGGER.error(f"Failed to fetch data from ENTSO-E: {e}")
             return None
-
-        return response
 
     async def _process_data(self, data):
         """Process the data from ENTSO-E."""
@@ -207,16 +253,17 @@ class EntsoEAPI(BaseEnergyAPI):
             # Use provided session if available
             if session:
                 api.session = session
-
+                api._owns_session = False
+            
             # Try to fetch some data with the provided key
             result = await api._fetch_data()
 
             # Close session if we created one
-            if not session and api.session:
+            if api._owns_session:
                 await api.close()
 
             # Check if we got a valid response
-            if result and not isinstance(result, str):
+            if result and isinstance(result, str) and "<Publication_MarketDocument" in result:
                 return True
             elif isinstance(result, str) and "Not authorized" in result:
                 _LOGGER.error("API key validation failed: Not authorized")
