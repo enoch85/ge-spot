@@ -125,26 +125,39 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_api_keys(self, user_input=None) -> FlowResult:
         """Handle API key entry for sources that require it."""
         self._errors = {}
+        
+        # Check if we already have this API key in another config entry
+        existing_api_key = await self._find_existing_api_key(SOURCE_ENTSO_E)
 
         if user_input is not None:
             try:
+                # If user left field empty but we have existing key, use that
+                entso_key_field = f"{SOURCE_ENTSO_E}_api_key"
+                if entso_key_field in user_input and not user_input[entso_key_field] and existing_api_key:
+                    user_input[entso_key_field] = existing_api_key
+                
                 # Store API keys in data
                 for source, api_key in user_input.items():
                     if source == f"{SOURCE_ENTSO_E}_api_key" and api_key:
-                        # Validate the ENTSO-E API key if provided
-                        _LOGGER.debug(f"Validating ENTSO-E API key: {api_key[:5]}...")
+                        # Only validate if key has changed from existing keys
+                        if api_key != existing_api_key:
+                            # Validate the ENTSO-E API key if provided
+                            _LOGGER.debug(f"Validating ENTSO-E API key: {api_key[:5]}...")
 
-                        valid_key = await validate_entso_e_api_key(
-                            api_key,
-                            self._data.get(CONF_AREA),
-                            None  # No existing session
-                        )
+                            valid_key = await validate_entso_e_api_key(
+                                api_key,
+                                self._data.get(CONF_AREA),
+                                None  # No existing session
+                            )
 
-                        if valid_key:
-                            # Store the API key in correct format
-                            self._data[CONF_API_KEY] = api_key
+                            if valid_key:
+                                # Store the API key in correct format
+                                self._data[CONF_API_KEY] = api_key
+                            else:
+                                self._errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
                         else:
-                            self._errors[f"{SOURCE_ENTSO_E}_api_key"] = "invalid_api_key"
+                            # Use existing validated key
+                            self._data[CONF_API_KEY] = api_key
 
                 # If no errors, proceed with config entry creation
                 if not self._errors:
@@ -156,14 +169,28 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         # Get description for API key entry
         area = self._data.get(CONF_AREA)
         description = get_entso_e_api_key_description(area)
+        
+        # Add info about existing API key to description
+        if existing_api_key:
+            description += f"\n\nAn API key is already configured from another region. You can leave this field empty to reuse it."
 
         # Show API key form
         return self.async_show_form(
             step_id="api_keys",
-            data_schema=get_api_keys_schema(area),
+            data_schema=get_api_keys_schema(area, existing_api_key),
             errors=self._errors,
             description_placeholders={"description": description}
         )
+
+    async def _find_existing_api_key(self, source_type):
+        """Find existing API key in other config entries."""
+        existing_entries = self.hass.config_entries.async_entries(DOMAIN)
+        for entry in existing_entries:
+            if CONF_API_KEY in entry.data and entry.data.get(CONF_API_KEY):
+                # Verify it's for the requested source type
+                if source_type in entry.data.get("source_priority", []):
+                    return entry.data.get(CONF_API_KEY)
+        return None
 
     def _create_entry(self) -> FlowResult:
         """Create the config entry."""
