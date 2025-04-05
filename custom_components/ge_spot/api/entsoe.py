@@ -11,7 +11,8 @@ _LOGGER = logging.getLogger(__name__)
 class EntsoEAPI(BaseEnergyAPI):
     """API handler for ENTSO-E Transparency Platform."""
 
-    BASE_URL = "https://transparency.entsoe.eu/api"
+    # Updated URL based on official documentation
+    BASE_URL = "https://web-api.tp.entsoe.eu/api"
 
     async def _fetch_data(self):
         """Fetch data from ENTSO-E."""
@@ -72,8 +73,9 @@ class EntsoEAPI(BaseEnergyAPI):
             
             for attempt in range(retries):
                 try:
-                    # Full URL with parameters for debugging
-                    full_url = f"{url}?securityToken={api_key[:5]}...&documentType=A44&in_Domain={entsoe_area}&out_Domain={entsoe_area}&periodStart={period_start}&periodEnd={period_end}"
+                    # Full URL with parameters for debugging (hide full API key)
+                    masked_key = f"{api_key[:5]}..." if len(api_key) > 5 else "***"
+                    full_url = f"{url}?securityToken={masked_key}&documentType=A44&in_Domain={entsoe_area}&out_Domain={entsoe_area}&periodStart={period_start}&periodEnd={period_end}"
                     _LOGGER.debug(f"ENTSO-E request attempt {attempt+1}: {full_url}")
                     
                     async with self.session.get(url, params=params, headers=headers, timeout=60) as resp:
