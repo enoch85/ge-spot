@@ -77,7 +77,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                 if entsoe_api and hasattr(entsoe_api, "validate_api_key"):
                     try:
-                        is_valid = await entsoe_api.validate_api_key(api_key)
+                        # Pass the area parameter to fix the validation error
+                        is_valid = await entsoe_api.validate_api_key(api_key, self.area, self.session)
                         api_key_status[SOURCE_ENTSO_E] = {
                             "configured": True,
                             "valid": is_valid,
