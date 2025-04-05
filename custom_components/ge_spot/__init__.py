@@ -16,6 +16,7 @@ from .const import (
     REGION_TO_CURRENCY,
 )
 from .coordinator import RegionPriceCoordinator
+from .api.base import register_shutdown_task
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +56,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         timedelta(minutes=update_interval),
         config,
     )
+
+    # Register shutdown task to close all sessions when Home Assistant stops
+    register_shutdown_task(hass)
 
     # Fetch initial data
     await coordinator.async_config_entry_first_refresh()
