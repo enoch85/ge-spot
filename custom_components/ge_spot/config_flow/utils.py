@@ -1,6 +1,6 @@
 """Utility functions for config flow."""
 import logging
-from typing import Dict, Set, List
+from typing import Dict, Set, List, Any
 
 from ..const import (
     SOURCE_NORDPOOL,
