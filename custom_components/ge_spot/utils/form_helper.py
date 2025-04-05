@@ -60,9 +60,14 @@ class FormHelper:
         Returns:
             A SelectSelector for update interval
         """
+        # Convert integer values to strings to avoid selector errors
+        options = [
+            {"value": str(option["value"]), "label": option["label"]}
+            for option in UPDATE_INTERVAL_OPTIONS
+        ]
         return selector.SelectSelector(
             selector.SelectSelectorConfig(
-                options=UPDATE_INTERVAL_OPTIONS,
+                options=options,
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
         )
