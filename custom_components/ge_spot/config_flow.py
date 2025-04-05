@@ -15,17 +15,11 @@ from .const import (
 )
 from .api import get_sources_for_region
 
-# Import required functions from config_flow package
-from .config_flow import (
-    get_deduplicated_regions,
-    SOURCE_AREA_MAPS,
-    validate_entso_e_api_key,
-    get_entso_e_api_key_description,
-    get_user_schema,
-    get_source_priority_schema,
-    get_api_keys_schema,
-    GSpotOptionsFlow
-)
+# Import from the config_flow package modules
+from .config_flow.utils import get_deduplicated_regions, SOURCE_AREA_MAPS
+from .config_flow.validators import validate_entso_e_api_key, get_entso_e_api_key_description
+from .config_flow.schemas import get_user_schema, get_source_priority_schema, get_api_keys_schema
+from .config_flow.options import GSpotOptionsFlow
 
 _LOGGER = logging.getLogger(__name__)
 
