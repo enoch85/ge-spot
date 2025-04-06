@@ -13,6 +13,8 @@ from ..const import (
     CONF_API_KEY,
     REGION_TO_CURRENCY,
     ENERGY_UNIT_CONVERSION,
+    CONF_DISPLAY_UNIT,
+    DISPLAY_UNIT_CENTS,
 )
 from ..utils.currency_utils import async_convert_energy_price
 from ..utils.timezone_utils import localize_datetime
@@ -321,7 +323,14 @@ class BaseEnergyAPI(ABC):
         if price is None:
             return None
 
-        use_subunit = to_subunit if to_subunit is not None else self.config.get("price_in_cents", False)
+        # Determine if we should convert to subunit
+        use_subunit = to_subunit
+        if use_subunit is None:
+            # Use config setting if not explicitly provided
+            use_subunit = self.config.get("price_in_cents", False)
+            # If display_unit is set, it takes precedence
+            if CONF_DISPLAY_UNIT in self.config:
+                use_subunit = self.config[CONF_DISPLAY_UNIT] == DISPLAY_UNIT_CENTS
 
         # Perform conversion
         converted_price = await async_convert_energy_price(
