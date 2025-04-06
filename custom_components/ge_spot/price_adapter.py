@@ -17,6 +17,7 @@ from .utils.timezone_utils import (
     get_price_list,
     get_statistics,
     is_tomorrow_valid,
+    classify_price_periods,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,6 +40,9 @@ class ElectricityPriceAdapter:
 
         # Process data into periods with proper timezone handling
         self.price_periods = process_price_data(self.processed_raw_data, self.local_tz)
+        
+        # Classify periods by date (today, tomorrow, etc.)
+        self.classified_periods = classify_price_periods(self.price_periods, self.hass)
 
         # Log first and last periods for debugging
         if self.price_periods:
@@ -47,7 +51,9 @@ class ElectricityPriceAdapter:
             _LOGGER.debug(f"First period: {first_period['start'].isoformat()} - {first_period['price']}")
             _LOGGER.debug(f"Last period: {last_period['start'].isoformat()} - {last_period['price']}")
 
-        _LOGGER.debug(f"Created {len(self.price_periods)} price periods")
+        _LOGGER.debug(f"Created {len(self.price_periods)} price periods "
+                     f"(today: {len(self.classified_periods['today'])}, "
+                     f"tomorrow: {len(self.classified_periods['tomorrow'])})")
 
     def _process_raw_data(self):
         """Process various raw data formats into a standardized structure."""
@@ -167,7 +173,13 @@ class ElectricityPriceAdapter:
 
     def get_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
         """Get all prices for a specific day (today + offset)."""
-        return get_prices_for_day(self.price_periods, day_offset, self.hass)
+        if day_offset == 0:
+            return self.classified_periods["today"]
+        elif day_offset == 1:
+            return self.classified_periods["tomorrow"]
+        else:
+            # For other offsets, fallback to the original method
+            return get_prices_for_day(self.price_periods, day_offset, self.hass)
 
     def get_raw_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
         """Get raw price data formatted for Home Assistant attributes."""
@@ -176,11 +188,11 @@ class ElectricityPriceAdapter:
 
     def get_today_prices(self) -> List[float]:
         """Get list of today's prices in chronological order."""
-        return get_price_list(self.get_prices_for_day(0))
+        return get_price_list(self.classified_periods["today"])
 
     def get_tomorrow_prices(self) -> List[float]:
         """Get list of tomorrow's prices in chronological order."""
-        return get_price_list(self.get_prices_for_day(1))
+        return get_price_list(self.classified_periods["tomorrow"])
 
     def get_day_statistics(self, day_offset: int = 0) -> Dict[str, Any]:
         """Calculate statistics for a particular day."""
@@ -196,4 +208,4 @@ class ElectricityPriceAdapter:
 
     def is_tomorrow_valid(self) -> bool:
         """Check if tomorrow's data is available."""
-        return is_tomorrow_valid(self.price_periods, self.hass)
+        return len(self.classified_periods["tomorrow"]) >= 20
