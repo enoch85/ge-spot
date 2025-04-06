@@ -445,6 +445,3 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     await api.close()
             except Exception as e:
                 _LOGGER.error(f"Error closing API {api.__class__.__name__}: {e}")
-
-# Legacy coordinator for backward compatibility
-ElectricityPriceCoordinator = RegionPriceCoordinator
