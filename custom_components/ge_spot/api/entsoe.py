@@ -5,7 +5,12 @@ import asyncio
 import xml.etree.ElementTree as ET
 from .base import BaseEnergyAPI
 from ..utils.currency_utils import convert_to_subunit, async_convert_energy_price
-from ..const import ENTSOE_AREA_MAPPING, CONF_API_KEY
+from ..const import (
+    ENTSOE_AREA_MAPPING, 
+    CONF_API_KEY,
+    CONF_DISPLAY_UNIT,
+    DISPLAY_UNIT_CENTS
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,7 +67,7 @@ class EntsoEAPI(BaseEnergyAPI):
         }
 
         try:
-            await self._ensure_session()
+            await self.data_processor._ensure_session()
 
             if not self.session or self.session.closed:
                 _LOGGER.error("No valid session for ENTSO-E API request")
@@ -285,7 +290,10 @@ class EntsoEAPI(BaseEnergyAPI):
             hourly_prices = selected_series["prices"]  # These are the raw prices
             
             # Convert all prices to target currency/unit
-            use_cents = self.config.get("price_in_cents", False)
+            # Get display unit setting from config
+            display_unit = self.config.get(CONF_DISPLAY_UNIT)
+            use_cents = display_unit == DISPLAY_UNIT_CENTS
+            
             currency = selected_series["metadata"]["currency"]
             
             final_hourly_prices = {}
@@ -312,12 +320,12 @@ class EntsoEAPI(BaseEnergyAPI):
                     "price": price
                 })
                 
-                # Convert price
+                # Convert price using the centralized method
                 converted_price = await self._convert_price(
                     price=price,
                     from_currency=currency,
                     from_unit="MWh",
-                    to_subunit=use_cents
+                    to_subunit=use_cents  # Use the display unit setting from config
                 )
                 
                 # Store converted price
