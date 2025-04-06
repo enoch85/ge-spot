@@ -1,6 +1,6 @@
-"""Price conversion utilities for energy prices."""
+"""Price conversion utilities for energy APIs."""
 import logging
-from typing import Optional, Any
+from typing import Optional
 
 from ...const import (
     CONF_DISPLAY_UNIT,
@@ -12,7 +12,7 @@ from ...utils.currency_utils import async_convert_energy_price
 _LOGGER = logging.getLogger(__name__)
 
 class PriceConverter:
-    """Handles price conversion consistently across all API implementations."""
+    """Handles price conversion consistently across API implementations."""
 
     def __init__(self, api_instance):
         """Initialize the price converter.
@@ -74,23 +74,6 @@ class PriceConverter:
 
         return converted_price
 
-    def _apply_vat(self, price, vat_rate=None):
-        """Apply VAT to a price value."""
-        if price is None:
-            return None
-
-        # Use provided VAT rate or fall back to instance VAT
-        vat = vat_rate if vat_rate is not None else self.vat
-
-        if vat > 0:
-            original_price = price
-            price = price * (1 + vat)
-            _LOGGER.debug(f"Applied VAT {vat:.2%}: {original_price} → {price}")
-        else:
-            _LOGGER.debug(f"No VAT applied (rate: {vat:.2%})")
-
-        return price
-
     def get_display_format(self):
         """Get information about the current display format."""
         use_subunit = self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS
@@ -100,13 +83,11 @@ class PriceConverter:
             return {
                 "unit": f"{subunit_name}/kWh",
                 "is_subunit": True,
-                "subunit_name": subunit_name,
-                "conversion_factor": 100  # Default conversion factor
+                "subunit_name": subunit_name
             }
         else:
             return {
                 "unit": f"{self._currency}/kWh",
                 "is_subunit": False,
-                "subunit_name": None,
-                "conversion_factor": 1
+                "subunit_name": None
             }
