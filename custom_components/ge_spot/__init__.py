@@ -16,7 +16,7 @@ from .const import (
     REGION_TO_CURRENCY,
 )
 from .coordinator import RegionPriceCoordinator
-from .api.base import register_shutdown_task
+from .api.base.session_manager import register_shutdown_task
 
 _LOGGER = logging.getLogger(__name__)
 
