@@ -1,41 +1,12 @@
 """Constants for the GE-Spot integration."""
 
-from .config import (
-    CONF_SOURCE,
-    CONF_AREA,
-    CONF_VAT,
-    CONF_UPDATE_INTERVAL,
-    CONF_DISPLAY_UNIT,
-    CONF_CURRENCY,
-    CONF_PRECISION,
-    CONF_API_KEY,
-    CONF_PRICE_IN_CENTS,
-    CONF_CACHE_TTL,
-    CONF_SOURCE_PRIORITY,
-    Config
-)
+# Add a constant for storing original area
+CONF_ORIGINAL_AREA = "original_area"
 
-from .defaults import (
-    DEFAULT_NAME,
-    DEFAULT_VAT,
-    DEFAULT_UPDATE_INTERVAL,
-    DEFAULT_DISPLAY_UNIT,
-    DEFAULT_PRECISION,
-    DEFAULT_CACHE_TTL,
-    Defaults
-)
-
-from .sources import (
-    SOURCE_ENERGI_DATA_SERVICE,
-    SOURCE_NORDPOOL,
-    SOURCE_ENTSO_E,
-    SOURCE_EPEX,
-    SOURCE_OMIE,
-    SOURCE_AEMO,
-    SOURCES,
-    Source
-)
-
+# Import all constants from their submodules
+from .config import Config
+from .defaults import Defaults
+from .sources import Source
 from .areas import (
     AREA_TIMEZONES,
     ENTSOE_AREA_MAPPING,
@@ -48,28 +19,13 @@ from .areas import (
     DEFAULT_AREAS,
     NORDPOOL_DELIVERY_AREA_MAPPING
 )
-
 from .currencies import (
+    Currency,
     REGION_TO_CURRENCY,
     CURRENCY_SUBUNIT_MULTIPLIER,
     CURRENCY_SUBUNIT_NAMES,
     ENERGY_UNIT_CONVERSION,
-    # Direct currency constants
-    CURRENCY_EUR,
-    CURRENCY_SEK,
-    CURRENCY_NOK,
-    CURRENCY_DKK,
-    CURRENCY_GBP,
-    CURRENCY_AUD,
-    CURRENCY_MDL,
-    CURRENCY_UAH,
-    CURRENCY_AMD,
-    CURRENCY_GEL,
-    CURRENCY_AZN,
-    # Currency class
-    Currency
 )
-
 from .precision import (
     PRICE_PRECISION,
     PRICE_PRECISION_HIGH,
@@ -78,64 +34,69 @@ from .precision import (
     PRICE_FORMAT_EURO,
     PRICE_FORMAT_PERCENT
 )
-
 from .display import (
     DISPLAY_UNIT_DECIMAL,
     DISPLAY_UNIT_CENTS,
     DISPLAY_UNITS,
     UPDATE_INTERVAL_OPTIONS
 )
-
-from .sensors import (
-    SENSOR_TYPE_CURRENT,
-    SENSOR_TYPE_NEXT,
-    SENSOR_TYPE_DAY_AVG,
-    SENSOR_TYPE_PEAK,
-    SENSOR_TYPE_OFF_PEAK,
-    SENSOR_TYPE_TOMORROW_AVG,
-    SENSOR_TYPE_TOMORROW_PEAK,
-    SENSOR_TYPE_TOMORROW_OFF_PEAK,
-    SensorType
-)
-
-from .attributes import (
-    ATTR_DATA_SOURCE,
-    ATTR_FALLBACK_USED,
-    ATTR_RAW_API_DATA,
-    ATTR_RAW_VALUES,
-    ATTR_FALLBACK_INFO,
-    ATTR_USING_CACHED_DATA,
-    ATTR_ATTEMPTED_SOURCES,
-    ATTR_PRIMARY_SOURCE,
-    ATTR_ACTIVE_SOURCE,
-    ATTR_RAW_VALUE,
-    ATTR_CONVERSION_INFO,
-    ATTR_CURRENCY,
-    ATTR_AREA,
-    ATTR_VAT,
-    ATTR_TODAY,
-    ATTR_TOMORROW,
-    ATTR_TOMORROW_VALID,
-    ATTR_RAW_TODAY,
-    ATTR_RAW_TOMORROW,
-    ATTR_CURRENT_PRICE,
-    ATTR_MIN,
-    ATTR_MAX,
-    ATTR_AVERAGE,
-    ATTR_OFF_PEAK_1,
-    ATTR_OFF_PEAK_2,
-    ATTR_PEAK,
-    ATTR_LAST_UPDATED,
-    ATTR_AVAILABLE_FALLBACKS,
-    ATTR_IS_USING_FALLBACK,
-    ATTR_API_KEY_STATUS,
-    Attributes
-)
-
-from .errors import (
-    ErrorMessages,
-    TRANSLATIONS
-)
+from .sensors import SensorType
+from .attributes import Attributes
+from .errors import ErrorMessages, TRANSLATIONS
 
 # Domain
 DOMAIN = "ge_spot"
+CONFIG_VERSION = 1
+
+# Constants to simplify imports across the integration
+# These allow direct access without class prefixes
+CONF_AREA = Config.AREA
+CONF_VAT = Config.VAT
+CONF_UPDATE_INTERVAL = Config.UPDATE_INTERVAL
+CONF_DISPLAY_UNIT = Config.DISPLAY_UNIT
+CONF_CURRENCY = Config.CURRENCY
+CONF_API_KEY = Config.API_KEY
+CONF_SOURCE_PRIORITY = Config.SOURCE_PRIORITY
+
+DEFAULT_VAT = Defaults.VAT
+DEFAULT_UPDATE_INTERVAL = Defaults.UPDATE_INTERVAL
+DEFAULT_DISPLAY_UNIT = Defaults.DISPLAY_UNIT
+
+SOURCE_NORDPOOL = Source.NORDPOOL
+SOURCE_ENERGI_DATA_SERVICE = Source.ENERGI_DATA_SERVICE
+SOURCE_ENTSO_E = Source.ENTSO_E
+SOURCE_EPEX = Source.EPEX
+SOURCE_OMIE = Source.OMIE
+SOURCE_AEMO = Source.AEMO
+
+# Attributes for easy access
+ATTR_DATA_SOURCE = Attributes.DATA_SOURCE
+ATTR_FALLBACK_USED = Attributes.FALLBACK_USED
+ATTR_RAW_API_DATA = Attributes.RAW_API_DATA
+ATTR_RAW_VALUES = Attributes.RAW_VALUES
+ATTR_FALLBACK_INFO = Attributes.FALLBACK_INFO
+ATTR_USING_CACHED_DATA = Attributes.USING_CACHED_DATA
+ATTR_ATTEMPTED_SOURCES = Attributes.ATTEMPTED_SOURCES
+ATTR_PRIMARY_SOURCE = Attributes.PRIMARY_SOURCE
+ATTR_ACTIVE_SOURCE = Attributes.ACTIVE_SOURCE
+ATTR_RAW_VALUE = Attributes.RAW_VALUE
+ATTR_CONVERSION_INFO = Attributes.CONVERSION_INFO
+ATTR_CURRENCY = Attributes.CURRENCY
+ATTR_AREA = Attributes.AREA
+ATTR_VAT = Attributes.VAT
+ATTR_TODAY = Attributes.TODAY
+ATTR_TOMORROW = Attributes.TOMORROW
+ATTR_TOMORROW_VALID = Attributes.TOMORROW_VALID
+ATTR_RAW_TODAY = Attributes.RAW_TODAY
+ATTR_RAW_TOMORROW = Attributes.RAW_TOMORROW
+ATTR_CURRENT_PRICE = Attributes.CURRENT_PRICE
+ATTR_MIN = Attributes.MIN
+ATTR_MAX = Attributes.MAX
+ATTR_AVERAGE = Attributes.AVERAGE
+ATTR_OFF_PEAK_1 = Attributes.OFF_PEAK_1
+ATTR_OFF_PEAK_2 = Attributes.OFF_PEAK_2
+ATTR_PEAK = Attributes.PEAK
+ATTR_LAST_UPDATED = Attributes.LAST_UPDATED
+ATTR_AVAILABLE_FALLBACKS = Attributes.AVAILABLE_FALLBACKS
+ATTR_IS_USING_FALLBACK = Attributes.IS_USING_FALLBACK
+ATTR_API_KEY_STATUS = Attributes.API_KEY_STATUS
