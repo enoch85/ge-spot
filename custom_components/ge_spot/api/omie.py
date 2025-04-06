@@ -12,7 +12,7 @@ import pytz # For timezone handling
 
 # Import from ge-spot's own modules
 from ..const import (
-    TIMEZONE_IBERIAN,
+    OMIE_AREAS,
     CURRENCY_EUR,
     PRICE_PRECISION,
     API_TIMEOUT,
