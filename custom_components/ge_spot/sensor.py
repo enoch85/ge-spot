@@ -37,8 +37,16 @@ class BaseElectricityPriceSensor(SensorEntity):
         self._vat = config_data.get(ATTR_VAT, 0)
         self._precision = config_data.get("precision", 3)
         self._sensor_type = sensor_type
-        self._display_unit = config_data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
-
+        
+        # Get display unit from config or coordinator
+        if hasattr(coordinator, 'display_unit') and coordinator.display_unit:
+            self._display_unit = coordinator.display_unit
+        else:
+            self._display_unit = config_data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
+        
+        # Determine if subunit conversion is needed
+        self._use_subunit = self._display_unit == DISPLAY_UNIT_CENTS
+        
         # Get currency from region
         self._currency = config_data.get(ATTR_CURRENCY, REGION_TO_CURRENCY.get(self._area))
 
@@ -52,7 +60,8 @@ class BaseElectricityPriceSensor(SensorEntity):
         self._attr_unique_id = f"gespot_{sensor_type}_{self._area}".lower()
 
         # Set unit based on display_unit configuration
-        if self._display_unit == DISPLAY_UNIT_CENTS:
+        # Note: This only affects the display - actual conversion is done in the adapter
+        if self._use_subunit:
             subunit = CURRENCY_SUBUNIT_NAMES.get(self._currency, "cents")
             self._attr_native_unit_of_measurement = f"{subunit}/kWh"
         else:
@@ -78,6 +87,8 @@ class BaseElectricityPriceSensor(SensorEntity):
             ATTR_LAST_UPDATED: self.coordinator.data.get(ATTR_LAST_UPDATED),
             ATTR_DATA_SOURCE: self.coordinator.data.get(ATTR_DATA_SOURCE),
             "is_using_fallback": self.coordinator.data.get(ATTR_IS_USING_FALLBACK, False),
+            "display_unit": self._display_unit,
+            "use_subunit": self._use_subunit
         }
 
         # Add exchange rate information if available
@@ -240,14 +251,21 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # Determine currency based on area
     currency = config_entry.data.get(ATTR_CURRENCY, REGION_TO_CURRENCY.get(area))
 
+    # Get display unit setting - first try coordinator, then config
+    display_unit = None
+    if hasattr(coordinator, 'display_unit'):
+        display_unit = coordinator.display_unit
+    else:
+        display_unit = config_entry.options.get(
+            CONF_DISPLAY_UNIT,
+            config_entry.data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
+        )
+
     config_data = {
         ATTR_AREA: area,
         ATTR_VAT: vat,
         ATTR_CURRENCY: currency,
-        CONF_DISPLAY_UNIT: config_entry.options.get(
-            CONF_DISPLAY_UNIT,
-            config_entry.data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
-        ),
+        CONF_DISPLAY_UNIT: display_unit,
     }
 
     # Define sensors with their value extraction functions
