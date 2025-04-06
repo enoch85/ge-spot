@@ -345,7 +345,7 @@ class BaseEnergyAPI(ABC):
             return localize_datetime(now_utc, self.hass)
         return datetime.datetime.now()
 
-    async def _fetch_with_retry(self, url, params=None, max_retries=3):
+    async def _fetch_with_retry(self, url, params=None, timeout=30, max_retries=3):
         """Fetch data from URL with retry mechanism."""
         await self._ensure_session()
 
@@ -363,7 +363,7 @@ class BaseEnergyAPI(ABC):
                     "Accept": "application/json, text/plain, */*"
                 }
 
-                async with self.session.get(url, params=params, headers=headers, timeout=30) as response:
+                async with self.session.get(url, params=params, headers=headers, timeout=timeout) as response:
                     if response.status != 200:
                         _LOGGER.error(f"Error fetching from URL (attempt {attempt+1}/{max_retries}): HTTP {response.status}")
 
