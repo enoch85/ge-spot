@@ -62,6 +62,10 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         self._active_api = None
         self._fallback_used = False
         self._attempted_sources = []
+        
+        # Track separate sources for today and tomorrow data
+        self._today_source = None
+        self._tomorrow_source = None
 
     async def check_api_key_status(self):
         """Check status of configured API keys and report in attributes."""
@@ -123,212 +127,85 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             self._active_source = None
             self._active_api = None
             self._attempted_sources = []
+            self._today_source = None
+            self._tomorrow_source = None
 
-            # Fetch data from APIs in priority order
-            today_data = None
+            # Store results by source and date
+            source_data = {
+                "today": {},
+                "tomorrow": {}
+            }
 
-            # First, try to restore primary source if using fallback
-            if hasattr(self, '_last_successful_data') and self._last_successful_data and self._fallback_used:
-                # Only check primary source if enough time has passed
-                now = datetime.datetime.now()
-                check_primary = True
+            # Try to fetch data from all available sources
+            for api in self._apis:
+                api_name = api.__class__.__name__
+                source_type = self._map_api_to_source_type(api_name)
+                self._attempted_sources.append(source_type)
 
-                if hasattr(self, '_last_primary_check') and self._last_primary_check:
-                    time_since_check = (now - self._last_primary_check).total_seconds() / 60
-                    if time_since_check < self.update_interval.total_seconds() / 60:
-                        check_primary = False
+                _LOGGER.info(f"Attempting to fetch data from {api_name} ({source_type})")
 
-                if check_primary:
-                    self._last_primary_check = now
-                    # Try primary source first
-                    primary_source = self.config.get(CONF_SOURCE_PRIORITY, [])[0]
-                    primary_api = next((api for api in self._apis
-                                    if primary_source.lower() in api.__class__.__name__.lower()), None)
-
-                    if primary_api and primary_api != self._active_api:
-                        _LOGGER.debug(f"Checking if primary source {primary_source} is available again")
-                        try:
-                            data = await primary_api.fetch_day_ahead_prices(
-                                self.area, self.currency, dt_util.now(), self.hass
-                            )
-
-                            if data and ApiValidator.is_data_adequate(data):
-                                _LOGGER.info(f"Primary source {primary_source} is available again, switching back")
-                                today_data = data
-                                self._active_source = primary_source
-                                self._active_api = primary_api
-                                self._fallback_used = False
-                                self._attempted_sources = [primary_source]
-                        except Exception as e:
-                            _LOGGER.debug(f"Primary source {primary_source} still unavailable: {e}")
-
-            # Try all sources if primary source check didn't succeed
-            if not today_data:
-                for api in self._apis:
-                    api_name = api.__class__.__name__
-
-                    # Map API class name to source type more precisely
-                    source_mapping = {
-                        "NordpoolAPI": "nordpool",
-                        "EntsoEAPI": "entsoe",
-                        "EnergiDataServiceAPI": "energi_data_service",
-                        "EpexAPI": "epex",
-                        "OmieAPI": "omie",
-                        "AemoAPI": "aemo"
-                    }
-
-                    api_type = source_mapping.get(api_name, next((s for s in self.config.get(CONF_SOURCE_PRIORITY, [])
-                                if s.lower() in api_name.lower()), "unknown"))
-
-                    _LOGGER.info(f"Attempting to fetch data from {api_name} ({api_type})")
-                    self._attempted_sources.append(api_type)
-
-                    try:
-                        # Pass Home Assistant instance to the API for timezone handling
-                        data = await api.fetch_day_ahead_prices(
-                            self.area,
-                            self.currency,
-                            dt_util.now(),
-                            self.hass
-                        )
-
-                        # Check if data is adequate, not just present
-                        if data and ApiValidator.is_data_adequate(data):
-                            today_data = data
-                            self._active_source = api_type
-                            self._active_api = api
-                            if len(self._attempted_sources) > 1:
-                                self._fallback_used = True
-                            _LOGGER.info(f"Successfully retrieved adequate data from {api_name}")
-                            break
-                        else:
-                            _LOGGER.warning(f"No data or inadequate data retrieved from {api_name}")
-                    except Exception as e:
-                        _LOGGER.error(f"Error fetching data from {api_name}: {e}")
-
-            # If no today data could be fetched, check if we have cached data for today
-            if not today_data:
-                _LOGGER.error(f"Failed to fetch today's price data from any source. Attempted: {', '.join(self._attempted_sources)}")
-
-                # Check if we have cached today's data that's still relevant for today
-                if self._last_successful_data and "today" in self._last_successful_data:
-                    today_date = dt_util.now().date()
-                    cached_today = False
-
-                    # Check if cached data contains valid hours for today
-                    if "adapter" in self._last_successful_data:
-                        adapter = self._last_successful_data["adapter"]
-                        today_prices = adapter.get_prices_for_day(0)
-                        if today_prices:
-                            for period in today_prices:
-                                if period.get("day") == today_date:
-                                    cached_today = True
-                                    break
-
-                    if cached_today:
-                        _LOGGER.warning("Using cached data for today's prices")
-                        today_data = self._last_successful_data
-
-            if not today_data and self._last_successful_data:
-                _LOGGER.warning("Using cached data from last successful update")
-                self._last_successful_data["source_info"] = {
-                    "reason": "All API sources failed",
-                    "attempted_sources": self._attempted_sources,
-                    "using_cached_data": True,
-                    "cache_timestamp": self._last_successful_data.get(ATTR_LAST_UPDATED, "unknown")
-                }
-                self._last_successful_data[ATTR_FALLBACK_USED] = True
-                self._last_successful_data[ATTR_IS_USING_FALLBACK] = True
-
-                # Check API key status
-                api_key_status = await self.check_api_key_status()
-                self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
-
-                return self._last_successful_data
-            elif not today_data:
-                return None
-
-            # Log raw values for debugging - raw_today contains hourly prices in JSON format
-            if "raw_today" in today_data:
-                raw_today = today_data["raw_today"]
-                _LOGGER.debug(f"Raw today data for sensor.gespot_current_price_{self.area.lower()}: {len(raw_today)} entries")
-                # Log only first few entries to avoid log overload
-                if raw_today and len(raw_today) > 0:
-                    _LOGGER.debug(f"Sample raw today data: {raw_today[0]}")
-
-            # Log detailed conversion raw values
-            if "raw_values" in today_data:
-                raw_values = today_data["raw_values"]
-                _LOGGER.debug(f"Raw values available for {self.area}: {list(raw_values.keys())}")
-
-            # Try to fetch tomorrow's data if after 1 PM
-            tomorrow_data = None
-            tomorrow_source = None
-            now = dt_util.now()
-
-            if now.hour >= 13 and self._active_api:
                 try:
-                    _LOGGER.info(f"Attempting to fetch tomorrow's data from {self._active_source}")
-                    tomorrow_data = await self._active_api.fetch_day_ahead_prices(
+                    # Pass Home Assistant instance to the API for timezone handling
+                    data = await api.fetch_day_ahead_prices(
                         self.area,
                         self.currency,
-                        dt_util.now() + timedelta(days=1),
+                        dt_util.now(),
                         self.hass
                     )
 
-                    if tomorrow_data:
-                        tomorrow_source = self._active_source
-                        _LOGGER.info(f"Successfully fetched tomorrow's price data from {self._active_source}")
-                    else:
-                        _LOGGER.warning(f"Tomorrow's price data not available from {self._active_source}")
+                    # If data is valid, store it by source
+                    if data and ApiValidator.is_data_adequate(data):
+                        source_data["today"][source_type] = data
+                        self._today_source = source_type
+                        
+                        # If this is the first successful source, set as active
+                        if not self._active_source:
+                            self._active_source = source_type
+                            self._active_api = api
+                            self._fallback_used = self._active_source != self.config.get(CONF_SOURCE_PRIORITY, [])[0]
 
-                        # Try fallbacks for tomorrow data
-                        for api in self._apis:
-                            if api == self._active_api:
-                                continue  # Skip the already-tried active API
+                        # Check for tomorrow data
+                        if data.get("tomorrow_valid", False) or "tomorrow_hourly_prices" in data:
+                            source_data["tomorrow"][source_type] = data
+                            self._tomorrow_source = source_type
 
-                            api_name = api.__class__.__name__
-
-                            # Map API class name to source type more precisely
-                            source_mapping = {
-                                "NordpoolAPI": "nordpool",
-                                "EntsoEAPI": "entsoe",
-                                "EnergiDataServiceAPI": "energi_data_service",
-                                "EpexAPI": "epex",
-                                "OmieAPI": "omie",
-                                "AemoAPI": "aemo"
-                            }
-
-                            api_type = source_mapping.get(api_name, next((s for s in self.config.get(CONF_SOURCE_PRIORITY, [])
-                                           if s.lower() in api_name.lower()), "unknown"))
-
-                            _LOGGER.info(f"Trying fallback for tomorrow's data: {api_name}")
-
-                            try:
-                                tomorrow_data = await api.fetch_day_ahead_prices(
-                                    self.area,
-                                    self.currency,
-                                    dt_util.now() + timedelta(days=1),
-                                    self.hass
-                                )
-
-                                if tomorrow_data:
-                                    tomorrow_source = api_type
-                                    _LOGGER.info(f"Successfully retrieved tomorrow's data from fallback API: {api_name}")
-                                    self._fallback_used = True
-                                    break
-                            except Exception as e:
-                                _LOGGER.error(f"Error fetching tomorrow's data from {api_name}: {e}")
                 except Exception as e:
-                    _LOGGER.warning(f"Failed to fetch tomorrow's prices: {e}")
-            else:
-                _LOGGER.info(f"Not fetching tomorrow's data yet, current hour: {now.hour}")
+                    _LOGGER.error(f"Error fetching data from {api_name}: {e}")
 
-            # Combine the data
+            # If we couldn't get today's data from any source
+            if not source_data["today"]:
+                _LOGGER.error(f"Failed to fetch today's price data from any source. Attempted: {', '.join(self._attempted_sources)}")
+                if self._last_successful_data:
+                    _LOGGER.warning("Using cached data from last successful update")
+                    
+                    # Check API key status
+                    api_key_status = await self.check_api_key_status()
+                    self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
+                    
+                    return self._last_successful_data
+                return None
+
+            # Choose the best sources for today and tomorrow
+            today_data = self._select_primary_source_data(source_data["today"])
+            
+            # If tomorrow data is available from today's source, use it
+            # Otherwise, choose the best available tomorrow data from any source
+            if today_data.get("tomorrow_valid", False) or "tomorrow_hourly_prices" in today_data:
+                tomorrow_data = today_data
+                _LOGGER.info(f"Using tomorrow data from same source: {self._today_source}")
+            else:
+                # Select tomorrow data from fallback sources if available
+                tomorrow_data = self._select_best_tomorrow_data(source_data["tomorrow"])
+                if tomorrow_data:
+                    _LOGGER.info(f"Using tomorrow data from fallback source: {self._tomorrow_source}")
+                else:
+                    _LOGGER.info("No tomorrow data available from any source")
+
+            # Combine today and tomorrow data
             all_data = []
             if today_data:
                 all_data.append(today_data)
-            if tomorrow_data:
+            if tomorrow_data and tomorrow_data != today_data:
                 all_data.append(tomorrow_data)
 
             # Create adapter with processed data
@@ -346,34 +223,21 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
             # Process statistics for today and tomorrow
             today_stats = self.adapter.get_day_statistics(0)
-            tomorrow_stats = self.adapter.get_day_statistics(1) if tomorrow_data else None
+            tomorrow_stats = self.adapter.get_day_statistics(1) if self.adapter.classified_periods["tomorrow"] else None
 
             # Get available fallbacks (sources after the primary)
             available_fallbacks = []
             if len(self._apis) > 1:
                 for api in self._apis[1:]:
-                    api_name = api.__class__.__name__
-
-                    # Map API class name to source type more precisely
-                    source_mapping = {
-                        "NordpoolAPI": "nordpool",
-                        "EntsoEAPI": "entsoe",
-                        "EnergiDataServiceAPI": "energi_data_service",
-                        "EpexAPI": "epex",
-                        "OmieAPI": "omie",
-                        "AemoAPI": "aemo"
-                    }
-
-                    api_type = source_mapping.get(api_name, next((s for s in self.config.get(CONF_SOURCE_PRIORITY, [])
-                                   if s.lower() in api_name.lower()), "unknown"))
-
-                    available_fallbacks.append(api_type)
+                    source_type = self._map_api_to_source_type(api.__class__.__name__)
+                    available_fallbacks.append(source_type)
 
             # Build information about data sources
             source_info = {
                 "primary_source": self.config.get(CONF_SOURCE_PRIORITY, [])[0] if self.config.get(CONF_SOURCE_PRIORITY) else None,
                 "active_source": self._active_source,
-                "tomorrow_source": tomorrow_source,
+                "today_source": self._today_source,
+                "tomorrow_source": self._tomorrow_source,
                 "fallback_used": self._fallback_used,
                 "is_using_fallback": self._fallback_used,
                 "attempted_sources": self._attempted_sources,
@@ -436,6 +300,70 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                 return self._last_successful_data
             raise
+
+    def _map_api_to_source_type(self, api_name):
+        """Map API class name to source type."""
+        source_mapping = {
+            "NordpoolAPI": "nordpool",
+            "EntsoEAPI": "entsoe",
+            "EnergiDataServiceAPI": "energi_data_service",
+            "EpexAPI": "epex",
+            "OmieAPI": "omie",
+            "AemoAPI": "aemo"
+        }
+        
+        # Try direct mapping first
+        if api_name in source_mapping:
+            return source_mapping[api_name]
+        
+        # Fallback to case-insensitive substring search
+        for source, mapped_name in source_mapping.items():
+            if source.lower() in api_name.lower():
+                return mapped_name
+                
+        # If no match, return a generic name based on API class
+        return api_name.lower().replace("api", "")
+
+    def _select_primary_source_data(self, source_data):
+        """Select the best source for today's data based on priority."""
+        if not source_data:
+            return None
+            
+        # Get source priorities from config
+        priorities = self.config.get(CONF_SOURCE_PRIORITY, [])
+        
+        # Try to find data from sources in priority order
+        for source in priorities:
+            if source in source_data:
+                self._today_source = source
+                return source_data[source]
+                
+        # If no priority match, just use the first available
+        first_source = next(iter(source_data.keys()))
+        self._today_source = first_source
+        return source_data[first_source]
+
+    def _select_best_tomorrow_data(self, source_data):
+        """Select the best source for tomorrow's data."""
+        if not source_data:
+            return None
+            
+        # If today's source has tomorrow data, prefer that for consistency
+        if self._today_source and self._today_source in source_data:
+            self._tomorrow_source = self._today_source
+            return source_data[self._today_source]
+            
+        # Otherwise, use priority order
+        priorities = self.config.get(CONF_SOURCE_PRIORITY, [])
+        for source in priorities:
+            if source in source_data:
+                self._tomorrow_source = source
+                return source_data[source]
+                
+        # Fallback to first available
+        first_source = next(iter(source_data.keys()))
+        self._tomorrow_source = first_source
+        return source_data[first_source]
 
     async def async_close(self):
         """Close all API sessions."""
