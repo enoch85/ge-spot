@@ -24,6 +24,8 @@ class NordpoolAPI(BaseEnergyAPI):
         """Fetch data from Nordpool."""
         try:
             now = self._get_now()
+            _LOGGER.debug(f"Current local time from _get_now: {now.isoformat()}")
+            
             today = now.strftime("%Y-%m-%d")
             tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -41,7 +43,7 @@ class NordpoolAPI(BaseEnergyAPI):
                 "deliveryArea": delivery_area
             }
 
-            today_data = await self._fetch_with_retry(self.BASE_URL, params=params)
+            today_data = await self.data_processor.fetch_with_retry(self.BASE_URL, params=params)
 
             if today_data is None:
                 _LOGGER.error(f"Failed to fetch today's data for {delivery_area}")
@@ -54,7 +56,7 @@ class NordpoolAPI(BaseEnergyAPI):
 
             if now_cet.hour >= 13:
                 params["date"] = tomorrow
-                tomorrow_data = await self._fetch_with_retry(self.BASE_URL, params=params)
+                tomorrow_data = await self.data_processor.fetch_with_retry(self.BASE_URL, params=params)
 
             return {
                 "today": today_data,
@@ -85,7 +87,9 @@ class NordpoolAPI(BaseEnergyAPI):
         current_hour = now.hour
         _LOGGER.debug(f"Current local time: {now.isoformat()}, hour: {current_hour}")
 
-        use_subunit = self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS
+        # Determine display unit from config
+        display_unit = self.config.get(CONF_DISPLAY_UNIT, "decimal")
+        use_subunit = display_unit == DISPLAY_UNIT_CENTS
 
         # Determine target currency based on area
         target_currency = REGION_TO_CURRENCY.get(area, self._currency)
@@ -146,19 +150,21 @@ class NordpoolAPI(BaseEnergyAPI):
             try:
                 # Parse the datetime correctly without timezone assumptions
                 dt = parse_datetime(start_time)
+                
+                # Debug the timestamps to check timezone handling
+                _LOGGER.debug(f"Original timestamp: {start_time}, Parsed: {dt.isoformat()}")
 
                 # Convert to HA's local timezone
                 local_dt = dt
-                if hasattr(self, "hass"):
+                if hasattr(self, "hass") and self.hass:
                     local_dt = localize_datetime(dt, self.hass)
+                    _LOGGER.debug(f"Localized using HA timezone: {local_dt.isoformat()}")
                 else:
                     from homeassistant.util import dt as dt_util
                     local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
+                    _LOGGER.debug(f"Localized using default timezone: {local_dt.isoformat()}")
 
-                # Debug timestamp conversion
-                _LOGGER.debug(f"Parsed timestamp '{start_time}' → local: {local_dt.isoformat()}, hour: {local_dt.hour}")
-
-                # Convert price using the centralized converter
+                # Convert price using the centralized method
                 converted_price = await self._convert_price(
                     price=raw_price,
                     from_currency="EUR",
@@ -275,13 +281,13 @@ class NordpoolAPI(BaseEnergyAPI):
 
                     # Convert to local time
                     local_dt = dt
-                    if hasattr(self, "hass"):
+                    if hasattr(self, "hass") and self.hass:
                         local_dt = localize_datetime(dt, self.hass)
                     else:
                         from homeassistant.util import dt as dt_util
                         local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
 
-                    # Convert price using the centralized converter
+                    # Convert price using the centralized method
                     converted_price = await self._convert_price(
                         price=raw_price,
                         from_currency="EUR",
