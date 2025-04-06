@@ -158,19 +158,20 @@ class PriceValueSensor(BaseElectricityPriceSensor):
 class TimestampAttributeMixin:
     """Mixin to provide timestamp attribute."""
 
-    def __init__(self, *args, **kwargs):
-        """Initialize with timestamp key."""
-        self._timestamp_key = f"{self._extrema_type}_timestamp"
-        super().__init__(*args, **kwargs)
-
     def get_additional_attrs(self, data):
         """Get additional attributes including timestamp."""
         attrs = {}
+        
+        # Check for required attributes
+        if not hasattr(self, '_stats_key') or not hasattr(self, '_extrema_type'):
+            return attrs
+            
         stats_key = self._stats_key
+        timestamp_key = f"{self._extrema_type}_timestamp"
 
-        if stats_key in data and self._timestamp_key in data[stats_key]:
-            attrs["timestamp"] = data[stats_key][self._timestamp_key]
-
+        if data and stats_key in data and timestamp_key in data.get(stats_key, {}):
+            attrs["timestamp"] = data[stats_key][timestamp_key]
+            
         return attrs
 
 
