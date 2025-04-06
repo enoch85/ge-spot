@@ -56,7 +56,7 @@ class EpexAPI(BaseEnergyAPI):
             # Get display unit setting from config
             display_unit = self.config.get(CONF_DISPLAY_UNIT)
             use_subunit = display_unit == DISPLAY_UNIT_CENTS
-            
+
             # Parse HTML
             soup = BeautifulSoup(data, 'html.parser')
 

@@ -30,7 +30,7 @@ class BaseEnergyAPI(ABC):
         self._cache_ttl = config.get("cache_ttl", 60)  # Cache TTL in minutes
         self.hass = None  # Will be set when used with Home Assistant
         self._owns_session = False  # Track if we created the session
-        
+
         # Create utilities
         self.data_fetcher = DataFetcher(self)
         self.price_converter = PriceConverter(self)

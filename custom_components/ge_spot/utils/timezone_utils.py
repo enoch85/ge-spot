@@ -129,10 +129,10 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
 
         if not start:
             continue
-            
+
         # Ensure timestamps are timezone-aware
         start = ensure_timezone_aware(start)
-        
+
         # If end is missing, assume 1 hour duration
         if not end:
             end = start + timedelta(hours=1)
@@ -141,7 +141,7 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
 
         # Debug timestamp comparison
         _LOGGER.debug(f"Comparing period: {start.isoformat()} - {end.isoformat()} with reference: {reference_time.isoformat()}")
-        
+
         if start <= reference_time < end:
             _LOGGER.debug(f"Found matching period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
             return period
@@ -169,44 +169,44 @@ def classify_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] = 
     """Classify price periods by date (today, tomorrow, etc.)."""
     if not periods:
         return {"today": [], "tomorrow": [], "other": []}
-    
+
     # Get reference dates in local timezone
     if hass:
         local_now = dt_util.as_local(dt_util.utcnow())
     else:
         local_now = dt_util.now()
-    
+
     today = local_now.date()
     tomorrow = today + timedelta(days=1)
-    
+
     classified = {
         "today": [],
         "tomorrow": [],
         "other": []
     }
-    
+
     for period in periods:
         if not period.get("start"):
             continue
-            
+
         # Ensure datetime is timezone aware
         start = ensure_timezone_aware(period["start"])
         period_date = start.date()
-        
+
         if period_date == today:
             classified["today"].append(period)
         elif period_date == tomorrow:
             classified["tomorrow"].append(period)
         else:
             classified["other"].append(period)
-    
+
     # Sort each list by start time
     for key in classified:
         classified[key] = sorted(classified[key], key=lambda x: x.get("start", dt_util.now()))
-    
+
     # Debug log with period counts
     _LOGGER.debug(f"Classified periods: today={len(classified['today'])}, tomorrow={len(classified['tomorrow'])}, other={len(classified['other'])}")
-    
+
     return classified
 
 
@@ -299,7 +299,7 @@ def get_raw_prices_for_day(day_data: List[Dict]) -> List[Dict]:
 
         try:
             end_time = period.get("end") or period["start"] + timedelta(hours=1)
-            
+
             result.append({
                 "start": period["start"].isoformat(),
                 "end": end_time.isoformat(),

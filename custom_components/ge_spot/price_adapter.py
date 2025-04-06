@@ -43,7 +43,7 @@ class ElectricityPriceAdapter:
 
         # Process data into periods with proper timezone handling
         self.price_periods = process_price_data(self.processed_raw_data, self.local_tz)
-        
+
         # Classify periods by date (today, tomorrow, etc.)
         self.classified_periods = classify_price_periods(self.price_periods, self.hass)
 
@@ -179,12 +179,12 @@ class ElectricityPriceAdapter:
         for period in self.price_periods:
             if "currency" in period and period["currency"]:
                 return period["currency"]
-                
+
         # Then check raw data
         for item in self.raw_data:
             if isinstance(item, dict) and "currency" in item and item["currency"]:
                 return item["currency"]
-        
+
         # Default fallback
         return "EUR"
 
@@ -196,13 +196,13 @@ class ElectricityPriceAdapter:
 
         # Use the utility function to find the current price
         price = find_current_price(self.price_periods, reference_time)
-        
+
         # Apply subunit conversion if needed
         if price is not None and self.use_subunit:
             currency = self._get_currency()
             _LOGGER.debug(f"Converting price to subunit: {price} {currency} → subunit")
             price = convert_to_subunit(price, currency)
-        
+
         return price
 
     def get_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
@@ -223,23 +223,23 @@ class ElectricityPriceAdapter:
     def get_today_prices(self) -> List[float]:
         """Get list of today's prices in chronological order."""
         prices = get_price_list(self.classified_periods["today"])
-        
+
         # Apply subunit conversion if needed
         if self.use_subunit and prices:
             currency = self._get_currency()
             prices = [convert_to_subunit(price, currency) if price is not None else None for price in prices]
-        
+
         return prices
 
     def get_tomorrow_prices(self) -> List[float]:
         """Get list of tomorrow's prices in chronological order."""
         prices = get_price_list(self.classified_periods["tomorrow"])
-        
+
         # Apply subunit conversion if needed
         if self.use_subunit and prices:
             currency = self._get_currency()
             prices = [convert_to_subunit(price, currency) if price is not None else None for price in prices]
-        
+
         return prices
 
     def get_day_statistics(self, day_offset: int = 0) -> Dict[str, Any]:
@@ -252,7 +252,7 @@ class ElectricityPriceAdapter:
         # Apply subunit conversion if needed
         if self.use_subunit and stats:
             currency = self._get_currency()
-            
+
             # Apply conversion to all numeric statistics
             for key in ["min", "max", "average", "median", "off_peak_1", "off_peak_2", "peak"]:
                 if key in stats and stats[key] is not None:

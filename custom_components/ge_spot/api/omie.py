@@ -24,17 +24,17 @@ class OmieAPI(BaseEnergyAPI):
             # Get proper date in the local timezone of the area (ES/PT)
             now = self._get_now()
             area = self.config.get("area", "ES")
-            
+
             # Format dates for OMIE files
             target_date = now.date()
             year = str(target_date.year)
             month = str.zfill(str(target_date.month), 2)
             day = str.zfill(str(target_date.day), 2)
             date_format = f"{day}_{month}_{year}"
-            
+
             # OMIE URL format
             url = f"https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{date_format}_{date_format}.TXT"
-            
+
             _LOGGER.debug(f"Fetching OMIE data from URL: {url}")
 
             # Fetch data with built-in retry mechanism
@@ -44,7 +44,7 @@ class OmieAPI(BaseEnergyAPI):
             if not response:
                 _LOGGER.warning(f"No response from OMIE for {date_format}")
                 return None
-                
+
             if isinstance(response, str) and ("<html" in response.lower() or "<!doctype" in response.lower()):
                 _LOGGER.warning(f"HTML response from OMIE for {date_format}, likely data not available yet")
                 return None
@@ -69,23 +69,23 @@ class OmieAPI(BaseEnergyAPI):
             # Get display unit setting from config
             display_unit = self.config.get(CONF_DISPLAY_UNIT)
             use_subunit = display_unit == DISPLAY_UNIT_CENTS
-            
+
             raw_data = data["raw_data"]
             target_date = data["target_date"]
 
             # Process CSV-like data (OMIE uses ; as delimiter)
             file_like_data = io.StringIO(raw_data)
             lines = file_like_data.readlines()
-            
+
             # Check if we have valid data
             if len(lines) < 3:
                 _LOGGER.warning(f"Not enough data lines in OMIE response")
                 return None
-                
+
             # OMIE format: Skip first 2 lines (header), then read CSV
             csv_data = lines[2:]
             reader = csv.reader(csv_data, delimiter=';', skipinitialspace=True)
-            
+
             hourly_prices = {}
             all_prices = []
             raw_prices = []
@@ -102,11 +102,11 @@ class OmieAPI(BaseEnergyAPI):
             price_field_name = "Precio marginal en el sistema español (EUR/MWh)"
             if area == "PT":
                 price_field_name = "Precio marginal en el sistema portugués (EUR/MWh)"
-            
+
             for row in reader:
                 if len(row) < 6:
                     continue
-                    
+
                 # Look for the specified price data row
                 row_name = row[0] if row else ""
                 if price_field_name in row_name:
@@ -121,12 +121,12 @@ class OmieAPI(BaseEnergyAPI):
                                 prices.append(float(val.replace(',', '.')))
                             except (ValueError, TypeError):
                                 prices.append(None)
-                        
+
                         # Store prices for each hour
                         for hour, price in enumerate(prices):
                             if price is None:
                                 continue
-                                
+
                             # Convert using centralized method
                             converted_price = await self._convert_price(
                                 price=price,
@@ -134,10 +134,10 @@ class OmieAPI(BaseEnergyAPI):
                                 from_currency="EUR",
                                 to_subunit=use_subunit
                             )
-                            
+
                             # Create timestamp for this hour
                             dt_local = datetime.datetime.combine(target_date, datetime.time(hour, 0))
-                            
+
                             # Store raw price data
                             raw_prices.append({
                                 "start": dt_local.isoformat(),
@@ -166,7 +166,7 @@ class OmieAPI(BaseEnergyAPI):
                                     "converted": converted_price,
                                     "hour": hour
                                 }
-                                
+
                         # We found the row we needed, can break now
                         break
                     except Exception as e:

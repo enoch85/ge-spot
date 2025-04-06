@@ -23,7 +23,7 @@ class NordpoolAPI(BaseEnergyAPI):
         try:
             now = self._get_now()
             _LOGGER.debug(f"Current local time from _get_now: {now.isoformat()}")
-            
+
             today = now.strftime("%Y-%m-%d")
             tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -149,7 +149,7 @@ class NordpoolAPI(BaseEnergyAPI):
             try:
                 # Parse the datetime correctly without timezone assumptions
                 dt = parse_datetime(start_time)
-                
+
                 # Debug the timestamps to check timezone handling
                 _LOGGER.debug(f"Original timestamp: {start_time}, Parsed: {dt.isoformat()}")
 

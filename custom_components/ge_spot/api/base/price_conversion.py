@@ -16,7 +16,7 @@ class PriceConverter:
 
     def __init__(self, api_instance):
         """Initialize the price converter.
-        
+
         Args:
             api_instance: The API instance that owns this converter
         """
@@ -28,7 +28,7 @@ class PriceConverter:
 
     async def convert_price(self, price, from_currency="EUR", from_unit="MWh", to_subunit=None, exchange_rate=None):
         """Convert price using centralized conversion logic.
-        
+
         Args:
             price: The price value to convert
             from_currency: Source currency code
@@ -36,7 +36,7 @@ class PriceConverter:
             to_subunit: Whether to convert to currency subunit (cents, öre)
                         If None, uses config setting
             exchange_rate: Optional explicit exchange rate to use
-        
+
         Returns:
             The converted price value
         """
@@ -77,7 +77,7 @@ class PriceConverter:
     def get_display_format(self):
         """Get information about the current display format."""
         use_subunit = self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS
-        
+
         if use_subunit:
             subunit_name = CURRENCY_SUBUNIT_NAMES.get(self._currency, "cents")
             return {

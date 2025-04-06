@@ -60,20 +60,20 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
         # Create prioritized APIs for this region
         source_priority = config.get(CONF_SOURCE_PRIORITY)
-        
+
         # Ensure display unit is available to all APIs
         self.display_unit = config.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
         self.use_subunit = self.display_unit == DISPLAY_UNIT_CENTS
-        
+
         # Make sure all APIs use consistent settings for display unit
         self.config["price_in_cents"] = self.use_subunit
-        
+
         self._apis = create_apis_for_region(area, config, source_priority)
         self._active_source = None
         self._active_api = None
         self._fallback_used = False
         self._attempted_sources = []
-        
+
         # Track separate sources for today and tomorrow data
         self._today_source = None
         self._tomorrow_source = None
@@ -160,7 +160,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     # Pass display unit setting to API
                     api.config[CONF_DISPLAY_UNIT] = self.display_unit
                     api.config["price_in_cents"] = self.use_subunit
-                    
+
                     # Pass Home Assistant instance to the API for timezone handling
                     data = await api.fetch_day_ahead_prices(
                         self.area,
@@ -173,7 +173,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     if data and ApiValidator.is_data_adequate(data):
                         source_data["today"][source_type] = data
                         self._today_source = source_type
-                        
+
                         # If this is the first successful source, set as active
                         if not self._active_source:
                             self._active_source = source_type
@@ -193,17 +193,17 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 _LOGGER.error(f"Failed to fetch today's price data from any source. Attempted: {', '.join(self._attempted_sources)}")
                 if self._last_successful_data:
                     _LOGGER.warning("Using cached data from last successful update")
-                    
+
                     # Check API key status
                     api_key_status = await self.check_api_key_status()
                     self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
-                    
+
                     return self._last_successful_data
                 return None
 
             # Choose the best sources for today and tomorrow
             today_data = self._select_primary_source_data(source_data["today"])
-            
+
             # If tomorrow data is available from today's source, use it
             # Otherwise, choose the best available tomorrow data from any source
             if today_data.get("tomorrow_valid", False) or "tomorrow_hourly_prices" in today_data:
@@ -329,16 +329,16 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             "OmieAPI": "omie",
             "AemoAPI": "aemo"
         }
-        
+
         # Try direct mapping first
         if api_name in source_mapping:
             return source_mapping[api_name]
-        
+
         # Fallback to case-insensitive substring search
         for source, mapped_name in source_mapping.items():
             if source.lower() in api_name.lower():
                 return mapped_name
-                
+
         # If no match, return a generic name based on API class
         return api_name.lower().replace("api", "")
 
@@ -346,16 +346,16 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         """Select the best source for today's data based on priority."""
         if not source_data:
             return None
-            
+
         # Get source priorities from config
         priorities = self.config.get(CONF_SOURCE_PRIORITY, [])
-        
+
         # Try to find data from sources in priority order
         for source in priorities:
             if source in source_data:
                 self._today_source = source
                 return source_data[source]
-                
+
         # If no priority match, just use the first available
         first_source = next(iter(source_data.keys()))
         self._today_source = first_source
@@ -365,19 +365,19 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         """Select the best source for tomorrow's data."""
         if not source_data:
             return None
-            
+
         # If today's source has tomorrow data, prefer that for consistency
         if self._today_source and self._today_source in source_data:
             self._tomorrow_source = self._today_source
             return source_data[self._today_source]
-            
+
         # Otherwise, use priority order
         priorities = self.config.get(CONF_SOURCE_PRIORITY, [])
         for source in priorities:
             if source in source_data:
                 self._tomorrow_source = source
                 return source_data[source]
-                
+
         # Fallback to first available
         first_source = next(iter(source_data.keys()))
         self._tomorrow_source = first_source

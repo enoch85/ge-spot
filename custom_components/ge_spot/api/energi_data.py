@@ -4,7 +4,7 @@ import datetime
 import json
 from .base import BaseEnergyAPI
 from ..const import (
-    REGION_TO_CURRENCY, 
+    REGION_TO_CURRENCY,
     CURRENCY_SUBUNIT_NAMES,
     CONF_DISPLAY_UNIT,
     DISPLAY_UNIT_CENTS
@@ -57,7 +57,7 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
         # Get display unit setting from config
         display_unit = self.config.get(CONF_DISPLAY_UNIT)
         use_subunit = display_unit == DISPLAY_UNIT_CENTS
-        
+
         area = self.config.get("area", "DK1")
         target_currency = REGION_TO_CURRENCY.get(area, "DKK")  # Default to DKK for Danish data
 

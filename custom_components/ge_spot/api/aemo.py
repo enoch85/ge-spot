@@ -39,10 +39,10 @@ class AemoAPI(BaseEnergyAPI):
             # Get display unit setting from config
             display_unit = self.config.get(CONF_DISPLAY_UNIT)
             use_subunit = display_unit == DISPLAY_UNIT_CENTS
-            
+
             # This is a placeholder - actual implementation would depend on AEMO's data format
             _LOGGER.error("AEMO API processing is not implemented - raw API format not known")
-            
+
             # Return a minimal structure to avoid errors elsewhere
             return {
                 "current_price": None,

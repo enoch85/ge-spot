@@ -37,16 +37,16 @@ class BaseElectricityPriceSensor(SensorEntity):
         self._vat = config_data.get(ATTR_VAT, 0)
         self._precision = config_data.get("precision", 3)
         self._sensor_type = sensor_type
-        
+
         # Get display unit from config or coordinator
         if hasattr(coordinator, 'display_unit') and coordinator.display_unit:
             self._display_unit = coordinator.display_unit
         else:
             self._display_unit = config_data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
-        
+
         # Determine if subunit conversion is needed
         self._use_subunit = self._display_unit == DISPLAY_UNIT_CENTS
-        
+
         # Get currency from region
         self._currency = config_data.get(ATTR_CURRENCY, REGION_TO_CURRENCY.get(self._area))
 
@@ -172,17 +172,17 @@ class TimestampAttributeMixin:
     def get_additional_attrs(self, data):
         """Get additional attributes including timestamp."""
         attrs = {}
-        
+
         # Check for required attributes
         if not hasattr(self, '_stats_key') or not hasattr(self, '_extrema_type'):
             return attrs
-            
+
         stats_key = self._stats_key
         timestamp_key = f"{self._extrema_type}_timestamp"
 
         if data and stats_key in data and timestamp_key in data.get(stats_key, {}):
             attrs["timestamp"] = data[stats_key][timestamp_key]
-            
+
         return attrs
 
 
@@ -206,7 +206,7 @@ class ExtremaPriceSensor(PriceValueSensor, TimestampAttributeMixin):
         self._day_offset = day_offset  # 0 for today, 1 for tomorrow
         self._extrema_type = extrema_type  # "min" or "max"
         self._stats_key = "today_stats" if day_offset == 0 else "tomorrow_stats"
-        
+
         # Create value extraction function
         def extract_value(data):
             if self._stats_key not in data:
@@ -217,7 +217,7 @@ class ExtremaPriceSensor(PriceValueSensor, TimestampAttributeMixin):
             const_attr = ATTR_MIN if self._extrema_type == "min" else ATTR_MAX
 
             return data[self._stats_key].get(attr_key) or data[self._stats_key].get(const_attr)
-            
+
         # Initialize parent classes
         PriceValueSensor.__init__(
             self,

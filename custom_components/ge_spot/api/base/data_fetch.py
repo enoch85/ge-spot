@@ -16,7 +16,7 @@ class DataFetcher:
 
     def __init__(self, api_instance):
         """Initialize the data fetcher.
-        
+
         Args:
             api_instance: The API instance that owns this fetcher
         """
@@ -184,7 +184,7 @@ class DataFetcher:
                     'data': processed_data,
                     'timestamp': current_time
                 }
-                
+
                 # Update API's cache too
                 self.api._cache[cache_key] = self._cache[cache_key]
 

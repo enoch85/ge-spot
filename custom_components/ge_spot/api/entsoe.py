@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from .base import BaseEnergyAPI
 from ..utils.timezone_utils import ensure_timezone_aware
 from ..const import (
-    ENTSOE_AREA_MAPPING, 
+    ENTSOE_AREA_MAPPING,
     CONF_API_KEY,
     CONF_DISPLAY_UNIT,
     DISPLAY_UNIT_CENTS
@@ -67,17 +67,17 @@ class EntsoEAPI(BaseEnergyAPI):
         }
 
         response = await self.data_fetcher.fetch_with_retry(
-            self.BASE_URL, 
-            params=params, 
-            headers=headers, 
+            self.BASE_URL,
+            params=params,
+            headers=headers,
             timeout=60,
             max_retries=3
         )
-        
+
         if not response:
             _LOGGER.error("ENTSO-E API returned empty response after all retries")
             return None
-            
+
         # Check for authentication errors in the response
         if "Not authorized" in response:
             _LOGGER.error(f"ENTSO-E API authentication failed: Not authorized. Check your API key.")
@@ -85,7 +85,7 @@ class EntsoEAPI(BaseEnergyAPI):
         elif "No matching data found" in response:
             _LOGGER.warning(f"ENTSO-E API returned: No matching data found for the query parameters")
             return None
-            
+
         return response
 
     async def _process_data(self, data):
@@ -113,13 +113,13 @@ class EntsoEAPI(BaseEnergyAPI):
 
             now = self._get_now()
             current_hour = now.hour
-            
+
             # We'll store data from all TimeSeries in these dictionaries keyed by hour-string
             # This way we can compare and choose the correct prices
             all_hourly_prices = []
-            
+
             _LOGGER.debug(f"Found {len(time_series_elements)} TimeSeries elements in ENTSO-E response")
-            
+
             # Process each TimeSeries separately to compare them
             for ts_index, ts in enumerate(time_series_elements):
                 # Extract TimeSeries metadata for identification
@@ -127,46 +127,46 @@ class EntsoEAPI(BaseEnergyAPI):
                 curve_type = self._find_element_text(ts, ".//ns:curveType", nsmap, "unknown")
                 currency = self._find_element_text(ts, ".//ns:currency_Unit.name", nsmap, "EUR")
                 unit_name = self._find_element_text(ts, ".//ns:price_Measure_Unit.name", nsmap, "unknown")
-                
+
                 _LOGGER.debug(f"TimeSeries {ts_index+1}: businessType={business_type}, curveType={curve_type}, "
                              f"currency={currency}, measureUnit={unit_name}")
-                
+
                 # Find Period elements
                 period_elements = ts.findall(".//ns:Period", nsmap)
                 if not period_elements:
                     _LOGGER.debug(f"No Period elements found in TimeSeries {ts_index+1}")
                     continue
-                
+
                 # Process this TimeSeries
                 hourly_prices = {}
                 raw_prices = []
-                
+
                 for period in period_elements:
                     # Extract timeInterval
                     interval = period.find("ns:timeInterval", nsmap)
                     if interval is None:
                         continue
-                        
+
                     # Get start and end times
                     start_element = interval.find("ns:start", nsmap)
                     end_element = interval.find("ns:end", nsmap)
-                    
+
                     if start_element is None or end_element is None:
                         continue
-                        
+
                     # Parse times
                     try:
                         start_dt = datetime.datetime.fromisoformat(start_element.text.replace("Z", "+00:00"))
                         end_dt = datetime.datetime.fromisoformat(end_element.text.replace("Z", "+00:00"))
                     except ValueError:
                         continue
-                        
+
                     # Get resolution
                     resolution_element = period.find("ns:resolution", nsmap)
                     resolution = "PT60M"  # Default hourly
                     if resolution_element is not None:
                         resolution = resolution_element.text
-                        
+
                     # Handle different resolutions
                     if resolution == "PT15M":
                         resolution_minutes = 15
@@ -174,41 +174,41 @@ class EntsoEAPI(BaseEnergyAPI):
                         resolution_minutes = 60
                     else:
                         resolution_minutes = 60
-                    
+
                     # Process Point elements
                     points = period.findall("ns:Point", nsmap)
                     position_prices = {}
-                    
+
                     for point in points:
                         position_element = point.find("ns:position", nsmap)
                         price_element = point.find("ns:price.amount", nsmap)
-                        
+
                         if position_element is None or price_element is None:
                             continue
-                            
+
                         try:
                             position = int(position_element.text)
                             price = float(price_element.text)
                             position_prices[position] = price
                         except (ValueError, TypeError):
                             continue
-                            
+
                     # Process each position
                     for position, price in position_prices.items():
                         position_minutes = (position - 1) * resolution_minutes
                         position_time = start_dt + datetime.timedelta(minutes=position_minutes)
-                        
+
                         # Convert to local time
                         local_time = self._convert_to_local(position_time)
                         hour_str = local_time.strftime("%H:00")
-                        
+
                         # Debug the timezone conversion
                         _LOGGER.debug(f"Position time: {position_time.isoformat()} → Local time: {local_time.isoformat()}")
-                        
+
                         # Store in hourly prices
                         if hour_str not in hourly_prices:
                             hourly_prices[hour_str] = price
-                
+
                 # Store this TimeSeries prices for comparison
                 if hourly_prices:
                     all_hourly_prices.append({
@@ -221,52 +221,52 @@ class EntsoEAPI(BaseEnergyAPI):
                         },
                         "prices": hourly_prices
                     })
-            
+
             # If we have multiple TimeSeries, select the correct one
             # For SE4 with EUR, the actual spot prices are usually the day-ahead allocation (A62)
             # with the lowest values around peak hours
             selected_series = self._select_best_time_series(all_hourly_prices)
-            
+
             if not selected_series:
                 _LOGGER.error("Failed to identify any valid price TimeSeries")
                 return None
-                
+
             # Now process the selected series completely
             _LOGGER.info(f"Selected TimeSeries with businessType={selected_series['metadata']['business_type']}, "
                         f"index={selected_series['metadata']['index']} for price data")
-            
+
             hourly_prices = selected_series["prices"]  # These are the raw prices
-            
+
             # Get display unit setting from config
             display_unit = self.config.get(CONF_DISPLAY_UNIT)
             use_subunit = display_unit == DISPLAY_UNIT_CENTS
-            
+
             currency = selected_series["metadata"]["currency"]
-            
+
             final_hourly_prices = {}
             all_converted_prices = []
             raw_prices = []
             current_price = None
             next_hour_price = None
             raw_values = {}
-            
+
             # Process each hour in the selected series
             for hour_str, price in hourly_prices.items():
                 hour = int(hour_str.split(":")[0])
-                
+
                 # Create timestamps for the raw prices array
                 today = now.date()
                 hour_time = datetime.datetime.combine(today, datetime.time(hour=hour))
                 hour_time = self._convert_to_local(hour_time)
                 end_time = hour_time + datetime.timedelta(hours=1)
-                
+
                 # Store raw price
                 raw_prices.append({
                     "start": hour_time.isoformat(),
                     "end": end_time.isoformat(),
                     "price": price
                 })
-                
+
                 # Convert price using the centralized method
                 converted_price = await self._convert_price(
                     price=price,
@@ -274,11 +274,11 @@ class EntsoEAPI(BaseEnergyAPI):
                     from_unit="MWh",
                     to_subunit=use_subunit  # Pass the display unit setting
                 )
-                
+
                 # Store converted price
                 final_hourly_prices[hour_str] = converted_price
                 all_converted_prices.append(converted_price)
-                
+
                 # Check if this is current hour
                 if hour == current_hour:
                     current_price = converted_price
@@ -287,7 +287,7 @@ class EntsoEAPI(BaseEnergyAPI):
                         "converted": converted_price,
                         "hour": current_hour
                     }
-                
+
                 # Check if this is next hour
                 next_hour = (current_hour + 1) % 24
                 if hour == next_hour:
@@ -297,17 +297,17 @@ class EntsoEAPI(BaseEnergyAPI):
                         "converted": converted_price,
                         "hour": next_hour
                     }
-                    
+
             # Calculate statistics
             day_average_price = sum(all_converted_prices) / len(all_converted_prices) if all_converted_prices else None
             peak_price = max(all_converted_prices) if all_converted_prices else None
             off_peak_price = min(all_converted_prices) if all_converted_prices else None
-            
+
             # Store raw value details for statistics
             raw_values["day_average_price"] = {"value": day_average_price}
             raw_values["peak_price"] = {"value": peak_price}
             raw_values["off_peak_price"] = {"value": off_peak_price}
-            
+
             # Ensure we have data for current hour
             if current_price is None and final_hourly_prices:
                 _LOGGER.warning(f"Current hour price not found, using first available hour")
@@ -318,13 +318,13 @@ class EntsoEAPI(BaseEnergyAPI):
                     # Use first available price
                     first_hour = list(final_hourly_prices.keys())[0]
                     current_price = final_hourly_prices[first_hour]
-                    
+
             # Ensure we have data for next hour
             if next_hour_price is None and final_hourly_prices:
                 next_hour_str = f"{next_hour:02d}:00"
                 if next_hour_str in final_hourly_prices:
                     next_hour_price = final_hourly_prices[next_hour_str]
-            
+
             return {
                 "current_price": current_price,
                 "next_hour_price": next_hour_price,
@@ -350,37 +350,37 @@ class EntsoEAPI(BaseEnergyAPI):
 
     def _select_best_time_series(self, all_series):
         """Select the best TimeSeries to use for price data.
-        
+
         For ENTSO-E, the XML can contain multiple TimeSeries elements with different data.
         We need to determine which one contains the actual spot prices.
         """
         if not all_series:
             return None
-            
+
         # If only one series, use it
         if len(all_series) == 1:
             return all_series[0]
-            
+
         # First try to identify by businessType
         # A62 (Day-ahead allocation) is generally the correct spot price data
         for series in all_series:
             if series["metadata"]["business_type"] == "A62":
                 _LOGGER.debug("Selected TimeSeries with businessType=A62 (Day-ahead allocation)")
                 return series
-                
+
         # Next, try A44 (Day-ahead)
         for series in all_series:
             if series["metadata"]["business_type"] == "A44":
                 _LOGGER.debug("Selected TimeSeries with businessType=A44 (Day-ahead)")
                 return series
-        
-        # If still not found, use a heuristic approach - spot price TimeSeries 
+
+        # If still not found, use a heuristic approach - spot price TimeSeries
         # often has the lowest values at peak hours compared to other TimeSeries
-        
+
         # For most electricity markets, prices are lower overnight
         # Get average of overnight hours for each series
         overnight_averages = []
-        
+
         for series in all_series:
             overnight_prices = []
             for hour_str, price in series["prices"].items():
@@ -388,7 +388,7 @@ class EntsoEAPI(BaseEnergyAPI):
                 # Consider 0-6 as overnight hours
                 if 0 <= hour <= 6:
                     overnight_prices.append(price)
-            
+
             # Calculate average if we have prices
             if overnight_prices:
                 avg = sum(overnight_prices) / len(overnight_prices)
@@ -396,13 +396,13 @@ class EntsoEAPI(BaseEnergyAPI):
                     "series": series,
                     "overnight_avg": avg
                 })
-        
+
         # Choose the series with the lowest overnight average
         if overnight_averages:
             overnight_averages.sort(key=lambda x: x["overnight_avg"])
             _LOGGER.debug(f"Selected TimeSeries with lowest overnight prices (avg={overnight_averages[0]['overnight_avg']})")
             return overnight_averages[0]["series"]
-            
+
         # If all else fails, use the first series
         _LOGGER.debug("Falling back to first TimeSeries")
         return all_series[0]
