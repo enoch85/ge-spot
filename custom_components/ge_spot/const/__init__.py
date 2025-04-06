@@ -70,6 +70,15 @@ from .currencies import (
     Currency
 )
 
+from .precision import (
+    PRICE_PRECISION,
+    PRICE_PRECISION_HIGH,
+    PRICE_PRECISION_LOW,
+    PRICE_FORMAT_DEFAULT,
+    PRICE_FORMAT_EURO,
+    PRICE_FORMAT_PERCENT
+)
+
 from .display import (
     DISPLAY_UNIT_DECIMAL,
     DISPLAY_UNIT_CENTS,
