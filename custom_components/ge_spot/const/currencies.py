@@ -1,5 +1,34 @@
 """Currency constants for GE-Spot integration."""
 
+# Currency code constants
+class Currency:
+    """Currency code constants."""
+    EUR = "EUR"
+    SEK = "SEK"
+    NOK = "NOK"
+    DKK = "DKK"
+    GBP = "GBP"
+    AUD = "AUD"
+    MDL = "MDL"
+    UAH = "UAH"
+    AMD = "AMD"
+    GEL = "GEL"
+    AZN = "AZN"
+
+
+# For backward compatibility - direct constants
+CURRENCY_EUR = Currency.EUR
+CURRENCY_SEK = Currency.SEK
+CURRENCY_NOK = Currency.NOK
+CURRENCY_DKK = Currency.DKK
+CURRENCY_GBP = Currency.GBP
+CURRENCY_AUD = Currency.AUD
+CURRENCY_MDL = Currency.MDL
+CURRENCY_UAH = Currency.UAH
+CURRENCY_AMD = Currency.AMD
+CURRENCY_GEL = Currency.GEL
+CURRENCY_AZN = Currency.AZN
+
 # Region to Currency mapping
 REGION_TO_CURRENCY = {
     # Nordics
