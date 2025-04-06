@@ -133,7 +133,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_api_keys(self, user_input=None) -> FlowResult:
         """Handle API key entry for sources that require it."""
         self._errors = {}
-        
+
         # Check if we already have this API key in another config entry
         existing_api_key = await self._find_existing_api_key(SOURCE_ENTSO_E)
 
@@ -143,7 +143,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 entso_key_field = f"{SOURCE_ENTSO_E}_api_key"
                 if entso_key_field in user_input and not user_input[entso_key_field] and existing_api_key:
                     user_input[entso_key_field] = existing_api_key
-                
+
                 # Store API keys in data
                 for source, api_key in user_input.items():
                     if source == f"{SOURCE_ENTSO_E}_api_key" and api_key:
@@ -177,7 +177,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         # Get description for API key entry
         area = self._data.get(CONF_AREA)
         description = self._get_api_key_description(area)
-        
+
         # Add info about existing API key to description
         if existing_api_key:
             description += f"\n\nAn API key is already configured from another region. You can leave this field empty to reuse it."
@@ -230,7 +230,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 break
 
         return region_name or region_code
-        
+
     def _get_api_key_description(self, area):
         """Get description text for API key form."""
         # For now, we only use API keys with ENTSO-E

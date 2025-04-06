@@ -47,14 +47,14 @@ class GSpotOptionsFlow(OptionsFlow):
             try:
                 # Find existing API key from this or other entries
                 existing_api_key = await self._find_existing_api_key(SOURCE_ENTSO_E)
-                
+
                 # Handle API key updates if present
                 if f"{SOURCE_ENTSO_E}_api_key" in user_input and user_input[f"{SOURCE_ENTSO_E}_api_key"]:
                     # If empty field but we have an existing key, use that
                     api_key = user_input[f"{SOURCE_ENTSO_E}_api_key"]
                     if not api_key and existing_api_key:
                         api_key = existing_api_key
-                        
+
                     # Only validate if key has changed
                     if api_key != self._data.get(CONF_API_KEY, ""):
                         _LOGGER.debug(f"Validating updated ENTSO-E API key")
@@ -62,10 +62,10 @@ class GSpotOptionsFlow(OptionsFlow):
                         # Create an API instance to validate the key
                         config = {"area": self._area, "api_key": api_key}
                         api = create_api(SOURCE_ENTSO_E, config)
-                        
+
                         if api and hasattr(api, "validate_api_key"):
                             valid_key = await api.validate_api_key(api_key)
-                        
+
                             if valid_key:
                                 # Update the stored data with the new API key
                                 updated_data = dict(self._data)
@@ -114,7 +114,7 @@ class GSpotOptionsFlow(OptionsFlow):
                 return await self._show_form()
 
         return await self._show_form()
-    
+
     async def _show_form(self):
         """Show the options form."""
         try:
@@ -143,20 +143,20 @@ class GSpotOptionsFlow(OptionsFlow):
                 }),
                 errors=self._errors,
             )
-            
+
     async def _find_existing_api_key(self, source_type):
         """Find existing API key in this or other config entries."""
         # First check the current entry's data
         if CONF_API_KEY in self._data and self._data.get(CONF_API_KEY):
             return self._data.get(CONF_API_KEY)
-            
+
         # Then check other entries
         from ..const import DOMAIN
         existing_entries = self.hass.config_entries.async_entries(DOMAIN)
         for entry in existing_entries:
             if entry.entry_id == self.entry_id:
                 continue  # Skip current entry
-                
+
             if CONF_API_KEY in entry.data and entry.data.get(CONF_API_KEY):
                 # Verify it's for the requested source type
                 if source_type in entry.data.get(CONF_SOURCE_PRIORITY, []):

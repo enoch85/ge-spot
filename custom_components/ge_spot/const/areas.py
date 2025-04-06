@@ -89,7 +89,7 @@ NORDPOOL_DELIVERY_AREA_MAPPING = {
     "LT": "LT",
 }
 
-# Nordpool areas 
+# Nordpool areas
 NORDPOOL_AREAS = {
     "Oslo": "Norway (Oslo)",
     "Kr.sand": "Norway (Kr.sand)",
@@ -109,13 +109,13 @@ NORDPOOL_AREAS = {
     "LT": "Lithuania",
 }
 
-# Energi Data Service areas 
+# Energi Data Service areas
 ENERGI_DATA_AREAS = {
     "DK1": "Denmark (DK1)",
     "DK2": "Denmark (DK2)",
 }
 
-# ENTSO-E area mapping from our area codes to ENTSO-E area codes 
+# ENTSO-E area mapping from our area codes to ENTSO-E area codes
 ENTSOE_AREA_MAPPING = {
     # Nordic regions
     "SE1": "10Y1001A1001A44P",
@@ -295,7 +295,7 @@ ENTSOE_AREAS = {
     "10Y1001A1001A93C": "Malta"
 }
 
-# EPEX areas 
+# EPEX areas
 EPEX_AREAS = {
     "DE-LU": "Germany-Luxembourg",
     "FR": "France",
@@ -304,13 +304,13 @@ EPEX_AREAS = {
     "AT": "Austria",
 }
 
-# OMIE areas 
+# OMIE areas
 OMIE_AREAS = {
     "ES": "Spain",
     "PT": "Portugal",
 }
 
-# AEMO areas 
+# AEMO areas
 AEMO_AREAS = {
     "NSW1": "New South Wales (NSW1)",
     "QLD1": "Queensland (QLD1)",
@@ -319,7 +319,7 @@ AEMO_AREAS = {
     "VIC1": "Victoria (VIC1)",
 }
 
-# Default areas for each source 
+# Default areas for each source
 DEFAULT_AREAS = {
     SOURCE_NORDPOOL: "SE4",
     SOURCE_ENERGI_DATA_SERVICE: "DK1",

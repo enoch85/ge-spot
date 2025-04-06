@@ -80,7 +80,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     try:
                         # Get session from the API if possible
                         session = getattr(entsoe_api, 'session', None)
-                        
+
                         # Pass the area parameter and the session from the API if available
                         is_valid = await entsoe_api.validate_api_key(api_key, self.area, session)
                         api_key_status[SOURCE_ENTSO_E] = {
@@ -166,7 +166,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             if not today_data:
                 for api in self._apis:
                     api_name = api.__class__.__name__
-                    
+
                     # Map API class name to source type more precisely
                     source_mapping = {
                         "NordpoolAPI": "nordpool",
@@ -176,7 +176,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                         "OmieAPI": "omie",
                         "AemoAPI": "aemo"
                     }
-                    
+
                     api_type = source_mapping.get(api_name, next((s for s in self.config.get(CONF_SOURCE_PRIORITY, [])
                                 if s.lower() in api_name.lower()), "unknown"))
 
@@ -288,7 +288,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                                 continue  # Skip the already-tried active API
 
                             api_name = api.__class__.__name__
-                            
+
                             # Map API class name to source type more precisely
                             source_mapping = {
                                 "NordpoolAPI": "nordpool",
@@ -298,7 +298,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                                 "OmieAPI": "omie",
                                 "AemoAPI": "aemo"
                             }
-                            
+
                             api_type = source_mapping.get(api_name, next((s for s in self.config.get(CONF_SOURCE_PRIORITY, [])
                                            if s.lower() in api_name.lower()), "unknown"))
 
@@ -353,7 +353,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             if len(self._apis) > 1:
                 for api in self._apis[1:]:
                     api_name = api.__class__.__name__
-                    
+
                     # Map API class name to source type more precisely
                     source_mapping = {
                         "NordpoolAPI": "nordpool",
@@ -363,10 +363,10 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                         "OmieAPI": "omie",
                         "AemoAPI": "aemo"
                     }
-                    
+
                     api_type = source_mapping.get(api_name, next((s for s in self.config.get(CONF_SOURCE_PRIORITY, [])
                                    if s.lower() in api_name.lower()), "unknown"))
-                    
+
                     available_fallbacks.append(api_type)
 
             # Build information about data sources

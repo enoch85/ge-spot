@@ -36,7 +36,7 @@ class ElectricityPriceAdapter:
 
         # Process all available raw data formats
         self._process_raw_data()
-        
+
         # Process data into periods with proper timezone handling
         self.price_periods = process_price_data(self.processed_raw_data, self.local_tz)
 
@@ -123,7 +123,7 @@ class ElectricityPriceAdapter:
         for entry in entries:
             if isinstance(entry, dict) and "start" in entry and ("price" in entry or "value" in entry):
                 start_time = parse_datetime(entry["start"])
-                
+
                 # Handle end time
                 if "end" in entry and entry["end"]:
                     end_time = parse_datetime(entry["end"])

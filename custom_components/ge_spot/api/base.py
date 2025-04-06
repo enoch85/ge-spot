@@ -231,7 +231,7 @@ class BaseEnergyAPI(ABC):
         except Exception as e:
             _LOGGER.error(f"Error fetching day-ahead prices: {str(e)}", exc_info=True)
             return None
-            
+
     async def _check_cache(self, cache_key):
         """Check if we have a valid cached response."""
         current_time = datetime.datetime.now()

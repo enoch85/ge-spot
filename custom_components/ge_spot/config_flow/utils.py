@@ -123,12 +123,12 @@ def get_api_keys_schema(area, existing_api_key=None):
     description = None
     if has_existing:
         description = "Leave empty to use existing key"
-    
+
     # Create field with appropriate defaults and description
-    field = vol.Optional(f"{SOURCE_ENTSO_E}_api_key", 
+    field = vol.Optional(f"{SOURCE_ENTSO_E}_api_key",
                         description=description,
                         default=existing_api_key)
-    
+
     # Use a text selector for the API key
     schema_dict[field] = selector.TextSelector(
         selector.TextSelectorConfig(

@@ -121,7 +121,7 @@ class PriceValueSensor(BaseElectricityPriceSensor):
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix, value_fn, additional_attrs=None):
         """Initialize the price value sensor.
-        
+
         Args:
             coordinator: The data coordinator
             config_data: Configuration data
@@ -145,19 +145,19 @@ class PriceValueSensor(BaseElectricityPriceSensor):
     def extra_state_attributes(self):
         """Return the state attributes."""
         attrs = super().extra_state_attributes
-        
+
         # Add additional attributes if function provided
         if self._additional_attrs and self.coordinator.data:
             additional = self._additional_attrs(self.coordinator.data)
             if additional:
                 attrs.update(additional)
-                
+
         return attrs
 
 
 class TomorrowSensorMixin:
     """Mixin to provide tomorrow-specific behavior."""
-    
+
     @property
     def available(self):
         """Return if entity is available."""
@@ -169,20 +169,20 @@ class TomorrowSensorMixin:
 
 class TimestampAttributeMixin:
     """Mixin to provide timestamp attribute."""
-    
+
     def __init__(self, *args, timestamp_key=None, **kwargs):
         """Initialize with timestamp key."""
         super().__init__(*args, **kwargs)
         self._timestamp_key = timestamp_key or f"{self._extrema_type}_timestamp"
-        
+
     def get_additional_attrs(self, data):
         """Get additional attributes including timestamp."""
         attrs = {}
         stats_key = self._stats_key
-        
+
         if stats_key in data and self._timestamp_key in data[stats_key]:
             attrs["timestamp"] = data[stats_key][self._timestamp_key]
-            
+
         return attrs
 
 
@@ -194,18 +194,18 @@ class ExtremaPriceSensor(PriceValueSensor, TimestampAttributeMixin):
         self._day_offset = day_offset  # 0 for today, 1 for tomorrow
         self._extrema_type = extrema_type  # "min" or "max"
         self._stats_key = "today_stats" if day_offset == 0 else "tomorrow_stats"
-        
+
         # Create value extraction function
         def extract_value(data):
             if self._stats_key not in data:
                 return None
-                
+
             # Get min or max based on extrema_type
             attr_key = "min" if self._extrema_type == "min" else "max"
             const_attr = ATTR_MIN if self._extrema_type == "min" else ATTR_MAX
-            
+
             return data[self._stats_key].get(attr_key) or data[self._stats_key].get(const_attr)
-        
+
         # Initialize with value function and timestamp attribute getter
         super().__init__(
             coordinator,
@@ -319,11 +319,11 @@ def async_setup_entry(hass, config_entry, async_add_entities):
     ]
 
     entities = []
-    
+
     # Create sensor entities based on definitions
     for sensor_def in sensor_definitions:
         sensor_class = sensor_def["class"]
-        
+
         if sensor_class == PriceValueSensor:
             entities.append(PriceValueSensor(
                 coordinator,

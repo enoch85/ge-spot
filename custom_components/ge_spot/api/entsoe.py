@@ -149,19 +149,19 @@ class EntsoEAPI(BaseEnergyAPI):
             nsmap = {
                 "ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"
             }
-            
+
             # Parse XML
             root = ET.fromstring(data)
-            
+
             # Find TimeSeries elements using explicit namespace
             time_series_elements = root.findall(".//ns:TimeSeries", nsmap)
-            
+
             # Check if we found any TimeSeries elements
             if not time_series_elements:
                 _LOGGER.error("No TimeSeries elements found in ENTSO-E response")
                 _LOGGER.debug(f"First 500 chars of XML: {data[:500]}")
                 return None
-                
+
             now = self._get_now()
             current_hour = now.hour
             hourly_prices = {}
@@ -170,41 +170,41 @@ class EntsoEAPI(BaseEnergyAPI):
             current_price = None
             next_hour_price = None
             raw_values = {}
-            
+
             use_cents = self.config.get("price_in_cents", False)
-            
+
             # Process each TimeSeries element
             for ts in time_series_elements:
-                # Extract any useful TimeSeries metadata 
+                # Extract any useful TimeSeries metadata
                 currency = self._find_element_text(ts, ".//ns:currency_Unit.name", nsmap) or "EUR"
                 _LOGGER.debug(f"Currency from TimeSeries: {currency}")
-                
+
                 # Find Period elements with namespace
                 period_elements = ts.findall(".//ns:Period", nsmap)
-                
+
                 if not period_elements:
                     _LOGGER.warning("No Period elements found in TimeSeries")
                     continue
-                    
+
                 for period in period_elements:
                     # Extract timeInterval with proper namespace
                     interval = period.find("ns:timeInterval", nsmap)
                     if interval is None:
                         _LOGGER.warning("Missing timeInterval in Period")
                         continue
-                        
+
                     # Get start and end times with proper namespace
                     start_element = interval.find("ns:start", nsmap)
                     end_element = interval.find("ns:end", nsmap)
-                    
+
                     if start_element is None or end_element is None:
                         _LOGGER.warning("Missing start or end in timeInterval")
                         continue
-                    
+
                     # Extract text content and convert to datetime
                     start_text = start_element.text
                     end_text = end_element.text
-                    
+
                     try:
                         # Handle ISO format with Z timezone indicator
                         start_dt = datetime.datetime.fromisoformat(start_text.replace("Z", "+00:00"))
@@ -213,7 +213,7 @@ class EntsoEAPI(BaseEnergyAPI):
                     except ValueError as e:
                         _LOGGER.error(f"Error parsing timeInterval: {e}")
                         continue
-                    
+
                     # Extract resolution with proper namespace
                     resolution_element = period.find("ns:resolution", nsmap)
                     if resolution_element is None:
@@ -230,25 +230,25 @@ class EntsoEAPI(BaseEnergyAPI):
                         else:
                             _LOGGER.warning(f"Unknown resolution: {resolution}, defaulting to hourly")
                             resolution_minutes = 60
-                    
+
                     _LOGGER.debug(f"Resolution: {resolution} ({resolution_minutes} minutes)")
-                    
+
                     # Process Point elements
                     points = period.findall("ns:Point", nsmap)
                     if not points:
                         _LOGGER.warning("No Point elements found in Period")
                         continue
-                    
+
                     # Build a dictionary of position -> price
                     position_prices = {}
                     for point in points:
                         position_element = point.find("ns:position", nsmap)
                         price_element = point.find("ns:price.amount", nsmap)
-                        
+
                         if position_element is None or price_element is None:
                             # Skip points with missing elements
                             continue
-                            
+
                         try:
                             position = int(position_element.text)
                             price = float(price_element.text)
@@ -256,35 +256,35 @@ class EntsoEAPI(BaseEnergyAPI):
                         except (ValueError, TypeError) as e:
                             _LOGGER.warning(f"Invalid position or price: {e}")
                             continue
-                    
+
                     # Calculate total positions and verify we have data
                     total_minutes = int((end_dt - start_dt).total_seconds() / 60)
                     expected_positions = total_minutes // resolution_minutes
-                    
+
                     _LOGGER.debug(f"Expected {expected_positions} positions, found {len(position_prices)}")
-                    
+
                     # Process points for each position
                     for position in range(1, expected_positions + 1):
                         if position not in position_prices:
                             continue
-                            
+
                         price = position_prices[position]
-                        
+
                         # Calculate the datetime for this position
                         position_minutes = (position - 1) * resolution_minutes
                         position_time = start_dt + datetime.timedelta(minutes=position_minutes)
                         position_end = position_time + datetime.timedelta(minutes=resolution_minutes)
-                        
+
                         # Convert to local time for comparison with current hour
                         local_position_time = self._convert_to_local(position_time)
-                        
+
                         # Store raw price data for API attributes
                         raw_prices.append({
                             "start": position_time.isoformat(),
                             "end": position_end.isoformat(),
                             "price": price
                         })
-                        
+
                         # Convert price from EUR/MWh to target currency/unit
                         converted_price = await self._convert_price(
                             price=price,
@@ -293,15 +293,15 @@ class EntsoEAPI(BaseEnergyAPI):
                             to_currency=self._currency,
                             to_subunit=use_cents
                         )
-                        
+
                         all_prices.append(converted_price)
-                        
+
                         # Handle different resolutions
                         if resolution_minutes < 60:
                             # For sub-hourly data, aggregate to full hours
                             hour_start = local_position_time.replace(minute=0, second=0, microsecond=0)
                             hour_key = hour_start.strftime("%H:00")
-                            
+
                             if hour_key not in hourly_prices:
                                 hourly_prices[hour_key] = {"sum": converted_price, "count": 1}
                             else:
@@ -311,7 +311,7 @@ class EntsoEAPI(BaseEnergyAPI):
                             # For hourly data, use directly
                             hour_key = local_position_time.strftime("%H:00")
                             hourly_prices[hour_key] = {"sum": converted_price, "count": 1}
-                        
+
                         # Check if this matches current hour
                         if local_position_time.hour == current_hour and local_position_time.date() == now.date():
                             # For sub-hourly data, this might happen multiple times per hour
@@ -322,7 +322,7 @@ class EntsoEAPI(BaseEnergyAPI):
                                 raw_values["current_hour"]["sum"] += price
                                 raw_values["current_hour"]["count"] += 1
                                 raw_values["current_hour"]["converted_sum"] += converted_price
-                        
+
                         # Check if this is next hour
                         next_hour = (current_hour + 1) % 24
                         if local_position_time.hour == next_hour and local_position_time.date() == now.date():
@@ -333,12 +333,12 @@ class EntsoEAPI(BaseEnergyAPI):
                                 raw_values["next_hour"]["sum"] += price
                                 raw_values["next_hour"]["count"] += 1
                                 raw_values["next_hour"]["converted_sum"] += converted_price
-            
+
             # Process final hourly prices
             final_hourly_prices = {}
             for hour_key, data in hourly_prices.items():
                 final_hourly_prices[hour_key] = data["sum"] / data["count"]
-            
+
             # Set current and next hour prices
             if "current_hour" in raw_values:
                 current_hour_data = raw_values["current_hour"]
@@ -348,7 +348,7 @@ class EntsoEAPI(BaseEnergyAPI):
                     "converted": current_price,
                     "hour": current_hour
                 }
-            
+
             if "next_hour" in raw_values:
                 next_hour_data = raw_values["next_hour"]
                 next_hour_price = next_hour_data["converted_sum"] / next_hour_data["count"]
@@ -357,17 +357,17 @@ class EntsoEAPI(BaseEnergyAPI):
                     "converted": next_hour_price,
                     "hour": next_hour
                 }
-            
+
             # Calculate statistics
             day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
             peak_price = max(all_prices) if all_prices else None
             off_peak_price = min(all_prices) if all_prices else None
-            
+
             # Store raw value details for statistics
             raw_values["day_average_price"] = {"value": day_average_price}
             raw_values["peak_price"] = {"value": peak_price}
             raw_values["off_peak_price"] = {"value": off_peak_price}
-            
+
             # Ensure we have data for current hour
             if not current_price and final_hourly_prices:
                 _LOGGER.warning(f"Current hour price not found, using first available hour")
@@ -379,14 +379,14 @@ class EntsoEAPI(BaseEnergyAPI):
                     first_hour = list(final_hourly_prices.keys())[0]
                     current_price = final_hourly_prices[first_hour]
                     _LOGGER.warning(f"Using {first_hour} price for current hour")
-            
+
             # Ensure we have data for next hour
             if not next_hour_price and final_hourly_prices:
                 next_hour_str = f"{next_hour:02d}:00"
                 if next_hour_str in final_hourly_prices:
                     next_hour_price = final_hourly_prices[next_hour_str]
                     _LOGGER.debug(f"Found next hour price: {next_hour_price}")
-            
+
             return {
                 "current_price": current_price,
                 "next_hour_price": next_hour_price,
@@ -420,12 +420,12 @@ class EntsoEAPI(BaseEnergyAPI):
         """Convert UTC datetime to local timezone."""
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=datetime.timezone.utc)
-        
+
         # If we have Home Assistant instance, use its timezone
         if hasattr(self, 'hass') and self.hass:
             from homeassistant.util import dt as dt_util
             return dt_util.as_local(dt)
-        
+
         # Otherwise use system local time
         return dt.astimezone()
 
