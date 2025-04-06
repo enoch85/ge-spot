@@ -19,18 +19,21 @@ from .utils.timezone_utils import (
     is_tomorrow_valid,
     classify_price_periods,
 )
+from .utils.currency_utils import convert_to_subunit
 
 _LOGGER = logging.getLogger(__name__)
 
 class ElectricityPriceAdapter:
     """A robust adapter for electricity price data with proper timezone handling."""
 
-    def __init__(self, hass: HomeAssistant, raw_data: List[Dict]) -> None:
+    def __init__(self, hass: HomeAssistant, raw_data: List[Dict], use_subunit: bool = False) -> None:
         """Initialize the price adapter."""
         self.hass = hass
         self.raw_data = raw_data or []
+        self.use_subunit = use_subunit
         self.local_tz = dt_util.get_time_zone(hass.config.time_zone)
         _LOGGER.debug(f"Initializing price adapter with Home Assistant timezone: {self.local_tz}")
+        _LOGGER.debug(f"Price adapter using subunit conversion: {self.use_subunit}")
 
         # Transform raw data format if necessary
         self.processed_raw_data = []
@@ -62,23 +65,26 @@ class ElectricityPriceAdapter:
             if not isinstance(item, dict):
                 continue
 
+            # Extract currency information - used for subunit conversion
+            currency = item.get("currency")
+
             # Handle API response with hourly_prices dictionary
             if "hourly_prices" in item:
-                self._process_hourly_prices(item)
+                self._process_hourly_prices(item, currency)
 
             # Process raw_today entries
             if "raw_today" in item:
-                self._process_raw_prices(item.get("raw_today", []))
+                self._process_raw_prices(item.get("raw_today", []), currency)
 
             # Process raw_tomorrow entries if available
             if "raw_tomorrow" in item:
-                self._process_raw_prices(item.get("raw_tomorrow", []))
+                self._process_raw_prices(item.get("raw_tomorrow", []), currency)
 
             # Process direct price entry format
             elif all(key in item for key in ["start", "end", "value"]) or all(key in item for key in ["start", "end", "price"]):
-                self._process_direct_entry(item)
+                self._process_direct_entry(item, currency)
 
-    def _process_hourly_prices(self, item):
+    def _process_hourly_prices(self, item, currency=None):
         """Process hourly_prices dictionary format."""
         current_date = dt_util.now().date()
         tomorrow_date = current_date + timedelta(days=1)
@@ -101,7 +107,8 @@ class ElectricityPriceAdapter:
                 self.processed_raw_data.append({
                     "start": start_time,
                     "end": end_time,
-                    "value": price
+                    "value": price,
+                    "currency": currency or item.get("currency")
                 })
             except Exception as e:
                 _LOGGER.warning(f"Error processing hourly price {hour_str}: {e}")
@@ -119,12 +126,13 @@ class ElectricityPriceAdapter:
                     self.processed_raw_data.append({
                         "start": start_time,
                         "end": end_time,
-                        "value": price
+                        "value": price,
+                        "currency": currency or item.get("currency")
                     })
                 except Exception as e:
                     _LOGGER.warning(f"Error processing tomorrow hourly price {hour_str}: {e}")
 
-    def _process_raw_prices(self, entries):
+    def _process_raw_prices(self, entries, currency=None):
         """Process raw_prices entries."""
         for entry in entries:
             if isinstance(entry, dict) and "start" in entry and ("price" in entry or "value" in entry):
@@ -142,10 +150,11 @@ class ElectricityPriceAdapter:
                 self.processed_raw_data.append({
                     "start": start_time,
                     "end": end_time,
-                    "value": price
+                    "value": price,
+                    "currency": currency or entry.get("currency")
                 })
 
-    def _process_direct_entry(self, item):
+    def _process_direct_entry(self, item, currency=None):
         """Process entries already in start/end/value format."""
         try:
             # Parse timestamps if needed
@@ -158,10 +167,26 @@ class ElectricityPriceAdapter:
             self.processed_raw_data.append({
                 "start": start_time,
                 "end": end_time,
-                "value": price
+                "value": price,
+                "currency": currency or item.get("currency")
             })
         except Exception as e:
             _LOGGER.warning(f"Error processing price entry: {e}")
+
+    def _get_currency(self):
+        """Get the currency from the raw data."""
+        # First check if any period has currency
+        for period in self.price_periods:
+            if "currency" in period and period["currency"]:
+                return period["currency"]
+                
+        # Then check raw data
+        for item in self.raw_data:
+            if isinstance(item, dict) and "currency" in item and item["currency"]:
+                return item["currency"]
+        
+        # Default fallback
+        return "EUR"
 
     def get_current_price(self, reference_time: Optional[datetime] = None) -> Optional[float]:
         """Get price for the current period."""
@@ -169,7 +194,16 @@ class ElectricityPriceAdapter:
             reference_time = dt_util.now()
             _LOGGER.debug(f"Using current time as reference: {reference_time.isoformat()}")
 
-        return find_current_price(self.price_periods, reference_time)
+        # Use the utility function to find the current price
+        price = find_current_price(self.price_periods, reference_time)
+        
+        # Apply subunit conversion if needed
+        if price is not None and self.use_subunit:
+            currency = self._get_currency()
+            _LOGGER.debug(f"Converting price to subunit: {price} {currency} → subunit")
+            price = convert_to_subunit(price, currency)
+        
+        return price
 
     def get_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
         """Get all prices for a specific day (today + offset)."""
@@ -188,11 +222,25 @@ class ElectricityPriceAdapter:
 
     def get_today_prices(self) -> List[float]:
         """Get list of today's prices in chronological order."""
-        return get_price_list(self.classified_periods["today"])
+        prices = get_price_list(self.classified_periods["today"])
+        
+        # Apply subunit conversion if needed
+        if self.use_subunit and prices:
+            currency = self._get_currency()
+            prices = [convert_to_subunit(price, currency) if price is not None else None for price in prices]
+        
+        return prices
 
     def get_tomorrow_prices(self) -> List[float]:
         """Get list of tomorrow's prices in chronological order."""
-        return get_price_list(self.classified_periods["tomorrow"])
+        prices = get_price_list(self.classified_periods["tomorrow"])
+        
+        # Apply subunit conversion if needed
+        if self.use_subunit and prices:
+            currency = self._get_currency()
+            prices = [convert_to_subunit(price, currency) if price is not None else None for price in prices]
+        
+        return prices
 
     def get_day_statistics(self, day_offset: int = 0) -> Dict[str, Any]:
         """Calculate statistics for a particular day."""
@@ -200,6 +248,15 @@ class ElectricityPriceAdapter:
 
         day_data = self.get_prices_for_day(day_offset)
         stats = get_statistics(day_data)
+
+        # Apply subunit conversion if needed
+        if self.use_subunit and stats:
+            currency = self._get_currency()
+            
+            # Apply conversion to all numeric statistics
+            for key in ["min", "max", "average", "median", "off_peak_1", "off_peak_2", "peak"]:
+                if key in stats and stats[key] is not None:
+                    stats[key] = convert_to_subunit(stats[key], currency)
 
         # Log calculation details
         log_statistics(stats, day_offset)
