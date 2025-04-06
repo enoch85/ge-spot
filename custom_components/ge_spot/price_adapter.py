@@ -34,114 +34,9 @@ class ElectricityPriceAdapter:
         # Transform raw data format if necessary
         self.processed_raw_data = []
 
-        for item in self.raw_data:
-            # Skip non-dictionary items
-            if not isinstance(item, dict):
-                continue
-
-            # Handle different API formats
-            if "hourly_prices" in item:
-                # Handle API response with hourly_prices dictionary
-                current_date = dt_util.now().date()
-                tomorrow_date = current_date + timedelta(days=1)
-
-                # Determine if this item contains today's or tomorrow's prices
-                is_tomorrow = "tomorrow" in item or "tomorrow_hourly_prices" in item or item.get("tomorrow_valid", False)
-                base_date = tomorrow_date if is_tomorrow else current_date
-
-                # Process hourly prices
-                for hour_str, price in item.get("hourly_prices", {}).items():
-                    try:
-                        # Parse hour string (format: "HH:00")
-                        hour = int(hour_str.split(":")[0])
-
-                        # Create timestamps for this hour in local time
-                        start_time = dt_util.as_local(dt_util.start_of_local_day(base_date))
-                        start_time = start_time.replace(hour=hour)
-                        end_time = start_time + timedelta(hours=1)
-
-                        self.processed_raw_data.append({
-                            "start": start_time,
-                            "end": end_time,
-                            "value": price
-                        })
-                    except Exception as e:
-                        _LOGGER.warning(f"Error processing hourly price {hour_str}: {e}")
-
-                # Also check for tomorrow_hourly_prices if this data contains today's prices
-                if not is_tomorrow and "tomorrow_hourly_prices" in item:
-                    for hour_str, price in item.get("tomorrow_hourly_prices", {}).items():
-                        try:
-                            hour = int(hour_str.split(":")[0])
-
-                            start_time = dt_util.as_local(dt_util.start_of_local_day(tomorrow_date))
-                            start_time = start_time.replace(hour=hour)
-                            end_time = start_time + timedelta(hours=1)
-
-                            self.processed_raw_data.append({
-                                "start": start_time,
-                                "end": end_time,
-                                "value": price
-                            })
-                        except Exception as e:
-                            _LOGGER.warning(f"Error processing tomorrow hourly price {hour_str}: {e}")
-
-            # Process raw_today entries
-            if "raw_today" in item:
-                for entry in item.get("raw_today", []):
-                    if isinstance(entry, dict) and "start" in entry and "price" in entry:
-                        start_time = parse_datetime(entry["start"])
-                        if "end" in entry and entry["end"]:
-                            end_time = parse_datetime(entry["end"])
-                        else:
-                            end_time = start_time + timedelta(hours=1)
-
-                        self.processed_raw_data.append({
-                            "start": start_time,
-                            "end": end_time,
-                            "value": entry["price"]
-                        })
-
-            # Process raw_tomorrow entries if available
-            if "raw_tomorrow" in item:
-                for entry in item.get("raw_tomorrow", []):
-                    if isinstance(entry, dict) and "start" in entry and "price" in entry:
-                        start_time = parse_datetime(entry["start"])
-                        if "end" in entry and entry["end"]:
-                            end_time = parse_datetime(entry["end"])
-                        else:
-                            end_time = start_time + timedelta(hours=1)
-
-                        self.processed_raw_data.append({
-                            "start": start_time,
-                            "end": end_time,
-                            "value": entry["price"]
-                        })
-
-            # Find price data in various formats
-            elif all(key in item for key in ["start", "end", "value"]):
-                # Already in the correct format
-                start_time = parse_datetime(item["start"]) if isinstance(item["start"], str) else item["start"]
-                end_time = parse_datetime(item["end"]) if isinstance(item["end"], str) else item["end"]
-
-                self.processed_raw_data.append({
-                    "start": start_time,
-                    "end": end_time,
-                    "value": item["value"]
-                })
-            elif all(key in item for key in ["start", "end", "price"]):
-                # Convert price to value key for consistency
-                start_time = parse_datetime(item["start"]) if isinstance(item["start"], str) else item["start"]
-                end_time = parse_datetime(item["end"]) if isinstance(item["end"], str) else item["end"]
-
-                self.processed_raw_data.append({
-                    "start": start_time,
-                    "end": end_time,
-                    "value": item["price"]
-                })
-
-        _LOGGER.debug(f"Processed {len(self.processed_raw_data)} raw data entries")
-
+        # Process all available raw data formats
+        self._process_raw_data()
+        
         # Process data into periods with proper timezone handling
         self.price_periods = process_price_data(self.processed_raw_data, self.local_tz)
 
@@ -154,14 +49,121 @@ class ElectricityPriceAdapter:
 
         _LOGGER.debug(f"Created {len(self.price_periods)} price periods")
 
+    def _process_raw_data(self):
+        """Process various raw data formats into a standardized structure."""
+        for item in self.raw_data:
+            # Skip non-dictionary items
+            if not isinstance(item, dict):
+                continue
+
+            # Handle API response with hourly_prices dictionary
+            if "hourly_prices" in item:
+                self._process_hourly_prices(item)
+
+            # Process raw_today entries
+            if "raw_today" in item:
+                self._process_raw_prices(item.get("raw_today", []))
+
+            # Process raw_tomorrow entries if available
+            if "raw_tomorrow" in item:
+                self._process_raw_prices(item.get("raw_tomorrow", []))
+
+            # Process direct price entry format
+            elif all(key in item for key in ["start", "end", "value"]) or all(key in item for key in ["start", "end", "price"]):
+                self._process_direct_entry(item)
+
+    def _process_hourly_prices(self, item):
+        """Process hourly_prices dictionary format."""
+        current_date = dt_util.now().date()
+        tomorrow_date = current_date + timedelta(days=1)
+
+        # Determine if this item contains today's or tomorrow's prices
+        is_tomorrow = "tomorrow" in item or "tomorrow_hourly_prices" in item or item.get("tomorrow_valid", False)
+        base_date = tomorrow_date if is_tomorrow else current_date
+
+        # Process hourly prices
+        for hour_str, price in item.get("hourly_prices", {}).items():
+            try:
+                # Parse hour string (format: "HH:00")
+                hour = int(hour_str.split(":")[0])
+
+                # Create timestamps for this hour in local time
+                start_time = dt_util.as_local(dt_util.start_of_local_day(base_date))
+                start_time = start_time.replace(hour=hour)
+                end_time = start_time + timedelta(hours=1)
+
+                self.processed_raw_data.append({
+                    "start": start_time,
+                    "end": end_time,
+                    "value": price
+                })
+            except Exception as e:
+                _LOGGER.warning(f"Error processing hourly price {hour_str}: {e}")
+
+        # Also check for tomorrow_hourly_prices if this data contains today's prices
+        if not is_tomorrow and "tomorrow_hourly_prices" in item:
+            for hour_str, price in item.get("tomorrow_hourly_prices", {}).items():
+                try:
+                    hour = int(hour_str.split(":")[0])
+
+                    start_time = dt_util.as_local(dt_util.start_of_local_day(tomorrow_date))
+                    start_time = start_time.replace(hour=hour)
+                    end_time = start_time + timedelta(hours=1)
+
+                    self.processed_raw_data.append({
+                        "start": start_time,
+                        "end": end_time,
+                        "value": price
+                    })
+                except Exception as e:
+                    _LOGGER.warning(f"Error processing tomorrow hourly price {hour_str}: {e}")
+
+    def _process_raw_prices(self, entries):
+        """Process raw_prices entries."""
+        for entry in entries:
+            if isinstance(entry, dict) and "start" in entry and ("price" in entry or "value" in entry):
+                start_time = parse_datetime(entry["start"])
+                
+                # Handle end time
+                if "end" in entry and entry["end"]:
+                    end_time = parse_datetime(entry["end"])
+                else:
+                    end_time = start_time + timedelta(hours=1)
+
+                # Handle price/value field name variations
+                price = entry.get("price") if "price" in entry else entry.get("value")
+
+                self.processed_raw_data.append({
+                    "start": start_time,
+                    "end": end_time,
+                    "value": price
+                })
+
+    def _process_direct_entry(self, item):
+        """Process entries already in start/end/value format."""
+        try:
+            # Parse timestamps if needed
+            start_time = parse_datetime(item["start"]) if isinstance(item["start"], str) else item["start"]
+            end_time = parse_datetime(item["end"]) if isinstance(item["end"], str) else item["end"]
+
+            # Handle price field name variations
+            price = item.get("value", item.get("price"))
+
+            self.processed_raw_data.append({
+                "start": start_time,
+                "end": end_time,
+                "value": price
+            })
+        except Exception as e:
+            _LOGGER.warning(f"Error processing price entry: {e}")
+
     def get_current_price(self, reference_time: Optional[datetime] = None) -> Optional[float]:
         """Get price for the current period."""
         if reference_time is None:
             reference_time = dt_util.now()
             _LOGGER.debug(f"Using current time as reference: {reference_time.isoformat()}")
 
-        period = find_current_price_period(self.price_periods, reference_time)
-        return period["price"] if period else None
+        return find_current_price(self.price_periods, reference_time)
 
     def get_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
         """Get all prices for a specific day (today + offset)."""
