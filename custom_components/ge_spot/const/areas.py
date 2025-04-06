@@ -9,7 +9,11 @@ from .sources import (
     SOURCE_AEMO,
 )
 
-# Area to timezone mapping
+# OMIE specific
+TIMEZONE_IBERIAN = "Europe/Madrid"
+TIMEZONE_LISBON = "Europe/Lisbon"
+
+# Area to timezone mapping (Using content from user upload, adding ES/PT)
 AREA_TIMEZONES = {
     "DK1": "Europe/Copenhagen",
     "DK2": "Europe/Copenhagen",
@@ -62,8 +66,16 @@ AREA_TIMEZONES = {
     "Bergen": "Europe/Oslo",
     "Molde": "Europe/Oslo",
     "Tr.heim": "Europe/Oslo",
-    "Tromsø": "Europe/Oslo"
+    "Tromsø": "Europe/Oslo",
+    "ES": TIMEZONE_IBERIAN, # UPDATED: Use constant for Spain
+    "PT": TIMEZONE_LISBON,  # ADDED: Use constant for Portugal
+    # Ensure other relevant areas like CH, PL etc. are mapped if needed
+    "CH": "Europe/Zurich", # Example
+    "PL": "Europe/Warsaw", # Example
 }
+
+# --- Area Definitions & Mappings ---
+# (Using content from user upload below)
 
 # Nordpool delivery area mapping
 NORDPOOL_DELIVERY_AREA_MAPPING = {
@@ -196,7 +208,7 @@ ENTSOE_AREA_MAPPING = {
     "CZ-DE-SK-LT-SE4": "10Y1001C--00038X"
 }
 
-# ENTSO-E areas
+# ENTSO-E areas (Display names)
 ENTSOE_AREAS = {
     # Nordic regions
     "SE1": "Sweden (SE1)",
@@ -291,7 +303,8 @@ ENTSOE_AREAS = {
     "10Y1001A1001A93C": "Malta"
 }
 
-# EPEX areas
+
+# EPEX areas (Copied from uploaded file)
 EPEX_AREAS = {
     "DE-LU": "Germany-Luxembourg",
     "FR": "France",
@@ -300,14 +313,7 @@ EPEX_AREAS = {
     "AT": "Austria",
 }
 
-# OMIE areas
-OMIE_AREAS = {
-    "ES": "Spain",
-    "PT": "Portugal",
-    "TIMEZONE_IBERIAN": "Europe/Madrid",
-}
-
-# AEMO areas
+# AEMO areas (Copied from uploaded file)
 AEMO_AREAS = {
     "NSW1": "New South Wales (NSW1)",
     "QLD1": "Queensland (QLD1)",
@@ -316,11 +322,11 @@ AEMO_AREAS = {
     "VIC1": "Victoria (VIC1)",
 }
 
-# Default areas for each source
+# Default areas for each source (Copied from uploaded file)
 DEFAULT_AREAS = {
     SOURCE_NORDPOOL: "SE4",
     SOURCE_ENERGI_DATA_SERVICE: "DK1",
-    SOURCE_ENTSO_E: "10Y1001A1001A47J",  # SE4
+    SOURCE_ENTSO_E: "10Y1001A1001A47J",  # SE4 EIC Code
     SOURCE_EPEX: "DE-LU",
     SOURCE_OMIE: "ES",
     SOURCE_AEMO: "NSW1",
