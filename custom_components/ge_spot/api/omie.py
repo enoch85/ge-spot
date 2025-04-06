@@ -71,14 +71,15 @@ class OMIEApiClient:
         Returns:
             A dictionary mapping UTC datetime objects to prices in EUR/kWh,
             or an empty dictionary if no data is available yet,
-            or None if a critical error prevented processing (should ideally raise).
+            or raises CannotConnect if a critical error occurs.
 
         Raises:
-            CannotConnect: If connection or data retrieval/processing fails critically.
+            CannotConnect: If connection or data retrieval/processing fails critically,
+                           or if pandas dependency is missing.
         """
         # Check if pandas is available (dependency of omiedata)
         if pd is None:
-            _LOGGER.error("Pandas library not found. Please ensure 'omiedata' dependencies are installed.")
+            _LOGGER.error("Pandas library not found. Please ensure 'omiedata' dependencies are installed via manifest.json.")
             raise CannotConnect("Missing dependency (pandas) for OMIE data processing.")
 
         _LOGGER.debug("Executing synchronous OMIE data fetch for date: %s", target_date)
@@ -110,10 +111,10 @@ class OMIEApiClient:
                 except Exception as tz_err:
                     _LOGGER.error("Failed to localize OMIE timestamp index for %s: %s", target_date, tz_err)
                     raise CannotConnect(f"Could not handle timezone for OMIE data on {target_date}") from tz_err
-            elif str(df_prices.index.tz) != TIMEZONE_IBERIAN:
+            elif str(df_prices.index.tz) != str(self._iberian_tz): # Compare string representations for safety
                  _LOGGER.warning(
                      "OMIE data index has unexpected timezone '%s' for %s. Attempting conversion from %s.",
-                     df_prices.index.tz, target_date, TIMEZONE_IBERIAN
+                     df_prices.index.tz, target_date, self._iberian_tz
                  )
                  # Try to convert to the expected timezone before UTC conversion
                  try:
@@ -179,6 +180,7 @@ class OMIEApiClient:
         try:
             # Determine tomorrow's date based on the current time in the Iberian timezone
             # This ensures we query for the correct day according to OMIE's publication time.
+            # Use datetime.now(self._iberian_tz) for robustness.
             today_local = datetime.now(self._iberian_tz).date()
             target_date = today_local + timedelta(days=1)
             _LOGGER.debug("Target date for OMIE prices: %s", target_date)
@@ -196,7 +198,7 @@ class OMIEApiClient:
                 prices = result
 
         except CannotConnect as e:
-             # The error was already logged in the synchronous function. Re-raise.
+             # The error was already logged in the synchronous function or during dependency check. Re-raise.
              _LOGGER.warning("Could not connect or fetch OMIE data: %s", e)
              raise # Let the calling code (e.g., GEApiClient) handle this
         except TimeoutError:
