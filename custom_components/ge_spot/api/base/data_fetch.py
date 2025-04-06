@@ -1,24 +1,24 @@
-"""Data processing utilities for energy price APIs."""
+"""Data fetching and processing for energy APIs."""
 import logging
 import datetime
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
 
 from .session_manager import ensure_session, fetch_with_retry
+from ...const import CONF_API_KEY
 from ...utils.timezone_utils import localize_datetime
 
 _LOGGER = logging.getLogger(__name__)
 
-class DataProcessor:
-    """Handles API data fetching and processing."""
+class DataFetcher:
+    """Handles data fetching and caching for API implementations."""
 
     def __init__(self, api_instance):
-        """Initialize the data processor.
+        """Initialize the data fetcher.
         
         Args:
-            api_instance: The API instance that owns this processor
+            api_instance: The API instance that owns this fetcher
         """
         self.api = api_instance
         self.config = api_instance.config
@@ -31,12 +31,62 @@ class DataProcessor:
         self._cache_ttl = api_instance._cache_ttl
         self.session = api_instance.session
         self._owns_session = api_instance._owns_session
-        
-    async def _ensure_session(self):
-        """Ensure that we have an aiohttp session."""
-        await ensure_session(self.api)
-        self.session = self.api.session
-        self._owns_session = self.api._owns_session
+
+    async def validate_api_key(self, api_key=None):
+        """Validate an API key.
+
+        Args:
+            api_key: Optional API key to validate (uses stored key if not provided)
+
+        Returns:
+            bool: True if the API key is valid, False otherwise
+        """
+        # Use provided key or get from config
+        key_to_validate = api_key or self.config.get(CONF_API_KEY) or self.config.get("api_key")
+
+        if not key_to_validate:
+            _LOGGER.warning("No API key to validate")
+            return False
+
+        try:
+            # Implementation depends on the specific API
+            _LOGGER.debug(f"Validating API key (starting with {key_to_validate[:5]}...)")
+
+            # Default implementation - will be overridden by subclasses
+            # Simply try to fetch data with the key
+            test_config = dict(self.config)
+            test_config[CONF_API_KEY] = key_to_validate
+
+            # Create a temporary instance with the test config
+            temp_instance = self.api.__class__(test_config)
+            temp_owns_session = False
+
+            # Use existing session if available to avoid creating too many
+            if hasattr(self.api, "session") and self.api.session and not self.api.session.closed:
+                temp_instance.session = self.api.session
+            else:
+                # Create a session for validation if needed
+                await ensure_session(temp_instance)
+                temp_owns_session = True
+
+            # Try to fetch data
+            result = await temp_instance._fetch_data()
+
+            # Close the temporary instance session if we created it
+            if temp_owns_session and hasattr(temp_instance, 'close'):
+                await temp_instance.close()
+
+            # Check if we got a valid response
+            if result:
+                _LOGGER.info("API key validation successful")
+                return True
+            else:
+                _LOGGER.warning("API key validation failed: No data returned")
+                return False
+
+        except Exception as e:
+            _LOGGER.error(f"API key validation error: {e}")
+            return False
 
     async def fetch_day_ahead_prices(self, area, currency, date, hass=None):
         """Fetch day-ahead prices for a specific area and date."""
@@ -47,9 +97,9 @@ class DataProcessor:
                 _LOGGER.debug(f"Home Assistant instance set for {self.api.__class__.__name__}")
 
             # Ensure we have a session
-            await self._ensure_session()
+            await ensure_session(self.api)
 
-            if not self.session or self.session.closed:
+            if not self.api.session or self.api.session.closed:
                 _LOGGER.error(f"Could not create session for {self.api.__class__.__name__}")
                 return None
 
@@ -83,6 +133,7 @@ class DataProcessor:
                     return self._last_successful_fetch
 
             self._last_fetched = current_time
+            self.api._last_fetched = current_time
 
             # Fetch the raw data
             _LOGGER.debug(f"Fetching data for {area} on {date_str} with currency {currency}")
@@ -114,7 +165,7 @@ class DataProcessor:
                 processed_data["data_source"] = self.api.__class__.__name__
 
                 # Add raw values to processed data
-                if not "raw_values" in processed_data:
+                if "raw_values" not in processed_data:
                     processed_data["raw_values"] = {}
 
                 # Include Home Assistant timezone information
@@ -126,12 +177,16 @@ class DataProcessor:
 
                 # Mark as successful fetch
                 self._last_successful_fetch = processed_data
+                self.api._last_successful_fetch = processed_data
 
                 # Cache the result
                 self._cache[cache_key] = {
                     'data': processed_data,
                     'timestamp': current_time
                 }
+                
+                # Update API's cache too
+                self.api._cache[cache_key] = self._cache[cache_key]
 
                 _LOGGER.debug(f"Successfully processed and cached data for {cache_key}")
 
@@ -207,6 +262,6 @@ class DataProcessor:
         # Standard rate limiting - don't fetch more than once per hour
         return time_diff < 60
 
-    async def fetch_with_retry(self, url, params=None, timeout=30, max_retries=3):
+    async def fetch_with_retry(self, url, params=None, headers=None, timeout=30, max_retries=3):
         """Fetch data from URL with retry mechanism."""
-        return await fetch_with_retry(self.api, url, params, timeout, max_retries)
+        return await fetch_with_retry(self.api, url, params, headers, timeout, max_retries)
