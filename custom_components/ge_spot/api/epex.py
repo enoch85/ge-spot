@@ -1,9 +1,13 @@
+"""API handler for EPEX SPOT."""
 import logging
 import datetime
 import asyncio
 from bs4 import BeautifulSoup
 from .base import BaseEnergyAPI
-from ..utils.currency_utils import async_convert_energy_price
+from ..const import (
+    CONF_DISPLAY_UNIT,
+    DISPLAY_UNIT_CENTS
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,7 +38,7 @@ class EpexAPI(BaseEnergyAPI):
         _LOGGER.debug(f"Fetching EPEX with params: {params}")
 
         try:
-            html_content = await self._fetch_with_retry(self.BASE_URL, params=params)
+            html_content = await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
             if not html_content:
                 return None
             return html_content
@@ -49,6 +53,10 @@ class EpexAPI(BaseEnergyAPI):
             return None
 
         try:
+            # Get display unit setting from config
+            display_unit = self.config.get(CONF_DISPLAY_UNIT)
+            use_subunit = display_unit == DISPLAY_UNIT_CENTS
+            
             # Parse HTML
             soup = BeautifulSoup(data, 'html.parser')
 
@@ -128,16 +136,12 @@ class EpexAPI(BaseEnergyAPI):
                         "price": price
                     })
 
-                    # Convert from EUR/MWh to appropriate format
-                    converted_price = await async_convert_energy_price(
+                    # Convert price using centralized method
+                    converted_price = await self._convert_price(
                         price=price,
-                        from_unit="MWh",
-                        to_unit="kWh",
                         from_currency="EUR",
-                        to_currency=self._currency,
-                        vat=self.vat,
-                        to_subunit=self.config.get("price_in_cents", False),
-                        session=self.session
+                        from_unit="MWh",
+                        to_subunit=use_subunit  # Use the display unit setting
                     )
 
                     # Format hour string and store price
@@ -162,7 +166,8 @@ class EpexAPI(BaseEnergyAPI):
                 "hourly_prices": hourly_prices,
                 "raw_prices": raw_prices,
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "data_source": "EPEX SPOT"
+                "data_source": "EPEX SPOT",
+                "currency": "EUR"
             }
 
         except Exception as e:
