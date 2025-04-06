@@ -185,18 +185,26 @@ class EntsoEAPI(BaseEnergyAPI):
                     # Get resolution (PT15M for 15 minutes, PT60M for 60 minutes)
                     resolution_element = period.find("ns:resolution", ns) or period.find("resolution")
                     if resolution_element is None:
-                        _LOGGER.warning("Missing resolution element in period")
-                        continue
-
-                    resolution = resolution_element.text
-                    resolution_minutes = 60  # Default to hourly
-
-                    if resolution == "PT15M":
-                        resolution_minutes = 15
-                    elif resolution == "PT60M" or resolution == "PT1H":
+                        _LOGGER.warning("Missing resolution element in period, defaulting to hourly")
+                        # Log period structure for debugging
+                        try:
+                            period_xml = ET.tostring(period, encoding='utf8').decode('utf8')
+                            _LOGGER.debug(f"Period without resolution element: {period_xml[:200]}...")
+                        except Exception as e:
+                            _LOGGER.debug(f"Could not convert period to string: {e}")
+                        
+                        resolution = "PT60M"  # Default to hourly
                         resolution_minutes = 60
                     else:
-                        _LOGGER.warning(f"Unknown resolution: {resolution}, defaulting to hourly")
+                        resolution = resolution_element.text
+                        resolution_minutes = 60  # Default to hourly
+
+                        if resolution == "PT15M":
+                            resolution_minutes = 15
+                        elif resolution == "PT60M" or resolution == "PT1H":
+                            resolution_minutes = 60
+                        else:
+                            _LOGGER.warning(f"Unknown resolution: {resolution}, defaulting to hourly")
 
                     # Get time interval
                     interval = period.find("ns:timeInterval", ns) or period.find("timeInterval")
