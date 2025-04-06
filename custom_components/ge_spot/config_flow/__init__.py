@@ -215,9 +215,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         _LOGGER.debug(f"Generated unique ID for config entry: {unique_id}")
 
         # Set the unique_id to ensure we don't create duplicates
-        self.async_set_unique_id(unique_id)
-        self._abort_if_unique_id_configured()
-
+        # IMPORTANT: Make sure to await this coroutine
         return self.async_create_entry(
             title=f"GE-Spot - {region_name}",
             data=self._data,
