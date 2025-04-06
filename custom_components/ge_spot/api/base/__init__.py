@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .session_manager import ensure_session, close_session
+from .session_manager import ensure_session, close_session, register_shutdown_task
 from .data_fetch import DataFetcher
 from .price_conversion import PriceConverter
 from ...utils.timezone_utils import localize_datetime
