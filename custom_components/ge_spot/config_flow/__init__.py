@@ -1,5 +1,6 @@
 """Config flow for GE-Spot integration."""
 import logging
+import hashlib
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow
@@ -11,19 +12,26 @@ from ..const import (
     CONF_AREA,
     CONF_VAT,
     CONF_API_KEY,
+    CONF_SOURCE_PRIORITY,
+    CONF_ORIGINAL_AREA,
     SOURCE_ENTSO_E,
 )
-from ..api import get_sources_for_region
-
-from .utils import get_deduplicated_regions, SOURCE_AREA_MAPS
-from .validators import validate_entso_e_api_key, get_entso_e_api_key_description
-from .schemas import get_user_schema, get_source_priority_schema, get_api_keys_schema
+from ..api import get_sources_for_region, create_api
 from .options import GSpotOptionsFlow
+from .utils import (
+    get_deduplicated_regions,
+    validate_entso_e_api_key,
+    SOURCE_AREA_MAPS,
+    get_user_schema,
+    get_source_priority_schema,
+    get_api_keys_schema,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for GE-Spot integration."""
+
     VERSION = 1
     CONNECTION_CLASS = "cloud_poll"
 
@@ -102,7 +110,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 # Check if ENTSO-E requires an API key for this area
                 area = self._data.get(CONF_AREA)
                 requires_api_key = False
-                if SOURCE_ENTSO_E in self._data.get("source_priority", []):
+                if SOURCE_ENTSO_E in self._data.get(CONF_SOURCE_PRIORITY, []):
                     # Always go to API keys step when ENTSO-E is selected
                     requires_api_key = True
 
@@ -168,7 +176,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Get description for API key entry
         area = self._data.get(CONF_AREA)
-        description = get_entso_e_api_key_description(area)
+        description = self._get_api_key_description(area)
         
         # Add info about existing API key to description
         if existing_api_key:
@@ -188,7 +196,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         for entry in existing_entries:
             if CONF_API_KEY in entry.data and entry.data.get(CONF_API_KEY):
                 # Verify it's for the requested source type
-                if source_type in entry.data.get("source_priority", []):
+                if source_type in entry.data.get(CONF_SOURCE_PRIORITY, []):
                     return entry.data.get(CONF_API_KEY)
         return None
 
@@ -197,6 +205,18 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         # Get region name for entry title
         area = self._data.get(CONF_AREA)
         region_name = self._get_region_name(area)
+
+        # Store original area for maintaining entity ID consistency
+        self._data[CONF_ORIGINAL_AREA] = area
+
+        # Create a unique ID that won't change if area changes
+        unique_id_base = f"{area}"
+        unique_id = f"gespot_{hashlib.md5(unique_id_base.encode()).hexdigest()}"
+        _LOGGER.debug(f"Generated unique ID for config entry: {unique_id}")
+
+        # Set the unique_id to ensure we don't create duplicates
+        self.async_set_unique_id(unique_id)
+        self._abort_if_unique_id_configured()
 
         return self.async_create_entry(
             title=f"GE-Spot - {region_name}",
@@ -212,6 +232,14 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 break
 
         return region_name or region_code
+        
+    def _get_api_key_description(self, area):
+        """Get description text for API key form."""
+        # For now, we only use API keys with ENTSO-E
+        return (
+            f"Enter your ENTSO-E API key for region {area}.\n\n"
+            f"This key is required to access energy price data from the ENTSO-E Transparency Platform."
+        )
 
     @staticmethod
     @callback
