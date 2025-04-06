@@ -1,17 +1,15 @@
 """API handler for OMIE (Operador del Mercado Ibérico de Energía)."""
 import logging
 import datetime
-import asyncio
 import csv
 import io
+from typing import Optional, Dict, Any
+
 from .base import BaseEnergyAPI
-from ..utils.currency_utils import async_convert_energy_price
-from ..utils.timezone_utils import localize_datetime
+from ..utils.timezone_utils import localize_datetime, parse_datetime
+from ..const import AREA_TIMEZONES
 
 _LOGGER = logging.getLogger(__name__)
-
-# URL Template for OMIE's daily marginal price file
-OMIE_URL_TEMPLATE = "https://www.omie.es/sites/default/files/dados/SP/marginalpdbc_{date_str}.1"
 
 class OmieAPI(BaseEnergyAPI):
     """API handler for OMIE."""
@@ -19,25 +17,39 @@ class OmieAPI(BaseEnergyAPI):
     async def _fetch_data(self):
         """Fetch data from OMIE."""
         try:
-            # Determine tomorrow's date in Iberian timezone
+            # Get proper date in the local timezone of the area (ES/PT)
             now = self._get_now()
-            tomorrow = now + datetime.timedelta(days=1)
-            date_str = tomorrow.strftime("%Y%m%d")
-
-            url = OMIE_URL_TEMPLATE.format(date_str=date_str)
+            area = self.config.get("area", "ES")
+            
+            # Format dates for OMIE files
+            target_date = now.date()
+            year = str(target_date.year)
+            month = str.zfill(str(target_date.month), 2)
+            day = str.zfill(str(target_date.day), 2)
+            date_format = f"{day}_{month}_{year}"
+            
+            # OMIE URL format
+            url = f"https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{date_format}_{date_format}.TXT"
+            
             _LOGGER.debug(f"Fetching OMIE data from URL: {url}")
 
             # Fetch data with built-in retry mechanism
             response = await self._fetch_with_retry(url, timeout=30)
 
-            if not response or isinstance(response, str) and ("<!DOCTYPE html" in response.lower() or "<html" in response.lower()):
-                _LOGGER.warning(f"Empty or HTML response from OMIE for {date_str}.")
+            # OMIE returns HTML for non-existent files rather than 404
+            if not response:
+                _LOGGER.warning(f"No response from OMIE for {date_format}")
+                return None
+                
+            if isinstance(response, str) and ("<html" in response.lower() or "<!doctype" in response.lower()):
+                _LOGGER.warning(f"HTML response from OMIE for {date_format}, likely data not available yet")
                 return None
 
             return {
                 "raw_data": response,
-                "date_str": date_str,
-                "target_date": tomorrow.date()
+                "date_str": date_format,
+                "target_date": target_date,
+                "url": url
             }
 
         except Exception as e:
@@ -51,23 +63,21 @@ class OmieAPI(BaseEnergyAPI):
 
         try:
             raw_data = data["raw_data"]
-            date_str = data["date_str"]
             target_date = data["target_date"]
 
-            # Process CSV-like data
+            # Process CSV-like data (OMIE uses ; as delimiter)
             file_like_data = io.StringIO(raw_data)
-            valid_lines = []
-
-            for line in file_like_data:
-                if line.strip().startswith("marginalpdbc") and len(line.split(';')) >= 6:
-                    valid_lines.append(line)
-
-            if not valid_lines:
-                _LOGGER.warning(f"No valid data lines in OMIE response for {date_str}.")
+            lines = file_like_data.readlines()
+            
+            # Check if we have valid data
+            if len(lines) < 3:
+                _LOGGER.warning(f"Not enough data lines in OMIE response")
                 return None
-
-            reader = csv.reader(valid_lines, delimiter=';', skipinitialspace=True)
-
+                
+            # OMIE format: Skip first 2 lines (header), then read CSV
+            csv_data = lines[2:]
+            reader = csv.reader(csv_data, delimiter=';', skipinitialspace=True)
+            
             hourly_prices = {}
             all_prices = []
             raw_prices = []
@@ -79,70 +89,83 @@ class OmieAPI(BaseEnergyAPI):
             current_hour = now.hour
             next_hour = (current_hour + 1) % 24
 
+            # Process each row looking for Spanish/Portuguese price data based on area
+            area = self.config.get("area", "ES")
+            price_field_name = "Precio marginal en el sistema español (EUR/MWh)"
+            if area == "PT":
+                price_field_name = "Precio marginal en el sistema portugués (EUR/MWh)"
+            
             for row in reader:
                 if len(row) < 6:
                     continue
+                    
+                # Look for the specified price data row
+                row_name = row[0] if row else ""
+                if price_field_name in row_name:
+                    try:
+                        # Process hourly prices (values start from position 1)
+                        prices = []
+                        for val in row[1:]:
+                            if not val.strip():
+                                continue
+                            try:
+                                # Handle comma decimal separator
+                                prices.append(float(val.replace(',', '.')))
+                            except (ValueError, TypeError):
+                                prices.append(None)
+                        
+                        # Store prices for each hour
+                        for hour, price in enumerate(prices):
+                            if price is None:
+                                continue
+                                
+                            # Convert price
+                            converted_price = await self._convert_price(
+                                price=price,
+                                from_unit="MWh",
+                                from_currency="EUR"
+                            )
+                            
+                            # Create timestamp for this hour
+                            dt_local = datetime.datetime.combine(target_date, datetime.time(hour, 0))
+                            
+                            # Store raw price data
+                            raw_prices.append({
+                                "start": dt_local.isoformat(),
+                                "end": (dt_local + datetime.timedelta(hours=1)).isoformat(),
+                                "price": price
+                            })
 
-                try:
-                    year, month, day, hour_1_based = map(int, row[1:5])
-                    price_str = row[5]
+                            hour_str = f"{hour:02d}:00"
+                            hourly_prices[hour_str] = converted_price
+                            all_prices.append(converted_price)
 
-                    if not (2000 < year < 2100 and 1 <= month <= 12 and 1 <= day <= 31 and 1 <= hour_1_based <= 24):
-                        _LOGGER.warning(f"Invalid date/hour in OMIE row: {row}")
+                            # Check if this is current hour
+                            if hour == current_hour:
+                                current_price = converted_price
+                                raw_values["current_price"] = {
+                                    "raw": price,
+                                    "converted": converted_price,
+                                    "hour": hour
+                                }
+
+                            # Check if this is next hour
+                            if hour == next_hour:
+                                next_hour_price = converted_price
+                                raw_values["next_hour_price"] = {
+                                    "raw": price,
+                                    "converted": converted_price,
+                                    "hour": hour
+                                }
+                                
+                        # We found the row we needed, can break now
+                        break
+                    except Exception as e:
+                        _LOGGER.warning(f"Error processing OMIE price row: {e}")
                         continue
 
-                    hour_0_based = hour_1_based - 1
-
-                    # Create datetime objects
-                    dt_local = datetime.datetime(year, month, day, hour_0_based)
-                    if hasattr(self, 'hass') and self.hass:
-                        dt_local = localize_datetime(dt_local, self.hass)
-
-                    # Parse price value
-                    price_mwh = float(price_str.replace(',', '.'))
-
-                    # Store raw price data
-                    raw_prices.append({
-                        "start": dt_local.isoformat(),
-                        "end": (dt_local + datetime.timedelta(hours=1)).isoformat(),
-                        "price": price_mwh
-                    })
-
-                    # Convert price
-                    converted_price = await self._convert_price(
-                        price=price_mwh,
-                        from_unit="MWh",
-                        from_currency="EUR"
-                    )
-
-                    hour_str = f"{hour_0_based:02d}:00"
-                    hourly_prices[hour_str] = converted_price
-                    all_prices.append(converted_price)
-
-                    # Check if this is current hour
-                    if hour_0_based == current_hour and dt_local.date() == now.date():
-                        current_price = converted_price
-                        raw_values["current_price"] = {
-                            "raw": price_mwh,
-                            "converted": converted_price,
-                            "hour": hour_0_based
-                        }
-
-                    # Check if this is next hour
-                    if hour_0_based == next_hour and dt_local.date() == now.date():
-                        next_hour_price = converted_price
-                        raw_values["next_hour_price"] = {
-                            "raw": price_mwh,
-                            "converted": converted_price,
-                            "hour": hour_0_based
-                        }
-
-                except (ValueError, IndexError, TypeError) as e:
-                    _LOGGER.warning(f"Error processing OMIE row: {e}. Row: {row}")
-                    continue
-
             if not all_prices:
-                _LOGGER.warning(f"No valid prices extracted from OMIE data for {date_str}")
+                _LOGGER.warning(f"No valid prices extracted from OMIE data")
                 return None
 
             # Calculate day average
