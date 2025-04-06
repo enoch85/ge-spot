@@ -3,12 +3,7 @@ import logging
 from typing import Dict, Optional, Type, List, Set
 
 from ..const import (
-    SOURCE_NORDPOOL,
-    SOURCE_ENERGI_DATA_SERVICE,
-    SOURCE_ENTSO_E,
-    SOURCE_EPEX,
-    SOURCE_OMIE,
-    SOURCE_AEMO,
+    Source,
     NORDPOOL_AREAS,
     ENERGI_DATA_AREAS,
     ENTSOE_AREAS,
@@ -18,6 +13,14 @@ from ..const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# For convenience, establish direct references to source constants
+SOURCE_NORDPOOL = Source.NORDPOOL
+SOURCE_ENERGI_DATA_SERVICE = Source.ENERGI_DATA_SERVICE
+SOURCE_ENTSO_E = Source.ENTSO_E
+SOURCE_EPEX = Source.EPEX
+SOURCE_OMIE = Source.OMIE
+SOURCE_AEMO = Source.AEMO
 
 # Mapping of which source supports which regions
 SOURCE_REGION_SUPPORT = {
