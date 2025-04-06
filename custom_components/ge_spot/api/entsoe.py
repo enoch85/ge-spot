@@ -1,3 +1,4 @@
+"""API handler for ENTSO-E Transparency Platform."""
 import logging
 import datetime
 import asyncio
@@ -286,11 +287,11 @@ class EntsoEAPI(BaseEnergyAPI):
                         })
 
                         # Convert price from EUR/MWh to target currency/unit
+                        # Fix: Use _convert_price without to_currency parameter
                         converted_price = await self._convert_price(
                             price=price,
                             from_currency=currency,
                             from_unit="MWh",
-                            to_currency=self._currency,
                             to_subunit=use_cents
                         )
 
