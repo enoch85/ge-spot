@@ -15,6 +15,9 @@ from .const import (
     CONF_AREA,
     CONF_SOURCE_PRIORITY,
     CONF_API_KEY,
+    CONF_DISPLAY_UNIT,
+    DISPLAY_UNIT_CENTS,
+    DEFAULT_DISPLAY_UNIT,
     ATTR_LAST_UPDATED,
     ATTR_DATA_SOURCE,
     ATTR_FALLBACK_USED,
@@ -57,6 +60,14 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
         # Create prioritized APIs for this region
         source_priority = config.get(CONF_SOURCE_PRIORITY)
+        
+        # Ensure display unit is available to all APIs
+        self.display_unit = config.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
+        self.use_subunit = self.display_unit == DISPLAY_UNIT_CENTS
+        
+        # Make sure all APIs use consistent settings for display unit
+        self.config["price_in_cents"] = self.use_subunit
+        
         self._apis = create_apis_for_region(area, config, source_priority)
         self._active_source = None
         self._active_api = None
@@ -121,6 +132,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         try:
             _LOGGER.info(f"Updating data for area {self.area} with currency {self.currency}")
             _LOGGER.debug(f"Home Assistant timezone: {self.hass.config.time_zone}")
+            _LOGGER.debug(f"Using display unit: {self.display_unit}, subunit conversion: {self.use_subunit}")
 
             # Reset tracking variables
             self._fallback_used = False
@@ -145,6 +157,10 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 _LOGGER.info(f"Attempting to fetch data from {api_name} ({source_type})")
 
                 try:
+                    # Pass display unit setting to API
+                    api.config[CONF_DISPLAY_UNIT] = self.display_unit
+                    api.config["price_in_cents"] = self.use_subunit
+                    
                     # Pass Home Assistant instance to the API for timezone handling
                     data = await api.fetch_day_ahead_prices(
                         self.area,
@@ -208,9 +224,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             if tomorrow_data and tomorrow_data != today_data:
                 all_data.append(tomorrow_data)
 
-            # Create adapter with processed data
+            # Create adapter with processed data and pass display unit setting
             _LOGGER.info("Creating price adapter with fetched data")
-            self.adapter = ElectricityPriceAdapter(self.hass, all_data)
+            self.adapter = ElectricityPriceAdapter(self.hass, all_data, self.use_subunit)
 
             if not self.adapter:
                 _LOGGER.error("Failed to create price adapter")
@@ -282,7 +298,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 ATTR_API_KEY_STATUS: api_key_status,
                 "source_info": source_info,
                 "timezone": str(self.hass.config.time_zone),
-                "exchange_rate_info": exchange_rate_info
+                "exchange_rate_info": exchange_rate_info,
+                "display_unit": self.display_unit,
+                "use_subunit": self.use_subunit
             }
 
             _LOGGER.info(f"Successfully updated data with current price: {result['current_price']}")
