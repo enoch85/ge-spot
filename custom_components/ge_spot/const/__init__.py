@@ -54,6 +54,7 @@ from .currencies import (
     CURRENCY_SUBUNIT_MULTIPLIER,
     CURRENCY_SUBUNIT_NAMES,
     ENERGY_UNIT_CONVERSION,
+    # Direct currency constants
     CURRENCY_EUR,
     CURRENCY_SEK,
     CURRENCY_NOK,
@@ -65,6 +66,7 @@ from .currencies import (
     CURRENCY_AMD,
     CURRENCY_GEL,
     CURRENCY_AZN,
+    # Currency class
     Currency
 )
 
