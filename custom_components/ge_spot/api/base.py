@@ -9,18 +9,17 @@ import weakref
 from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
 
+from ..const import (
+    CONF_API_KEY,
+    REGION_TO_CURRENCY,
+    ENERGY_UNIT_CONVERSION,
+)
 from ..utils.currency_utils import async_convert_energy_price
 from ..utils.timezone_utils import localize_datetime
-from ..const import (
-    REGION_TO_CURRENCY,
-    CURRENCY_SUBUNIT_NAMES,
-    ENERGY_UNIT_CONVERSION,
-    CONF_API_KEY
-)
 
 _LOGGER = logging.getLogger(__name__)
 
-# Global session registry to prevent session leaks
+# Global session registry to prevent leaks
 _SESSION_REGISTRY = weakref.WeakSet()
 
 async def close_all_sessions():
@@ -232,6 +231,7 @@ class BaseEnergyAPI(ABC):
         except Exception as e:
             _LOGGER.error(f"Error fetching day-ahead prices: {str(e)}", exc_info=True)
             return None
+            
     async def _check_cache(self, cache_key):
         """Check if we have a valid cached response."""
         current_time = datetime.datetime.now()
@@ -323,12 +323,6 @@ class BaseEnergyAPI(ABC):
 
         use_subunit = to_subunit if to_subunit is not None else self.config.get("price_in_cents", False)
 
-        from ..utils.debug_utils import log_conversion
-        from ..utils.currency_utils import async_convert_energy_price
-
-        # Store original for logging
-        original_price = price
-
         # Perform conversion
         converted_price = await async_convert_energy_price(
             price=price,
@@ -340,17 +334,6 @@ class BaseEnergyAPI(ABC):
             to_subunit=use_subunit,
             session=self.session,
             exchange_rate=exchange_rate
-        )
-
-        # Log details
-        log_conversion(
-            original=original_price,
-            converted=converted_price,
-            from_currency=from_currency,
-            to_currency=self._currency,
-            from_unit=from_unit,
-            to_unit="kWh",
-            vat=self.vat
         )
 
         return converted_price
@@ -472,7 +455,6 @@ class BaseEnergyAPI(ABC):
             _LOGGER.debug(f"No VAT applied (rate: {vat:.2%})")
 
         return price
-
 
 # Register close_all_sessions as a shutdown task for Home Assistant
 def register_shutdown_task(hass):
