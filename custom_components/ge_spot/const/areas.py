@@ -304,7 +304,7 @@ EPEX_AREAS = {
 OMIE_AREAS = {
     "ES": "Spain",
     "PT": "Portugal",
-    "TIMEZONE_IBERIAN": = "Europe/Madrid" 
+    "TIMEZONE_IBERIAN": "Europe/Madrid",
 }
 
 # AEMO areas
