@@ -4,7 +4,7 @@ import datetime
 import asyncio
 import xml.etree.ElementTree as ET
 from .base import BaseEnergyAPI
-from ..utils.currency_utils import convert_to_subunit, async_convert_energy_price
+from ..utils.timezone_utils import ensure_timezone_aware
 from ..const import (
     ENTSOE_AREA_MAPPING, 
     CONF_API_KEY,
@@ -66,82 +66,27 @@ class EntsoEAPI(BaseEnergyAPI):
             "Content-Type": "application/xml;charset=UTF-8"
         }
 
-        try:
-            await self.data_processor._ensure_session()
-
-            if not self.session or self.session.closed:
-                _LOGGER.error("No valid session for ENTSO-E API request")
-                return None
-
-            url = self.BASE_URL
-            response = None
-            retries = 3
-
-            for attempt in range(retries):
-                try:
-                    # Full URL with parameters for debugging (hide full API key)
-                    masked_key = f"{api_key[:5]}..." if len(api_key) > 5 else "***"
-                    full_url = f"{url}?securityToken={masked_key}&documentType=A44&in_Domain={entsoe_area}&out_Domain={entsoe_area}&periodStart={period_start}&periodEnd={period_end}"
-                    _LOGGER.debug(f"ENTSO-E request attempt {attempt+1}: {full_url}")
-
-                    async with self.session.get(url, params=params, headers=headers, timeout=60) as resp:
-                        status_code = resp.status
-                        content_type = resp.headers.get('Content-Type', '')
-                        _LOGGER.debug(f"ENTSO-E response status: {status_code}, content-type: {content_type}")
-
-                        if status_code == 200:
-                            response = await resp.text()
-                            _LOGGER.debug(f"ENTSO-E response: received {len(response)} bytes")
-                            if "<Publication_MarketDocument" in response:
-                                _LOGGER.debug("ENTSO-E response contains valid XML document")
-                                break
-                            else:
-                                _LOGGER.warning("ENTSO-E response does not contain expected XML document")
-                                if len(response) < 500:
-                                    _LOGGER.debug(f"Response content: {response}")
-
-                        elif status_code == 401 or status_code == 403:
-                            error_text = await resp.text()
-                            _LOGGER.error(f"ENTSO-E API authentication failed ({status_code}). Check your API key. Response: {error_text[:200]}")
-                            break  # No point retrying with same credentials
-
-                        else:
-                            error_text = await resp.text()
-                            _LOGGER.error(f"ENTSO-E API request failed with status {status_code}: {error_text[:200]}")
-                            if attempt < retries - 1:
-                                delay = 2 ** attempt
-                                _LOGGER.debug(f"Retrying in {delay} seconds...")
-                                await asyncio.sleep(delay)
-
-                except asyncio.TimeoutError:
-                    _LOGGER.error(f"Timeout fetching from ENTSO-E (attempt {attempt+1}/{retries})")
-                    if attempt < retries - 1:
-                        delay = 2 ** attempt
-                        await asyncio.sleep(delay)
-
-                except Exception as e:
-                    _LOGGER.error(f"Error during ENTSO-E API request (attempt {attempt+1}/{retries}): {e}")
-                    if attempt < retries - 1:
-                        delay = 2 ** attempt
-                        await asyncio.sleep(delay)
-
-            # Check for authentication errors in the response
-            if response:
-                if "Not authorized" in response:
-                    _LOGGER.error(f"ENTSO-E API authentication failed: Not authorized. Check your API key.")
-                    return None
-                elif "No matching data found" in response:
-                    _LOGGER.warning(f"ENTSO-E API returned: No matching data found for the query parameters")
-                    return None
-
-                return response
-            else:
-                _LOGGER.error("ENTSO-E API returned empty response after all retries")
-                return None
-
-        except Exception as e:
-            _LOGGER.error(f"Failed to fetch data from ENTSO-E: {e}")
+        response = await self.data_fetcher.fetch_with_retry(
+            self.BASE_URL, 
+            params=params, 
+            headers=headers, 
+            timeout=60,
+            max_retries=3
+        )
+        
+        if not response:
+            _LOGGER.error("ENTSO-E API returned empty response after all retries")
             return None
+            
+        # Check for authentication errors in the response
+        if "Not authorized" in response:
+            _LOGGER.error(f"ENTSO-E API authentication failed: Not authorized. Check your API key.")
+            return None
+        elif "No matching data found" in response:
+            _LOGGER.warning(f"ENTSO-E API returned: No matching data found for the query parameters")
+            return None
+            
+        return response
 
     async def _process_data(self, data):
         """Process the data from ENTSO-E with correct XML namespace handling."""
@@ -257,6 +202,9 @@ class EntsoEAPI(BaseEnergyAPI):
                         local_time = self._convert_to_local(position_time)
                         hour_str = local_time.strftime("%H:00")
                         
+                        # Debug the timezone conversion
+                        _LOGGER.debug(f"Position time: {position_time.isoformat()} → Local time: {local_time.isoformat()}")
+                        
                         # Store in hourly prices
                         if hour_str not in hourly_prices:
                             hourly_prices[hour_str] = price
@@ -289,10 +237,9 @@ class EntsoEAPI(BaseEnergyAPI):
             
             hourly_prices = selected_series["prices"]  # These are the raw prices
             
-            # Convert all prices to target currency/unit
             # Get display unit setting from config
             display_unit = self.config.get(CONF_DISPLAY_UNIT)
-            use_cents = display_unit == DISPLAY_UNIT_CENTS
+            use_subunit = display_unit == DISPLAY_UNIT_CENTS
             
             currency = selected_series["metadata"]["currency"]
             
@@ -325,7 +272,7 @@ class EntsoEAPI(BaseEnergyAPI):
                     price=price,
                     from_currency=currency,
                     from_unit="MWh",
-                    to_subunit=use_cents  # Use the display unit setting from config
+                    to_subunit=use_subunit  # Pass the display unit setting
                 )
                 
                 # Store converted price
@@ -388,7 +335,8 @@ class EntsoEAPI(BaseEnergyAPI):
                 "raw_prices": raw_prices,
                 "raw_values": raw_values,
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "api_key_valid": True
+                "api_key_valid": True,
+                "currency": currency
             }
         except ET.ParseError as e:
             _LOGGER.error(f"Error parsing ENTSO-E XML: {e}")
@@ -468,16 +416,19 @@ class EntsoEAPI(BaseEnergyAPI):
 
     def _convert_to_local(self, dt):
         """Convert UTC datetime to local timezone."""
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        dt = ensure_timezone_aware(dt)
 
         # If we have Home Assistant instance, use its timezone
         if hasattr(self, 'hass') and self.hass:
             from homeassistant.util import dt as dt_util
-            return dt_util.as_local(dt)
+            local_dt = dt_util.as_local(dt)
+            _LOGGER.debug(f"Converting {dt.isoformat()} to local time: {local_dt.isoformat()}")
+            return local_dt
 
         # Otherwise use system local time
-        return dt.astimezone()
+        local_dt = dt.astimezone()
+        _LOGGER.debug(f"Converting {dt.isoformat()} to system local time: {local_dt.isoformat()}")
+        return local_dt
 
     @staticmethod
     def is_area_supported(area: str) -> bool:
