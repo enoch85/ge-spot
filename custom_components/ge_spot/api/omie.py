@@ -7,7 +7,11 @@ from typing import Optional, Dict, Any
 
 from .base import BaseEnergyAPI
 from ..utils.timezone_utils import localize_datetime, parse_datetime
-from ..const import AREA_TIMEZONES
+from ..const import (
+    AREA_TIMEZONES,
+    CONF_DISPLAY_UNIT,
+    DISPLAY_UNIT_CENTS
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,7 +38,7 @@ class OmieAPI(BaseEnergyAPI):
             _LOGGER.debug(f"Fetching OMIE data from URL: {url}")
 
             # Fetch data with built-in retry mechanism
-            response = await self._fetch_with_retry(url, timeout=30)
+            response = await self.data_fetcher.fetch_with_retry(url, timeout=30)
 
             # OMIE returns HTML for non-existent files rather than 404
             if not response:
@@ -62,6 +66,10 @@ class OmieAPI(BaseEnergyAPI):
             return None
 
         try:
+            # Get display unit setting from config
+            display_unit = self.config.get(CONF_DISPLAY_UNIT)
+            use_subunit = display_unit == DISPLAY_UNIT_CENTS
+            
             raw_data = data["raw_data"]
             target_date = data["target_date"]
 
@@ -119,11 +127,12 @@ class OmieAPI(BaseEnergyAPI):
                             if price is None:
                                 continue
                                 
-                            # Convert price
+                            # Convert using centralized method
                             converted_price = await self._convert_price(
                                 price=price,
                                 from_unit="MWh",
-                                from_currency="EUR"
+                                from_currency="EUR",
+                                to_subunit=use_subunit
                             )
                             
                             # Create timestamp for this hour
@@ -201,7 +210,8 @@ class OmieAPI(BaseEnergyAPI):
                 "raw_prices": raw_prices,
                 "raw_values": raw_values,
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "data_source": "OMIE"
+                "data_source": "OMIE",
+                "currency": "EUR"
             }
 
         except Exception as e:
