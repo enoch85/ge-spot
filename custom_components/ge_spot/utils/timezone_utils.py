@@ -127,15 +127,31 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
         start = period.get("start")
         end = period.get("end")
 
-        if not start or not end:
+        if not start:
             continue
-
+            
         # Ensure timestamps are timezone-aware
         start = ensure_timezone_aware(start)
-        end = ensure_timezone_aware(end)
+        
+        # If end is missing, assume 1 hour duration
+        if not end:
+            end = start + timedelta(hours=1)
+        else:
+            end = ensure_timezone_aware(end)
 
+        # Debug timestamp comparison
+        _LOGGER.debug(f"Comparing period: {start.isoformat()} - {end.isoformat()} with reference: {reference_time.isoformat()}")
+        
         if start <= reference_time < end:
-            _LOGGER.debug(f"Found period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
+            _LOGGER.debug(f"Found matching period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
+            return period
+
+    # If still not found, try matching by hour
+    current_hour = reference_time.hour
+    for period in periods:
+        start = period.get("start")
+        if start and hasattr(start, "hour") and start.hour == current_hour:
+            _LOGGER.debug(f"Found period by hour match: {start.isoformat()}, price: {period.get('price')}")
             return period
 
     # If we get here, no matching period was found
@@ -186,7 +202,7 @@ def classify_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] = 
     
     # Sort each list by start time
     for key in classified:
-        classified[key] = sorted(classified[key], key=lambda x: x.get("start"))
+        classified[key] = sorted(classified[key], key=lambda x: x.get("start", dt_util.now()))
     
     # Debug log with period counts
     _LOGGER.debug(f"Classified periods: today={len(classified['today'])}, tomorrow={len(classified['tomorrow'])}, other={len(classified['other'])}")
@@ -218,17 +234,23 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
             start_time = parse_datetime(start_str)
             end_time = parse_datetime(end_str) if end_str else start_time + timedelta(hours=1)
 
+            # Log the original and parsed timestamps for debugging
+            _LOGGER.debug(f"Original timestamp: {start_str} → Parsed: {start_time.isoformat()}")
+
             # Localize to proper timezone
             if local_tz:
                 if hasattr(local_tz, 'tzinfo') and local_tz.tzinfo:
                     start_time = start_time.astimezone(local_tz.tzinfo)
                     end_time = end_time.astimezone(local_tz.tzinfo)
+                    _LOGGER.debug(f"Localized to HA timezone: {start_time.isoformat()}")
                 else:
                     start_time = start_time.astimezone(dt_util.DEFAULT_TIME_ZONE)
                     end_time = end_time.astimezone(dt_util.DEFAULT_TIME_ZONE)
+                    _LOGGER.debug(f"Localized to default timezone: {start_time.isoformat()}")
             else:
                 start_time = dt_util.as_local(start_time)
                 end_time = dt_util.as_local(end_time)
+                _LOGGER.debug(f"Localized as local: {start_time.isoformat()}")
 
             # Parse price value
             if not isinstance(price_value, (float, int)):
@@ -241,6 +263,7 @@ def process_price_data(raw_data: List[Dict], local_tz=None) -> List[Dict]:
                 "day": start_time.date(),
                 "hour": start_time.hour,
                 "raw": item,
+                "currency": item.get("currency")
             })
 
         except Exception as e:
@@ -271,13 +294,15 @@ def get_raw_prices_for_day(day_data: List[Dict]) -> List[Dict]:
 
     result = []
     for period in day_data:
-        if "start" not in period or "end" not in period or "price" not in period:
+        if "start" not in period or "price" not in period:
             continue
 
         try:
+            end_time = period.get("end") or period["start"] + timedelta(hours=1)
+            
             result.append({
                 "start": period["start"].isoformat(),
-                "end": period["end"].isoformat(),
+                "end": end_time.isoformat(),
                 "price": period["price"],
                 "hour": period["start"].hour if "start" in period else None
             })
