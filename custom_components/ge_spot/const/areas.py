@@ -304,6 +304,12 @@ EPEX_AREAS = {
     "AT": "Austria",
 }
 
+# OMIE areas 
+OMIE_AREAS = {
+    "ES": "Spain",
+    "PT": "Portugal",
+}
+
 # AEMO areas 
 AEMO_AREAS = {
     "NSW1": "New South Wales (NSW1)",
