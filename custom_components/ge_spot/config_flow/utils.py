@@ -300,7 +300,12 @@ async def validate_entso_e_api_key(api_key, area, session=None):
 
         # Try to validate the API key
         if hasattr(api, "validate_api_key"):
-            result = await api.validate_api_key()
+            if api.__class__.__name__ == "EntsoEAPI":
+                # For EntsoEAPI, call the static method with required arguments
+                result = await api.__class__.validate_api_key(api_key, area, session)
+            else:
+                # For other API types that use the instance method
+                result = await api.validate_api_key(api_key)
         else:
             # Fall back to fetching data as a validation test
             result = False
