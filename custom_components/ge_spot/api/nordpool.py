@@ -2,15 +2,13 @@
 import logging
 import datetime
 from .base import BaseEnergyAPI
-from ..utils.currency_utils import async_convert_energy_price
 from ..utils.timezone_utils import parse_datetime, localize_datetime
 from ..const import (
-    AREA_TIMEZONES,
-    REGION_TO_CURRENCY,
     CONF_DISPLAY_UNIT,
     DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES,
     NORDPOOL_DELIVERY_AREA_MAPPING,
+    REGION_TO_CURRENCY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,7 +41,7 @@ class NordpoolAPI(BaseEnergyAPI):
                 "deliveryArea": delivery_area
             }
 
-            today_data = await self.data_processor.fetch_with_retry(self.BASE_URL, params=params)
+            today_data = await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
 
             if today_data is None:
                 _LOGGER.error(f"Failed to fetch today's data for {delivery_area}")
@@ -56,7 +54,7 @@ class NordpoolAPI(BaseEnergyAPI):
 
             if now_cet.hour >= 13:
                 params["date"] = tomorrow
-                tomorrow_data = await self.data_processor.fetch_with_retry(self.BASE_URL, params=params)
+                tomorrow_data = await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
 
             return {
                 "today": today_data,
@@ -105,7 +103,8 @@ class NordpoolAPI(BaseEnergyAPI):
             "last_updated": raw_data.get("timestamp"),
             "raw_today": [],
             "raw_tomorrow": [],
-            "raw_values": {}
+            "raw_values": {},
+            "currency": target_currency
         }
 
         # Process today's data
@@ -329,8 +328,6 @@ class NordpoolAPI(BaseEnergyAPI):
         # Include meta-information
         from homeassistant.util import dt as dt_util
         result["state_class"] = "total"
-        result["currency"] = target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents")
-        result["area"] = area
         result["vat"] = self.vat
         result["data_source"] = "NordpoolAPI"
         result["timezone"] = str(dt_util.DEFAULT_TIME_ZONE)
