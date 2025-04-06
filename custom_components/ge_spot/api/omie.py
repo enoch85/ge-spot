@@ -71,13 +71,18 @@ class OMIEApiClient:
         try:
             # 1. Determine tomorrow's date
             # Use local Iberian time to determine the correct date OMIE uses
-            tomorrow = datetime.now(self._iberian_tz) + timedelta(days=1)
+            # Ensure datetime.now() gets the correct timezone context if running elsewhere.
+            # Using the timezone object directly is robust.
+            now_local = datetime.now(self._iberian_tz)
+            tomorrow = now_local + timedelta(days=1)
             date_str = tomorrow.strftime("%Y%m%d")
             url = OMIE_URL_TEMPLATE.format(date_str=date_str)
             _LOGGER.debug("Fetching OMIE data from URL: %s", url)
 
             # 2. Fetch data using aiohttp session
-            async with self._session.get(url, timeout=API_TIMEOUT) as resp:
+            # Use headers to mimic a browser slightly, might help avoid blocking
+            headers = {"User-Agent": "Home Assistant Custom Component"}
+            async with self._session.get(url, timeout=API_TIMEOUT, headers=headers) as resp:
                 # Check for HTTP errors
                 if resp.status != 200:
                     _LOGGER.error(
@@ -90,14 +95,22 @@ class OMIEApiClient:
                         _LOGGER.warning("OMIE file for %s not found (likely not published yet).", date_str)
                         return {} # Return empty dict, not an error
                     else:
+                        # Log content for unexpected errors if useful
+                        # content_sample = await resp.text(encoding='latin-1', errors='ignore')[:200]
+                        # _LOGGER.error("Unexpected HTTP response content sample: %s", content_sample)
                         raise CannotConnect(f"HTTP Error {resp.status} fetching OMIE data.")
 
-                # Read response text
-                raw_data = await resp.text()
+                # Read response text, try latin-1 encoding often used in Spanish sources
+                try:
+                    raw_data = await resp.text(encoding='latin-1')
+                except UnicodeDecodeError:
+                    _LOGGER.warning("Failed to decode OMIE data as latin-1, trying default encoding.")
+                    raw_data = await resp.text()
+
 
                 # Check for empty or unexpected content (sometimes OMIE returns error pages)
-                if not raw_data or "<html" in raw_data.lower():
-                    _LOGGER.warning("Received empty or non-data response from OMIE URL for %s.", date_str)
+                if not raw_data or "<!DOCTYPE html" in raw_data.lower() or "<html" in raw_data.lower():
+                    _LOGGER.warning("Received empty or non-data (HTML?) response from OMIE URL for %s.", date_str)
                     return {}
 
                 # 3. Parse the CSV-like data
@@ -109,30 +122,45 @@ class OMIEApiClient:
                 # ...
                 # Use StringIO to treat the string data like a file
                 file_like_data = io.StringIO(raw_data)
-                reader = csv.reader(file_like_data, delimiter=';')
+                # Skip potential header lines if they don't start with the expected prefix
+                valid_lines = [line for line in file_like_data if line.strip().startswith("marginalpdbc")]
+                if not valid_lines:
+                     _LOGGER.warning("No valid data lines found in OMIE response for %s.", date_str)
+                     return {}
+
+                # Process valid lines using csv reader
+                reader = csv.reader(valid_lines, delimiter=';', skipinitialspace=True)
 
                 for row in reader:
-                    # Basic validation and skipping irrelevant lines
-                    if not row or len(row) < 6 or not row[0].startswith("marginalpdbc"):
+                    # Basic validation for expected number of columns (adjust if needed)
+                    if len(row) < 6:
+                        _LOGGER.warning("Skipping row with unexpected number of columns: %s", row)
                         continue
 
                     try:
-                        # Extract relevant fields (adjust indices if format differs!)
+                        # Extract relevant fields (indices based on example format)
                         year = int(row[1])
                         month = int(row[2])
                         day = int(row[3])
                         hour_1_based = int(row[4]) # OMIE uses 1-24 for hours
                         price_str = row[5] # Price in EUR/MWh, potentially with ',' as decimal
 
+                        # Validate extracted data slightly
+                        if not (2000 < year < 2100 and 1 <= month <= 12 and 1 <= day <= 31 and 1 <= hour_1_based <= 24):
+                            _LOGGER.warning("Skipping row with invalid date/hour values: %s", row)
+                            continue
+
                         # Adjust hour to be 0-23 for datetime object
                         hour_0_based = hour_1_based - 1
 
                         # Construct local datetime (aware of Iberian timezone)
+                        # This assumes the date/time in the file *is* Iberian time
                         dt_local = self._iberian_tz.localize(
                             datetime(year, month, day, hour_0_based)
                         )
 
-                        # Convert price string (e.g., "105,50") to float
+                        # Convert price string (e.g., "105,50" or "105.50") to float
+                        # Handle both comma and dot as decimal separators
                         price_mwh = float(price_str.replace(',', '.'))
 
                         # Convert price to EUR/kWh
@@ -151,6 +179,10 @@ class OMIEApiClient:
                         )
                         continue # Skip to next row on error
 
+                if not prices:
+                     _LOGGER.warning("Processed OMIE file for %s but extracted no valid prices.", date_str)
+                     return {} # Return empty if parsing succeeded but found nothing valid
+
                 _LOGGER.info(
                     "Successfully processed %d OMIE prices for %s via direct download.",
                     len(prices),
@@ -167,6 +199,7 @@ class OMIEApiClient:
              _LOGGER.error("Error parsing OMIE CSV data: %s", csv_err)
              raise CannotConnect(f"Could not parse OMIE data: {csv_err}") from csv_err
         except Exception as e:
+            # Catch any other unexpected error during the process
             _LOGGER.exception("Unexpected error fetching or processing OMIE data: %s", e)
             raise CannotConnect(f"Unexpected error processing OMIE data: {e!s}") from e
 
