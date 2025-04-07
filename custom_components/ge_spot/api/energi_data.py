@@ -3,12 +3,6 @@ import logging
 import datetime
 import json
 from .base import BaseEnergyAPI
-from ..const import (
-    REGION_TO_CURRENCY,
-    CURRENCY_SUBUNIT_NAMES,
-    CONF_DISPLAY_UNIT,
-    DISPLAY_UNIT_CENTS
-)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,16 +48,9 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
         raw_values = {}
         raw_prices = []
 
-        # Get display unit setting from config
-        display_unit = self.config.get(CONF_DISPLAY_UNIT)
-        use_subunit = display_unit == DISPLAY_UNIT_CENTS
-
-        area = self.config.get("area", "DK1")
-        target_currency = REGION_TO_CURRENCY.get(area, "DKK")  # Default to DKK for Danish data
-
         # Extract exchange rate if available
         exchange_rate = None
-        if "currency" in data and data["currency"] != target_currency:
+        if "currency" in data and data["currency"] != self._currency:
             api_currency = data.get("currency", "DKK")
             if "exchangeRate" in data:
                 try:
@@ -73,8 +60,6 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
                     _LOGGER.warning(f"Invalid exchange rate in API data: {data.get('exchangeRate')}")
         else:
             api_currency = "DKK"  # Default for this API
-
-        vat_rate = self.vat  # Extract VAT from self
 
         for record in records:
             hour_dk = datetime.datetime.fromisoformat(record["HourDK"].replace("Z", "+00:00"))
@@ -100,7 +85,6 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
                 price=raw_price,
                 from_currency=api_currency,
                 from_unit="MWh",
-                to_subunit=use_subunit,
                 exchange_rate=exchange_rate
             )
 
@@ -117,8 +101,8 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
                     "raw": raw_price,
                     "unit": f"{api_currency}/MWh",
                     "final": converted_price,
-                    "currency": target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
-                    "vat_rate": vat_rate
+                    "currency": self._currency,
+                    "vat_rate": self.vat
                 }
 
             # Check if this is next hour
@@ -129,8 +113,8 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
                     "raw": raw_price,
                     "unit": f"{api_currency}/MWh",
                     "final": converted_price,
-                    "currency": target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
-                    "vat_rate": vat_rate
+                    "currency": self._currency,
+                    "vat_rate": self.vat
                 }
 
         # Calculate day average
@@ -166,6 +150,5 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
             "raw_values": raw_values,
             "raw_prices": raw_prices,
             "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "raw_api_response": data,  # Store raw API response
-            "currency": target_currency
+            "currency": self._currency
         }
