@@ -6,7 +6,7 @@ from typing import Optional
 from homeassistant.core import HomeAssistant
 
 from .session_manager import ensure_session, fetch_with_retry
-from ...const import CONF_API_KEY
+from ...const import CONF_API_KEY, CONF_DISPLAY_UNIT, DISPLAY_UNIT_CENTS
 from ...utils.timezone_utils import localize_datetime
 
 _LOGGER = logging.getLogger(__name__)
@@ -146,6 +146,11 @@ class DataFetcher:
                 _LOGGER.error(f"No data received from API for {area} on {date_str}")
                 return None
 
+            # Make sure display unit is properly passed
+            if CONF_DISPLAY_UNIT in self.config:
+                _LOGGER.debug(f"Using display unit from config: {self.config[CONF_DISPLAY_UNIT]}")
+                # Do nothing - config is already properly set up
+            
             # Process the data into a consistent format
             _LOGGER.debug(f"Processing raw data for {area}")
             processed_data = await self.api._process_data(raw_data)
@@ -222,7 +227,9 @@ class DataFetcher:
                 if isinstance(raw_info, dict) and "raw" in raw_info:
                     raw = raw_info["raw"]
                     converted = processed_data[key]
-                    _LOGGER.debug(f"  - {key}: {raw} → {converted} (applied VAT {self.api.vat:.2%})")
+                    currency_from = raw_info.get("unit", "EUR/MWh").split("/")[0]
+                    currency_to = self.api._currency
+                    _LOGGER.debug(f"  - {key}: {raw} {currency_from} → {converted} {currency_to} (applied VAT {self.api.vat:.2%})")
 
     def _should_skip_fetch(self, current_time):
         """Determine if we should skip fetching based on rate limiting rules."""
