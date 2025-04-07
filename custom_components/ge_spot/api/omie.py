@@ -6,7 +6,7 @@ import io
 from typing import Optional, Dict, Any
 
 from .base import BaseEnergyAPI
-from ..utils.timezone_utils import localize_datetime, parse_datetime
+from ...timezone  import localize_datetime, parse_datetime
 from ..const import (
     AREA_TIMEZONES,
     CONF_DISPLAY_UNIT,
