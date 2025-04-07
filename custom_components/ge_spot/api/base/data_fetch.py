@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 
 from .session_manager import ensure_session, fetch_with_retry
 from ...const import CONF_API_KEY, CONF_DISPLAY_UNIT, DISPLAY_UNIT_CENTS
-from ...utils.timezone_utils import localize_datetime
+from ...timezone import localize_datetime
 
 _LOGGER = logging.getLogger(__name__)
 
