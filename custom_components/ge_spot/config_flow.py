@@ -1,2 +1,8 @@
 """Config flow for GE-Spot integration."""
-from .config_flow import GSpotConfigFlow, GSpotOptionsFlow  # pylint: disable=unused-import
+from .implementation import GSpotConfigFlow
+from .options import GSpotOptionsFlow
+
+__all__ = [
+    "GSpotConfigFlow",
+    "GSpotOptionsFlow",
+]
