@@ -60,7 +60,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         self._attr_unique_id = f"gespot_{sensor_type}_{self._area}".lower()
 
         # Set unit based on display_unit configuration
-        # Note: This only affects the display - actual conversion is done in the adapter
+        # This only affects the display - actual conversion is done by the APIs
         if self._use_subunit:
             subunit = CURRENCY_SUBUNIT_NAMES.get(self._currency, "cents")
             self._attr_native_unit_of_measurement = f"{subunit}/kWh"
@@ -92,15 +92,24 @@ class BaseElectricityPriceSensor(SensorEntity):
         }
 
         # Add exchange rate information if available
-        if "raw_values" in self.coordinator.data and "current_price" in self.coordinator.data["raw_values"]:
-            raw_price_info = self.coordinator.data["raw_values"]["current_price"]
-            if isinstance(raw_price_info, dict):
-                # Add raw currency
-                if "unit" in raw_price_info:
-                    attrs["current_raw_currency"] = raw_price_info["unit"]
-                # Add exchange rate used
-                if "exchange_rate" in raw_price_info:
-                    attrs["current_exchange_rate"] = raw_price_info["exchange_rate"]
+        if "exchange_rate_info" in self.coordinator.data:
+            exchange_info = self.coordinator.data.get("exchange_rate_info", {})
+            if "rate" in exchange_info:
+                attrs["exchange_rate"] = exchange_info["rate"]
+            if "formatted" in exchange_info:
+                attrs["exchange_rate_formatted"] = exchange_info["formatted"]
+            if "timestamp" in exchange_info:
+                attrs["exchange_rate_timestamp"] = exchange_info["timestamp"]
+
+        # Add raw value information if available
+        if "raw_values" in self.coordinator.data and self._sensor_type in self.coordinator.data["raw_values"]:
+            raw_info = self.coordinator.data["raw_values"][self._sensor_type]
+            if isinstance(raw_info, dict):
+                # Add raw currency and value
+                if "raw" in raw_info:
+                    attrs["raw_value"] = raw_info["raw"]
+                if "unit" in raw_info:
+                    attrs["raw_unit"] = raw_info["unit"]
 
         # Add source information if available
         if "source_info" in self.coordinator.data:
@@ -150,7 +159,13 @@ class PriceValueSensor(BaseElectricityPriceSensor):
         """Return the native value of the sensor."""
         if not self.coordinator.data:
             return None
-        return self._value_fn(self.coordinator.data)
+        
+        # Get the raw value using the provided extraction function
+        value = self._value_fn(self.coordinator.data)
+        
+        # No need to apply any conversion - values from coordinator should already be 
+        # properly converted by the API with correct currency and subunit format
+        return value
 
     @property
     def extra_state_attributes(self):
