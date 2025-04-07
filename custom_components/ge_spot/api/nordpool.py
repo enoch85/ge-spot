@@ -2,7 +2,7 @@
 import logging
 import datetime
 from .base import BaseEnergyAPI
-from ..utils.timezone_utils import parse_datetime, localize_datetime
+from ..timezone import parse_datetime, localize_datetime
 from ..const import (
     NORDPOOL_DELIVERY_AREA_MAPPING,
 )
