@@ -9,13 +9,11 @@ from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import (
     DOMAIN,
-    CONF_AREA,
-    CONF_UPDATE_INTERVAL,
-    CONF_CURRENCY,
-    DEFAULT_UPDATE_INTERVAL,
-    REGION_TO_CURRENCY,
+    Config,
+    Defaults,
+    SOURCE_ENTSO_E,
 )
-from .coordinator import RegionPriceCoordinator
+from .coordinator.region import RegionPriceCoordinator
 from .api.base.session_manager import register_shutdown_task
 
 _LOGGER = logging.getLogger(__name__)
