@@ -52,7 +52,7 @@ class AemoAPI(BaseEnergyAPI):
             # placeholder until actual API structure is known
             hourly_prices = {}
             raw_prices = []
-            
+
             # Return a minimal structure to avoid errors elsewhere
             return {
                 "current_price": None,

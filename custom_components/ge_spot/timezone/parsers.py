@@ -36,11 +36,11 @@ def parse_datetime(timestamp: Union[str, datetime]) -> datetime:
         # Handle explicit timezone offset or standard ISO format
         if isinstance(timestamp, str):
             dt = datetime.fromisoformat(timestamp)
-            
+
             # Add UTC timezone if not provided
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=dt_util.UTC)
-                
+
             return dt
 
     except (ValueError, TypeError) as e:
@@ -51,7 +51,7 @@ def parse_datetime(timestamp: Union[str, datetime]) -> datetime:
                 return dt
         except Exception:
             pass
-            
+
         _LOGGER.error(f"Error parsing datetime {timestamp}: {e}")
 
     # Default fallback

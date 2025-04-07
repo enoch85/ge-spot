@@ -8,7 +8,7 @@ from .currency import (
     format_price,
 )
 from .energy import (
-    convert_energy_unit, 
+    convert_energy_unit,
     ENERGY_UNIT_CONVERSION
 )
 from .statistics import (
@@ -20,22 +20,22 @@ from .statistics import (
 __all__ = [
     # Adapter
     "ElectricityPriceAdapter",
-    
+
     # Conversion functions
     "convert_energy_price",
     "async_convert_energy_price",
     "mwh_to_kwh",
-    
+
     # Currency functions
     "get_default_currency",
     "convert_to_subunit",
     "get_subunit_name",
     "format_price",
-    
+
     # Energy functions
     "convert_energy_unit",
     "ENERGY_UNIT_CONVERSION",
-    
+
     # Statistics functions
     "get_statistics",
     "find_extrema_with_timestamps",

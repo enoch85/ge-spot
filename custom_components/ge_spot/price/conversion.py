@@ -64,7 +64,7 @@ async def convert_energy_price(price, from_unit="MWh", to_unit="kWh",
                 original_price_in_from_currency = price  # Store for logging
                 price = await service.convert(price, from_currency, to_currency)
                 _LOGGER.debug(f"Currency conversion using service: {original_price_in_from_currency} {from_currency} → {price} {to_currency}")
-            
+
             # Update from_currency to to_currency as we've now converted
             from_currency = to_currency
         except Exception as e:

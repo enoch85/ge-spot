@@ -33,11 +33,11 @@ class PriceValueSensor(BaseElectricityPriceSensor):
         """Return the native value of the sensor."""
         if not self.coordinator.data:
             return None
-        
+
         # Get the raw value using the provided extraction function
         value = self._value_fn(self.coordinator.data)
-        
-        # No need to apply any conversion - values from coordinator should already be 
+
+        # No need to apply any conversion - values from coordinator should already be
         # properly converted by the API with correct currency and subunit format
         return value
 

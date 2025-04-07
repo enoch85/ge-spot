@@ -150,7 +150,7 @@ class DataFetcher:
             if CONF_DISPLAY_UNIT in self.config:
                 _LOGGER.debug(f"Using display unit from config: {self.config[CONF_DISPLAY_UNIT]}")
                 # Do nothing - config is already properly set up
-            
+
             # Process the data into a consistent format
             _LOGGER.debug(f"Processing raw data for {area}")
             processed_data = await self.api._process_data(raw_data)

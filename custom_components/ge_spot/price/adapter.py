@@ -195,7 +195,7 @@ class ElectricityPriceAdapter:
 
         # Use the utility function to find the current price
         price = find_current_price(self.price_periods, reference_time)
-            
+
         return price
 
     def get_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
