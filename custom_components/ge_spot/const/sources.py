@@ -9,8 +9,9 @@ class Source:
     EPEX = "epex"
     OMIE = "omie"
     AEMO = "aemo"
+    STROMLIGNING = "stromligning"
 
-    ALL = [NORDPOOL, ENERGI_DATA_SERVICE, ENTSO_E, EPEX, OMIE, AEMO]
+    ALL = [NORDPOOL, ENERGI_DATA_SERVICE, ENTSO_E, EPEX, OMIE, AEMO, STROMLIGNING]
 
 
 # For backward compatibility - direct constants
@@ -20,6 +21,7 @@ SOURCE_ENTSO_E = Source.ENTSO_E
 SOURCE_EPEX = Source.EPEX
 SOURCE_OMIE = Source.OMIE
 SOURCE_AEMO = Source.AEMO
+SOURCE_STROMLIGNING = Source.STROMLIGNING
 
 # List of all sources for backward compatibility
 SOURCES = Source.ALL
