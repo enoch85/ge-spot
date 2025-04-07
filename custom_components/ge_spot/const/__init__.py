@@ -8,6 +8,9 @@ from .config import Config
 from .defaults import Defaults
 from .sources import Source
 from .areas import (
+    # Export Areas as an alias for the entire areas module
+    Areas,
+    # All specific area constants remain the same
     AREA_TIMEZONES,
     ENTSOE_AREA_MAPPING,
     ENTSOE_AREAS,
@@ -48,8 +51,7 @@ from .errors import ErrorMessages, TRANSLATIONS
 DOMAIN = "ge_spot"
 CONFIG_VERSION = 1
 
-# Constants to simplify imports across the integration
-# These allow direct access without class prefixes
+# Re-export specific constants for direct access
 CONF_AREA = Config.AREA
 CONF_VAT = Config.VAT
 CONF_UPDATE_INTERVAL = Config.UPDATE_INTERVAL
@@ -58,10 +60,12 @@ CONF_CURRENCY = Config.CURRENCY
 CONF_API_KEY = Config.API_KEY
 CONF_SOURCE_PRIORITY = Config.SOURCE_PRIORITY
 
+# More re-exports as needed
 DEFAULT_VAT = Defaults.VAT
 DEFAULT_UPDATE_INTERVAL = Defaults.UPDATE_INTERVAL
 DEFAULT_DISPLAY_UNIT = Defaults.DISPLAY_UNIT
 
+# Export sources for easy access
 SOURCE_NORDPOOL = Source.NORDPOOL
 SOURCE_ENERGI_DATA_SERVICE = Source.ENERGI_DATA_SERVICE
 SOURCE_ENTSO_E = Source.ENTSO_E
