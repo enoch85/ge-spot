@@ -1,7 +1,6 @@
 """API handler for EPEX SPOT."""
 import logging
 import datetime
-import asyncio
 from bs4 import BeautifulSoup
 from .base import BaseEnergyAPI
 from ..const import (
@@ -129,7 +128,7 @@ class EpexAPI(BaseEnergyAPI):
                         start_time = now.replace(hour=hour, minute=0, second=0, microsecond=0)
                     end_time = start_time + datetime.timedelta(hours=1)
 
-                    # Add to raw prices
+                    # Store raw price data
                     raw_prices.append({
                         "start": start_time.isoformat(),
                         "end": end_time.isoformat(),
@@ -141,7 +140,7 @@ class EpexAPI(BaseEnergyAPI):
                         price=price,
                         from_currency="EUR",
                         from_unit="MWh",
-                        to_subunit=use_subunit  # Use the display unit setting
+                        to_subunit=use_subunit
                     )
 
                     # Format hour string and store price
@@ -156,18 +155,31 @@ class EpexAPI(BaseEnergyAPI):
                 _LOGGER.error("No prices found in EPEX data")
                 return None
 
-            # Calculate statistics and prepare result
+            # Calculate statistics
+            day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
+            peak_price = max(all_prices) if all_prices else None
+            off_peak_price = min(all_prices) if all_prices else None
+
+            current_hour_str = f"{current_hour:02d}:00"
+            next_hour_str = f"{(current_hour + 1) % 24:02d}:00"
+
             return {
-                "current_price": hourly_prices.get(f"{current_hour:02d}:00"),
-                "next_hour_price": hourly_prices.get(f"{(current_hour + 1) % 24:02d}:00"),
-                "day_average_price": sum(all_prices) / len(all_prices),
-                "peak_price": max(all_prices),
-                "off_peak_price": min(all_prices),
+                "current_price": hourly_prices.get(current_hour_str),
+                "next_hour_price": hourly_prices.get(next_hour_str),
+                "day_average_price": day_average_price,
+                "peak_price": peak_price,
+                "off_peak_price": off_peak_price,
                 "hourly_prices": hourly_prices,
                 "raw_prices": raw_prices,
+                "raw_values": {
+                    "current_price": {"hour": current_hour, "raw": price if current_hour_str in hourly_prices else None},
+                    "peak_price": {"value": peak_price},
+                    "off_peak_price": {"value": off_peak_price},
+                    "day_average_price": {"value": day_average_price}
+                },
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "data_source": "EPEX SPOT",
-                "currency": "EUR"
+                "currency": self._currency
             }
 
         except Exception as e:
