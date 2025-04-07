@@ -8,7 +8,6 @@ from .config import Config
 from .defaults import Defaults
 from .sources import Source
 from .areas import (
-    Areas,
     AREA_TIMEZONES,
     ENTSOE_AREA_MAPPING,
     ENTSOE_AREAS,
