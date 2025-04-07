@@ -11,7 +11,7 @@ from .const import (
     DOMAIN,
     Config,
     Defaults,
-    SOURCE_ENTSO_E,
+    Source,
 )
 from .coordinator.region import RegionPriceCoordinator
 from .api.base.session_manager import register_shutdown_task
@@ -23,10 +23,10 @@ PLATFORMS = [Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up from a config entry."""
     # Get configuration
-    area = entry.data.get(CONF_AREA)
+    area = entry.data.get(Config.AREA)
 
     # Get currency based on region
-    currency = entry.data.get(CONF_CURRENCY, REGION_TO_CURRENCY.get(area, "EUR"))
+    currency = entry.data.get(Config.CURRENCY, Config.get_default_currency(area))
 
     _LOGGER.debug(f"Setting up integration for area: {area}, currency: {currency}")
 
@@ -42,8 +42,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Get update interval (prefer options over data, with fallback to default)
     # Convert update interval to integer to avoid TypeError
     update_interval = int(entry.options.get(
-        CONF_UPDATE_INTERVAL,
-        entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        Config.UPDATE_INTERVAL,
+        entry.data.get(Config.UPDATE_INTERVAL, Defaults.UPDATE_INTERVAL)
     ))
 
     # Create a data coordinator
