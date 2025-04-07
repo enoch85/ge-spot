@@ -7,27 +7,27 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import (
-    DOMAIN,
-    Config,
-    Defaults,
-    Source,
-)
-from .coordinator.region import RegionPriceCoordinator
-from .api.base.session_manager import register_shutdown_task
-
-_LOGGER = logging.getLogger(__name__)
-
+# Defer heavy imports to avoid blocking
 PLATFORMS = [Platform.SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up from a config entry."""
+    # Defer imports to this method to avoid blocking
+    from .const import (
+        DOMAIN,
+        Config,
+        Defaults,
+    )
+    from .coordinator.region import RegionPriceCoordinator
+    from .api.base.session_manager import register_shutdown_task
+
     # Get configuration
     area = entry.data.get(Config.AREA)
 
     # Get currency based on region
     currency = entry.data.get(Config.CURRENCY, Config.get_default_currency(area))
 
+    _LOGGER = logging.getLogger(__name__)
     _LOGGER.debug(f"Setting up integration for area: {area}, currency: {currency}")
 
     if not area:
