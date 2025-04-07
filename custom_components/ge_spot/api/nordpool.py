@@ -4,11 +4,7 @@ import datetime
 from .base import BaseEnergyAPI
 from ..utils.timezone_utils import parse_datetime, localize_datetime
 from ..const import (
-    CONF_DISPLAY_UNIT,
-    DISPLAY_UNIT_CENTS,
-    CURRENCY_SUBUNIT_NAMES,
     NORDPOOL_DELIVERY_AREA_MAPPING,
-    REGION_TO_CURRENCY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,13 +81,6 @@ class NordpoolAPI(BaseEnergyAPI):
         current_hour = now.hour
         _LOGGER.debug(f"Current local time: {now.isoformat()}, hour: {current_hour}")
 
-        # Determine display unit from config
-        display_unit = self.config.get(CONF_DISPLAY_UNIT, "decimal")
-        use_subunit = display_unit == DISPLAY_UNIT_CENTS
-
-        # Determine target currency based on area
-        target_currency = REGION_TO_CURRENCY.get(area, self._currency)
-
         # Dictionary to store results
         result = {
             "current_price": None,
@@ -104,12 +93,8 @@ class NordpoolAPI(BaseEnergyAPI):
             "raw_today": [],
             "raw_tomorrow": [],
             "raw_values": {},
-            "currency": target_currency
+            "currency": self._currency
         }
-
-        # Process today's data
-        entries = today_data.get("multiAreaEntries", [])
-        all_prices = []
 
         # Extract exchange rate if available
         exchange_rate = None
@@ -119,6 +104,10 @@ class NordpoolAPI(BaseEnergyAPI):
                 _LOGGER.debug(f"Using exchange rate from API: {exchange_rate}")
             except (ValueError, TypeError):
                 _LOGGER.warning(f"Invalid exchange rate in API data: {today_data.get('exchangeRate')}")
+
+        # Process today's data
+        entries = today_data.get("multiAreaEntries", [])
+        all_prices = []
 
         for entry in entries:
             if not isinstance(entry, dict) or "entryPerArea" not in entry:
@@ -139,8 +128,8 @@ class NordpoolAPI(BaseEnergyAPI):
                 "price": raw_price
             })
 
-            # Convert price
-            if not isinstance(raw_price, (float, int)):
+            # Convert to float if needed
+            if isinstance(raw_price, str):
                 try:
                     raw_price = float(raw_price)
                 except (ValueError, TypeError):
@@ -163,11 +152,10 @@ class NordpoolAPI(BaseEnergyAPI):
                     local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
                     _LOGGER.debug(f"Localized using default timezone: {local_dt.isoformat()}")
 
-                # Convert price using the centralized method - this now properly handles currency conversion
+                # Convert price using the centralized method
                 converted_price = await self._convert_price(
                     price=raw_price,
                     from_currency="EUR",
-                    to_subunit=use_subunit,
                     exchange_rate=exchange_rate
                 )
 
@@ -267,8 +255,8 @@ class NordpoolAPI(BaseEnergyAPI):
                     "price": raw_price
                 })
 
-                # Convert price
-                if not isinstance(raw_price, (float, int)):
+                # Convert to float if needed
+                if isinstance(raw_price, str):
                     try:
                         raw_price = float(raw_price)
                     except (ValueError, TypeError):
@@ -290,7 +278,6 @@ class NordpoolAPI(BaseEnergyAPI):
                     converted_price = await self._convert_price(
                         price=raw_price,
                         from_currency="EUR",
-                        to_subunit=use_subunit,
                         exchange_rate=tomorrow_exchange_rate
                     )
 
