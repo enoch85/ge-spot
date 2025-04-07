@@ -127,14 +127,6 @@ class OmieAPI(BaseEnergyAPI):
                             if price is None:
                                 continue
 
-                            # Convert using centralized method
-                            converted_price = await self._convert_price(
-                                price=price,
-                                from_unit="MWh",
-                                from_currency="EUR",
-                                to_subunit=use_subunit
-                            )
-
                             # Create timestamp for this hour
                             dt_local = datetime.datetime.combine(target_date, datetime.time(hour, 0))
 
@@ -144,6 +136,14 @@ class OmieAPI(BaseEnergyAPI):
                                 "end": (dt_local + datetime.timedelta(hours=1)).isoformat(),
                                 "price": price
                             })
+
+                            # Convert price using centralized method
+                            converted_price = await self._convert_price(
+                                price=price,
+                                from_unit="MWh",
+                                from_currency="EUR",
+                                to_subunit=use_subunit
+                            )
 
                             hour_str = f"{hour:02d}:00"
                             hourly_prices[hour_str] = converted_price
@@ -211,7 +211,7 @@ class OmieAPI(BaseEnergyAPI):
                 "raw_values": raw_values,
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "data_source": "OMIE",
-                "currency": "EUR"
+                "currency": self._currency
             }
 
         except Exception as e:
