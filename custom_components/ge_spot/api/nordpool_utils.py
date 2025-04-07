@@ -1,7 +1,7 @@
 """Utility functions for Nordpool API."""
 import logging
 import datetime
-from ..utils.currency_utils import async_convert_energy_price
+from ..price.conversion import async_convert_energy_price
 from ...timezone  import convert_to_local_time
 from ..const import CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY
 

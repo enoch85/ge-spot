@@ -7,7 +7,7 @@ from ...const import (
     DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES,
 )
-from ...utils.currency_utils import async_convert_energy_price
+from ..price.conversion import async_convert_energy_price
 
 _LOGGER = logging.getLogger(__name__)
 
