@@ -75,4 +75,4 @@ custom_components/ge_spot/
     ├── error_handler.py          # Error handling utilities
     ├── exchange_service.py       # Currency exchange service
     └── form_helper.py            # Form helper utilities
-``
+````
