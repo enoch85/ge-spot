@@ -6,19 +6,17 @@ from homeassistant.config_entries import OptionsFlow, ConfigEntry
 from homeassistant.data_entry_flow import FlowResult
 
 from ..const import (
-    CONF_AREA,
-    CONF_VAT,
-    CONF_UPDATE_INTERVAL,
-    CONF_DISPLAY_UNIT,
-    CONF_API_KEY,
-    CONF_SOURCE_PRIORITY,
-    DEFAULT_UPDATE_INTERVAL,
-    DEFAULT_DISPLAY_UNIT,
-    DEFAULT_VAT,
-    SOURCE_ENTSO_E,
+    DOMAIN,
+    Config,
+    Defaults,
+    Source,
 )
 from ..api import get_sources_for_region, create_api
-from .utils import get_options_schema, get_default_values
+from .utils import (
+    get_options_schema, 
+    get_default_values, 
+    validate_entso_e_api_key
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,9 +28,9 @@ class GSpotOptionsFlow(OptionsFlow):
         self.entry_id = config_entry.entry_id
         self._data = dict(config_entry.data)
         self._options = dict(config_entry.options)
-        self._area = self._data.get(CONF_AREA)
+        self._area = self._data.get(Config.AREA)
         self._errors = {}
-
+        
         try:
             self._supported_sources = get_sources_for_region(self._area) if self._area else []
         except Exception as e:
