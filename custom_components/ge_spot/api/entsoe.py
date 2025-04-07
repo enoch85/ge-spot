@@ -8,8 +8,6 @@ from ..utils.timezone_utils import ensure_timezone_aware
 from ..const import (
     ENTSOE_AREA_MAPPING,
     CONF_API_KEY,
-    CONF_DISPLAY_UNIT,
-    DISPLAY_UNIT_CENTS
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -236,11 +234,6 @@ class EntsoEAPI(BaseEnergyAPI):
                         f"index={selected_series['metadata']['index']} for price data")
 
             hourly_prices = selected_series["prices"]  # These are the raw prices
-
-            # Get display unit setting from config
-            display_unit = self.config.get(CONF_DISPLAY_UNIT)
-            use_subunit = display_unit == DISPLAY_UNIT_CENTS
-
             currency = selected_series["metadata"]["currency"]
 
             final_hourly_prices = {}
@@ -271,8 +264,7 @@ class EntsoEAPI(BaseEnergyAPI):
                 converted_price = await self._convert_price(
                     price=price,
                     from_currency=currency,
-                    from_unit="MWh",
-                    to_subunit=use_subunit  # Pass the display unit setting
+                    from_unit="MWh"
                 )
 
                 # Store converted price
@@ -336,7 +328,7 @@ class EntsoEAPI(BaseEnergyAPI):
                 "raw_values": raw_values,
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "api_key_valid": True,
-                "currency": currency
+                "currency": self._currency
             }
         except ET.ParseError as e:
             _LOGGER.error(f"Error parsing ENTSO-E XML: {e}")
