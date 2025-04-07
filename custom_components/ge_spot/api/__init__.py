@@ -9,22 +9,24 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Source constants for convenience
+# For convenience, establish direct references to source constants
 SOURCE_NORDPOOL = Source.NORDPOOL
 SOURCE_ENERGI_DATA_SERVICE = Source.ENERGI_DATA_SERVICE
 SOURCE_ENTSO_E = Source.ENTSO_E
 SOURCE_EPEX = Source.EPEX
 SOURCE_OMIE = Source.OMIE
 SOURCE_AEMO = Source.AEMO
+SOURCE_STROMLIGNING = Source.STROMLIGNING
 
 # Mapping of which source supports which regions
 SOURCE_REGION_SUPPORT = {
-    SOURCE_NORDPOOL: set(Areas.NORDPOOL_AREAS.keys()),
-    SOURCE_ENERGI_DATA_SERVICE: set(Areas.ENERGI_DATA_AREAS.keys()),
-    SOURCE_ENTSO_E: set(Areas.ENTSOE_AREAS.keys()),
-    SOURCE_EPEX: set(Areas.EPEX_AREAS.keys()),
-    SOURCE_OMIE: set(Areas.OMIE_AREAS.keys()),
-    SOURCE_AEMO: set(Areas.AEMO_AREAS.keys()),
+    SOURCE_NORDPOOL: set(NORDPOOL_AREAS.keys()),
+    SOURCE_ENERGI_DATA_SERVICE: set(ENERGI_DATA_AREAS.keys()),
+    SOURCE_ENTSO_E: set(ENTSOE_AREAS.keys()),
+    SOURCE_EPEX: set(EPEX_AREAS.keys()),
+    SOURCE_OMIE: set(OMIE_AREAS.keys()),
+    SOURCE_AEMO: set(AEMO_AREAS.keys()),
+    SOURCE_STROMLIGNING: set(STROMLIGNING_AREAS.keys()),
 }
 
 # Source reliability ratings (higher is better)
@@ -35,6 +37,7 @@ SOURCE_RELIABILITY = {
     SOURCE_EPEX: 7,
     SOURCE_OMIE: 6,
     SOURCE_AEMO: 6,
+    SOURCE_STROMLIGNING: 8,  # Similar reliability to Energi Data Service
 }
 
 class ApiRegistry:
