@@ -110,8 +110,9 @@ async def convert_energy_price(price, from_unit="MWh", to_unit="kWh",
         try:
             if exchange_rate is not None:
                 # Use provided exchange rate
-                price = price * exchange_rate
-                _LOGGER.debug(f"Currency conversion using provided rate: {price} {from_currency} → {price*exchange_rate} {to_currency} (rate: {exchange_rate})")
+                converted_price = price * exchange_rate
+                _LOGGER.debug(f"Currency conversion using provided rate: {price} {from_currency} → {converted_price} {to_currency} (rate: {exchange_rate})")
+                price = converted_price
             else:
                 # Use exchange service
                 service = await get_exchange_service(session)
@@ -131,7 +132,7 @@ async def convert_energy_price(price, from_unit="MWh", to_unit="kWh",
         price = price * (1 + vat)
         _LOGGER.debug(f"VAT application: {pre_vat_price} → {price} (rate: {vat:.2%})")
 
-    # Step 4: Convert to subunit if requested (but only if not already done by caller)
+    # Step 4: Convert to subunit if requested
     if to_subunit:
         pre_subunit_price = price
         price = convert_to_subunit(price, from_currency)
