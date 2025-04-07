@@ -8,9 +8,7 @@ from .config import Config
 from .defaults import Defaults
 from .sources import Source
 from .areas import (
-    # Export Areas as an alias for the entire areas module
     Areas,
-    # All specific area constants remain the same
     AREA_TIMEZONES,
     ENTSOE_AREA_MAPPING,
     ENTSOE_AREAS,
