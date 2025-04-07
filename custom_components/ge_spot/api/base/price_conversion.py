@@ -59,7 +59,7 @@ class PriceConverter:
             from_unit=from_unit,
             to_unit="kWh",
             from_currency=from_currency,
-            to_currency=self._currency,
+            to_currency=self._currency,  # Always pass the target currency
             vat=self.vat,
             to_subunit=use_subunit,
             session=self.session,
