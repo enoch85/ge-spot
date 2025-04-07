@@ -197,12 +197,11 @@ class ElectricityPriceAdapter:
         # Use the utility function to find the current price
         price = find_current_price(self.price_periods, reference_time)
 
-        # Apply subunit conversion if needed
-        if price is not None and self.use_subunit:
-            currency = self._get_currency()
-            _LOGGER.debug(f"Converting price to subunit: {price} {currency} → subunit")
-            price = convert_to_subunit(price, currency)
-
+        # Do NOT apply subunit conversion here - it should already be done by the API
+        # We only need to check if the price is None
+        if price is None:
+            _LOGGER.debug("No price found for the current period")
+            
         return price
 
     def get_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
@@ -222,25 +221,11 @@ class ElectricityPriceAdapter:
 
     def get_today_prices(self) -> List[float]:
         """Get list of today's prices in chronological order."""
-        prices = get_price_list(self.classified_periods["today"])
-
-        # Apply subunit conversion if needed
-        if self.use_subunit and prices:
-            currency = self._get_currency()
-            prices = [convert_to_subunit(price, currency) if price is not None else None for price in prices]
-
-        return prices
+        return get_price_list(self.classified_periods["today"])
 
     def get_tomorrow_prices(self) -> List[float]:
         """Get list of tomorrow's prices in chronological order."""
-        prices = get_price_list(self.classified_periods["tomorrow"])
-
-        # Apply subunit conversion if needed
-        if self.use_subunit and prices:
-            currency = self._get_currency()
-            prices = [convert_to_subunit(price, currency) if price is not None else None for price in prices]
-
-        return prices
+        return get_price_list(self.classified_periods["tomorrow"])
 
     def get_day_statistics(self, day_offset: int = 0) -> Dict[str, Any]:
         """Calculate statistics for a particular day."""
@@ -248,15 +233,6 @@ class ElectricityPriceAdapter:
 
         day_data = self.get_prices_for_day(day_offset)
         stats = get_statistics(day_data)
-
-        # Apply subunit conversion if needed
-        if self.use_subunit and stats:
-            currency = self._get_currency()
-
-            # Apply conversion to all numeric statistics
-            for key in ["min", "max", "average", "median", "off_peak_1", "off_peak_2", "peak"]:
-                if key in stats and stats[key] is not None:
-                    stats[key] = convert_to_subunit(stats[key], currency)
 
         # Log calculation details
         log_statistics(stats, day_offset)
