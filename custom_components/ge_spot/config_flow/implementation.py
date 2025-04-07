@@ -1,6 +1,7 @@
 """Config flow implementation for GE-Spot integration."""
 import logging
 import voluptuous as vol
+import hashlib
 
 from homeassistant.config_entries import ConfigFlow
 from homeassistant.core import callback
@@ -8,23 +9,29 @@ from homeassistant.data_entry_flow import FlowResult
 
 from ..const import (
     DOMAIN,
-    CONF_AREA,
-    CONF_VAT,
-    CONF_API_KEY,
-    SOURCE_ENTSO_E,
+    Config,
+    Source,
+    Areas,
+    Currencies,
 )
-from ..api import get_sources_for_region
+from ..api import get_sources_for_region, create_api
+from ..price.conversion import async_convert_energy_price
+from ..timezone import convert_to_local_time
 
-# Import from the config_flow package modules
-from .utils import get_deduplicated_regions, SOURCE_AREA_MAPS
-from .validators import validate_entso_e_api_key, get_entso_e_api_key_description
-from .schemas import get_user_schema, get_source_priority_schema, get_api_keys_schema
+from .utils import (
+    get_deduplicated_regions,
+    validate_entso_e_api_key,
+    get_source_priority_schema,
+    get_api_keys_schema,
+    get_user_schema,
+)
 from .options import GSpotOptionsFlow
 
 _LOGGER = logging.getLogger(__name__)
 
 class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for GE-Spot integration."""
+
     VERSION = 1
     CONNECTION_CLASS = "cloud_poll"
 
