@@ -4,7 +4,9 @@ import datetime
 from .base import BaseEnergyAPI
 from ..const import (
     CONF_DISPLAY_UNIT,
-    DISPLAY_UNIT_CENTS
+    DISPLAY_UNIT_CENTS,
+    CURRENCY_SUBUNIT_NAMES,
+    ATTR_CURRENCY
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,7 +31,7 @@ class AemoAPI(BaseEnergyAPI):
     async def _process_data(self, data):
         """Process the data from AEMO."""
         # Note: As AEMO's API format might differ, this implementation may need adjustment
-        # This is a placeholder implementation based on assumed API response format
+        # This is a placeholder implementation based on assumed API format
 
         if not data:
             _LOGGER.error("No data received from AEMO API")
@@ -41,8 +43,16 @@ class AemoAPI(BaseEnergyAPI):
             use_subunit = display_unit == DISPLAY_UNIT_CENTS
 
             # This is a placeholder - actual implementation would depend on AEMO's data format
-            _LOGGER.error("AEMO API processing is not implemented - raw API format not known")
+            _LOGGER.warning("AEMO API processing is not implemented - raw API format not known")
 
+            # Target currency is AUD for Australia
+            currency = "AUD"
+
+            # Parse data and extract hourly prices
+            # placeholder until actual API structure is known
+            hourly_prices = {}
+            raw_prices = []
+            
             # Return a minimal structure to avoid errors elsewhere
             return {
                 "current_price": None,
@@ -50,12 +60,12 @@ class AemoAPI(BaseEnergyAPI):
                 "day_average_price": None,
                 "peak_price": None,
                 "off_peak_price": None,
-                "hourly_prices": {},
+                "hourly_prices": hourly_prices,
                 "raw_values": {},
-                "raw_prices": [],
+                "raw_prices": raw_prices,
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "data_source": "AEMO",
-                "currency": "AUD"
+                "currency": currency
             }
 
         except Exception as e:
