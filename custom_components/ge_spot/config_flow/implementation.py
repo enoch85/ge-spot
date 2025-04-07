@@ -11,7 +11,6 @@ from ..const import (
     DOMAIN,
     Config,
     Source,
-    Areas,
     Currencies,
 )
 from ..api import get_sources_for_region, create_api

@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any
 
 from .currency import convert_to_subunit, get_subunit_name
 from .energy import convert_energy_unit
-from ..utils.exchange_service import get_exchange_service
+from ..utils.exchange_service import ExchangeService
 
 _LOGGER = logging.getLogger(__name__)
 
