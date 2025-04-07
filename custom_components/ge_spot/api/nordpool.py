@@ -163,7 +163,7 @@ class NordpoolAPI(BaseEnergyAPI):
                     local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
                     _LOGGER.debug(f"Localized using default timezone: {local_dt.isoformat()}")
 
-                # Convert price using the centralized method
+                # Convert price using the centralized method - this now properly handles currency conversion
                 converted_price = await self._convert_price(
                     price=raw_price,
                     from_currency="EUR",
