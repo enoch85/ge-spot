@@ -329,3 +329,9 @@ DEFAULT_AREAS = {
     SOURCE_OMIE: "ES",
     SOURCE_AEMO: "NSW1",
 }
+
+# Stromligning areas
+STROMLIGNING_AREAS = {
+    "DK1": "Denmark (DK1)",
+    "DK2": "Denmark (DK2)",
+ }
