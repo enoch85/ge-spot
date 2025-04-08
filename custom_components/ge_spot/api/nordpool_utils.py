@@ -7,6 +7,14 @@ from ..const import CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY
 
 _LOGGER = logging.getLogger(__name__)
 
+class NordpoolUtilsConstants:
+    """Constants for Nordpool utilities."""
+    DEFAULT_CURRENCY = "EUR"
+    DEFAULT_ENERGY_UNIT = "MWh"
+    TARGET_ENERGY_UNIT = "kWh"
+    MIN_VALID_HOURS = 20  # Minimum hours needed for valid day data
+    DEFAULT_PRECISION = 3
+
 async def process_day_data(data, area, current_hour=None, use_subunit=False, currency="EUR", apply_vat_func=None, session=None):
     """Process price data for a single day with improved currency handling."""
     if not data or "multiAreaEntries" not in data:
@@ -67,7 +75,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
                 _LOGGER.warning(f"Invalid exchange rate in API data: {data.get('exchangeRate')}")
 
         # If there's a currency specified in API data, use it
-        api_currency = data.get("currency", "EUR")
+        api_currency = data.get("currency", NordpoolUtilsConstants.DEFAULT_CURRENCY)
         _LOGGER.debug(f"API data currency: {api_currency}")
 
         # Extract VAT rate from apply_vat_func for logging
@@ -127,8 +135,8 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
             # Use the comprehensive conversion function (async version)
             final_price = await async_convert_energy_price(
                 price=raw_price,
-                from_unit="MWh",
-                to_unit="kWh",
+                from_unit=NordpoolUtilsConstants.DEFAULT_ENERGY_UNIT,
+                to_unit=NordpoolUtilsConstants.TARGET_ENERGY_UNIT,
                 from_currency=api_currency,
                 to_currency=target_currency,
                 vat=vat_rate,
