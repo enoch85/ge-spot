@@ -2,7 +2,7 @@
 import logging
 import datetime
 
-from ..const import ENTSOE_AREA_MAPPING, SOURCE_ENTSO_E
+from ..const import ENTSOE_AREA_MAPPING, Source
 from ..api import create_api
 
 _LOGGER = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ async def validate_entso_e_api_key(api_key, area, session=None):
             "area": area,
             "api_key": api_key
         }
-        api = create_api(SOURCE_ENTSO_E, config)
+        api = create_api(Source.ENTSO_E, config)
 
         # Use provided session if available
         if session:
