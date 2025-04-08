@@ -3,10 +3,10 @@ import logging
 import datetime
 from .base import BaseEnergyAPI
 from ..const import (
-    CONF_DISPLAY_UNIT,
+    Config,
     DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES,
-    ATTR_CURRENCY
+    Attributes
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class AemoAPI(BaseEnergyAPI):
 
         try:
             # Get display unit setting from config
-            display_unit = self.config.get(CONF_DISPLAY_UNIT)
+            display_unit = self.config.get(Config.DISPLAY_UNIT)
             use_subunit = display_unit == DISPLAY_UNIT_CENTS
 
             # This is a placeholder - actual implementation would depend on AEMO's data format
