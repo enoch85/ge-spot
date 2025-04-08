@@ -4,7 +4,14 @@ from typing import Dict, Optional, Type, List, Set
 
 from ..const import (
     Source,
+    NORDPOOL_AREAS,
+    ENERGI_DATA_AREAS,
+    ENTSOE_AREAS,
+    EPEX_AREAS,
+    OMIE_AREAS,
+    AEMO_AREAS
 )
+from ..const.sources import SOURCE_STROMLIGNING
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,7 +22,13 @@ SOURCE_ENTSO_E = Source.ENTSO_E
 SOURCE_EPEX = Source.EPEX
 SOURCE_OMIE = Source.OMIE
 SOURCE_AEMO = Source.AEMO
-SOURCE_STROMLIGNING = Source.STROMLIGNING
+SOURCE_STROMLIGNING = SOURCE_STROMLIGNING
+
+# Get areas dictionary for STROMLIGNING which might not be in the main const
+STROMLIGNING_AREAS = {
+    "DK1": "Denmark (DK1)",
+    "DK2": "Denmark (DK2)",
+}
 
 # Mapping of which source supports which regions
 SOURCE_REGION_SUPPORT = {
@@ -78,16 +91,7 @@ class ApiRegistry:
 
     def create_apis_for_region(self, region: str, config: dict,
                             source_priority: Optional[List[str]] = None) -> List:
-        """Create API instances for all sources supporting a region.
-
-        Args:
-            region: The region code
-            config: Configuration dictionary
-            source_priority: Optional custom source priority order
-
-        Returns:
-            List of API instances in priority order
-        """
+        """Create API instances for all sources supporting a region."""
         if source_priority:
             # Use custom priority order
             sources = [s for s in source_priority if region in SOURCE_REGION_SUPPORT.get(s, set())]
@@ -121,6 +125,7 @@ def register_apis():
     from .epex import EpexAPI
     from .omie import OmieAPI
     from .aemo import AemoAPI
+    from .stromligning import StromligningAPI
 
     # Register all APIs
     registry.register(SOURCE_NORDPOOL, NordpoolAPI)
@@ -129,6 +134,7 @@ def register_apis():
     registry.register(SOURCE_EPEX, EpexAPI)
     registry.register(SOURCE_OMIE, OmieAPI)
     registry.register(SOURCE_AEMO, AemoAPI)
+    registry.register(SOURCE_STROMLIGNING, StromligningAPI)
 
 # Register APIs on module import
 register_apis()
@@ -158,6 +164,7 @@ def get_fallback_apis(primary_source: str, config: dict):
         SOURCE_EPEX: [SOURCE_ENTSO_E, SOURCE_NORDPOOL],
         SOURCE_OMIE: [SOURCE_ENTSO_E],
         SOURCE_AEMO: [],  # No fallbacks for AEMO currently
+        SOURCE_STROMLIGNING: [SOURCE_ENERGI_DATA_SERVICE, SOURCE_NORDPOOL],
     }
 
     # Get fallback sources for this primary source
