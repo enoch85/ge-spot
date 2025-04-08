@@ -4,7 +4,7 @@ import datetime
 from bs4 import BeautifulSoup
 from .base import BaseEnergyAPI
 from ..const import (
-    CONF_DISPLAY_UNIT,
+    Config,
     DISPLAY_UNIT_CENTS
 )
 
@@ -53,7 +53,7 @@ class EpexAPI(BaseEnergyAPI):
 
         try:
             # Get display unit setting from config
-            display_unit = self.config.get(CONF_DISPLAY_UNIT)
+            display_unit = self.config.get(Config.DISPLAY_UNIT)
             use_subunit = display_unit == DISPLAY_UNIT_CENTS
 
             # Parse HTML
