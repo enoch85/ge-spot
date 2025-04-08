@@ -7,8 +7,11 @@ from homeassistant.data_entry_flow import FlowResult
 
 from ..const import (
     DOMAIN,
-    Config,
-    Defaults,
+    CONF_VAT,
+    CONF_UPDATE_INTERVAL,
+    CONF_SOURCE_PRIORITY,
+    CONF_API_KEY,
+    DEFAULT_UPDATE_INTERVAL,
     Source,
 )
 from ..api import get_sources_for_region, create_api
