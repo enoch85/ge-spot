@@ -15,6 +15,16 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+class OmieConstants:
+    """Constants for OMIE API."""
+    DEFAULT_AREA = "ES"
+    BASE_URL_TEMPLATE = "https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{day}_{month}_{year}_{day}_{month}_{year}.TXT"
+    PRICE_FIELD_ES = "Precio marginal en el sistema español (EUR/MWh)"
+    PRICE_FIELD_PT = "Precio marginal en el sistema portugués (EUR/MWh)"
+    DEFAULT_CURRENCY = "EUR"
+    DEFAULT_ENERGY_UNIT = "MWh"
+    DEFAULT_TIMEOUT = 30
+
 class OmieAPI(BaseEnergyAPI):
     """API handler for OMIE."""
 
@@ -23,7 +33,7 @@ class OmieAPI(BaseEnergyAPI):
         try:
             # Get proper date in the local timezone of the area (ES/PT)
             now = self._get_now()
-            area = self.config.get("area", "ES")
+            area = self.config.get("area", OmieConstants.DEFAULT_AREA)
 
             # Format dates for OMIE files
             target_date = now.date()
@@ -32,13 +42,18 @@ class OmieAPI(BaseEnergyAPI):
             day = str.zfill(str(target_date.day), 2)
             date_format = f"{day}_{month}_{year}"
 
-            # OMIE URL format
-            url = f"https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{date_format}_{date_format}.TXT"
+            # Build OMIE URL using template
+            url = OmieConstants.BASE_URL_TEMPLATE.format(
+                year=year, month=month, day=day
+            )
 
             _LOGGER.debug(f"Fetching OMIE data from URL: {url}")
 
             # Fetch data with built-in retry mechanism
-            response = await self.data_fetcher.fetch_with_retry(url, timeout=30)
+            response = await self.data_fetcher.fetch_with_retry(
+                url, 
+                timeout=OmieConstants.DEFAULT_TIMEOUT
+            )
 
             # OMIE returns HTML for non-existent files rather than 404
             if not response:
@@ -98,10 +113,10 @@ class OmieAPI(BaseEnergyAPI):
             next_hour = (current_hour + 1) % 24
 
             # Process each row looking for Spanish/Portuguese price data based on area
-            area = self.config.get("area", "ES")
-            price_field_name = "Precio marginal en el sistema español (EUR/MWh)"
+            area = self.config.get("area", OmieConstants.DEFAULT_AREA)
+            price_field_name = OmieConstants.PRICE_FIELD_ES
             if area == "PT":
-                price_field_name = "Precio marginal en el sistema portugués (EUR/MWh)"
+                price_field_name = OmieConstants.PRICE_FIELD_PT
 
             for row in reader:
                 if len(row) < 6:
@@ -140,8 +155,8 @@ class OmieAPI(BaseEnergyAPI):
                             # Convert price using centralized method
                             converted_price = await self._convert_price(
                                 price=price,
-                                from_unit="MWh",
-                                from_currency="EUR",
+                                from_unit=OmieConstants.DEFAULT_ENERGY_UNIT,
+                                from_currency=OmieConstants.DEFAULT_CURRENCY,
                                 to_subunit=use_subunit
                             )
 
