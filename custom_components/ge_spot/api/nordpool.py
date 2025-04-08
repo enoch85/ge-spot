@@ -5,21 +5,19 @@ from .base import BaseEnergyAPI
 from ..timezone import parse_datetime, localize_datetime
 from ..const import (
     NORDPOOL_DELIVERY_AREA_MAPPING,
+    Currency,
+    Nordpool,
+    URLs,
+    TimeFormat,
+    EnergyUnit
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-class NordpoolConstants:
-    """Constants for Nordpool API."""
-    BASE_URL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
-    DEFAULT_CURRENCY = "EUR"
-    DEFAULT_AREA = "Oslo"
-    MARKET_DAYAHEAD = "DayAhead"
-
 class NordpoolAPI(BaseEnergyAPI):
     """API handler for Nordpool."""
 
-    BASE_URL = NordpoolConstants.BASE_URL
+    BASE_URL = URLs.NORDPOOL
 
     async def _fetch_data(self):
         """Fetch data from Nordpool."""
@@ -27,10 +25,10 @@ class NordpoolAPI(BaseEnergyAPI):
             now = self._get_now()
             _LOGGER.debug(f"Current local time from _get_now: {now.isoformat()}")
 
-            today = now.strftime("%Y-%m-%d")
-            tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+            today = now.strftime(TimeFormat.DATE_ONLY)
+            tomorrow = (now + datetime.timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
 
-            area = self.config.get("area", NordpoolConstants.DEFAULT_AREA)
+            area = self.config.get("area", Nordpool.DEFAULT_AREA)
 
             # Map the area names to the API's delivery area codes
             delivery_area = NORDPOOL_DELIVERY_AREA_MAPPING.get(area, area)
@@ -38,9 +36,9 @@ class NordpoolAPI(BaseEnergyAPI):
 
             # Fetch today's data
             params = {
-                "currency": NordpoolConstants.DEFAULT_CURRENCY,  # Always request in EUR, we'll convert later
+                "currency": Currency.EUR,  # Always request in EUR, we'll convert later
                 "date": today,
-                "market": NordpoolConstants.MARKET_DAYAHEAD,
+                "market": Nordpool.MARKET_DAYAHEAD,
                 "deliveryArea": delivery_area
             }
 
@@ -81,7 +79,7 @@ class NordpoolAPI(BaseEnergyAPI):
             _LOGGER.error("Missing multiAreaEntries in Nordpool data")
             return None
 
-        area = self.config.get("area", NordpoolConstants.DEFAULT_AREA)
+        area = self.config.get("area", Nordpool.DEFAULT_AREA)
 
         # Get current time from Home Assistant in local timezone
         now = self._get_now()
@@ -162,7 +160,8 @@ class NordpoolAPI(BaseEnergyAPI):
                 # Convert price using the centralized method
                 converted_price = await self._convert_price(
                     price=raw_price,
-                    from_currency=NordpoolConstants.DEFAULT_CURRENCY,
+                    from_currency=Currency.EUR,
+                    from_unit=EnergyUnit.MWH,
                     exchange_rate=exchange_rate
                 )
 
@@ -179,7 +178,7 @@ class NordpoolAPI(BaseEnergyAPI):
                     # Store raw value information with detailed timestamp info
                     result["raw_values"]["current_price"] = {
                         "raw": raw_price,
-                        "unit": f"{NordpoolConstants.DEFAULT_CURRENCY}/MWh",
+                        "unit": f"{Currency.EUR}/MWh",
                         "converted": converted_price,
                         "hour_str": hour_str,
                         "local_hour": hour,
@@ -195,7 +194,7 @@ class NordpoolAPI(BaseEnergyAPI):
                     # Store raw value information
                     result["raw_values"]["next_hour_price"] = {
                         "raw": raw_price,
-                        "unit": f"{NordpoolConstants.DEFAULT_CURRENCY}/MWh",
+                        "unit": f"{Currency.EUR}/MWh",
                         "converted": converted_price,
                         "hour_str": hour_str,
                         "local_hour": hour,
@@ -284,7 +283,8 @@ class NordpoolAPI(BaseEnergyAPI):
                     # Convert price using the centralized method
                     converted_price = await self._convert_price(
                         price=raw_price,
-                        from_currency=NordpoolConstants.DEFAULT_CURRENCY,
+                        from_currency=Currency.EUR,
+                        from_unit=EnergyUnit.MWH,
                         exchange_rate=tomorrow_exchange_rate
                     )
 
