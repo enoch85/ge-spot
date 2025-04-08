@@ -11,7 +11,7 @@ from ..const import (
     Source,
     Attributes,
     Defaults,
-    REGION_TO_CURRENCY,
+    CurrencyInfo
 )
 from .base import BaseElectricityPriceSensor
 from .price import (
@@ -30,7 +30,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     vat = config_entry.data.get(Config.VAT, 0)
 
     # Determine currency based on area
-    currency = config_entry.data.get(Config.CURRENCY, REGION_TO_CURRENCY.get(area))
+    currency = config_entry.data.get(Config.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(area))
 
     # Get display unit setting - first try coordinator, then config
     display_unit = None
