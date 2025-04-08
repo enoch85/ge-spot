@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 
 from ...const import (
-    CONF_DISPLAY_UNIT,
+    Config,
     DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES,
 )
@@ -47,8 +47,8 @@ class PriceConverter:
         use_subunit = to_subunit
         if use_subunit is None:
             # First check display_unit setting (this is the primary setting)
-            if CONF_DISPLAY_UNIT in self.config:
-                use_subunit = self.config[CONF_DISPLAY_UNIT] == DISPLAY_UNIT_CENTS
+            if Config.DISPLAY_UNIT in self.config:
+                use_subunit = self.config[Config.DISPLAY_UNIT] == DISPLAY_UNIT_CENTS
             # Then fall back to price_in_cents if display_unit not available
             else:
                 use_subunit = self.config.get("price_in_cents", False)
@@ -76,7 +76,7 @@ class PriceConverter:
 
     def get_display_format(self):
         """Get information about the current display format."""
-        use_subunit = self.config.get(CONF_DISPLAY_UNIT) == DISPLAY_UNIT_CENTS
+        use_subunit = self.config.get(Config.DISPLAY_UNIT) == DISPLAY_UNIT_CENTS
 
         if use_subunit:
             subunit_name = CURRENCY_SUBUNIT_NAMES.get(self._currency, "cents")
