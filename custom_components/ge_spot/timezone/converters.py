@@ -6,21 +6,10 @@ from typing import Any, Dict, List, Optional, Union
 from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
 
-from ..const import AREA_TIMEZONES
+from ..const import AREA_TIMEZONES, PeriodType, TimeFormat
 from .parsers import parse_datetime
 
 _LOGGER = logging.getLogger(__name__)
-
-class TimezoneConstants:
-    """Constants for timezone operations."""
-    DEFAULT_RESOLUTION_MINUTES = 60
-    MIN_VALID_TOMORROW_ENTRIES = 20  # Minimum entries needed to consider tomorrow data valid
-    PERIOD_TYPES = {
-        "TODAY": "today",
-        "TOMORROW": "tomorrow",
-        "OTHER": "other"
-    }
-    DEFAULT_HOUR_FORMAT = "%H:00"
 
 def ensure_timezone_aware(dt_obj: datetime) -> datetime:
     """Ensure a datetime object has timezone information."""
@@ -137,9 +126,9 @@ def classify_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] = 
     """Classify price periods by date (today, tomorrow, etc.)."""
     if not periods:
         return {
-            TimezoneConstants.PERIOD_TYPES["TODAY"]: [],
-            TimezoneConstants.PERIOD_TYPES["TOMORROW"]: [],
-            TimezoneConstants.PERIOD_TYPES["OTHER"]: []
+            PeriodType.TODAY: [],
+            PeriodType.TOMORROW: [],
+            PeriodType.OTHER: []
         }
 
     # Get reference dates in local timezone
@@ -152,9 +141,9 @@ def classify_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] = 
     tomorrow = today + timedelta(days=1)
 
     classified = {
-        TimezoneConstants.PERIOD_TYPES["TODAY"]: [],
-        TimezoneConstants.PERIOD_TYPES["TOMORROW"]: [],
-        TimezoneConstants.PERIOD_TYPES["OTHER"]: []
+        PeriodType.TODAY: [],
+        PeriodType.TOMORROW: [],
+        PeriodType.OTHER: []
     }
 
     for period in periods:
@@ -166,18 +155,18 @@ def classify_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] = 
         period_date = start.date()
 
         if period_date == today:
-            classified[TimezoneConstants.PERIOD_TYPES["TODAY"]].append(period)
+            classified[PeriodType.TODAY].append(period)
         elif period_date == tomorrow:
-            classified[TimezoneConstants.PERIOD_TYPES["TOMORROW"]].append(period)
+            classified[PeriodType.TOMORROW].append(period)
         else:
-            classified[TimezoneConstants.PERIOD_TYPES["OTHER"]].append(period)
+            classified[PeriodType.OTHER].append(period)
 
     # Sort each list by start time
     for key in classified:
         classified[key] = sorted(classified[key], key=lambda x: x.get("start", dt_util.now()))
 
     # Debug log with period counts
-    _LOGGER.debug(f"Classified periods: today={len(classified[TimezoneConstants.PERIOD_TYPES['TODAY']])}, tomorrow={len(classified[TimezoneConstants.PERIOD_TYPES['TOMORROW']])}, other={len(classified[TimezoneConstants.PERIOD_TYPES['OTHER']])}")
+    _LOGGER.debug(f"Classified periods: today={len(classified[PeriodType.TODAY])}, tomorrow={len(classified[PeriodType.TOMORROW])}, other={len(classified[PeriodType.OTHER])}")
 
     return classified
 
@@ -287,4 +276,4 @@ def get_price_list(day_data: List[Dict]) -> List[float]:
 def is_tomorrow_valid(price_data: List[Dict], hass: Optional[HomeAssistant] = None) -> bool:
     """Check if tomorrow's data is valid (at least 20 entries)."""
     tomorrow_data = get_prices_for_day(price_data, 1, hass)
-    return len(tomorrow_data) >= TimezoneConstants.MIN_VALID_TOMORROW_ENTRIES
+    return len(tomorrow_data) >= PeriodType.MIN_VALID_HOURS
