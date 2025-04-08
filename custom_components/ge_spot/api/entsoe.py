@@ -8,24 +8,20 @@ from ..timezone import ensure_timezone_aware
 from ..const import (
     ENTSOE_AREA_MAPPING,
     CONF_API_KEY,
+    EntsoE,
+    URLs,
+    NetworkDefaults,
+    TimeFormat,
+    EnergyUnit,
+    ContentType
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-class EntsoEConstants:
-    """Constants for ENTSO-E API."""
-    BASE_URL = "https://web-api.tp.entsoe.eu/api"
-    DOCUMENT_TYPE_DAY_AHEAD = "A44"  # Day-ahead prices
-    BUSINESS_TYPE_DAY_AHEAD_ALLOCATION = "A62"  # Day-ahead allocation
-    BUSINESS_TYPE_DAY_AHEAD = "A44"  # Day-ahead
-    NS_URN = "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"
-    XMLNS_NS = "ns"
-
 class EntsoEAPI(BaseEnergyAPI):
     """API handler for ENTSO-E Transparency Platform."""
 
-    # Updated URL based on official documentation
-    BASE_URL = EntsoEConstants.BASE_URL
+    BASE_URL = URLs.ENTSOE
 
     async def _fetch_data(self):
         """Fetch data from ENTSO-E."""
@@ -38,10 +34,10 @@ class EntsoEAPI(BaseEnergyAPI):
         today = now
         tomorrow = today + datetime.timedelta(days=1)
 
-        # Format dates for ENTSO-E API
+        # Format dates for ENTSO-E API (YYYYMMDDHHMM format)
         # Use 01:00 (1 AM) as the time part as shown in the ENTSO-E examples
-        period_start = today.strftime("%Y%m%d0100")
-        period_end = tomorrow.strftime("%Y%m%d0100")
+        period_start = today.strftime(TimeFormat.ENTSOE_DATE_HOUR)
+        period_end = tomorrow.strftime(TimeFormat.ENTSOE_DATE_HOUR)
 
         # Get area code - map our area code to ENTSO-E area code without default
         area = self.config.get("area")
@@ -57,7 +53,7 @@ class EntsoEAPI(BaseEnergyAPI):
         # Build query parameters according to ENTSO-E API requirements
         params = {
             "securityToken": api_key,
-            "documentType": EntsoEConstants.DOCUMENT_TYPE_DAY_AHEAD,
+            "documentType": EntsoE.DOCUMENT_TYPE_DAY_AHEAD,
             "in_Domain": entsoe_area,
             "out_Domain": entsoe_area,
             "periodStart": period_start,
@@ -68,17 +64,17 @@ class EntsoEAPI(BaseEnergyAPI):
 
         # Use custom headers for ENTSO-E API
         headers = {
-            "User-Agent": "HomeAssistantGESpot/1.0",
-            "Accept": "application/xml;charset=UTF-8",
-            "Content-Type": "application/xml;charset=UTF-8"
+            "User-Agent": NetworkDefaults.USER_AGENT,
+            "Accept": ContentType.XML,
+            "Content-Type": ContentType.XML
         }
 
         response = await self.data_fetcher.fetch_with_retry(
             self.BASE_URL,
             params=params,
             headers=headers,
-            timeout=60,
-            max_retries=3
+            timeout=NetworkDefaults.TIMEOUT,
+            max_retries=NetworkDefaults.RETRY_COUNT
         )
 
         if not response:
@@ -104,14 +100,14 @@ class EntsoEAPI(BaseEnergyAPI):
             # The XML has a default namespace which must be handled explicitly
             # Define our namespace map
             nsmap = {
-                EntsoEConstants.XMLNS_NS: EntsoEConstants.NS_URN
+                EntsoE.XMLNS_NS: EntsoE.NS_URN
             }
 
             # Parse XML
             root = ET.fromstring(data)
 
             # Find TimeSeries elements using explicit namespace
-            time_series_elements = root.findall(f".//{EntsoEConstants.XMLNS_NS}:TimeSeries", nsmap)
+            time_series_elements = root.findall(f".//{EntsoE.XMLNS_NS}:TimeSeries", nsmap)
 
             if not time_series_elements:
                 _LOGGER.error("No TimeSeries elements found in ENTSO-E response")
@@ -130,16 +126,16 @@ class EntsoEAPI(BaseEnergyAPI):
             # Process each TimeSeries separately to compare them
             for ts_index, ts in enumerate(time_series_elements):
                 # Extract TimeSeries metadata for identification
-                business_type = self._find_element_text(ts, f".//{EntsoEConstants.XMLNS_NS}:businessType", nsmap, "unknown")
-                curve_type = self._find_element_text(ts, f".//{EntsoEConstants.XMLNS_NS}:curveType", nsmap, "unknown")
-                currency = self._find_element_text(ts, f".//{EntsoEConstants.XMLNS_NS}:currency_Unit.name", nsmap, "EUR")
-                unit_name = self._find_element_text(ts, f".//{EntsoEConstants.XMLNS_NS}:price_Measure_Unit.name", nsmap, "unknown")
+                business_type = self._find_element_text(ts, f".//{EntsoE.XMLNS_NS}:businessType", nsmap, "unknown")
+                curve_type = self._find_element_text(ts, f".//{EntsoE.XMLNS_NS}:curveType", nsmap, "unknown")
+                currency = self._find_element_text(ts, f".//{EntsoE.XMLNS_NS}:currency_Unit.name", nsmap, "EUR")
+                unit_name = self._find_element_text(ts, f".//{EntsoE.XMLNS_NS}:price_Measure_Unit.name", nsmap, "unknown")
 
                 _LOGGER.debug(f"TimeSeries {ts_index+1}: businessType={business_type}, curveType={curve_type}, "
                              f"currency={currency}, measureUnit={unit_name}")
 
                 # Find Period elements
-                period_elements = ts.findall(f".//{EntsoEConstants.XMLNS_NS}:Period", nsmap)
+                period_elements = ts.findall(f".//{EntsoE.XMLNS_NS}:Period", nsmap)
                 if not period_elements:
                     _LOGGER.debug(f"No Period elements found in TimeSeries {ts_index+1}")
                     continue
@@ -150,13 +146,13 @@ class EntsoEAPI(BaseEnergyAPI):
 
                 for period in period_elements:
                     # Extract timeInterval
-                    interval = period.find(f"{EntsoEConstants.XMLNS_NS}:timeInterval", nsmap)
+                    interval = period.find(f"{EntsoE.XMLNS_NS}:timeInterval", nsmap)
                     if interval is None:
                         continue
 
                     # Get start and end times
-                    start_element = interval.find(f"{EntsoEConstants.XMLNS_NS}:start", nsmap)
-                    end_element = interval.find(f"{EntsoEConstants.XMLNS_NS}:end", nsmap)
+                    start_element = interval.find(f"{EntsoE.XMLNS_NS}:start", nsmap)
+                    end_element = interval.find(f"{EntsoE.XMLNS_NS}:end", nsmap)
 
                     if start_element is None or end_element is None:
                         continue
@@ -169,26 +165,26 @@ class EntsoEAPI(BaseEnergyAPI):
                         continue
 
                     # Get resolution
-                    resolution_element = period.find(f"{EntsoEConstants.XMLNS_NS}:resolution", nsmap)
-                    resolution = "PT60M"  # Default hourly
+                    resolution_element = period.find(f"{EntsoE.XMLNS_NS}:resolution", nsmap)
+                    resolution = TimeInterval.HOURLY  # Default hourly
                     if resolution_element is not None:
                         resolution = resolution_element.text
 
                     # Handle different resolutions
-                    if resolution == "PT15M":
+                    if resolution == TimeInterval.QUARTER_HOURLY:
                         resolution_minutes = 15
-                    elif resolution == "PT60M" or resolution == "PT1H":
+                    elif resolution == TimeInterval.HOURLY or resolution == "PT1H":
                         resolution_minutes = 60
                     else:
                         resolution_minutes = 60
 
                     # Process Point elements
-                    points = period.findall(f"{EntsoEConstants.XMLNS_NS}:Point", nsmap)
+                    points = period.findall(f"{EntsoE.XMLNS_NS}:Point", nsmap)
                     position_prices = {}
 
                     for point in points:
-                        position_element = point.find(f"{EntsoEConstants.XMLNS_NS}:position", nsmap)
-                        price_element = point.find(f"{EntsoEConstants.XMLNS_NS}:price.amount", nsmap)
+                        position_element = point.find(f"{EntsoE.XMLNS_NS}:position", nsmap)
+                        price_element = point.find(f"{EntsoE.XMLNS_NS}:price.amount", nsmap)
 
                         if position_element is None or price_element is None:
                             continue
@@ -207,7 +203,7 @@ class EntsoEAPI(BaseEnergyAPI):
 
                         # Convert to local time
                         local_time = self._convert_to_local(position_time)
-                        hour_str = local_time.strftime("%H:00")
+                        hour_str = local_time.strftime(TimeFormat.HOUR_ONLY)
 
                         # Debug the timezone conversion
                         _LOGGER.debug(f"Position time: {position_time.isoformat()} → Local time: {local_time.isoformat()}")
@@ -273,7 +269,7 @@ class EntsoEAPI(BaseEnergyAPI):
                 converted_price = await self._convert_price(
                     price=price,
                     from_currency=currency,
-                    from_unit="MWh"
+                    from_unit=EnergyUnit.MWH
                 )
 
                 # Store converted price
@@ -365,14 +361,14 @@ class EntsoEAPI(BaseEnergyAPI):
         # First try to identify by businessType
         # A62 (Day-ahead allocation) is generally the correct spot price data
         for series in all_series:
-            if series["metadata"]["business_type"] == EntsoEConstants.BUSINESS_TYPE_DAY_AHEAD_ALLOCATION:
-                _LOGGER.debug(f"Selected TimeSeries with businessType={EntsoEConstants.BUSINESS_TYPE_DAY_AHEAD_ALLOCATION} (Day-ahead allocation)")
+            if series["metadata"]["business_type"] == EntsoE.BUSINESS_TYPE_DAY_AHEAD_ALLOCATION:
+                _LOGGER.debug(f"Selected TimeSeries with businessType={EntsoE.BUSINESS_TYPE_DAY_AHEAD_ALLOCATION} (Day-ahead allocation)")
                 return series
 
         # Next, try A44 (Day-ahead)
         for series in all_series:
-            if series["metadata"]["business_type"] == EntsoEConstants.BUSINESS_TYPE_DAY_AHEAD:
-                _LOGGER.debug(f"Selected TimeSeries with businessType={EntsoEConstants.BUSINESS_TYPE_DAY_AHEAD} (Day-ahead)")
+            if series["metadata"]["business_type"] == EntsoE.BUSINESS_TYPE_DAY_AHEAD:
+                _LOGGER.debug(f"Selected TimeSeries with businessType={EntsoE.BUSINESS_TYPE_DAY_AHEAD} (Day-ahead)")
                 return series
 
         # If still not found, use a heuristic approach - spot price TimeSeries
