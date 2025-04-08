@@ -4,7 +4,7 @@ import datetime
 import asyncio
 import xml.etree.ElementTree as ET
 from .base import BaseEnergyAPI
-from ...timezone  import ensure_timezone_aware
+from ..timezone import ensure_timezone_aware
 from ..const import (
     ENTSOE_AREA_MAPPING,
     CONF_API_KEY,
