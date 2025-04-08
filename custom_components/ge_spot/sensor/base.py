@@ -14,10 +14,9 @@ from ..const import (
     Attributes,
     Config,
     Currency,
+    CurrencyInfo,
     Defaults,
-    DISPLAY_UNIT_CENTS,
-    CURRENCY_SUBUNIT_NAMES,
-    REGION_TO_CURRENCY,
+    DisplayUnit
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -43,10 +42,10 @@ class BaseElectricityPriceSensor(SensorEntity):
             self._display_unit = config_data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
 
         # Determine if subunit conversion is needed
-        self._use_subunit = self._display_unit == DISPLAY_UNIT_CENTS
+        self._use_subunit = self._display_unit == DisplayUnit.CENTS
 
         # Get currency from region
-        self._currency = config_data.get(Attributes.CURRENCY, REGION_TO_CURRENCY.get(self._area))
+        self._currency = config_data.get(Attributes.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(self._area))
 
         # Create standardized entity_id
         self.entity_id = f"sensor.gespot_{sensor_type.lower()}_{self._area.lower()}"
@@ -60,7 +59,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Set unit based on display_unit configuration
         # This only affects the display - actual conversion is done by the APIs
         if self._use_subunit:
-            subunit = CURRENCY_SUBUNIT_NAMES.get(self._currency, "cents")
+            subunit = CurrencyInfo.SUBUNIT_NAMES.get(self._currency, "cents")
             self._attr_native_unit_of_measurement = f"{subunit}/kWh"
         else:
             self._attr_native_unit_of_measurement = f"{self._currency}/kWh"
