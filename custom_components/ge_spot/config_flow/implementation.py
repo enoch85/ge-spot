@@ -13,7 +13,7 @@ from ..const import (
     CONF_VAT,
     CONF_API_KEY,
     CONF_SOURCE_PRIORITY,
-    Currencies,
+    Currency,
     Source,
 )
 from ..api import get_sources_for_region, create_api
