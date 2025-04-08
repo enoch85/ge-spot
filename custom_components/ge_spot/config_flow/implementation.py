@@ -9,9 +9,12 @@ from homeassistant.data_entry_flow import FlowResult
 
 from ..const import (
     DOMAIN,
-    Config,
-    Source,
+    CONF_AREA,
+    CONF_VAT,
+    CONF_API_KEY,
+    CONF_SOURCE_PRIORITY,
     Currencies,
+    Source,
 )
 from ..api import get_sources_for_region, create_api
 from ..price.conversion import async_convert_energy_price
