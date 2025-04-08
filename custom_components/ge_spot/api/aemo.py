@@ -4,8 +4,8 @@ import datetime
 from .base import BaseEnergyAPI
 from ..const import (
     Config,
-    DISPLAY_UNIT_CENTS,
-    CURRENCY_SUBUNIT_NAMES,
+    DisplayUnit,
+    CurrencyInfo,
     Attributes
 )
 
@@ -40,7 +40,7 @@ class AemoAPI(BaseEnergyAPI):
         try:
             # Get display unit setting from config
             display_unit = self.config.get(Config.DISPLAY_UNIT)
-            use_subunit = display_unit == DISPLAY_UNIT_CENTS
+            use_subunit = display_unit == DisplayUnit.CENTS
 
             # This is a placeholder - actual implementation would depend on AEMO's data format
             _LOGGER.warning("AEMO API processing is not implemented - raw API format not known")
