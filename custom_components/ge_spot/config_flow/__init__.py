@@ -6,11 +6,7 @@ from homeassistant.config_entries import ConfigFlow, OptionsFlow
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
-from ..const import (
-    DOMAIN,
-    Config,
-    Source,
-)
+from ..const import DOMAIN
 from .implementation import GSpotConfigFlow
 from .options import GSpotOptionsFlow
 
