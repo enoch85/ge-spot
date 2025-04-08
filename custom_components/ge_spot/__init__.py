@@ -15,17 +15,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Defer imports to this method to avoid blocking
     from .const import (
         DOMAIN,
-        Config,
-        Defaults,
+        CONF_AREA,
+        CONF_CURRENCY,
+        CONF_UPDATE_INTERVAL,
+        DEFAULT_UPDATE_INTERVAL
     )
+    from .price.currency import get_default_currency
     from .coordinator.region import RegionPriceCoordinator
     from .api.base.session_manager import register_shutdown_task
 
     # Get configuration
-    area = entry.data.get(Config.AREA)
+    area = entry.data.get(CONF_AREA)
 
     # Get currency based on region
-    currency = entry.data.get(Config.CURRENCY, Config.get_default_currency(area))
+    currency = entry.data.get(CONF_CURRENCY, get_default_currency(area))
 
     _LOGGER = logging.getLogger(__name__)
     _LOGGER.debug(f"Setting up integration for area: {area}, currency: {currency}")
@@ -42,8 +45,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Get update interval (prefer options over data, with fallback to default)
     # Convert update interval to integer to avoid TypeError
     update_interval = int(entry.options.get(
-        Config.UPDATE_INTERVAL,
-        entry.data.get(Config.UPDATE_INTERVAL, Defaults.UPDATE_INTERVAL)
+        CONF_UPDATE_INTERVAL,
+        entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
     ))
 
     # Create a data coordinator
@@ -75,6 +78,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    from .const import DOMAIN
+    
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
