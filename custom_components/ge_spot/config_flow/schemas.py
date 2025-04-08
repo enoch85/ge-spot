@@ -7,20 +7,14 @@ from homeassistant.helpers import selector
 import homeassistant.helpers.config_validation as cv
 
 from ..const import (
-    CONF_AREA, 
-    CONF_VAT, 
-    CONF_UPDATE_INTERVAL,
-    CONF_DISPLAY_UNIT, 
-    CONF_SOURCE_PRIORITY, 
-    CONF_API_KEY,
+    Config,
+    Defaults,
+    Source,
     DISPLAY_UNIT_DECIMAL, 
+    DISPLAY_UNIT_CENTS, 
     DISPLAY_UNITS, 
-    SOURCE_ENTSO_E,
     UPDATE_INTERVAL_OPTIONS, 
     ENTSOE_AREA_MAPPING,
-    DEFAULT_VAT, 
-    DEFAULT_UPDATE_INTERVAL, 
-    DEFAULT_DISPLAY_UNIT,
 )
 from ..utils.form_helper import FormHelper
 
@@ -30,7 +24,7 @@ def get_user_schema(available_regions):
     """Return schema for the user step."""
     return vol.Schema(
         {
-            vol.Required(CONF_AREA, default="SE4"): selector.SelectSelector(
+            vol.Required(Config.AREA, default="SE4"): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": area, "label": name}
@@ -46,7 +40,7 @@ def get_source_priority_schema(supported_sources):
     """Return schema for source priority step."""
     return vol.Schema(
         {
-            vol.Required(CONF_SOURCE_PRIORITY, default=supported_sources): selector.SelectSelector(
+            vol.Required(Config.SOURCE_PRIORITY, default=supported_sources): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": source, "label": source.replace("_", " ").title()}
@@ -63,17 +57,17 @@ def get_source_priority_schema(supported_sources):
                     multiline=True,
                 )
             ),
-            vol.Optional(CONF_VAT, default=0): vol.All(
+            vol.Optional(Config.VAT, default=0): vol.All(
                 vol.Coerce(float),
                 vol.Range(min=0, max=100),
             ),
-            vol.Optional(CONF_UPDATE_INTERVAL, default=60): vol.In({
+            vol.Optional(Config.UPDATE_INTERVAL, default=60): vol.In({
                 60: "1 hour",
                 360: "6 hours",
                 720: "12 hours",
                 1440: "24 hours"
             }),
-            vol.Optional(CONF_DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): selector.SelectSelector(
+            vol.Optional(Config.DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": key, "label": value}
@@ -99,7 +93,7 @@ def get_api_keys_schema(area, existing_api_key=None):
         description = "Leave empty to use existing key"
 
     # Create field with appropriate defaults and description
-    field = vol.Optional(f"{SOURCE_ENTSO_E}_api_key",
+    field = vol.Optional(f"{Source.ENTSO_E}_api_key",
                         description=description,
                         default=existing_api_key)
 
@@ -111,17 +105,17 @@ def get_api_keys_schema(area, existing_api_key=None):
 def get_options_schema(defaults, supported_sources):
     """Return schema for options."""
     schema = {
-        vol.Optional(CONF_VAT, default=defaults.get(CONF_VAT, 0) * 100): vol.All(
+        vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0) * 100): vol.All(
             vol.Coerce(float),
             vol.Range(min=0, max=100),
         ),
-        vol.Optional(CONF_UPDATE_INTERVAL, default=defaults.get(CONF_UPDATE_INTERVAL, 60)): vol.In({
+        vol.Optional(Config.UPDATE_INTERVAL, default=defaults.get(Config.UPDATE_INTERVAL, 60)): vol.In({
             60: "1 hour",
             360: "6 hours",
             720: "12 hours",
             1440: "24 hours"
         }),
-        vol.Optional(CONF_DISPLAY_UNIT, default=defaults.get(CONF_DISPLAY_UNIT, DISPLAY_UNIT_DECIMAL)): selector.SelectSelector(
+        vol.Optional(Config.DISPLAY_UNIT, default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
                     {"value": key, "label": value}
@@ -133,9 +127,9 @@ def get_options_schema(defaults, supported_sources):
     }
 
     # Add source priority selection
-    current_priority = defaults.get(CONF_SOURCE_PRIORITY, supported_sources)
+    current_priority = defaults.get(Config.SOURCE_PRIORITY, supported_sources)
     schema[vol.Optional(
-        CONF_SOURCE_PRIORITY,
+        Config.SOURCE_PRIORITY,
         default=current_priority
     )] = selector.SelectSelector(
         selector.SelectSelectorConfig(
@@ -157,13 +151,13 @@ def get_options_schema(defaults, supported_sources):
     )
 
     # Add API key fields for sources that require it
-    if SOURCE_ENTSO_E in supported_sources:
+    if Source.ENTSO_E in supported_sources:
         # Show current API key status
-        current_api_key = defaults.get(CONF_API_KEY, "")
+        current_api_key = defaults.get(Config.API_KEY, "")
         api_key_status = "API key configured" if current_api_key else "No API key configured"
         # Add field for ENTSO-E API key with the current status shown
         schema[vol.Optional(
-            f"{SOURCE_ENTSO_E}_api_key",
+            f"{Source.ENTSO_E}_api_key",
             description=f"Current status: {api_key_status}"
         )] = FormHelper.create_api_key_selector()
 
@@ -174,36 +168,36 @@ def get_default_values(options, data):
     try:
         defaults = {}
         # VAT - convert from decimal to percentage
-        vat_decimal = options.get(CONF_VAT, data.get(CONF_VAT, DEFAULT_VAT))
-        defaults[CONF_VAT] = vat_decimal
+        vat_decimal = options.get(Config.VAT, data.get(Config.VAT, Defaults.VAT))
+        defaults[Config.VAT] = vat_decimal
 
         # Update interval
-        defaults[CONF_UPDATE_INTERVAL] = options.get(
-            CONF_UPDATE_INTERVAL,
-            data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        defaults[Config.UPDATE_INTERVAL] = options.get(
+            Config.UPDATE_INTERVAL,
+            data.get(Config.UPDATE_INTERVAL, Defaults.UPDATE_INTERVAL)
         )
         # Display unit
-        defaults[CONF_DISPLAY_UNIT] = options.get(
-            CONF_DISPLAY_UNIT,
-            data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
+        defaults[Config.DISPLAY_UNIT] = options.get(
+            Config.DISPLAY_UNIT,
+            data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         )
 
         # Source priority
-        if CONF_SOURCE_PRIORITY in options:
-            defaults[CONF_SOURCE_PRIORITY] = options[CONF_SOURCE_PRIORITY]
-        elif CONF_SOURCE_PRIORITY in data:
-            defaults[CONF_SOURCE_PRIORITY] = data[CONF_SOURCE_PRIORITY]
+        if Config.SOURCE_PRIORITY in options:
+            defaults[Config.SOURCE_PRIORITY] = options[Config.SOURCE_PRIORITY]
+        elif Config.SOURCE_PRIORITY in data:
+            defaults[Config.SOURCE_PRIORITY] = data[Config.SOURCE_PRIORITY]
 
         # API key (if present)
-        if CONF_API_KEY in options or CONF_API_KEY in data:
-            defaults[CONF_API_KEY] = options.get(CONF_API_KEY, data.get(CONF_API_KEY, ""))
+        if Config.API_KEY in options or Config.API_KEY in data:
+            defaults[Config.API_KEY] = options.get(Config.API_KEY, data.get(Config.API_KEY, ""))
 
         return defaults
     except Exception as e:
         _LOGGER.error(f"Error getting default values: {e}")
         # Return minimal defaults
         return {
-            CONF_VAT: DEFAULT_VAT,
-            CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL,
-            CONF_DISPLAY_UNIT: DEFAULT_DISPLAY_UNIT,
+            Config.VAT: Defaults.VAT,
+            Config.UPDATE_INTERVAL: Defaults.UPDATE_INTERVAL,
+            Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
         }
