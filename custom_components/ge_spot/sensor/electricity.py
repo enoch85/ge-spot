@@ -7,17 +7,11 @@ from homeassistant.util import dt as dt_util
 
 from ..const import (
     DOMAIN,
-    ATTR_AREA,
-    ATTR_VAT,
-    ATTR_CURRENCY,
-    ATTR_TODAY,
-    ATTR_TOMORROW,
-    ATTR_TOMORROW_VALID,
-    ATTR_API_KEY_STATUS,
-    CONF_DISPLAY_UNIT,
-    DEFAULT_DISPLAY_UNIT,
+    Config,
+    Source,
+    Attributes,
+    Defaults,
     REGION_TO_CURRENCY,
-    SOURCE_ENTSO_E,
 )
 from .base import BaseElectricityPriceSensor
 from .price import (
@@ -32,11 +26,11 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the electricity price sensors from config entries."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
-    area = config_entry.data.get(ATTR_AREA)
-    vat = config_entry.data.get(ATTR_VAT, 0)
+    area = config_entry.data.get(Config.AREA)
+    vat = config_entry.data.get(Config.VAT, 0)
 
     # Determine currency based on area
-    currency = config_entry.data.get(ATTR_CURRENCY, REGION_TO_CURRENCY.get(area))
+    currency = config_entry.data.get(Config.CURRENCY, REGION_TO_CURRENCY.get(area))
 
     # Get display unit setting - first try coordinator, then config
     display_unit = None
@@ -44,15 +38,15 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         display_unit = coordinator.display_unit
     else:
         display_unit = config_entry.options.get(
-            CONF_DISPLAY_UNIT,
-            config_entry.data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
+            Config.DISPLAY_UNIT,
+            config_entry.data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         )
 
     config_data = {
-        ATTR_AREA: area,
-        ATTR_VAT: vat,
-        ATTR_CURRENCY: currency,
-        CONF_DISPLAY_UNIT: display_unit,
+        Attributes.AREA: area,
+        Attributes.VAT: vat,
+        Attributes.CURRENCY: currency,
+        Config.DISPLAY_UNIT: display_unit,
     }
 
     # Define sensors with their value extraction functions
@@ -64,12 +58,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             "class": PriceValueSensor,
             "value_fn": lambda data: data.get("current_price"),
             "additional_attrs": lambda data: {
-                ATTR_TODAY: data.get(ATTR_TODAY, []),
-                ATTR_TOMORROW: data.get(ATTR_TOMORROW, []),
-                ATTR_TOMORROW_VALID: data.get(ATTR_TOMORROW_VALID, False),
+                Attributes.TODAY: data.get(Attributes.TODAY, []),
+                Attributes.TOMORROW: data.get(Attributes.TOMORROW, []),
+                Attributes.TOMORROW_VALID: data.get(Attributes.TOMORROW_VALID, False),
                 "exchange_service_timestamp": data.get("exchange_rate_info", {}).get("timestamp"),
                 "exchange_service_rate": data.get("exchange_rate_info", {}).get("formatted"),
-                "entso_e_api_key": data.get(ATTR_API_KEY_STATUS, {}).get(SOURCE_ENTSO_E, {})
+                "entso_e_api_key": data.get(Attributes.API_KEY_STATUS, {}).get(Source.ENTSO_E, {})
             }
         },
         # Next hour price
