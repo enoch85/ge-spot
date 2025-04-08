@@ -13,3 +13,4 @@ class Config:
     PRICE_IN_CENTS = "price_in_cents"
     CACHE_TTL = "cache_ttl"
     SOURCE_PRIORITY = "source_priority"
+    ORIGINAL_AREA = "original_area"
