@@ -7,7 +7,6 @@ from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
 
 from ..const import AREA_TIMEZONES
-from ..price.statistics import get_statistics
 from .parsers import parse_datetime
 
 _LOGGER = logging.getLogger(__name__)
