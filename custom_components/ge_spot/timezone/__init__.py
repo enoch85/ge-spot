@@ -1,4 +1,8 @@
 """Timezone utilities for handling datetime conversions."""
+# Import parsers FIRST
+from .parsers import parse_datetime
+
+# Then import converters
 from .converters import (
     ensure_timezone_aware,
     localize_datetime,
@@ -13,7 +17,6 @@ from .converters import (
     classify_price_periods,
     is_tomorrow_valid,
 )
-from .parsers import parse_datetime
 
 __all__ = [
     # Timezone converters
