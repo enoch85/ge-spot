@@ -7,6 +7,7 @@ from .sources import (
     SOURCE_EPEX,
     SOURCE_OMIE,
     SOURCE_AEMO,
+    SOURCE_STROMLIGNING,
 )
 
 # Area to timezone mapping (Using content from user upload, ensuring ES/PT exist)
