@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, Any, Optional, List, Callable, Awaitable
 import aiohttp
 
-from ..const import ATTR_DATA_SOURCE, ATTR_FALLBACK_USED
+from ..const import Attributes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -145,8 +145,8 @@ class ApiFallbackManager:
 
                     # Add metadata about source
                     if isinstance(result, dict):
-                        result[ATTR_DATA_SOURCE] = api_name
-                        result[ATTR_FALLBACK_USED] = self.fallback_used
+                        result[Attributes.DATA_SOURCE] = api_name
+                        result[Attributes.FALLBACK_USED] = self.fallback_used
 
                     return result
                 else:
