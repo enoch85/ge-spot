@@ -139,10 +139,3 @@ CURRENCY_SUBUNIT_NAMES = {
     CURRENCY_GEL: "tetri",
     CURRENCY_AZN: "qəpik",
 }
-
-# Energy unit conversion
-ENERGY_UNIT_CONVERSION = {
-    "MWh": 1,
-    "kWh": 1000,
-    "Wh": 1000000,
-}
