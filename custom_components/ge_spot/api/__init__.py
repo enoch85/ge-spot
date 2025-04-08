@@ -9,9 +9,9 @@ from ..const import (
     ENTSOE_AREAS,
     EPEX_AREAS,
     OMIE_AREAS,
-    AEMO_AREAS
+    AEMO_AREAS,
+    STROMLIGNING_AREAS,
 )
-from ..const.sources import SOURCE_STROMLIGNING
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,13 +22,7 @@ SOURCE_ENTSO_E = Source.ENTSO_E
 SOURCE_EPEX = Source.EPEX
 SOURCE_OMIE = Source.OMIE
 SOURCE_AEMO = Source.AEMO
-SOURCE_STROMLIGNING = SOURCE_STROMLIGNING
-
-# Get areas dictionary for STROMLIGNING which might not be in the main const
-STROMLIGNING_AREAS = {
-    "DK1": "Denmark (DK1)",
-    "DK2": "Denmark (DK2)",
-}
+SOURCE_STROMLIGNING = Source.STROMLIGNING
 
 # Mapping of which source supports which regions
 SOURCE_REGION_SUPPORT = {
