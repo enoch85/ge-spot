@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Callable
 from homeassistant.util import dt as dt_util
 
 from .base import BaseElectricityPriceSensor
-from ..const import ATTR_TODAY, ATTR_TOMORROW, ATTR_TOMORROW_VALID, ATTR_MIN, ATTR_MAX, ATTR_API_KEY_STATUS, SOURCE_ENTSO_E
+from ..const import Attributes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ class TomorrowSensorMixin:
         if not super().available:
             return False
         # Only available if tomorrow data is valid
-        return self.coordinator.data.get(ATTR_TOMORROW_VALID, False)
+        return self.coordinator.data.get(Attributes.TOMORROW_VALID, False)
 
 
 class ExtremaPriceSensor(PriceValueSensor, TimestampAttributeMixin):
@@ -103,7 +103,7 @@ class ExtremaPriceSensor(PriceValueSensor, TimestampAttributeMixin):
 
             # Get min or max based on extrema_type
             attr_key = "min" if self._extrema_type == "min" else "max"
-            const_attr = ATTR_MIN if self._extrema_type == "min" else ATTR_MAX
+            const_attr = Attributes.MIN if self._extrema_type == "min" else Attributes.MAX
 
             return data[self._stats_key].get(attr_key) or data[self._stats_key].get(const_attr)
 
