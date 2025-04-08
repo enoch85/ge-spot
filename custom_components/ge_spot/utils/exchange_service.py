@@ -14,13 +14,21 @@ from ..utils.error_handler import retry_async
 
 _LOGGER = logging.getLogger(__name__)
 
-# European Central Bank (ECB) exchange rates API
-ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
+class ExchangeServiceConstants:
+    """Constants for Exchange Rate Service."""
+    ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
+    DEFAULT_CACHE_TTL = 86400  # 24 hours in seconds
+    DEFAULT_TIMEOUT = 10
+    DEFAULT_CURRENCY = "EUR"
+    XML_NAMESPACE_GESMES = "http://www.gesmes.org/xml/2002-08-01"
+    XML_NAMESPACE_ECB = "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"
+    DEFAULT_RETRY_ATTEMPTS = 3
+    DEFAULT_RETRY_DELAY = 2.0
 
 class ExchangeRateService:
     """Service to fetch and cache currency exchange rates."""
 
-    def __init__(self, session=None, cache_file=None, cache_ttl=86400):
+    def __init__(self, session=None, cache_file=None, cache_ttl=ExchangeServiceConstants.DEFAULT_CACHE_TTL):
         """Initialize the exchange rate service."""
         self.session = session
         self.cache_file = cache_file or self._get_default_cache_path()
@@ -47,13 +55,15 @@ class ExchangeRateService:
             await self.session.close()
             self.session = None
 
-    @retry_async(max_attempts=3, base_delay=2.0)
+    @retry_async(max_attempts=ExchangeServiceConstants.DEFAULT_RETRY_ATTEMPTS, 
+                 base_delay=ExchangeServiceConstants.DEFAULT_RETRY_DELAY)
     async def _fetch_ecb_rates(self):
         """Fetch exchange rates from European Central Bank API."""
         await self._ensure_session()
 
         try:
-            async with self.session.get(ECB_URL, timeout=10) as response:
+            async with self.session.get(ExchangeServiceConstants.ECB_URL, 
+                                      timeout=ExchangeServiceConstants.DEFAULT_TIMEOUT) as response:
                 if response.status != 200:
                     _LOGGER.error(f"Failed to fetch exchange rates: HTTP {response.status}")
                     return None
@@ -69,12 +79,12 @@ class ExchangeRateService:
         try:
             root = ET.fromstring(xml_data)
             ns = {
-                "gesmes": "http://www.gesmes.org/xml/2002-08-01",
-                "ecb": "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"
+                "gesmes": ExchangeServiceConstants.XML_NAMESPACE_GESMES,
+                "ecb": ExchangeServiceConstants.XML_NAMESPACE_ECB
             }
 
             # ECB always uses EUR as the base currency
-            rates = {"EUR": 1.0}
+            rates = {ExchangeServiceConstants.DEFAULT_CURRENCY: 1.0}
 
             # Find exchange rates in the XML
             for cube in root.findall(".//ecb:Cube[@currency]", ns):
@@ -188,7 +198,7 @@ class ExchangeRateService:
 
         return result
 
-    def get_exchange_rate_info(self, from_currency="EUR", to_currency=None):
+    def get_exchange_rate_info(self, from_currency=ExchangeServiceConstants.DEFAULT_CURRENCY, to_currency=None):
         """Get exchange rate information between two currencies.
 
         Args:
