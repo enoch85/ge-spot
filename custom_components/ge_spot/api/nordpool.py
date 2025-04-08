@@ -4,12 +4,8 @@ import datetime
 from .base import BaseEnergyAPI
 from ..timezone import parse_datetime, localize_datetime
 from ..const import (
-    NORDPOOL_DELIVERY_AREA_MAPPING,
-    Currency,
-    Nordpool,
-    URLs,
-    TimeFormat,
-    EnergyUnit
+    Currency, Area, AreaMapping, TimeFormat, EnergyUnit, 
+    Nordpool, Attributes, Network
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -17,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 class NordpoolAPI(BaseEnergyAPI):
     """API handler for Nordpool."""
 
-    BASE_URL = URLs.NORDPOOL
+    BASE_URL = Network.URLs.NORDPOOL
 
     async def _fetch_data(self):
         """Fetch data from Nordpool."""
@@ -31,7 +27,7 @@ class NordpoolAPI(BaseEnergyAPI):
             area = self.config.get("area", Nordpool.DEFAULT_AREA)
 
             # Map the area names to the API's delivery area codes
-            delivery_area = NORDPOOL_DELIVERY_AREA_MAPPING.get(area, area)
+            delivery_area = AreaMapping.NORDPOOL_DELIVERY.get(area, area)
             _LOGGER.debug(f"Fetching Nordpool data for area: {delivery_area}")
 
             # Fetch today's data
