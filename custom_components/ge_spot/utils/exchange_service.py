@@ -10,12 +10,9 @@ import time
 from typing import Dict, Optional
 
 from ..const import (
-    CURRENCY_SUBUNIT_MULTIPLIER, 
-    CURRENCY_SUBUNIT_NAMES, 
-    REGION_TO_CURRENCY,
-    Currency,
-    NetworkDefaults,
-    URLs,
+    Currency, 
+    CurrencyInfo,
+    Network,
     ECB
 )
 from ..utils.error_handler import retry_async
@@ -25,7 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 class ExchangeRateService:
     """Service to fetch and cache currency exchange rates."""
 
-    def __init__(self, session=None, cache_file=None, cache_ttl=NetworkDefaults.CACHE_TTL):
+    def __init__(self, session=None, cache_file=None, cache_ttl=Network.Defaults.CACHE_TTL):
         """Initialize the exchange rate service."""
         self.session = session
         self.cache_file = cache_file or self._get_default_cache_path()
@@ -52,15 +49,15 @@ class ExchangeRateService:
             await self.session.close()
             self.session = None
 
-    @retry_async(max_attempts=NetworkDefaults.RETRY_COUNT, 
-                 base_delay=NetworkDefaults.RETRY_BASE_DELAY)
+    @retry_async(max_attempts=Network.Defaults.RETRY_COUNT, 
+                 base_delay=Network.Defaults.RETRY_BASE_DELAY)
     async def _fetch_ecb_rates(self):
         """Fetch exchange rates from European Central Bank API."""
         await self._ensure_session()
 
         try:
-            async with self.session.get(URLs.ECB, 
-                                      timeout=NetworkDefaults.TIMEOUT) as response:
+            async with self.session.get(Network.URLs.ECB, 
+                                      timeout=Network.Defaults.TIMEOUT) as response:
                 if response.status != 200:
                     _LOGGER.error(f"Failed to fetch exchange rates: HTTP {response.status}")
                     return None
