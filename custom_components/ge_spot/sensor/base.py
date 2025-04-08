@@ -11,16 +11,10 @@ from homeassistant.util import dt as dt_util
 
 from ..const import (
     DOMAIN,
-    ATTR_CURRENCY,
-    ATTR_AREA,
-    ATTR_VAT,
-    ATTR_LAST_UPDATED,
-    ATTR_DATA_SOURCE,
-    ATTR_FALLBACK_USED,
-    ATTR_IS_USING_FALLBACK,
-    ATTR_AVAILABLE_FALLBACKS,
-    CONF_DISPLAY_UNIT,
-    DEFAULT_DISPLAY_UNIT,
+    Attributes,
+    Config,
+    Currency,
+    Defaults,
     DISPLAY_UNIT_CENTS,
     CURRENCY_SUBUNIT_NAMES,
     REGION_TO_CURRENCY,
@@ -37,8 +31,8 @@ class BaseElectricityPriceSensor(SensorEntity):
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):
         """Initialize the base sensor."""
         self.coordinator = coordinator
-        self._area = config_data.get(ATTR_AREA)
-        self._vat = config_data.get(ATTR_VAT, 0)
+        self._area = config_data.get(Attributes.AREA)
+        self._vat = config_data.get(Attributes.VAT, 0)
         self._precision = config_data.get("precision", 3)
         self._sensor_type = sensor_type
 
@@ -46,13 +40,13 @@ class BaseElectricityPriceSensor(SensorEntity):
         if hasattr(coordinator, 'display_unit') and coordinator.display_unit:
             self._display_unit = coordinator.display_unit
         else:
-            self._display_unit = config_data.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
+            self._display_unit = config_data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
 
         # Determine if subunit conversion is needed
         self._use_subunit = self._display_unit == DISPLAY_UNIT_CENTS
 
         # Get currency from region
-        self._currency = config_data.get(ATTR_CURRENCY, REGION_TO_CURRENCY.get(self._area))
+        self._currency = config_data.get(Attributes.CURRENCY, REGION_TO_CURRENCY.get(self._area))
 
         # Create standardized entity_id
         self.entity_id = f"sensor.gespot_{sensor_type.lower()}_{self._area.lower()}"
@@ -85,12 +79,12 @@ class BaseElectricityPriceSensor(SensorEntity):
             return {}
 
         attrs = {
-            ATTR_CURRENCY: self._currency,
-            ATTR_AREA: self._area,
-            ATTR_VAT: self._vat,
-            ATTR_LAST_UPDATED: self.coordinator.data.get(ATTR_LAST_UPDATED),
-            ATTR_DATA_SOURCE: self.coordinator.data.get(ATTR_DATA_SOURCE),
-            "is_using_fallback": self.coordinator.data.get(ATTR_IS_USING_FALLBACK, False),
+            Attributes.CURRENCY: self._currency,
+            Attributes.AREA: self._area,
+            Attributes.VAT: self._vat,
+            Attributes.LAST_UPDATED: self.coordinator.data.get(Attributes.LAST_UPDATED),
+            Attributes.DATA_SOURCE: self.coordinator.data.get(Attributes.DATA_SOURCE),
+            "is_using_fallback": self.coordinator.data.get(Attributes.IS_USING_FALLBACK, False),
             "display_unit": self._display_unit,
             "use_subunit": self._use_subunit
         }
@@ -120,8 +114,8 @@ class BaseElectricityPriceSensor(SensorEntity):
             attrs["source_info"] = self.coordinator.data["source_info"]
 
         # Add available fallbacks information
-        if ATTR_AVAILABLE_FALLBACKS in self.coordinator.data:
-            attrs["available_fallbacks"] = self.coordinator.data[ATTR_AVAILABLE_FALLBACKS]
+        if Attributes.AVAILABLE_FALLBACKS in self.coordinator.data:
+            attrs["available_fallbacks"] = self.coordinator.data[Attributes.AVAILABLE_FALLBACKS]
 
         # Add next update time
         if "next_update" in self.coordinator.data:
