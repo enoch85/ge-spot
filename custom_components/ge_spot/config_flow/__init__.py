@@ -1,6 +1,5 @@
 """Config flow for GE-Spot integration."""
 import logging
-import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, OptionsFlow
 from homeassistant.core import callback
