@@ -15,7 +15,7 @@ from ..const import (
     Source,
     Attributes,
     Defaults,
-    DISPLAY_UNIT_CENTS,
+    DisplayUnit
 )
 from ..api import create_apis_for_region
 from ..utils.debug_utils import log_raw_data
@@ -54,7 +54,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
         # Ensure display unit is available to all APIs
         self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
-        self.use_subunit = self.display_unit == DISPLAY_UNIT_CENTS
+        self.use_subunit = self.display_unit == DisplayUnit.CENTS
 
         # Make sure all APIs use consistent settings for display unit
         self.config["price_in_cents"] = self.use_subunit
