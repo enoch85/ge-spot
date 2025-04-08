@@ -8,10 +8,10 @@ class EnergyUnit:
     
     DEFAULT = MWH
     TARGET = KWH
-
-# Energy unit conversion map (relative to MWh)
-ENERGY_UNIT_CONVERSION = {
-    EnergyUnit.MWH: 1,
-    EnergyUnit.KWH: 1000,
-    EnergyUnit.WH: 1000000,
-}
+    
+    # Energy unit conversion map (relative to MWh)
+    CONVERSION = {
+        MWH: 1,
+        KWH: 1000,
+        WH: 1000000,
+    }
