@@ -5,8 +5,8 @@ from typing import Dict, Any, List, Optional
 from homeassistant.helpers import selector
 
 from ..const import (
-    DISPLAY_UNITS,
-    UPDATE_INTERVAL_OPTIONS,
+    DisplayUnit,
+    UpdateInterval
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,16 +60,7 @@ class FormHelper:
             A dictionary mapping interval values to labels for vol.In()
         """
         # Create a dictionary mapping of interval values to labels
-        options = {}
-        for option in UPDATE_INTERVAL_OPTIONS:
-            try:
-                value = int(option["value"])
-                options[value] = option["label"]
-            except (ValueError, TypeError, KeyError):
-                _LOGGER.warning(f"Invalid update interval option format: {option}")
-                continue
-
-        return options
+        return UpdateInterval.OPTIONS_DICT
 
     @staticmethod
     def create_display_unit_selector() -> selector.SelectSelector:
@@ -82,7 +73,7 @@ class FormHelper:
             selector.SelectSelectorConfig(
                 options=[
                     {"value": key, "label": value}
-                    for key, value in DISPLAY_UNITS.items()
+                    for key, value in DisplayUnit.OPTIONS.items()
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
