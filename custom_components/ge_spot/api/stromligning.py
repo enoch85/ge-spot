@@ -14,10 +14,21 @@ from ..timezone import ensure_timezone_aware
 
 _LOGGER = logging.getLogger(__name__)
 
+class StromligningConstants:
+    """Constants for Stromligning.dk API."""
+    BASE_URL = "https://stromligning.dk/api/prices"
+    DEFAULT_AREA = "DK1"
+    DEFAULT_CURRENCY = "DKK"
+    PRICE_COMPONENTS = {
+        "ELECTRICITY": "electricity",
+        "GRID": "grid",
+        "TAX": "tax"
+    }
+
 class StromligningAPI(BaseEnergyAPI):
     """API handler for Stromligning.dk."""
 
-    BASE_URL = "https://stromligning.dk/api/prices"
+    BASE_URL = StromligningConstants.BASE_URL
     
     async def _fetch_data(self):
         """Fetch data from Stromligning.dk API."""
@@ -31,7 +42,7 @@ class StromligningAPI(BaseEnergyAPI):
         to_date = tomorrow.isoformat() + "T23:59:59"
         
         # Get area code - use the configured area (typically DK1 or DK2)
-        area = self.config.get("area", "DK1")
+        area = self.config.get("area", StromligningConstants.DEFAULT_AREA)
         
         params = {
             "from": from_date,
@@ -106,19 +117,19 @@ class StromligningAPI(BaseEnergyAPI):
                         "end": (local_dt + datetime.timedelta(hours=1)).isoformat(),
                         "price": total_price,
                         "components": {
-                            "electricity": electricity_price,
-                            "grid": grid_price,
-                            "tax": tax_price
+                            StromligningConstants.PRICE_COMPONENTS["ELECTRICITY"]: electricity_price,
+                            StromligningConstants.PRICE_COMPONENTS["GRID"]: grid_price,
+                            StromligningConstants.PRICE_COMPONENTS["TAX"]: tax_price
                         }
                     })
                     
                     # Convert price using centralized method if needed (for currency conversion)
                     # Note: Stromligning returns prices in DKK/kWh already, so we only need to convert
                     # if target currency is not DKK or if subunit display is requested
-                    if self._currency != "DKK" or use_subunit:
+                    if self._currency != StromligningConstants.DEFAULT_CURRENCY or use_subunit:
                         converted_price = await self._convert_price(
                             price=total_price,
-                            from_currency="DKK",
+                            from_currency=StromligningConstants.DEFAULT_CURRENCY,
                             from_unit="kWh",
                             to_subunit=use_subunit,
                         )
@@ -136,11 +147,11 @@ class StromligningAPI(BaseEnergyAPI):
                         current_price = converted_price
                         raw_values_current = {
                             "raw": total_price,
-                            "unit": "DKK/kWh",
+                            "unit": f"{StromligningConstants.DEFAULT_CURRENCY}/kWh",
                             "components": {
-                                "electricity": electricity_price,
-                                "grid": grid_price,
-                                "tax": tax_price
+                                StromligningConstants.PRICE_COMPONENTS["ELECTRICITY"]: electricity_price,
+                                StromligningConstants.PRICE_COMPONENTS["GRID"]: grid_price,
+                                StromligningConstants.PRICE_COMPONENTS["TAX"]: tax_price
                             },
                             "final": converted_price,
                             "currency": self._currency,
@@ -153,11 +164,11 @@ class StromligningAPI(BaseEnergyAPI):
                         next_hour_price = converted_price
                         raw_values_next = {
                             "raw": total_price,
-                            "unit": "DKK/kWh",
+                            "unit": f"{StromligningConstants.DEFAULT_CURRENCY}/kWh",
                             "components": {
-                                "electricity": electricity_price,
-                                "grid": grid_price,
-                                "tax": tax_price
+                                StromligningConstants.PRICE_COMPONENTS["ELECTRICITY"]: electricity_price,
+                                StromligningConstants.PRICE_COMPONENTS["GRID"]: grid_price,
+                                StromligningConstants.PRICE_COMPONENTS["TAX"]: tax_price
                             },
                             "final": converted_price,
                             "currency": self._currency,
