@@ -10,11 +10,9 @@ from ..const import (
     Config,
     Defaults,
     Source,
-    DISPLAY_UNIT_DECIMAL, 
-    DISPLAY_UNIT_CENTS, 
-    DISPLAY_UNITS, 
-    UPDATE_INTERVAL_OPTIONS, 
-    ENTSOE_AREA_MAPPING,
+    DisplayUnit, 
+    UpdateInterval,
+    AreaMapping
 )
 from ..utils.form_helper import FormHelper
 
@@ -67,11 +65,11 @@ def get_source_priority_schema(supported_sources):
                 720: "12 hours",
                 1440: "24 hours"
             }),
-            vol.Optional(Config.DISPLAY_UNIT, default=DISPLAY_UNIT_DECIMAL): selector.SelectSelector(
+            vol.Optional(Config.DISPLAY_UNIT, default=DisplayUnit.DECIMAL): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": key, "label": value}
-                        for key, value in DISPLAY_UNITS.items()
+                        for key, value in DisplayUnit.OPTIONS.items()
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
@@ -84,7 +82,7 @@ def get_api_keys_schema(area, existing_api_key=None):
     schema_dict = {}
 
     # Make API key optional if area is supported by ENTSO-E mapping
-    is_supported = area in ENTSOE_AREA_MAPPING
+    is_supported = area in AreaMapping.ENTSOE_MAPPING
     has_existing = existing_api_key is not None
 
     # Prepare field - optional for supported areas or if we have an existing key
@@ -119,7 +117,7 @@ def get_options_schema(defaults, supported_sources):
             selector.SelectSelectorConfig(
                 options=[
                     {"value": key, "label": value}
-                    for key, value in DISPLAY_UNITS.items()
+                    for key, value in DisplayUnit.OPTIONS.items()
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
