@@ -6,7 +6,7 @@ from typing import Optional
 from homeassistant.core import HomeAssistant
 
 from .session_manager import ensure_session, fetch_with_retry
-from ...const import CONF_API_KEY, CONF_DISPLAY_UNIT, DISPLAY_UNIT_CENTS
+from ...const import Config, DISPLAY_UNIT_CENTS
 from ...timezone import localize_datetime
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ class DataFetcher:
             bool: True if the API key is valid, False otherwise
         """
         # Use provided key or get from config
-        key_to_validate = api_key or self.config.get(CONF_API_KEY) or self.config.get("api_key")
+        key_to_validate = api_key or self.config.get(Config.API_KEY) or self.config.get("api_key")
 
         if not key_to_validate:
             _LOGGER.warning("No API key to validate")
@@ -55,7 +55,7 @@ class DataFetcher:
             # Default implementation - will be overridden by subclasses
             # Simply try to fetch data with the key
             test_config = dict(self.config)
-            test_config[CONF_API_KEY] = key_to_validate
+            test_config[Config.API_KEY] = key_to_validate
 
             # Create a temporary instance with the test config
             temp_instance = self.api.__class__(test_config)
@@ -147,8 +147,8 @@ class DataFetcher:
                 return None
 
             # Make sure display unit is properly passed
-            if CONF_DISPLAY_UNIT in self.config:
-                _LOGGER.debug(f"Using display unit from config: {self.config[CONF_DISPLAY_UNIT]}")
+            if Config.DISPLAY_UNIT in self.config:
+                _LOGGER.debug(f"Using display unit from config: {self.config[Config.DISPLAY_UNIT]}")
                 # Do nothing - config is already properly set up
 
             # Process the data into a consistent format
