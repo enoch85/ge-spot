@@ -15,35 +15,26 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# For convenience, establish direct references to source constants
-SOURCE_NORDPOOL = Source.NORDPOOL
-SOURCE_ENERGI_DATA_SERVICE = Source.ENERGI_DATA_SERVICE
-SOURCE_ENTSO_E = Source.ENTSO_E
-SOURCE_EPEX = Source.EPEX
-SOURCE_OMIE = Source.OMIE
-SOURCE_AEMO = Source.AEMO
-SOURCE_STROMLIGNING = Source.STROMLIGNING
-
 # Mapping of which source supports which regions
 SOURCE_REGION_SUPPORT = {
-    SOURCE_NORDPOOL: set(NORDPOOL_AREAS.keys()),
-    SOURCE_ENERGI_DATA_SERVICE: set(ENERGI_DATA_AREAS.keys()),
-    SOURCE_ENTSO_E: set(ENTSOE_AREAS.keys()),
-    SOURCE_EPEX: set(EPEX_AREAS.keys()),
-    SOURCE_OMIE: set(OMIE_AREAS.keys()),
-    SOURCE_AEMO: set(AEMO_AREAS.keys()),
-    SOURCE_STROMLIGNING: set(STROMLIGNING_AREAS.keys()),
+    Source.NORDPOOL: set(NORDPOOL_AREAS.keys()),
+    Source.ENERGI_DATA_SERVICE: set(ENERGI_DATA_AREAS.keys()),
+    Source.ENTSO_E: set(ENTSOE_AREAS.keys()),
+    Source.EPEX: set(EPEX_AREAS.keys()),
+    Source.OMIE: set(OMIE_AREAS.keys()),
+    Source.AEMO: set(AEMO_AREAS.keys()),
+    Source.STROMLIGNING: set(STROMLIGNING_AREAS.keys()),
 }
 
 # Source reliability ratings (higher is better)
 SOURCE_RELIABILITY = {
-    SOURCE_NORDPOOL: 10,  # Most reliable
-    SOURCE_ENERGI_DATA_SERVICE: 8,
-    SOURCE_ENTSO_E: 7,
-    SOURCE_EPEX: 7,
-    SOURCE_OMIE: 6,
-    SOURCE_AEMO: 6,
-    SOURCE_STROMLIGNING: 8,  # Similar reliability to Energi Data Service
+    Source.NORDPOOL: 10,  # Most reliable
+    Source.ENERGI_DATA_SERVICE: 8,
+    Source.ENTSO_E: 7,
+    Source.EPEX: 7,
+    Source.OMIE: 6,
+    Source.AEMO: 6,
+    Source.STROMLIGNING: 8,  # Similar reliability to Energi Data Service
 }
 
 class ApiRegistry:
@@ -122,13 +113,13 @@ def register_apis():
     from .stromligning import StromligningAPI
 
     # Register all APIs
-    registry.register(SOURCE_NORDPOOL, NordpoolAPI)
-    registry.register(SOURCE_ENERGI_DATA_SERVICE, EnergiDataServiceAPI)
-    registry.register(SOURCE_ENTSO_E, EntsoEAPI)
-    registry.register(SOURCE_EPEX, EpexAPI)
-    registry.register(SOURCE_OMIE, OmieAPI)
-    registry.register(SOURCE_AEMO, AemoAPI)
-    registry.register(SOURCE_STROMLIGNING, StromligningAPI)
+    registry.register(Source.NORDPOOL, NordpoolAPI)
+    registry.register(Source.ENERGI_DATA_SERVICE, EnergiDataServiceAPI)
+    registry.register(Source.ENTSO_E, EntsoEAPI)
+    registry.register(Source.EPEX, EpexAPI)
+    registry.register(Source.OMIE, OmieAPI)
+    registry.register(Source.AEMO, AemoAPI)
+    registry.register(Source.STROMLIGNING, StromligningAPI)
 
 # Register APIs on module import
 register_apis()
@@ -152,13 +143,13 @@ def get_fallback_apis(primary_source: str, config: dict):
 
     # Define fallback chain based on region compatibility
     fallback_map = {
-        SOURCE_NORDPOOL: [SOURCE_ENERGI_DATA_SERVICE, SOURCE_ENTSO_E, SOURCE_EPEX],
-        SOURCE_ENERGI_DATA_SERVICE: [SOURCE_NORDPOOL, SOURCE_ENTSO_E],
-        SOURCE_ENTSO_E: [SOURCE_NORDPOOL, SOURCE_EPEX],
-        SOURCE_EPEX: [SOURCE_ENTSO_E, SOURCE_NORDPOOL],
-        SOURCE_OMIE: [SOURCE_ENTSO_E],
-        SOURCE_AEMO: [],  # No fallbacks for AEMO currently
-        SOURCE_STROMLIGNING: [SOURCE_ENERGI_DATA_SERVICE, SOURCE_NORDPOOL],
+        Source.NORDPOOL: [Source.ENERGI_DATA_SERVICE, Source.ENTSO_E, Source.EPEX],
+        Source.ENERGI_DATA_SERVICE: [Source.NORDPOOL, Source.ENTSO_E],
+        Source.ENTSO_E: [Source.NORDPOOL, Source.EPEX],
+        Source.EPEX: [Source.ENTSO_E, Source.NORDPOOL],
+        Source.OMIE: [Source.ENTSO_E],
+        Source.AEMO: [],  # No fallbacks for AEMO currently
+        Source.STROMLIGNING: [Source.ENERGI_DATA_SERVICE, Source.NORDPOOL],
     }
 
     # Get fallback sources for this primary source
