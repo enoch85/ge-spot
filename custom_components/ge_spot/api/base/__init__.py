@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .session_manager import ensure_session, close_session, register_shutdown_task
+from .session_manager import ensure_session, close_session
 from .data_fetch import DataFetcher
 from .price_conversion import PriceConverter
 from ...timezone import localize_datetime
@@ -67,15 +67,5 @@ class BaseEnergyAPI(ABC):
 
     @abstractmethod
     async def _process_data(self, raw_data):
-        """Process raw price data into a consistent format.
-
-        The expected output format is a dictionary with keys like:
-        - current_price: price for current hour
-        - next_hour_price: price for next hour
-        - day_average_price: average price for the day
-        - peak_price: highest price of the day
-        - off_peak_price: lowest price of the day
-        - hourly_prices: dict mapping hour strings to prices
-        - raw_values: dict mapping keys to raw values before conversion
-        """
+        """Process raw price data into a consistent format."""
         pass
