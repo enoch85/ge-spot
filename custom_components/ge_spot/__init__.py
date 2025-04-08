@@ -15,17 +15,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Defer imports to this method to avoid blocking
     from .const import (
         DOMAIN,
-        CONF_AREA,
         CONF_CURRENCY,
         CONF_UPDATE_INTERVAL,
-        DEFAULT_UPDATE_INTERVAL
+        DEFAULT_UPDATE_INTERVAL,
+        Config,
     )
     from .price.currency import get_default_currency
     from .coordinator.region import RegionPriceCoordinator
     from .api.base.session_manager import register_shutdown_task
 
     # Get configuration
-    area = entry.data.get(CONF_AREA)
+    area = entry.data.get(Config.AREA)
 
     # Get currency based on region
     currency = entry.data.get(CONF_CURRENCY, get_default_currency(area))
