@@ -2,7 +2,7 @@
 import logging
 import datetime
 from ..price.conversion import async_convert_energy_price
-from ...timezone  import convert_to_local_time
+from ..timezone import convert_to_local_time
 from ..const import CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY
 
 _LOGGER = logging.getLogger(__name__)
