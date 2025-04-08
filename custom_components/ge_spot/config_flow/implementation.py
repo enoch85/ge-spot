@@ -9,12 +9,12 @@ from homeassistant.data_entry_flow import FlowResult
 
 from ..const import (
     DOMAIN,
-    CONF_AREA,
     CONF_VAT,
     CONF_API_KEY,
     CONF_SOURCE_PRIORITY,
     Currency,
     Source,
+    Config,
 )
 from ..api import get_sources_for_region, create_api
 from ..price.conversion import async_convert_energy_price
@@ -50,8 +50,8 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 # Store the area in our data
-                area = user_input[CONF_AREA]
-                self._data[CONF_AREA] = area
+                area = user_input[]
+                self._data[Config.AREA] = area
 
                 # Get list of sources that support this area
                 try:
@@ -59,11 +59,11 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                     _LOGGER.info(f"Supported sources for {area}: {self._supported_sources}")
                 except Exception as e:
                     _LOGGER.error(f"Error getting sources for {area}: {e}")
-                    self._errors[CONF_AREA] = "error_sources_for_region"
+                    self._errors[Config.AREA] = "error_sources_for_region"
                     self._supported_sources = []
 
                 if not self._supported_sources and not self._errors:
-                    self._errors[CONF_AREA] = "no_sources_for_region"
+                    self._errors[Config.AREA] = "no_sources_for_region"
                 else:
                     # Check for duplicate entries
                     await self.async_set_unique_id(f"gespot_{area}")
@@ -90,7 +90,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
             # Provide a fallback form if we can't create the proper one
             return self.async_show_form(
                 step_id="user",
-                data_schema=vol.Schema({vol.Required(CONF_AREA): str}),
+                data_schema=vol.Schema({vol.Required(Config.AREA): str}),
                 errors=self._errors,
             )
 
@@ -110,7 +110,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                         self._data[key] = user_input[key]
 
                 # Check if ENTSO-E requires an API key for this area
-                area = self._data.get(CONF_AREA)
+                area = self._data.get(Config.AREA)
                 requires_api_key = False
                 if SOURCE_ENTSO_E in self._data.get("source_priority", []):
                     # Always go to API keys step when ENTSO-E is selected
@@ -146,7 +146,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
 
                         valid_key = await validate_entso_e_api_key(
                             api_key,
-                            self._data.get(CONF_AREA),
+                            self._data.get(Config.AREA),
                             None  # No existing session
                         )
 
@@ -164,7 +164,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._errors["base"] = "unknown"
 
         # Get description for API key entry
-        area = self._data.get(CONF_AREA)
+        area = self._data.get(Config.AREA)
         description = get_entso_e_api_key_description(area)
 
         # Show API key form
@@ -178,7 +178,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     def _create_entry(self) -> FlowResult:
         """Create the config entry."""
         # Get region name for entry title
-        area = self._data.get(CONF_AREA)
+        area = self._data.get(Config.AREA)
         region_name = self._get_region_name(area)
 
         return self.async_create_entry(
