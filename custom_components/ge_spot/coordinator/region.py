@@ -11,19 +11,11 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from ..price import ElectricityPriceAdapter
 from ..const import (
     DOMAIN,
-    CONF_AREA,
-    CONF_SOURCE_PRIORITY,
-    CONF_API_KEY,
-    CONF_DISPLAY_UNIT,
+    Config,
+    Source,
+    Attributes,
+    Defaults,
     DISPLAY_UNIT_CENTS,
-    DEFAULT_DISPLAY_UNIT,
-    ATTR_LAST_UPDATED,
-    ATTR_DATA_SOURCE,
-    ATTR_FALLBACK_USED,
-    ATTR_AVAILABLE_FALLBACKS,
-    ATTR_IS_USING_FALLBACK,
-    ATTR_API_KEY_STATUS,
-    SOURCE_ENTSO_E,
 )
 from ..api import create_apis_for_region
 from ..utils.debug_utils import log_raw_data
@@ -58,10 +50,10 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         self.session = None  # Initialize session attribute to None
 
         # Create prioritized APIs for this region
-        source_priority = config.get(CONF_SOURCE_PRIORITY)
+        source_priority = config.get(Config.SOURCE_PRIORITY)
 
         # Ensure display unit is available to all APIs
-        self.display_unit = config.get(CONF_DISPLAY_UNIT, DEFAULT_DISPLAY_UNIT)
+        self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         self.use_subunit = self.display_unit == DISPLAY_UNIT_CENTS
 
         # Make sure all APIs use consistent settings for display unit
@@ -82,13 +74,13 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         api_key_status = {}
 
         # Check for ENTSO-E API key
-        if SOURCE_ENTSO_E in self.config.get(CONF_SOURCE_PRIORITY, []):
-            api_key = self.config.get(CONF_API_KEY)
+        if Source.ENTSO_E in self.config.get(Config.SOURCE_PRIORITY, []):
+            api_key = self.config.get(Config.API_KEY)
 
             if api_key:
                 # Try to find the ENTSO-E API instance
                 entsoe_api = next((api for api in self._apis
-                              if SOURCE_ENTSO_E.lower() in api.__class__.__name__.lower()), None)
+                              if Source.ENTSO_E.lower() in api.__class__.__name__.lower()), None)
 
                 if entsoe_api and hasattr(entsoe_api, "validate_api_key"):
                     try:
@@ -97,28 +89,28 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                         # Pass the area parameter and the session from the API if available
                         is_valid = await entsoe_api.validate_api_key(api_key, self.area, session)
-                        api_key_status[SOURCE_ENTSO_E] = {
+                        api_key_status[Source.ENTSO_E] = {
                             "configured": True,
                             "valid": is_valid,
                             "status": "valid" if is_valid else "invalid"
                         }
-                        _LOGGER.debug(f"ENTSO-E API key status: {api_key_status[SOURCE_ENTSO_E]}")
+                        _LOGGER.debug(f"ENTSO-E API key status: {api_key_status[Source.ENTSO_E]}")
                     except Exception as e:
                         _LOGGER.error(f"Error validating ENTSO-E API key: {e}")
-                        api_key_status[SOURCE_ENTSO_E] = {
+                        api_key_status[Source.ENTSO_E] = {
                             "configured": True,
                             "valid": False,
                             "status": "error",
                             "error": str(e)
                         }
                 else:
-                    api_key_status[SOURCE_ENTSO_E] = {
+                    api_key_status[Source.ENTSO_E] = {
                         "configured": True,
                         "valid": None,
                         "status": "unknown"
                     }
             else:
-                api_key_status[SOURCE_ENTSO_E] = {
+                api_key_status[Source.ENTSO_E] = {
                     "configured": False,
                     "valid": None,
                     "status": "not_configured"
@@ -157,7 +149,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                 try:
                     # Pass display unit setting to API
-                    api.config[CONF_DISPLAY_UNIT] = self.display_unit
+                    api.config[Config.DISPLAY_UNIT] = self.display_unit
                     api.config["price_in_cents"] = self.use_subunit
 
                     # Pass Home Assistant instance to the API for timezone handling
@@ -177,7 +169,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                         if not self._active_source:
                             self._active_source = source_type
                             self._active_api = api
-                            self._fallback_used = self._active_source != self.config.get(CONF_SOURCE_PRIORITY, [])[0]
+                            self._fallback_used = self._active_source != self.config.get(Config.SOURCE_PRIORITY, [])[0]
 
                         # Check for tomorrow data
                         if data.get("tomorrow_valid", False) or "tomorrow_hourly_prices" in data:
@@ -195,7 +187,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                     # Check API key status
                     api_key_status = await self.check_api_key_status()
-                    self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
+                    self._last_successful_data[Attributes.API_KEY_STATUS] = api_key_status
 
                     return self._last_successful_data
                 return None
@@ -232,7 +224,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 if self._last_successful_data:
                     # Check API key status
                     api_key_status = await self.check_api_key_status()
-                    self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
+                    self._last_successful_data[Attributes.API_KEY_STATUS] = api_key_status
                     return self._last_successful_data
                 return None
 
@@ -249,7 +241,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
             # Build information about data sources
             source_info = {
-                "primary_source": self.config.get(CONF_SOURCE_PRIORITY, [])[0] if self.config.get(CONF_SOURCE_PRIORITY) else None,
+                "primary_source": self.config.get(Config.SOURCE_PRIORITY, [])[0] if self.config.get(Config.SOURCE_PRIORITY) else None,
                 "active_source": self._active_source,
                 "today_source": self._today_source,
                 "tomorrow_source": self._tomorrow_source,
@@ -288,13 +280,13 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 "today_stats": today_stats,
                 "tomorrow_stats": tomorrow_stats,
                 "tomorrow_valid": self.adapter.is_tomorrow_valid(),
-                ATTR_LAST_UPDATED: dt_util.now().isoformat(),
+                Attributes.LAST_UPDATED: dt_util.now().isoformat(),
                 "next_update": next_update.isoformat(),
-                ATTR_DATA_SOURCE: self._active_source,
-                ATTR_FALLBACK_USED: self._fallback_used,
-                ATTR_IS_USING_FALLBACK: self._fallback_used,
-                ATTR_AVAILABLE_FALLBACKS: available_fallbacks,
-                ATTR_API_KEY_STATUS: api_key_status,
+                Attributes.DATA_SOURCE: self._active_source,
+                Attributes.FALLBACK_USED: self._fallback_used,
+                Attributes.IS_USING_FALLBACK: self._fallback_used,
+                Attributes.AVAILABLE_FALLBACKS: available_fallbacks,
+                Attributes.API_KEY_STATUS: api_key_status,
                 "source_info": source_info,
                 "timezone": str(self.hass.config.time_zone),
                 "exchange_rate_info": exchange_rate_info,
@@ -313,7 +305,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                 # Check API key status
                 api_key_status = await self.check_api_key_status()
-                self._last_successful_data[ATTR_API_KEY_STATUS] = api_key_status
+                self._last_successful_data[Attributes.API_KEY_STATUS] = api_key_status
 
                 return self._last_successful_data
             raise
@@ -321,12 +313,13 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
     def _map_api_to_source_type(self, api_name):
         """Map API class name to source type."""
         source_mapping = {
-            "NordpoolAPI": "nordpool",
-            "EntsoEAPI": "entsoe",
-            "EnergiDataServiceAPI": "energi_data_service",
-            "EpexAPI": "epex",
-            "OmieAPI": "omie",
-            "AemoAPI": "aemo"
+            "NordpoolAPI": Source.NORDPOOL,
+            "EntsoEAPI": Source.ENTSO_E,
+            "EnergiDataServiceAPI": Source.ENERGI_DATA_SERVICE,
+            "EpexAPI": Source.EPEX,
+            "OmieAPI": Source.OMIE,
+            "AemoAPI": Source.AEMO, 
+            "StromligningAPI": Source.STROMLIGNING
         }
 
         # Try direct mapping first
@@ -347,7 +340,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             return None
 
         # Get source priorities from config
-        priorities = self.config.get(CONF_SOURCE_PRIORITY, [])
+        priorities = self.config.get(Config.SOURCE_PRIORITY, [])
 
         # Try to find data from sources in priority order
         for source in priorities:
@@ -371,7 +364,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             return source_data[self._today_source]
 
         # Otherwise, use priority order
-        priorities = self.config.get(CONF_SOURCE_PRIORITY, [])
+        priorities = self.config.get(Config.SOURCE_PRIORITY, [])
         for source in priorities:
             if source in source_data:
                 self._tomorrow_source = source
