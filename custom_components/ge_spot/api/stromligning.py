@@ -10,7 +10,7 @@ from ..const import (
     CURRENCY_SUBUNIT_NAMES,
     ATTR_CURRENCY
 )
-from ..utils.timezone_utils import ensure_timezone_aware
+from ..timezone import ensure_timezone_aware
 
 _LOGGER = logging.getLogger(__name__)
 
