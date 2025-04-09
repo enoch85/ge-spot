@@ -6,7 +6,7 @@ from typing import Optional
 from homeassistant.core import HomeAssistant
 
 from .session_manager import ensure_session, fetch_with_retry
-from ...const import Config, DISPLAY_UNIT_CENTS
+from ...const import Config, DisplayUnit
 from ...timezone import localize_datetime
 
 _LOGGER = logging.getLogger(__name__)
