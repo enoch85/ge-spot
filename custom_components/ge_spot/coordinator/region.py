@@ -17,7 +17,7 @@ from ..const import (
     Defaults,
     DisplayUnit
 )
-from ..api import create_apis_for_region
+from ..api import fetch_day_ahead_prices, get_sources_for_region
 from ..utils.debug_utils import log_raw_data
 from ..utils.api_validator import ApiValidator
 
@@ -49,19 +49,17 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         self._last_primary_check = None
         self.session = None  # Initialize session attribute to None
 
-        # Create prioritized APIs for this region
-        source_priority = config.get(Config.SOURCE_PRIORITY)
-
-        # Ensure display unit is available to all APIs
+        # Ensure display unit is available
         self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         self.use_subunit = self.display_unit == DisplayUnit.CENTS
 
         # Make sure all APIs use consistent settings for display unit
+        self.config[Config.DISPLAY_UNIT] = self.display_unit
         self.config["price_in_cents"] = self.use_subunit
 
-        self._apis = create_apis_for_region(area, config, source_priority)
+        # Get supported sources for this region
+        self._supported_sources = get_sources_for_region(area)
         self._active_source = None
-        self._active_api = None
         self._fallback_used = False
         self._attempted_sources = []
 
@@ -78,36 +76,25 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             api_key = self.config.get(Config.API_KEY)
 
             if api_key:
-                # Try to find the ENTSO-E API instance
-                entsoe_api = next((api for api in self._apis
-                              if Source.ENTSO_E.lower() in api.__class__.__name__.lower()), None)
-
-                if entsoe_api and hasattr(entsoe_api, "validate_api_key"):
-                    try:
-                        # Get session from the API if possible
-                        session = getattr(entsoe_api, 'session', None)
-
-                        # Pass the area parameter and the session from the API if available
-                        is_valid = await entsoe_api.validate_api_key(api_key, self.area, session)
-                        api_key_status[Source.ENTSO_E] = {
-                            "configured": True,
-                            "valid": is_valid,
-                            "status": "valid" if is_valid else "invalid"
-                        }
-                        _LOGGER.debug(f"ENTSO-E API key status: {api_key_status[Source.ENTSO_E]}")
-                    except Exception as e:
-                        _LOGGER.error(f"Error validating ENTSO-E API key: {e}")
-                        api_key_status[Source.ENTSO_E] = {
-                            "configured": True,
-                            "valid": False,
-                            "status": "error",
-                            "error": str(e)
-                        }
-                else:
+                try:
+                    # Import the API module directly
+                    from ..api import entsoe
+                    
+                    # Pass the area parameter and session
+                    is_valid = await entsoe.validate_api_key(api_key, self.area, self.session)
                     api_key_status[Source.ENTSO_E] = {
                         "configured": True,
-                        "valid": None,
-                        "status": "unknown"
+                        "valid": is_valid,
+                        "status": "valid" if is_valid else "invalid"
+                    }
+                    _LOGGER.debug(f"ENTSO-E API key status: {api_key_status[Source.ENTSO_E]}")
+                except Exception as e:
+                    _LOGGER.error(f"Error validating ENTSO-E API key: {e}")
+                    api_key_status[Source.ENTSO_E] = {
+                        "configured": True,
+                        "valid": False,
+                        "status": "error",
+                        "error": str(e)
                     }
             else:
                 api_key_status[Source.ENTSO_E] = {
@@ -123,12 +110,11 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         try:
             _LOGGER.info(f"Updating data for area {self.area} with currency {self.currency}")
             _LOGGER.debug(f"Home Assistant timezone: {self.hass.config.time_zone}")
-            _LOGGER.debug(f"Using display unit: {self.display_unit}, subunit conversion: {self.use_subunit}")
+            _LOGGER.debug(f"Using display unit: {self.display_unit}, subunit: {self.use_subunit}")
 
             # Reset tracking variables
             self._fallback_used = False
             self._active_source = None
-            self._active_api = None
             self._attempted_sources = []
             self._today_source = None
             self._tomorrow_source = None
@@ -139,56 +125,62 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 "tomorrow": {}
             }
 
-            # Try to fetch data from all available sources
-            for api in self._apis:
-                api_name = api.__class__.__name__
-                source_type = self._map_api_to_source_type(api_name)
-                self._attempted_sources.append(source_type)
+            # Get source priorities
+            source_priority = self.config.get(Config.SOURCE_PRIORITY, [])
+            if not source_priority:
+                source_priority = self._supported_sources
 
-                _LOGGER.info(f"Attempting to fetch data from {api_name} ({source_type})")
+            # Try to fetch data from sources in priority order
+            for source in source_priority:
+                if source not in self._supported_sources:
+                    continue
+                    
+                self._attempted_sources.append(source)
+                _LOGGER.info(f"Attempting to fetch data from {source}")
 
                 try:
-                    # Pass display unit setting to API
-                    api.config[Config.DISPLAY_UNIT] = self.display_unit
-                    api.config["price_in_cents"] = self.use_subunit
-
-                    # Pass Home Assistant instance to the API for timezone handling
-                    data = await api.fetch_day_ahead_prices(
-                        self.area,
-                        self.currency,
-                        dt_util.now(),
+                    # Setup config for this fetch
+                    api_config = dict(self.config)
+                    api_config["session"] = self.session
+                    
+                    # Fetch data from this source
+                    data = await fetch_day_ahead_prices(
+                        source, 
+                        api_config, 
+                        self.area, 
+                        self.currency, 
+                        dt_util.now(), 
                         self.hass
                     )
 
-                    # If data is valid, store it by source
+                    # If data is valid, store it
                     if data and ApiValidator.is_data_adequate(data):
-                        source_data["today"][source_type] = data
-                        self._today_source = source_type
-
+                        source_data["today"][source] = data
+                        self._today_source = source
+                        
                         # If this is the first successful source, set as active
                         if not self._active_source:
-                            self._active_source = source_type
-                            self._active_api = api
-                            self._fallback_used = self._active_source != self.config.get(Config.SOURCE_PRIORITY, [])[0]
+                            self._active_source = source
+                            self._fallback_used = source != source_priority[0]
 
                         # Check for tomorrow data
                         if data.get("tomorrow_valid", False) or "tomorrow_hourly_prices" in data:
-                            source_data["tomorrow"][source_type] = data
-                            self._tomorrow_source = source_type
-
+                            source_data["tomorrow"][source] = data
+                            self._tomorrow_source = source
+                            
                 except Exception as e:
-                    _LOGGER.error(f"Error fetching data from {api_name}: {e}")
+                    _LOGGER.error(f"Error fetching data from {source}: {e}")
 
             # If we couldn't get today's data from any source
             if not source_data["today"]:
-                _LOGGER.error(f"Failed to fetch today's price data from any source. Attempted: {', '.join(self._attempted_sources)}")
+                _LOGGER.error(f"Failed to fetch today's price data. Attempted: {', '.join(self._attempted_sources)}")
                 if self._last_successful_data:
                     _LOGGER.warning("Using cached data from last successful update")
-
+                    
                     # Check API key status
                     api_key_status = await self.check_api_key_status()
                     self._last_successful_data[Attributes.API_KEY_STATUS] = api_key_status
-
+                    
                     return self._last_successful_data
                 return None
 
@@ -196,7 +188,6 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             today_data = self._select_primary_source_data(source_data["today"])
 
             # If tomorrow data is available from today's source, use it
-            # Otherwise, choose the best available tomorrow data from any source
             if today_data.get("tomorrow_valid", False) or "tomorrow_hourly_prices" in today_data:
                 tomorrow_data = today_data
                 _LOGGER.info(f"Using tomorrow data from same source: {self._today_source}")
@@ -234,14 +225,13 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
             # Get available fallbacks (sources after the primary)
             available_fallbacks = []
-            if len(self._apis) > 1:
-                for api in self._apis[1:]:
-                    source_type = self._map_api_to_source_type(api.__class__.__name__)
-                    available_fallbacks.append(source_type)
+            for source in source_priority[1:]:
+                if source in self._supported_sources:
+                    available_fallbacks.append(source)
 
             # Build information about data sources
             source_info = {
-                "primary_source": self.config.get(Config.SOURCE_PRIORITY, [])[0] if self.config.get(Config.SOURCE_PRIORITY) else None,
+                "primary_source": source_priority[0] if source_priority else None,
                 "active_source": self._active_source,
                 "today_source": self._today_source,
                 "tomorrow_source": self._tomorrow_source,
@@ -261,9 +251,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             # Get exchange rate info
             try:
                 from ..utils.exchange_service import get_exchange_service
-                exchange_service = await get_exchange_service()
+                exchange_service = await get_exchange_service(self.session)
                 exchange_rate_info = exchange_service.get_exchange_rate_info("EUR", self.currency)
-                _LOGGER.debug(f"Exchange rate info: {exchange_rate_info}")
             except Exception as e:
                 _LOGGER.error(f"Error getting exchange rate info: {e}")
                 exchange_rate_info = {
@@ -271,7 +260,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     "error": str(e)
                 }
 
-            # Return data that will be passed to sensors
+            # Build result data for sensors
             result = {
                 "adapter": self.adapter,
                 "current_price": self.adapter.get_current_price(),
@@ -291,7 +280,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 "timezone": str(self.hass.config.time_zone),
                 "exchange_rate_info": exchange_rate_info,
                 "display_unit": self.display_unit,
-                "use_subunit": self.use_subunit
+                "use_subunit": self.use_subunit,
+                # Include raw values from the source if available
+                "raw_values": today_data.get("raw_values", {})
             }
 
             _LOGGER.info(f"Successfully updated data with current price: {result['current_price']}")
@@ -309,30 +300,6 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                 return self._last_successful_data
             raise
-
-    def _map_api_to_source_type(self, api_name):
-        """Map API class name to source type."""
-        source_mapping = {
-            "NordpoolAPI": Source.NORDPOOL,
-            "EntsoEAPI": Source.ENTSO_E,
-            "EnergiDataServiceAPI": Source.ENERGI_DATA_SERVICE,
-            "EpexAPI": Source.EPEX,
-            "OmieAPI": Source.OMIE,
-            "AemoAPI": Source.AEMO, 
-            "StromligningAPI": Source.STROMLIGNING
-        }
-
-        # Try direct mapping first
-        if api_name in source_mapping:
-            return source_mapping[api_name]
-
-        # Fallback to case-insensitive substring search
-        for source, mapped_name in source_mapping.items():
-            if source.lower() in api_name.lower():
-                return mapped_name
-
-        # If no match, return a generic name based on API class
-        return api_name.lower().replace("api", "")
 
     def _select_primary_source_data(self, source_data):
         """Select the best source for today's data based on priority."""
@@ -377,9 +344,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
     async def async_close(self):
         """Close all API sessions."""
-        for api in self._apis:
+        if self.session:
             try:
-                if hasattr(api, 'close'):
-                    await api.close()
+                await self.session.close()
+                self.session = None
             except Exception as e:
-                _LOGGER.error(f"Error closing API {api.__class__.__name__}: {e}")
+                _LOGGER.error(f"Error closing session: {e}")
