@@ -6,14 +6,14 @@ import xml.etree.ElementTree as ET
 from .base import BaseEnergyAPI
 from ..timezone import ensure_timezone_aware
 from ..const import (
-    ENTSOE_AREA_MAPPING,
-    CONF_API_KEY,
+    AreaMapping,
+    Config,
     EntsoE,
-    URLs,
-    NetworkDefaults,
+    Network,
     TimeFormat,
     EnergyUnit,
-    ContentType
+    ContentType,
+    TimeInterval
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,11 +21,11 @@ _LOGGER = logging.getLogger(__name__)
 class EntsoEAPI(BaseEnergyAPI):
     """API handler for ENTSO-E Transparency Platform."""
 
-    BASE_URL = URLs.ENTSOE
+    BASE_URL = Network.URLs.ENTSOE
 
     async def _fetch_data(self):
         """Fetch data from ENTSO-E."""
-        api_key = self.config.get(CONF_API_KEY) or self.config.get("api_key")
+        api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
         if not api_key:
             _LOGGER.debug("No API key provided for ENTSO-E, skipping")
             return None
@@ -46,7 +46,7 @@ class EntsoEAPI(BaseEnergyAPI):
             return None
 
         # Try to use the mapped ENTSOE code if available
-        entsoe_area = ENTSOE_AREA_MAPPING.get(area, area)
+        entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area, area)
 
         _LOGGER.debug(f"Using ENTSO-E area code {entsoe_area} for area {area}")
 
@@ -64,7 +64,7 @@ class EntsoEAPI(BaseEnergyAPI):
 
         # Use custom headers for ENTSO-E API
         headers = {
-            "User-Agent": NetworkDefaults.USER_AGENT,
+            "User-Agent": Network.Defaults.USER_AGENT,
             "Accept": ContentType.XML,
             "Content-Type": ContentType.XML
         }
@@ -73,8 +73,8 @@ class EntsoEAPI(BaseEnergyAPI):
             self.BASE_URL,
             params=params,
             headers=headers,
-            timeout=NetworkDefaults.TIMEOUT,
-            max_retries=NetworkDefaults.RETRY_COUNT
+            timeout=Network.Defaults.TIMEOUT,
+            max_retries=Network.Defaults.RETRY_COUNT
         )
 
         if not response:
@@ -430,7 +430,7 @@ class EntsoEAPI(BaseEnergyAPI):
     @staticmethod
     def is_area_supported(area: str) -> bool:
         """Check if an area is supported by ENTSO-E."""
-        return area in ENTSOE_AREA_MAPPING
+        return area in AreaMapping.ENTSOE_MAPPING
 
     @staticmethod
     async def validate_api_key(api_key, area, session=None):
