@@ -1,6 +1,6 @@
 """API modules for the energy prices integration."""
 import logging
-from typing import Dict, Optional, Type, List, Set
+from typing import Dict, Optional, List, Any
 
 from ..const import (
     Source,
@@ -9,7 +9,7 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Mapping of which source supports which regions
+# Mapping of sources to supported regions
 SOURCE_REGION_SUPPORT = {
     Source.NORDPOOL: set(AreaMapping.NORDPOOL_AREAS.keys()),
     Source.ENERGI_DATA_SERVICE: set(AreaMapping.ENERGI_DATA_AREAS.keys()),
@@ -22,13 +22,13 @@ SOURCE_REGION_SUPPORT = {
 
 # Source reliability ratings (higher is better)
 SOURCE_RELIABILITY = {
-    Source.NORDPOOL: 10,  # Most reliable
+    Source.NORDPOOL: 10,
     Source.ENERGI_DATA_SERVICE: 8,
     Source.ENTSO_E: 7,
     Source.EPEX: 7,
     Source.OMIE: 6,
     Source.AEMO: 6,
-    Source.STROMLIGNING: 8,  # Similar reliability to Energi Data Service
+    Source.STROMLIGNING: 8,
 }
 
 class ApiRegistry:
@@ -38,21 +38,28 @@ class ApiRegistry:
         """Initialize the registry."""
         self._apis = {}
 
-    def register(self, source_type: str, api_class):
-        """Register an API class for a source type."""
-        self._apis[source_type] = api_class
+    def register(self, source_type: str, api_module):
+        """Register an API module for a source type."""
+        self._apis[source_type] = api_module
 
-    def create(self, source_type: str, config: dict):
-        """Create an API instance."""
-        api_class = self._apis.get(source_type)
-        if not api_class:
+    async def fetch_prices(self, source_type: str, config: dict, area: str, currency: str, 
+                          reference_time=None, hass=None):
+        """Fetch prices from a specific API."""
+        api_module = self._apis.get(source_type)
+        if not api_module:
             _LOGGER.error(f"Unknown source type: {source_type}")
             return None
 
         try:
-            return api_class(config)
+            # Make a copy of the config with area set
+            config_with_area = dict(config)
+            config_with_area["area"] = area
+            
+            return await api_module.fetch_day_ahead_prices(
+                config_with_area, area, currency, reference_time, hass, config.get("session")
+            )
         except Exception as e:
-            _LOGGER.error(f"Error creating API instance for {source_type}: {e}")
+            _LOGGER.error(f"Error fetching prices from {source_type}: {e}")
             return None
 
     def get_sources_for_region(self, region: str) -> List[str]:
@@ -68,8 +75,9 @@ class ApiRegistry:
                     key=lambda s: SOURCE_RELIABILITY.get(s, 0),
                     reverse=True)
 
-    def create_apis_for_region(self, region: str, config: dict,
-                            source_priority: Optional[List[str]] = None) -> List:
+    async def create_apis_for_region(self, region: str, config: dict,
+                                   currency: str, reference_time=None, hass=None,
+                                   source_priority: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Create API instances for all sources supporting a region."""
         if source_priority:
             # Use custom priority order
@@ -78,81 +86,80 @@ class ApiRegistry:
             # Use default order by reliability
             sources = self.get_sources_for_region(region)
 
-        _LOGGER.debug(f"Creating APIs for region {region} with priority: {sources}")
+        _LOGGER.debug(f"Fetching prices for region {region} with priority: {sources}")
 
-        # Create a copy of the config with the area set
-        config_with_area = dict(config)
-        config_with_area["area"] = region
-
-        apis = []
+        results = []
         for source in sources:
-            api = self.create(source, config_with_area)
-            if api:
-                apis.append(api)
+            data = await self.fetch_prices(source, config, region, currency, reference_time, hass)
+            if data:
+                data["source"] = source
+                data["fallback_used"] = sources[0] != source
+                results.append(data)
 
-        return apis
+        return results
+
+    def get_fallback_chain(self, primary_source: str, area: str) -> List[str]:
+        """Get list of fallback sources for a primary source."""
+        # Define fallback chain based on region compatibility
+        fallback_map = {
+            Source.NORDPOOL: [Source.ENERGI_DATA_SERVICE, Source.ENTSO_E, Source.EPEX],
+            Source.ENERGI_DATA_SERVICE: [Source.NORDPOOL, Source.ENTSO_E],
+            Source.ENTSO_E: [Source.NORDPOOL, Source.EPEX],
+            Source.EPEX: [Source.ENTSO_E, Source.NORDPOOL],
+            Source.OMIE: [Source.ENTSO_E],
+            Source.AEMO: [],  # No fallbacks for AEMO currently
+            Source.STROMLIGNING: [Source.ENERGI_DATA_SERVICE, Source.NORDPOOL],
+        }
+
+        # Get fallback sources for this primary source
+        fallbacks = fallback_map.get(primary_source, [])
+        
+        # Filter to only include sources that support this area
+        return [s for s in fallbacks if area in SOURCE_REGION_SUPPORT.get(s, set())]
 
 # Global registry
 registry = ApiRegistry()
 
 def register_apis():
     """Register all available API handlers."""
-    # Import here to avoid circular imports
-    from .nordpool import NordpoolAPI
-    from .energi_data import EnergiDataServiceAPI
-    from .entsoe import EntsoEAPI
-    from .epex import EpexAPI
-    from .omie import OmieAPI
-    from .aemo import AemoAPI
-    from .stromligning import StromligningAPI
+    # Import APIs
+    from . import nordpool
+    from . import energi_data
+    from . import entsoe
+    from . import epex
+    from . import omie
+    from . import aemo
+    from . import stromligning
 
     # Register all APIs
-    registry.register(Source.NORDPOOL, NordpoolAPI)
-    registry.register(Source.ENERGI_DATA_SERVICE, EnergiDataServiceAPI)
-    registry.register(Source.ENTSO_E, EntsoEAPI)
-    registry.register(Source.EPEX, EpexAPI)
-    registry.register(Source.OMIE, OmieAPI)
-    registry.register(Source.AEMO, AemoAPI)
-    registry.register(Source.STROMLIGNING, StromligningAPI)
+    registry.register(Source.NORDPOOL, nordpool)
+    registry.register(Source.ENERGI_DATA_SERVICE, energi_data)
+    registry.register(Source.ENTSO_E, entsoe)
+    registry.register(Source.EPEX, epex)
+    registry.register(Source.OMIE, omie)
+    registry.register(Source.AEMO, aemo)
+    registry.register(Source.STROMLIGNING, stromligning)
 
 # Register APIs on module import
 register_apis()
 
-def create_api(source_type: str, config: dict):
-    """Create an API instance."""
-    return registry.create(source_type, config)
+async def fetch_day_ahead_prices(source_type: str, config: dict, area: str, currency: str, 
+                               reference_time=None, hass=None):
+    """Fetch prices from a specific API."""
+    return await registry.fetch_prices(source_type, config, area, currency, reference_time, hass)
 
 def get_sources_for_region(region: str) -> List[str]:
     """Get sources supporting a region in priority order."""
     return registry.get_sources_for_region(region)
 
-def create_apis_for_region(region: str, config: dict,
-                        source_priority: Optional[List[str]] = None) -> List:
-    """Create prioritized API instances for a region."""
-    return registry.create_apis_for_region(region, config, source_priority)
+async def create_apis_for_region(region: str, config: dict, 
+                               source_priority: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Create API instances for all sources supporting a region."""
+    currency = config.get("currency", "EUR")
+    return await registry.create_apis_for_region(
+        region, config, currency, None, None, source_priority
+    )
 
-def get_fallback_apis(primary_source: str, config: dict):
-    """Get list of fallback API instances for a primary source."""
-    fallbacks = []
-
-    # Define fallback chain based on region compatibility
-    fallback_map = {
-        Source.NORDPOOL: [Source.ENERGI_DATA_SERVICE, Source.ENTSO_E, Source.EPEX],
-        Source.ENERGI_DATA_SERVICE: [Source.NORDPOOL, Source.ENTSO_E],
-        Source.ENTSO_E: [Source.NORDPOOL, Source.EPEX],
-        Source.EPEX: [Source.ENTSO_E, Source.NORDPOOL],
-        Source.OMIE: [Source.ENTSO_E],
-        Source.AEMO: [],  # No fallbacks for AEMO currently
-        Source.STROMLIGNING: [Source.ENERGI_DATA_SERVICE, Source.NORDPOOL],
-    }
-
-    # Get fallback sources for this primary source
-    fallback_sources = fallback_map.get(primary_source, [])
-
-    # Create API instances for each fallback source
-    for source in fallback_sources:
-        fallback_api = registry.create(source, config)
-        if fallback_api:
-            fallbacks.append(fallback_api)
-
-    return fallbacks
+def get_fallback_chain(primary_source: str, area: str) -> List[str]:
+    """Get list of fallback sources for a primary source."""
+    return registry.get_fallback_chain(primary_source, area)
