@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from .base import BaseEnergyAPI
 from ..const import (
     Config,
-    DISPLAY_UNIT_CENTS
+    DisplayUnit
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ class EpexAPI(BaseEnergyAPI):
         try:
             # Get display unit setting from config
             display_unit = self.config.get(Config.DISPLAY_UNIT)
-            use_subunit = display_unit == DISPLAY_UNIT_CENTS
+            use_subunit = display_unit == DisplayUnit.CENTS
 
             # Parse HTML
             soup = BeautifulSoup(data, 'html.parser')
