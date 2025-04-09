@@ -4,9 +4,11 @@ import datetime
 import xml.etree.ElementTree as ET
 from .base import BaseEnergyAPI
 from ..timezone import ensure_timezone_aware
+from ..price.conversion import async_convert_energy_price
 from ..const import (
     AreaMapping,
     Config,
+    DisplayUnit,
     EntsoE,
     Network,
     TimeFormat,
@@ -121,6 +123,13 @@ class EntsoEAPI(BaseEnergyAPI):
             all_hourly_prices = []
 
             _LOGGER.debug(f"Found {len(time_series_elements)} TimeSeries elements in ENTSO-E response")
+
+            # Determine if we should convert to subunit
+            use_subunit = None
+            if Config.DISPLAY_UNIT in self.config:
+                use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
+            else:
+                use_subunit = self.config.get("price_in_cents", False)
 
             # Process each TimeSeries separately to compare them
             for ts_index, ts in enumerate(time_series_elements):
@@ -259,11 +268,17 @@ class EntsoEAPI(BaseEnergyAPI):
                     "price": price
                 })
 
-                # Convert price using the centralized method
-                converted_price = await self._convert_price(
+                # Convert price using core conversion function directly
+                converted_price = await async_convert_energy_price(
                     price=price,
+                    from_unit=EnergyUnit.MWH,
+                    to_unit="kWh",
                     from_currency=currency,
-                    from_unit=EnergyUnit.MWH
+                    to_currency=self._currency,
+                    vat=self.vat,
+                    to_subunit=use_subunit,
+                    session=self.session,
+                    exchange_rate=None
                 )
 
                 # Store converted price
