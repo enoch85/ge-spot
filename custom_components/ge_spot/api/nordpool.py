@@ -1,318 +1,299 @@
-"""API module for Nordpool."""
+"""API handler for Nordpool."""
 import logging
 import datetime
-from .base import BaseEnergyAPI
-from ..timezone import parse_datetime, localize_datetime
-from ..const import (
-    Currency, Area, AreaMapping, TimeFormat, EnergyUnit, 
-    Nordpool, Attributes, Network, Config, DisplayUnit
-)
+from typing import Dict, Any, Optional
+
+from ..utils.api_client import ApiClient
 from ..price.conversion import async_convert_energy_price
+from ..timezone.parsers import parse_datetime
+from ..timezone.converters import localize_datetime
+from ..const import (
+    Currency, AreaMapping, TimeFormat, EnergyUnit, 
+    Network, Config, DisplayUnit
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-class NordpoolAPI(BaseEnergyAPI):
-    """API handler for Nordpool."""
+BASE_URL = Network.URLs.NORDPOOL
 
-    BASE_URL = Network.URLs.NORDPOOL
-
-    async def _fetch_data(self):
-        """Fetch data from Nordpool."""
-        try:
-            now = self._get_now()
-            _LOGGER.debug(f"Current local time from _get_now: {now.isoformat()}")
-
-            today = now.strftime(TimeFormat.DATE_ONLY)
-            tomorrow = (now + datetime.timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
-
-            area = self.config.get("area", Nordpool.DEFAULT_AREA)
-
-            # Map the area names to the API's delivery area codes
-            delivery_area = AreaMapping.NORDPOOL_DELIVERY.get(area, area)
-            _LOGGER.debug(f"Fetching Nordpool data for area: {delivery_area}")
-
-            # Fetch today's data
-            params = {
-                "currency": Currency.EUR,  # Always request in EUR, we'll convert later
-                "date": today,
-                "market": Nordpool.MARKET_DAYAHEAD,
-                "deliveryArea": delivery_area
-            }
-
-            today_data = await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
-
-            if today_data is None:
-                _LOGGER.error(f"Failed to fetch today's data for {delivery_area}")
-                return None
-
-            # Fetch tomorrow's data if after 13:00 CET
-            tomorrow_data = None
-            now_utc = datetime.datetime.now(datetime.timezone.utc)
-            now_cet = now_utc.astimezone(datetime.timezone(datetime.timedelta(hours=1)))
-
-            if now_cet.hour >= 13:
-                params["date"] = tomorrow
-                tomorrow_data = await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
-
-            return {
-                "today": today_data,
-                "tomorrow": tomorrow_data,
-                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            }
-
-        except Exception as e:
-            _LOGGER.error(f"Error in _fetch_data: {str(e)}", exc_info=True)
+async def fetch_day_ahead_prices(config, area, currency, reference_time=None, hass=None, session=None):
+    """Fetch day-ahead prices using Nordpool API."""
+    client = ApiClient(session=session)
+    try:
+        # Settings
+        use_subunit = config.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS
+        vat = config.get(Config.VAT, 0)
+        
+        # Fetch raw data
+        raw_data = await _fetch_data(client, config, area, reference_time)
+        if not raw_data:
             return None
+        
+        # Process data
+        result = await _process_data(raw_data, area, currency, vat, use_subunit, reference_time, hass, session)
+        
+        # Add metadata
+        if result:
+            result["data_source"] = "Nordpool"
+            result["last_updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            result["currency"] = currency
+        
+        return result
+    finally:
+        if not session and client:
+            await client.close()
 
-    async def _process_data(self, raw_data):
-        """Process the data from Nordpool."""
-        if not raw_data or "today" not in raw_data:
-            return None
-
-        today_data = raw_data["today"]
-        tomorrow_data = raw_data.get("tomorrow")
-
-        if "multiAreaEntries" not in today_data:
-            _LOGGER.error("Missing multiAreaEntries in Nordpool data")
-            return None
-
-        area = self.config.get("area", Nordpool.DEFAULT_AREA)
-
-        # Get current time from Home Assistant in local timezone
-        now = self._get_now()
-        current_hour = now.hour
-        _LOGGER.debug(f"Current local time: {now.isoformat()}, hour: {current_hour}")
-
-        # Dictionary to store results
-        result = {
-            "current_price": None,
-            "next_hour_price": None,
-            "day_average_price": None,
-            "peak_price": None,
-            "off_peak_price": None,
-            "hourly_prices": {},
-            "last_updated": raw_data.get("timestamp"),
-            "raw_today": [],
-            "raw_tomorrow": [],
-            "raw_values": {},
-            "currency": self._currency
+async def _fetch_data(client, config, area, reference_time):
+    """Fetch data from Nordpool."""
+    try:
+        if reference_time is None:
+            reference_time = datetime.datetime.now(datetime.timezone.utc)
+        
+        today = reference_time.strftime(TimeFormat.DATE_ONLY)
+        tomorrow = (reference_time + datetime.timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
+        
+        # Map area to Nordpool delivery area
+        delivery_area = AreaMapping.NORDPOOL_DELIVERY.get(area, area)
+        _LOGGER.debug(f"Fetching Nordpool data for area: {delivery_area}")
+        
+        # Fetch today's data
+        params = {
+            "currency": Currency.EUR,  # Always request in EUR, convert later
+            "date": today,
+            "market": "Elspot",
+            "deliveryArea": delivery_area
         }
+        
+        today_data = await client.fetch(BASE_URL, params=params)
+        
+        # Fetch tomorrow's data if after 13:00 CET
+        tomorrow_data = None
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        now_cet = now_utc.astimezone(datetime.timezone(datetime.timedelta(hours=1)))
+        
+        if now_cet.hour >= 13:
+            params["date"] = tomorrow
+            tomorrow_data = await client.fetch(BASE_URL, params=params)
+        
+        return {
+            "today": today_data,
+            "tomorrow": tomorrow_data,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        _LOGGER.error(f"Error fetching Nordpool data: {e}", exc_info=True)
+        return None
 
-        # Process today's data
-        entries = today_data.get("multiAreaEntries", [])
-        all_prices = []
-
-        # Determine if we should convert to subunit
-        use_subunit = None
-        if Config.DISPLAY_UNIT in self.config:
-            use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
-        else:
-            use_subunit = self.config.get("price_in_cents", False)
-
-        for entry in entries:
+async def _process_data(data, area, currency, vat, use_subunit, reference_time, hass, session):
+    """Process data from Nordpool."""
+    if not data or "today" not in data:
+        return None
+    
+    today_data = data["today"]
+    tomorrow_data = data.get("tomorrow")
+    
+    if "multiAreaEntries" not in today_data:
+        _LOGGER.error("Missing multiAreaEntries in Nordpool data")
+        return None
+    
+    # Get current time
+    now = reference_time or datetime.datetime.now(datetime.timezone.utc)
+    if hass:
+        now = localize_datetime(now, hass)
+    current_hour = now.hour
+    
+    # Initialize result structure
+    result = {
+        "current_price": None,
+        "next_hour_price": None,
+        "day_average_price": None,
+        "peak_price": None,
+        "off_peak_price": None,
+        "hourly_prices": {},
+        "raw_values": {},
+        "raw_prices": []
+    }
+    
+    # Process today's data
+    all_prices = []
+    hourly_prices = {}
+    
+    for entry in today_data.get("multiAreaEntries", []):
+        if not isinstance(entry, dict) or "entryPerArea" not in entry:
+            continue
+        
+        if area not in entry["entryPerArea"]:
+            continue
+        
+        # Extract values
+        start_time = entry.get("deliveryStart")
+        end_time = entry.get("deliveryEnd")
+        raw_price = entry["entryPerArea"][area]
+        
+        # Store in raw data
+        result["raw_prices"].append({
+            "start": start_time,
+            "end": end_time,
+            "price": raw_price
+        })
+        
+        # Convert to float if needed
+        if isinstance(raw_price, str):
+            try:
+                raw_price = float(raw_price)
+            except (ValueError, TypeError):
+                continue
+        
+        try:
+            # Parse timestamp
+            dt = parse_datetime(start_time)
+            
+            # Convert to local time
+            local_dt = dt
+            if hass:
+                local_dt = localize_datetime(dt, hass)
+            
+            # Convert price
+            converted_price = await async_convert_energy_price(
+                price=raw_price,
+                from_unit=EnergyUnit.MWH,
+                to_unit="kWh",
+                from_currency=Currency.EUR,
+                to_currency=currency,
+                vat=vat,
+                to_subunit=use_subunit,
+                session=session
+            )
+            
+            # Store hourly price
+            hour = local_dt.hour
+            hour_str = f"{hour:02d}:00"
+            hourly_prices[hour_str] = converted_price
+            all_prices.append(converted_price)
+            
+            # Check if current hour
+            if hour == current_hour:
+                result["current_price"] = converted_price
+                result["raw_values"]["current_price"] = {
+                    "raw": raw_price,
+                    "unit": f"{Currency.EUR}/MWh",
+                    "final": converted_price,
+                    "currency": currency,
+                    "vat_rate": vat
+                }
+            
+            # Check if next hour
+            if hour == (current_hour + 1) % 24:
+                result["next_hour_price"] = converted_price
+                result["raw_values"]["next_hour_price"] = {
+                    "raw": raw_price,
+                    "unit": f"{Currency.EUR}/MWh",
+                    "final": converted_price,
+                    "currency": currency,
+                    "vat_rate": vat
+                }
+                
+        except Exception as e:
+            _LOGGER.error(f"Error processing timestamp {start_time}: {e}")
+            continue
+    
+    # Check if we have exactly 24 prices
+    if len(hourly_prices) != 24 and len(hourly_prices) > 0:
+        _LOGGER.warning(f"Expected 24 hourly prices, got {len(hourly_prices)}. Prices may be incomplete.")
+    
+    # Add hourly prices
+    result["hourly_prices"] = hourly_prices
+    
+    # Calculate statistics
+    if all_prices:
+        result["day_average_price"] = sum(all_prices) / len(all_prices)
+        result["peak_price"] = max(all_prices)
+        result["off_peak_price"] = min(all_prices)
+        
+        # Add raw values for stats
+        result["raw_values"]["day_average_price"] = {
+            "value": result["day_average_price"],
+            "calculation": "average of all hourly prices"
+        }
+        result["raw_values"]["peak_price"] = {
+            "value": result["peak_price"],
+            "calculation": "maximum of all hourly prices"
+        }
+        result["raw_values"]["off_peak_price"] = {
+            "value": result["off_peak_price"],
+            "calculation": "minimum of all hourly prices"
+        }
+    
+    # Process tomorrow data if available
+    if tomorrow_data and "multiAreaEntries" in tomorrow_data:
+        tomorrow_hourly_prices = {}
+        tomorrow_prices = []
+        tomorrow_raw_prices = []
+        
+        # Process similar to today's data
+        for entry in tomorrow_data.get("multiAreaEntries", []):
             if not isinstance(entry, dict) or "entryPerArea" not in entry:
                 continue
-
+            
             if area not in entry["entryPerArea"]:
                 continue
-
+            
             # Extract values
             start_time = entry.get("deliveryStart")
             end_time = entry.get("deliveryEnd")
             raw_price = entry["entryPerArea"][area]
-
+            
             # Store in raw data
-            result["raw_today"].append({
+            tomorrow_raw_prices.append({
                 "start": start_time,
                 "end": end_time,
                 "price": raw_price
             })
-
+            
             # Convert to float if needed
             if isinstance(raw_price, str):
                 try:
                     raw_price = float(raw_price)
                 except (ValueError, TypeError):
                     continue
-
+            
+            # Similar processing as for today's data
             try:
-                # Parse the datetime correctly without timezone assumptions
                 dt = parse_datetime(start_time)
-
-                # Debug the timestamps to check timezone handling
-                _LOGGER.debug(f"Original timestamp: {start_time}, Parsed: {dt.isoformat()}")
-
-                # Convert to HA's local timezone
                 local_dt = dt
-                if hasattr(self, "hass") and self.hass:
-                    local_dt = localize_datetime(dt, self.hass)
-                    _LOGGER.debug(f"Localized using HA timezone: {local_dt.isoformat()}")
-                else:
-                    from homeassistant.util import dt as dt_util
-                    local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
-                    _LOGGER.debug(f"Localized using default timezone: {local_dt.isoformat()}")
-
-                # Convert price using core conversion function
+                if hass:
+                    local_dt = localize_datetime(dt, hass)
+                
                 converted_price = await async_convert_energy_price(
                     price=raw_price,
                     from_unit=EnergyUnit.MWH,
                     to_unit="kWh",
                     from_currency=Currency.EUR,
-                    to_currency=self._currency,
-                    vat=self.vat,
+                    to_currency=currency,
+                    vat=vat,
                     to_subunit=use_subunit,
-                    session=self.session,
-                    exchange_rate=None
+                    session=session
                 )
-
-                # Store in hourly prices using local hour
-                hour = local_dt.hour
-                hour_str = f"{hour:02d}:00"
-                result["hourly_prices"][hour_str] = converted_price
-                all_prices.append(converted_price)
-
-                # Check if this is current hour based on local time comparison
-                if hour == current_hour:
-                    result["current_price"] = converted_price
-                    _LOGGER.debug(f"Found current hour price ({hour_str}): {converted_price}")
-                    # Store raw value information with detailed timestamp info
-                    result["raw_values"]["current_price"] = {
-                        "raw": raw_price,
-                        "unit": f"{Currency.EUR}/MWh",
-                        "final": converted_price,
-                        "currency": self._currency,
-                        "vat_rate": self.vat
-                    }
-
-                # Check if this is next hour
-                elif hour == (current_hour + 1) % 24:
-                    result["next_hour_price"] = converted_price
-                    _LOGGER.debug(f"Found next hour price ({hour_str}): {converted_price}")
-                    # Store raw value information
-                    result["raw_values"]["next_hour_price"] = {
-                        "raw": raw_price,
-                        "unit": f"{Currency.EUR}/MWh",
-                        "final": converted_price,
-                        "currency": self._currency,
-                        "vat_rate": self.vat
-                    }
-            except (ValueError, TypeError) as e:
-                _LOGGER.error(f"Error processing timestamp {start_time}: {e}")
+                
+                hour_str = f"{local_dt.hour:02d}:00"
+                tomorrow_hourly_prices[hour_str] = converted_price
+                tomorrow_prices.append(converted_price)
+                
+            except Exception as e:
+                _LOGGER.error(f"Error processing tomorrow timestamp {start_time}: {e}")
                 continue
-
-        # Calculate statistics
-        if all_prices:
-            result["day_average_price"] = sum(all_prices) / len(all_prices)
-            result["peak_price"] = max(all_prices)
-            result["off_peak_price"] = min(all_prices)
-
-            # Store raw value information for statistics
-            result["raw_values"]["day_average_price"] = {
-                "value": result["day_average_price"],
-                "calculation": "average of all hourly prices"
-            }
-            result["raw_values"]["peak_price"] = {
-                "value": result["peak_price"],
-                "calculation": "maximum of all hourly prices"
-            }
-            result["raw_values"]["off_peak_price"] = {
-                "value": result["off_peak_price"],
-                "calculation": "minimum of all hourly prices"
-            }
-
-        # Process tomorrow's data if available
-        if tomorrow_data and "multiAreaEntries" in tomorrow_data:
-            tomorrow_entries = tomorrow_data.get("multiAreaEntries", [])
-            tomorrow_prices = []
-            result["tomorrow_hourly_prices"] = {}
-
-            for entry in tomorrow_entries:
-                if not isinstance(entry, dict) or "entryPerArea" not in entry:
-                    continue
-
-                if area not in entry["entryPerArea"]:
-                    continue
-
-                # Extract values
-                start_time = entry.get("deliveryStart")
-                end_time = entry.get("deliveryEnd")
-                raw_price = entry["entryPerArea"][area]
-
-                # Store in raw data
-                result["raw_tomorrow"].append({
-                    "start": start_time,
-                    "end": end_time,
-                    "price": raw_price
-                })
-
-                # Convert to float if needed
-                if isinstance(raw_price, str):
-                    try:
-                        raw_price = float(raw_price)
-                    except (ValueError, TypeError):
-                        continue
-
-                try:
-                    # Parse the datetime correctly
-                    dt = parse_datetime(start_time)
-
-                    # Convert to local time
-                    local_dt = dt
-                    if hasattr(self, "hass") and self.hass:
-                        local_dt = localize_datetime(dt, self.hass)
-                    else:
-                        from homeassistant.util import dt as dt_util
-                        local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
-
-                    # Convert price using core conversion function
-                    converted_price = await async_convert_energy_price(
-                        price=raw_price,
-                        from_unit=EnergyUnit.MWH,
-                        to_unit="kWh",
-                        from_currency=Currency.EUR,
-                        to_currency=self._currency,
-                        vat=self.vat,
-                        to_subunit=use_subunit,
-                        session=self.session,
-                        exchange_rate=None
-                    )
-
-                    # Store in hourly prices using local hour
-                    hour = local_dt.hour
-                    hour_str = f"{hour:02d}:00"
-                    result["tomorrow_hourly_prices"][hour_str] = converted_price
-                    tomorrow_prices.append(converted_price)
-
-                except (ValueError, TypeError) as e:
-                    _LOGGER.error(f"Error processing tomorrow timestamp {start_time}: {e}")
-                    continue
-
-            # Calculate tomorrow statistics
-            if tomorrow_prices:
-                result["tomorrow_average_price"] = sum(tomorrow_prices) / len(tomorrow_prices)
-                result["tomorrow_peak_price"] = max(tomorrow_prices)
-                result["tomorrow_off_peak_price"] = min(tomorrow_prices)
-                result["tomorrow_valid"] = len(tomorrow_prices) >= 20  # At least 20 hours
-
-                # Store raw values for tomorrow
-                result["raw_values"]["tomorrow_average_price"] = {
-                    "value": result["tomorrow_average_price"],
-                    "calculation": "average of all tomorrow's prices"
-                }
-                result["raw_values"]["tomorrow_peak_price"] = {
-                    "value": result["tomorrow_peak_price"],
-                    "calculation": "maximum of all tomorrow's prices"
-                }
-                result["raw_values"]["tomorrow_off_peak_price"] = {
-                    "value": result["tomorrow_off_peak_price"],
-                    "calculation": "minimum of all tomorrow's prices"
-                }
-
-        # Include meta-information
-        from homeassistant.util import dt as dt_util
-        result["state_class"] = "total"
-        result["vat"] = self.vat
-        result["data_source"] = "NordpoolAPI"
-        result["timezone"] = str(dt_util.DEFAULT_TIME_ZONE)
-
-        return result
+        
+        # Check for exactly 24 prices for tomorrow
+        if len(tomorrow_hourly_prices) != 24 and len(tomorrow_hourly_prices) > 0:
+            _LOGGER.warning(f"Expected 24 prices for tomorrow, got {len(tomorrow_hourly_prices)}.")
+                
+        # Add tomorrow data
+        if tomorrow_prices:
+            result["tomorrow_hourly_prices"] = tomorrow_hourly_prices
+            result["raw_tomorrow"] = tomorrow_raw_prices
+            result["tomorrow_average_price"] = sum(tomorrow_prices) / len(tomorrow_prices)
+            result["tomorrow_peak_price"] = max(tomorrow_prices)
+            result["tomorrow_off_peak_price"] = min(tomorrow_prices)
+            result["tomorrow_valid"] = len(tomorrow_prices) >= 20
+    
+    return result
