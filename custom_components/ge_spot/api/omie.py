@@ -7,9 +7,11 @@ from typing import Optional, Dict, Any
 
 from .base import BaseEnergyAPI
 from ..timezone import localize_datetime, parse_datetime
+from ..price.conversion import async_convert_energy_price
 from ..const import (
     Timezone,
     Config,
+    DisplayUnit,
     Currency,
     EnergyUnit
 )
@@ -107,6 +109,13 @@ class OmieAPI(BaseEnergyAPI):
             current_hour = now.hour
             next_hour = (current_hour + 1) % 24
 
+            # Determine if we should convert to subunit
+            use_subunit = None
+            if Config.DISPLAY_UNIT in self.config:
+                use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
+            else:
+                use_subunit = self.config.get("price_in_cents", False)
+
             # Process each row looking for Spanish/Portuguese price data based on area
             area = self.config.get("area", OmieConstants.DEFAULT_AREA)
             price_field_name = OmieConstants.PRICE_FIELD_ES
@@ -147,11 +156,17 @@ class OmieAPI(BaseEnergyAPI):
                                 "price": price
                             })
 
-                            # Convert price using centralized method
-                            converted_price = await self._convert_price(
+                            # Convert price using core conversion function directly
+                            converted_price = await async_convert_energy_price(
                                 price=price,
+                                from_unit=EnergyUnit.MWH,
+                                to_unit="kWh",
                                 from_currency=Currency.EUR,
-                                from_unit=EnergyUnit.MWH
+                                to_currency=self._currency,
+                                vat=self.vat,
+                                to_subunit=use_subunit,
+                                session=self.session,
+                                exchange_rate=None
                             )
 
                             hour_str = f"{hour:02d}:00"
