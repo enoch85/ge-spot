@@ -4,6 +4,7 @@ from .session_manager import ensure_session, close_session, fetch_with_retry, re
 from .data_fetch import DataFetcher
 
 __all__ = [
+    'BaseEnergyAPI',
     'ensure_session',
     'close_session',
     'fetch_with_retry',
