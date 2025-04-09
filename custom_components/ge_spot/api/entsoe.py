@@ -1,7 +1,6 @@
 """API handler for ENTSO-E Transparency Platform."""
 import logging
 import datetime
-import asyncio
 import xml.etree.ElementTree as ET
 from .base import BaseEnergyAPI
 from ..timezone import ensure_timezone_aware
@@ -13,7 +12,8 @@ from ..const import (
     TimeFormat,
     EnergyUnit,
     ContentType,
-    TimeInterval
+    TimeInterval,
+    Currency
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,7 +35,6 @@ class EntsoEAPI(BaseEnergyAPI):
         tomorrow = today + datetime.timedelta(days=1)
 
         # Format dates for ENTSO-E API (YYYYMMDDHHMM format)
-        # Use 01:00 (1 AM) as the time part as shown in the ENTSO-E examples
         period_start = today.strftime(TimeFormat.ENTSOE_DATE_HOUR)
         period_end = tomorrow.strftime(TimeFormat.ENTSOE_DATE_HOUR)
 
@@ -128,7 +127,7 @@ class EntsoEAPI(BaseEnergyAPI):
                 # Extract TimeSeries metadata for identification
                 business_type = self._find_element_text(ts, f".//{EntsoE.XMLNS_NS}:businessType", nsmap, "unknown")
                 curve_type = self._find_element_text(ts, f".//{EntsoE.XMLNS_NS}:curveType", nsmap, "unknown")
-                currency = self._find_element_text(ts, f".//{EntsoE.XMLNS_NS}:currency_Unit.name", nsmap, "EUR")
+                currency = self._find_element_text(ts, f".//{EntsoE.XMLNS_NS}:currency_Unit.name", nsmap, Currency.EUR)
                 unit_name = self._find_element_text(ts, f".//{EntsoE.XMLNS_NS}:price_Measure_Unit.name", nsmap, "unknown")
 
                 _LOGGER.debug(f"TimeSeries {ts_index+1}: businessType={business_type}, curveType={curve_type}, "
@@ -205,9 +204,6 @@ class EntsoEAPI(BaseEnergyAPI):
                         local_time = self._convert_to_local(position_time)
                         hour_str = local_time.strftime(TimeFormat.HOUR_ONLY)
 
-                        # Debug the timezone conversion
-                        _LOGGER.debug(f"Position time: {position_time.isoformat()} → Local time: {local_time.isoformat()}")
-
                         # Store in hourly prices
                         if hour_str not in hourly_prices:
                             hourly_prices[hour_str] = price
@@ -226,8 +222,6 @@ class EntsoEAPI(BaseEnergyAPI):
                     })
 
             # If we have multiple TimeSeries, select the correct one
-            # For SE4 with EUR, the actual spot prices are usually the day-ahead allocation (A62)
-            # with the lowest values around peak hours
             selected_series = self._select_best_time_series(all_hourly_prices)
 
             if not selected_series:
@@ -281,8 +275,10 @@ class EntsoEAPI(BaseEnergyAPI):
                     current_price = converted_price
                     raw_values["current_price"] = {
                         "raw": price,
-                        "converted": converted_price,
-                        "hour": current_hour
+                        "unit": f"{currency}/MWh",
+                        "final": converted_price,
+                        "currency": self._currency,
+                        "vat_rate": self.vat
                     }
 
                 # Check if this is next hour
@@ -291,8 +287,10 @@ class EntsoEAPI(BaseEnergyAPI):
                     next_hour_price = converted_price
                     raw_values["next_hour_price"] = {
                         "raw": price,
-                        "converted": converted_price,
-                        "hour": next_hour
+                        "unit": f"{currency}/MWh",
+                        "final": converted_price,
+                        "currency": self._currency,
+                        "vat_rate": self.vat
                     }
 
             # Calculate statistics
@@ -301,9 +299,18 @@ class EntsoEAPI(BaseEnergyAPI):
             off_peak_price = min(all_converted_prices) if all_converted_prices else None
 
             # Store raw value details for statistics
-            raw_values["day_average_price"] = {"value": day_average_price}
-            raw_values["peak_price"] = {"value": peak_price}
-            raw_values["off_peak_price"] = {"value": off_peak_price}
+            raw_values["day_average_price"] = {
+                "value": day_average_price,
+                "calculation": "average of all hourly prices"
+            }
+            raw_values["peak_price"] = {
+                "value": peak_price,
+                "calculation": "maximum of all hourly prices"
+            }
+            raw_values["off_peak_price"] = {
+                "value": off_peak_price,
+                "calculation": "minimum of all hourly prices"
+            }
 
             # Ensure we have data for current hour
             if current_price is None and final_hourly_prices:
@@ -346,11 +353,7 @@ class EntsoEAPI(BaseEnergyAPI):
             return None
 
     def _select_best_time_series(self, all_series):
-        """Select the best TimeSeries to use for price data.
-
-        For ENTSO-E, the XML can contain multiple TimeSeries elements with different data.
-        We need to determine which one contains the actual spot prices.
-        """
+        """Select the best TimeSeries to use for price data."""
         if not all_series:
             return None
 
@@ -434,16 +437,7 @@ class EntsoEAPI(BaseEnergyAPI):
 
     @staticmethod
     async def validate_api_key(api_key, area, session=None):
-        """Validate an API key by making a test request.
-
-        Args:
-            api_key: The ENTSO-E API key to validate
-            area: The area code to test with
-            session: Optional aiohttp session
-
-        Returns:
-            bool: True if the API key is valid, False otherwise
-        """
+        """Validate an API key by making a test request."""
         try:
             # Create a temporary API instance
             config = {
