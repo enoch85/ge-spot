@@ -4,6 +4,7 @@ import datetime
 from typing import Dict, Any, Optional
 
 from .base import BaseEnergyAPI
+from ..price.conversion import async_convert_energy_price
 from ..const import (
     Config,
     DisplayUnit,
@@ -75,6 +76,13 @@ class StromligningAPI(BaseEnergyAPI):
             current_hour = now.hour
             raw_values = {}
             
+            # Determine if we should convert to subunit
+            use_subunit = None
+            if Config.DISPLAY_UNIT in self.config:
+                use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
+            else:
+                use_subunit = self.config.get("price_in_cents", False)
+            
             for price_entry in data["prices"]:
                 # Extract timestamp and price
                 if "date" not in price_entry or "price" not in price_entry:
@@ -120,12 +128,18 @@ class StromligningAPI(BaseEnergyAPI):
                         }
                     })
                     
-                    # Use centralized conversion method
+                    # Use core conversion function directly
                     # Note: Stromligning returns prices in DKK/kWh already, so we only need to convert currency if needed
-                    converted_price = await self._convert_price(
+                    converted_price = await async_convert_energy_price(
                         price=total_price,
+                        from_unit=EnergyUnit.KWH,
+                        to_unit="kWh",
                         from_currency=StromligningConstants.DEFAULT_CURRENCY,
-                        from_unit=EnergyUnit.KWH  # Already in kWh
+                        to_currency=self._currency,
+                        vat=self.vat,
+                        to_subunit=use_subunit,
+                        session=self.session,
+                        exchange_rate=None
                     )
                     
                     # Store in hourly prices
