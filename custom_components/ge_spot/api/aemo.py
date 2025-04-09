@@ -2,6 +2,7 @@
 import logging
 import datetime
 from .base import BaseEnergyAPI
+from ..price.conversion import async_convert_energy_price
 from ..const import (
     Config,
     DisplayUnit,
