@@ -5,8 +5,9 @@ from .base import BaseEnergyAPI
 from ..timezone import parse_datetime, localize_datetime
 from ..const import (
     Currency, Area, AreaMapping, TimeFormat, EnergyUnit, 
-    Nordpool, Attributes, Network
+    Nordpool, Attributes, Network, Config, DisplayUnit
 )
+from ..price.conversion import async_convert_energy_price
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,6 +102,13 @@ class NordpoolAPI(BaseEnergyAPI):
         entries = today_data.get("multiAreaEntries", [])
         all_prices = []
 
+        # Determine if we should convert to subunit
+        use_subunit = None
+        if Config.DISPLAY_UNIT in self.config:
+            use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
+        else:
+            use_subunit = self.config.get("price_in_cents", False)
+
         for entry in entries:
             if not isinstance(entry, dict) or "entryPerArea" not in entry:
                 continue
@@ -144,11 +152,17 @@ class NordpoolAPI(BaseEnergyAPI):
                     local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
                     _LOGGER.debug(f"Localized using default timezone: {local_dt.isoformat()}")
 
-                # Convert price using the centralized method
-                converted_price = await self._convert_price(
+                # Convert price using core conversion function
+                converted_price = await async_convert_energy_price(
                     price=raw_price,
+                    from_unit=EnergyUnit.MWH,
+                    to_unit="kWh",
                     from_currency=Currency.EUR,
-                    from_unit=EnergyUnit.MWH
+                    to_currency=self._currency,
+                    vat=self.vat,
+                    to_subunit=use_subunit,
+                    session=self.session,
+                    exchange_rate=None
                 )
 
                 # Store in hourly prices using local hour
@@ -250,11 +264,17 @@ class NordpoolAPI(BaseEnergyAPI):
                         from homeassistant.util import dt as dt_util
                         local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
 
-                    # Convert price using the centralized method
-                    converted_price = await self._convert_price(
+                    # Convert price using core conversion function
+                    converted_price = await async_convert_energy_price(
                         price=raw_price,
+                        from_unit=EnergyUnit.MWH,
+                        to_unit="kWh",
                         from_currency=Currency.EUR,
-                        from_unit=EnergyUnit.MWH
+                        to_currency=self._currency,
+                        vat=self.vat,
+                        to_subunit=use_subunit,
+                        session=self.session,
+                        exchange_rate=None
                     )
 
                     # Store in hourly prices using local hour
