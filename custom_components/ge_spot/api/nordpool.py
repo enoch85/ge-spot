@@ -144,7 +144,8 @@ class NordpoolAPI(BaseEnergyAPI):
                     local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
                     _LOGGER.debug(f"Localized using default timezone: {local_dt.isoformat()}")
 
-                # Convert price using the centralized method - no explicit exchange_rate
+                # Convert price using the centralized method
+                # Don't pass exchange_rate from API as it may be incorrect
                 converted_price = await self._convert_price(
                     price=raw_price,
                     from_currency=Currency.EUR,
@@ -254,7 +255,8 @@ class NordpoolAPI(BaseEnergyAPI):
                         from homeassistant.util import dt as dt_util
                         local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
 
-                    # Convert price using the centralized method - no explicit exchange_rate
+                    # Convert price using the centralized method
+                    # Don't pass exchange_rate from API as it may be incorrect
                     converted_price = await self._convert_price(
                         price=raw_price,
                         from_currency=Currency.EUR,
