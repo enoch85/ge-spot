@@ -369,6 +369,17 @@ class AreaMapping:
         Area.DK2: "Denmark (DK2)",
     }
 
+    # All areas combined for lookup
+    ALL_AREAS = {
+        'nordpool': NORDPOOL_AREAS,
+        'energi_data_service': ENERGI_DATA_AREAS,
+        'entsoe': ENTSOE_AREAS,
+        'epex': EPEX_AREAS,
+        'omie': OMIE_AREAS,
+        'aemo': AEMO_AREAS,
+        'stromligning': STROMLIGNING_AREAS
+    }
+
     # Default areas for each source
     DEFAULT_AREAS = {
         "nordpool": Area.SE4,
