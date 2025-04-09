@@ -15,9 +15,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Defer imports to this method to avoid blocking
     from .const import (
         DOMAIN,
-        CONF_CURRENCY,
-        CONF_UPDATE_INTERVAL,
-        DEFAULT_UPDATE_INTERVAL,
         Config,
     )
     from .price.currency import get_default_currency
@@ -28,7 +25,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     area = entry.data.get(Config.AREA)
 
     # Get currency based on region
-    currency = entry.data.get(CONF_CURRENCY, get_default_currency(area))
+    currency = entry.data.get(Config.CURRENCY, get_default_currency(area))
 
     _LOGGER = logging.getLogger(__name__)
     _LOGGER.debug(f"Setting up integration for area: {area}, currency: {currency}")
@@ -45,8 +42,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Get update interval (prefer options over data, with fallback to default)
     # Convert update interval to integer to avoid TypeError
     update_interval = int(entry.options.get(
-        CONF_UPDATE_INTERVAL,
-        entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        Config.UPDATE_INTERVAL,
+        entry.data.get(Config.UPDATE_INTERVAL, 60)  # Use default of 60 minutes
     ))
 
     # Create a data coordinator
