@@ -3,8 +3,10 @@ import logging
 import datetime
 from bs4 import BeautifulSoup
 from .base import BaseEnergyAPI
+from ..price.conversion import async_convert_energy_price
 from ..const import (
     Config,
+    DisplayUnit,
     Currency,
     EnergyUnit
 )
@@ -87,6 +89,13 @@ class EpexAPI(BaseEnergyAPI):
             now = self._get_now()
             current_hour = now.hour
 
+            # Determine if we should convert to subunit
+            use_subunit = None
+            if Config.DISPLAY_UNIT in self.config:
+                use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
+            else:
+                use_subunit = self.config.get("price_in_cents", False)
+
             # Parse delivery date
             delivery_date = None
             if delivery_date_str:
@@ -137,11 +146,17 @@ class EpexAPI(BaseEnergyAPI):
                     api_currency = Currency.EUR
                     from_unit = EnergyUnit.MWH
 
-                    # Convert price using centralized method
-                    converted_price = await self._convert_price(
+                    # Convert price using core conversion function directly
+                    converted_price = await async_convert_energy_price(
                         price=price,
+                        from_unit=from_unit,
+                        to_unit="kWh",
                         from_currency=api_currency,
-                        from_unit=from_unit
+                        to_currency=self._currency,
+                        vat=self.vat,
+                        to_subunit=use_subunit,
+                        session=self.session,
+                        exchange_rate=None
                     )
 
                     # Format hour string and store price
