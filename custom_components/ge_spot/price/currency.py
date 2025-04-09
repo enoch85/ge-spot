@@ -2,17 +2,13 @@
 import logging
 from typing import Tuple, Optional
 
-from ..const import (
-    REGION_TO_CURRENCY,
-    CURRENCY_SUBUNIT_MULTIPLIER,
-    CURRENCY_SUBUNIT_NAMES
-)
+from ..const import CurrencyInfo
 
 _LOGGER = logging.getLogger(__name__)
 
 def get_default_currency(region: str) -> str:
     """Get the default currency for a region."""
-    currency = REGION_TO_CURRENCY.get(region, "EUR")
+    currency = CurrencyInfo.REGION_TO_CURRENCY.get(region, "EUR")
     _LOGGER.debug(f"Using default currency for region {region}: {currency}")
     return currency
 
@@ -21,7 +17,7 @@ def convert_to_subunit(value: float, currency: str) -> float:
     if value is None:
         return None
 
-    multiplier = CURRENCY_SUBUNIT_MULTIPLIER.get(currency, 100)
+    multiplier = CurrencyInfo.SUBUNIT_MULTIPLIER.get(currency, 100)
     result = value * multiplier
 
     subunit_name = get_subunit_name(currency)
@@ -31,7 +27,7 @@ def convert_to_subunit(value: float, currency: str) -> float:
 
 def get_subunit_name(currency: str) -> str:
     """Get the name of a currency's subunit."""
-    subunit = CURRENCY_SUBUNIT_NAMES.get(currency, "cents")
+    subunit = CurrencyInfo.SUBUNIT_NAMES.get(currency, "cents")
     return subunit
 
 def format_price(price: float, currency: str, use_subunit: bool = False, precision: int = 3) -> Tuple[Optional[float], str]:
