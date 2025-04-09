@@ -4,26 +4,20 @@ from typing import Dict, Optional, Type, List, Set
 
 from ..const import (
     Source,
-    NORDPOOL_AREAS,
-    ENERGI_DATA_AREAS,
-    ENTSOE_AREAS,
-    EPEX_AREAS,
-    OMIE_AREAS,
-    AEMO_AREAS,
-    STROMLIGNING_AREAS,
+    AreaMapping
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 # Mapping of which source supports which regions
 SOURCE_REGION_SUPPORT = {
-    Source.NORDPOOL: set(NORDPOOL_AREAS.keys()),
-    Source.ENERGI_DATA_SERVICE: set(ENERGI_DATA_AREAS.keys()),
-    Source.ENTSO_E: set(ENTSOE_AREAS.keys()),
-    Source.EPEX: set(EPEX_AREAS.keys()),
-    Source.OMIE: set(OMIE_AREAS.keys()),
-    Source.AEMO: set(AEMO_AREAS.keys()),
-    Source.STROMLIGNING: set(STROMLIGNING_AREAS.keys()),
+    Source.NORDPOOL: set(AreaMapping.NORDPOOL_AREAS.keys()),
+    Source.ENERGI_DATA_SERVICE: set(AreaMapping.ENERGI_DATA_AREAS.keys()),
+    Source.ENTSO_E: set(AreaMapping.ENTSOE_AREAS.keys()),
+    Source.EPEX: set(AreaMapping.EPEX_AREAS.keys()),
+    Source.OMIE: set(AreaMapping.OMIE_AREAS.keys()),
+    Source.AEMO: set(AreaMapping.AEMO_AREAS.keys()),
+    Source.STROMLIGNING: set(AreaMapping.STROMLIGNING_AREAS.keys()),
 }
 
 # Source reliability ratings (higher is better)
