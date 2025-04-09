@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Union
 from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
 
-from ..const import AREA_TIMEZONES, PeriodType, TimeFormat
+from ..const import Timezone, PeriodType, TimeFormat
 from .parsers import parse_datetime
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def convert_to_local_time(dt: datetime, area: str) -> datetime:
         dt = dt.replace(tzinfo=dt_util.UTC)
 
     # Get the timezone for this area
-    tz_name = AREA_TIMEZONES.get(area)
+    tz_name = Timezone.AREA_TIMEZONES.get(area)
 
     # Try with Home Assistant's timezone utilities
     try:
