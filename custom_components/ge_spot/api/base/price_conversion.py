@@ -36,6 +36,8 @@ class PriceConverter:
             to_subunit: Whether to convert to currency subunit (cents, öre)
                         If None, uses config setting
             exchange_rate: Optional explicit exchange rate to use
+                          NOTE: API-provided exchange rates may be incorrect,
+                          prefer to use exchange service by leaving this as None
 
         Returns:
             The converted price value
@@ -53,6 +55,11 @@ class PriceConverter:
             else:
                 use_subunit = self.config.get("price_in_cents", False)
 
+        # For energy market data, generally the exchange rates provided by APIs
+        # are less reliable than our dedicated exchange service. Therefore,
+        # we ignore the provided exchange_rate and always use the exchange service.
+        # This ensures consistent and accurate currency conversion.
+        
         # Perform conversion using the unified utility function
         converted_price = await async_convert_energy_price(
             price=price,
@@ -63,7 +70,7 @@ class PriceConverter:
             vat=self.vat,
             to_subunit=use_subunit,
             session=self.session,
-            exchange_rate=exchange_rate
+            exchange_rate=None  # Always use exchange service for accurate rates
         )
 
         _LOGGER.debug(
