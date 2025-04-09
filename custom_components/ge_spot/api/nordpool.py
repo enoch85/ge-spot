@@ -145,7 +145,6 @@ class NordpoolAPI(BaseEnergyAPI):
                     _LOGGER.debug(f"Localized using default timezone: {local_dt.isoformat()}")
 
                 # Convert price using the centralized method
-                # Don't pass exchange_rate from API as it may be incorrect
                 converted_price = await self._convert_price(
                     price=raw_price,
                     from_currency=Currency.EUR,
@@ -166,11 +165,9 @@ class NordpoolAPI(BaseEnergyAPI):
                     result["raw_values"]["current_price"] = {
                         "raw": raw_price,
                         "unit": f"{Currency.EUR}/MWh",
-                        "converted": converted_price,
-                        "hour_str": hour_str,
-                        "local_hour": hour,
-                        "api_timestamp": start_time,
-                        "local_time": local_dt.isoformat()
+                        "final": converted_price,
+                        "currency": self._currency,
+                        "vat_rate": self.vat
                     }
 
                 # Check if this is next hour
@@ -181,11 +178,9 @@ class NordpoolAPI(BaseEnergyAPI):
                     result["raw_values"]["next_hour_price"] = {
                         "raw": raw_price,
                         "unit": f"{Currency.EUR}/MWh",
-                        "converted": converted_price,
-                        "hour_str": hour_str,
-                        "local_hour": hour,
-                        "api_timestamp": start_time,
-                        "local_time": local_dt.isoformat()
+                        "final": converted_price,
+                        "currency": self._currency,
+                        "vat_rate": self.vat
                     }
             except (ValueError, TypeError) as e:
                 _LOGGER.error(f"Error processing timestamp {start_time}: {e}")
@@ -256,7 +251,6 @@ class NordpoolAPI(BaseEnergyAPI):
                         local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
 
                     # Convert price using the centralized method
-                    # Don't pass exchange_rate from API as it may be incorrect
                     converted_price = await self._convert_price(
                         price=raw_price,
                         from_currency=Currency.EUR,
