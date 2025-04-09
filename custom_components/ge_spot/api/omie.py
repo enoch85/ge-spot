@@ -8,9 +8,9 @@ from typing import Optional, Dict, Any
 from .base import BaseEnergyAPI
 from ..timezone import localize_datetime, parse_datetime
 from ..const import (
-    AREA_TIMEZONES,
-    CONF_DISPLAY_UNIT,
-    DISPLAY_UNIT_CENTS
+    Timezone,
+    Config,
+    DisplayUnit
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -82,8 +82,8 @@ class OmieAPI(BaseEnergyAPI):
 
         try:
             # Get display unit setting from config
-            display_unit = self.config.get(CONF_DISPLAY_UNIT)
-            use_subunit = display_unit == DISPLAY_UNIT_CENTS
+            display_unit = self.config.get(Config.DISPLAY_UNIT)
+            use_subunit = display_unit == DisplayUnit.CENTS
 
             raw_data = data["raw_data"]
             target_date = data["target_date"]
