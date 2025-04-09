@@ -160,6 +160,24 @@ async def create_apis_for_region(region: str, config: dict,
         region, config, currency, None, None, source_priority
     )
 
+async def create_api(source_type: str, config: dict, area: str = None, currency: str = None, 
+                   reference_time=None, hass=None):
+    """Create an API instance for a specific source type."""
+    # Get the API handler for this source
+    api_module = registry._apis.get(source_type)
+    if not api_module:
+        _LOGGER.error(f"Unknown source type: {source_type}")
+        return None
+    
+    # For class-based APIs (like EntsoEAPI)
+    api_class_name = source_type.title().replace("_", "") + "API"
+    if hasattr(api_module, api_class_name):
+        api_class = getattr(api_module, api_class_name)
+        return api_class(config)
+    
+    # For function-based APIs, return the module
+    return api_module
+
 def get_fallback_chain(primary_source: str, area: str) -> List[str]:
     """Get list of fallback sources for a primary source."""
     return registry.get_fallback_chain(primary_source, area)
