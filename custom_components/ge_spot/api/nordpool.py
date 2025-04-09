@@ -97,15 +97,6 @@ class NordpoolAPI(BaseEnergyAPI):
             "currency": self._currency
         }
 
-        # Extract exchange rate if available
-        exchange_rate = None
-        if "exchangeRate" in today_data:
-            try:
-                exchange_rate = float(today_data["exchangeRate"])
-                _LOGGER.debug(f"Using exchange rate from API: {exchange_rate}")
-            except (ValueError, TypeError):
-                _LOGGER.warning(f"Invalid exchange rate in API data: {today_data.get('exchangeRate')}")
-
         # Process today's data
         entries = today_data.get("multiAreaEntries", [])
         all_prices = []
@@ -153,12 +144,11 @@ class NordpoolAPI(BaseEnergyAPI):
                     local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
                     _LOGGER.debug(f"Localized using default timezone: {local_dt.isoformat()}")
 
-                # Convert price using the centralized method
+                # Convert price using the centralized method - no explicit exchange_rate
                 converted_price = await self._convert_price(
                     price=raw_price,
                     from_currency=Currency.EUR,
-                    from_unit=EnergyUnit.MWH,
-                    exchange_rate=exchange_rate
+                    from_unit=EnergyUnit.MWH
                 )
 
                 # Store in hourly prices using local hour
@@ -179,8 +169,7 @@ class NordpoolAPI(BaseEnergyAPI):
                         "hour_str": hour_str,
                         "local_hour": hour,
                         "api_timestamp": start_time,
-                        "local_time": local_dt.isoformat(),
-                        "exchange_rate": exchange_rate
+                        "local_time": local_dt.isoformat()
                     }
 
                 # Check if this is next hour
@@ -195,8 +184,7 @@ class NordpoolAPI(BaseEnergyAPI):
                         "hour_str": hour_str,
                         "local_hour": hour,
                         "api_timestamp": start_time,
-                        "local_time": local_dt.isoformat(),
-                        "exchange_rate": exchange_rate
+                        "local_time": local_dt.isoformat()
                     }
             except (ValueError, TypeError) as e:
                 _LOGGER.error(f"Error processing timestamp {start_time}: {e}")
@@ -227,16 +215,6 @@ class NordpoolAPI(BaseEnergyAPI):
             tomorrow_entries = tomorrow_data.get("multiAreaEntries", [])
             tomorrow_prices = []
             result["tomorrow_hourly_prices"] = {}
-
-            # Extract exchange rate for tomorrow if available
-            tomorrow_exchange_rate = None
-            if "exchangeRate" in tomorrow_data:
-                try:
-                    tomorrow_exchange_rate = float(tomorrow_data["exchangeRate"])
-                    _LOGGER.debug(f"Using exchange rate from API for tomorrow: {tomorrow_exchange_rate}")
-                except (ValueError, TypeError):
-                    _LOGGER.warning(f"Invalid exchange rate in API data for tomorrow: {tomorrow_data.get('exchangeRate')}")
-                    tomorrow_exchange_rate = exchange_rate  # Fallback to today's rate
 
             for entry in tomorrow_entries:
                 if not isinstance(entry, dict) or "entryPerArea" not in entry:
@@ -276,12 +254,11 @@ class NordpoolAPI(BaseEnergyAPI):
                         from homeassistant.util import dt as dt_util
                         local_dt = dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
 
-                    # Convert price using the centralized method
+                    # Convert price using the centralized method - no explicit exchange_rate
                     converted_price = await self._convert_price(
                         price=raw_price,
                         from_currency=Currency.EUR,
-                        from_unit=EnergyUnit.MWH,
-                        exchange_rate=tomorrow_exchange_rate
+                        from_unit=EnergyUnit.MWH
                     )
 
                     # Store in hourly prices using local hour
