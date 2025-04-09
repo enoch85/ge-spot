@@ -7,15 +7,9 @@ from ..const import (
     Config,
     Defaults,
     Source,
-    NORDPOOL_AREAS,
-    ENERGI_DATA_AREAS,
-    ENTSOE_AREAS,
-    EPEX_AREAS,
-    OMIE_AREAS,
-    AEMO_AREAS,
-    ENTSOE_AREA_MAPPING,
-    DISPLAY_UNITS,
-    UPDATE_INTERVAL_OPTIONS,
+    AreaMapping,
+    DisplayUnit,
+    UpdateInterval
 )
 from ..api import get_sources_for_region, create_api
 
@@ -23,12 +17,12 @@ _LOGGER = logging.getLogger(__name__)
 
 # Mapping of source to area dictionaries for convenience
 SOURCE_AREA_MAPS = {
-    Source.NORDPOOL: NORDPOOL_AREAS,
-    Source.ENERGI_DATA_SERVICE: ENERGI_DATA_AREAS,
-    Source.ENTSO_E: ENTSOE_AREAS,
-    Source.EPEX: EPEX_AREAS,
-    Source.OMIE: OMIE_AREAS,
-    Source.AEMO: AEMO_AREAS,
+    Source.NORDPOOL: AreaMapping.NORDPOOL_AREAS,
+    Source.ENERGI_DATA_SERVICE: AreaMapping.ENERGI_DATA_AREAS,
+    Source.ENTSO_E: AreaMapping.ENTSOE_AREAS,
+    Source.EPEX: AreaMapping.EPEX_AREAS,
+    Source.OMIE: AreaMapping.OMIE_AREAS,
+    Source.AEMO: AreaMapping.AEMO_AREAS,
 }
 
 # Define a list of API sources in priority order for UI display
@@ -92,7 +86,7 @@ def get_source_priority_schema(supported_sources):
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": key, "label": value}
-                        for key, value in DISPLAY_UNITS.items()
+                        for key, value in DisplayUnit.OPTIONS.items()
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
@@ -105,7 +99,7 @@ def get_api_keys_schema(area, existing_api_key=None):
     schema_dict = {}
 
     # Make API key optional if area is supported by ENTSO-E mapping
-    is_supported = area in ENTSOE_AREA_MAPPING
+    is_supported = area in AreaMapping.ENTSOE_MAPPING
     has_existing = existing_api_key is not None
 
     # Prepare field - optional for supported areas or if we have an existing key
@@ -145,7 +139,7 @@ def get_options_schema(defaults, supported_sources):
             selector.SelectSelectorConfig(
                 options=[
                     {"value": key, "label": value}
-                    for key, value in DISPLAY_UNITS.items()
+                    for key, value in DisplayUnit.OPTIONS.items()
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
