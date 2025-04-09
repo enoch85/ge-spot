@@ -2,67 +2,107 @@
 import logging
 import datetime
 import json
-from .base import BaseEnergyAPI
+from typing import Dict, Any, Optional
+
+from ..utils.api_client import ApiClient
 from ..price.conversion import async_convert_energy_price
-from ..const import Config, DisplayUnit
+from ..timezone.parsers import parse_datetime
+from ..timezone.converters import localize_datetime
+from ..const import (Config, DisplayUnit, EnergyUnit)
 
 _LOGGER = logging.getLogger(__name__)
 
-class EnergiDataServiceAPI(BaseEnergyAPI):
-    """API handler for Energi Data Service."""
+BASE_URL = "https://api.energidataservice.dk/dataset/Elspotprices"
 
-    BASE_URL = "https://api.energidataservice.dk/dataset/Elspotprices"
-
-    async def _fetch_data(self):
-        """Fetch data from Energi Data Service."""
-        now = self._get_now()
-        today = now.strftime("%Y-%m-%d")
-        tomorrow = (now + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-
-        area = self.config.get("area", "DK1")  # Default to Western Denmark
-
-        params = {
-            "start": f"{today}T00:00",
-            "end": f"{tomorrow}T00:00",
-            "filter": json.dumps({"PriceArea": area}),
-            "sort": "HourDK",
-            "timezone": "dk",
-        }
-
-        _LOGGER.debug(f"Fetching Energi Data Service with params: {params}")
-
-        return await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
-
-    async def _process_data(self, data):
-        """Process the data from Energi Data Service."""
-        if not data or "records" not in data or not data["records"]:
+async def fetch_day_ahead_prices(config, area, currency, reference_time=None, hass=None, session=None):
+    """Fetch day-ahead prices using Energi Data Service API."""
+    client = ApiClient(session=session)
+    try:
+        # Settings
+        use_subunit = config.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS
+        vat = config.get(Config.VAT, 0)
+        
+        # Fetch raw data
+        raw_data = await _fetch_data(client, config, area, reference_time)
+        if not raw_data:
             return None
+        
+        # Process data
+        result = await _process_data(raw_data, area, currency, vat, use_subunit, reference_time, hass, session)
+        
+        # Add metadata
+        if result:
+            result["data_source"] = "EnergiDataService"
+            result["last_updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            result["currency"] = currency
+        
+        return result
+    finally:
+        if not session and client:
+            await client.close()
 
-        records = data["records"]
-        now = self._get_now()
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
+async def _fetch_data(client, config, area, reference_time):
+    """Fetch data from Energi Data Service."""
+    if reference_time is None:
+        reference_time = datetime.datetime.now(datetime.timezone.utc)
+    
+    today = reference_time.strftime("%Y-%m-%d")
+    tomorrow = (reference_time + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
 
-        # Find current price
-        current_price = None
-        next_hour_price = None
-        hourly_prices = {}
-        all_prices = []
-        raw_values = {}
-        raw_prices = []
+    # Use area from config
+    area_code = config.get("area", "DK1")  # Default to Western Denmark
 
-        # Get the API's currency - default to DKK for this API
-        api_currency = data.get("currency", "DKK")
+    params = {
+        "start": f"{today}T00:00",
+        "end": f"{tomorrow}T00:00",
+        "filter": json.dumps({"PriceArea": area_code}),
+        "sort": "HourDK",
+        "timezone": "dk",
+    }
 
-        # Determine if we should convert to subunit
-        use_subunit = None
-        if Config.DISPLAY_UNIT in self.config:
-            use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
-        else:
-            use_subunit = self.config.get("price_in_cents", False)
+    _LOGGER.debug(f"Fetching Energi Data Service with params: {params}")
 
-        for record in records:
-            hour_dk = datetime.datetime.fromisoformat(record["HourDK"].replace("Z", "+00:00"))
+    return await client.fetch(BASE_URL, params=params)
 
+async def _process_data(data, area, currency, vat, use_subunit, reference_time, hass, session):
+    """Process data from Energi Data Service."""
+    if not data or "records" not in data or not data["records"]:
+        return None
+
+    records = data["records"]
+    
+    # Get current time
+    now = reference_time or datetime.datetime.now(datetime.timezone.utc)
+    if hass:
+        now = localize_datetime(now, hass)
+    current_hour = now.hour
+
+    # Initialize result structure
+    result = {
+        "current_price": None,
+        "next_hour_price": None,
+        "day_average_price": None,
+        "peak_price": None,
+        "off_peak_price": None,
+        "hourly_prices": {},
+        "raw_values": {},
+        "raw_prices": []
+    }
+
+    # Get the API's currency (default to DKK for Energi Data Service)
+    api_currency = data.get("currency", "DKK")
+    
+    # Process each record
+    all_prices = []
+    hourly_prices = {}
+    
+    for record in records:
+        try:
+            # Parse timestamp
+            hour_dk = parse_datetime(record["HourDK"])
+            if hass:
+                hour_dk = localize_datetime(hour_dk, hass)
+            
             # Store raw price from API
             raw_price = record.get("SpotPriceDKK", 0)
             if not isinstance(raw_price, (int, float)):
@@ -71,88 +111,82 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
                 except (ValueError, TypeError):
                     _LOGGER.warning(f"Invalid price value: {raw_price}")
                     continue
-
-            # Store the record in raw prices list
-            raw_prices.append({
+            
+            # Store in raw prices list
+            result["raw_prices"].append({
                 "start": hour_dk.isoformat(),
                 "end": (hour_dk + datetime.timedelta(hours=1)).isoformat(),
                 "price": raw_price
             })
-
-            # Use core conversion function directly
+            
+            # Convert price
             converted_price = await async_convert_energy_price(
                 price=raw_price,
-                from_unit="MWh",
+                from_unit=EnergyUnit.MWH,
                 to_unit="kWh",
                 from_currency=api_currency,
-                to_currency=self._currency,
-                vat=self.vat,
+                to_currency=currency,
+                vat=vat,
                 to_subunit=use_subunit,
-                session=self.session,
-                exchange_rate=None
+                session=session
             )
-
-            all_prices.append(converted_price)
-
-            # Store in hourly prices
-            hour_str = hour_dk.strftime("%H:%M")
+            
+            # Store hourly price
+            hour_str = f"{hour_dk.hour:02d}:00"
             hourly_prices[hour_str] = converted_price
-
-            # Check if this is current hour
-            if hour_dk.hour == current_hour.hour and hour_dk.day == current_hour.day:
-                current_price = converted_price
-                raw_values["current_price"] = {
+            all_prices.append(converted_price)
+            
+            # Check if current hour
+            if hour_dk.hour == current_hour and hour_dk.day == now.day:
+                result["current_price"] = converted_price
+                result["raw_values"]["current_price"] = {
                     "raw": raw_price,
                     "unit": f"{api_currency}/MWh",
                     "final": converted_price,
-                    "currency": self._currency,
-                    "vat_rate": self.vat
+                    "currency": currency,
+                    "vat_rate": vat
                 }
-
-            # Check if this is next hour
-            next_hour = current_hour + datetime.timedelta(hours=1)
-            if hour_dk.hour == next_hour.hour and hour_dk.day == next_hour.day:
-                next_hour_price = converted_price
-                raw_values["next_hour_price"] = {
+            
+            # Check if next hour
+            next_hour = (current_hour + 1) % 24
+            if hour_dk.hour == next_hour and hour_dk.day == now.day:
+                result["next_hour_price"] = converted_price
+                result["raw_values"]["next_hour_price"] = {
                     "raw": raw_price,
                     "unit": f"{api_currency}/MWh",
                     "final": converted_price,
-                    "currency": self._currency,
-                    "vat_rate": self.vat
+                    "currency": currency,
+                    "vat_rate": vat
                 }
-
-        # Calculate day average
-        day_average_price = sum(all_prices) / len(all_prices) if all_prices else None
-
-        # Find peak (highest) and off-peak (lowest) prices
-        peak_price = max(all_prices) if all_prices else None
-        off_peak_price = min(all_prices) if all_prices else None
-
-        # Store raw values for statistics
-        raw_values["day_average_price"] = {
-            "value": day_average_price,
+        except Exception as e:
+            _LOGGER.error(f"Error processing record: {e}")
+            continue
+    
+    # Check if we have exactly 24 hourly prices
+    if len(hourly_prices) != 24 and len(hourly_prices) > 0:
+        _LOGGER.warning(f"Expected 24 hourly prices, got {len(hourly_prices)}. Prices may be incomplete.")
+    
+    # Add hourly prices
+    result["hourly_prices"] = hourly_prices
+    
+    # Calculate statistics
+    if all_prices:
+        result["day_average_price"] = sum(all_prices) / len(all_prices)
+        result["peak_price"] = max(all_prices)
+        result["off_peak_price"] = min(all_prices)
+        
+        # Add raw values for stats
+        result["raw_values"]["day_average_price"] = {
+            "value": result["day_average_price"],
             "calculation": "average of all hourly prices"
         }
-
-        raw_values["peak_price"] = {
-            "value": peak_price,
+        result["raw_values"]["peak_price"] = {
+            "value": result["peak_price"],
             "calculation": "maximum of all hourly prices"
         }
-
-        raw_values["off_peak_price"] = {
-            "value": off_peak_price,
+        result["raw_values"]["off_peak_price"] = {
+            "value": result["off_peak_price"],
             "calculation": "minimum of all hourly prices"
         }
-
-        return {
-            "current_price": current_price,
-            "next_hour_price": next_hour_price,
-            "day_average_price": day_average_price,
-            "peak_price": peak_price,
-            "off_peak_price": off_peak_price,
-            "hourly_prices": hourly_prices,
-            "raw_values": raw_values,
-            "raw_prices": raw_prices,
-            "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "currency": self._currency
-        }
+    
+    return result
