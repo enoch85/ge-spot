@@ -8,8 +8,9 @@ from homeassistant.util import dt as dt_util
 
 from .session_manager import ensure_session, close_session
 from .data_fetch import DataFetcher
-from .price_conversion import PriceConverter
+from ...price.conversion import async_convert_energy_price
 from ...timezone import localize_datetime
+from ...const import Config, DisplayUnit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +34,6 @@ class BaseEnergyAPI(ABC):
 
         # Create utilities
         self.data_fetcher = DataFetcher(self)
-        self.price_converter = PriceConverter(self)
 
     async def validate_api_key(self, api_key=None):
         """Validate an API key."""
@@ -45,8 +45,23 @@ class BaseEnergyAPI(ABC):
 
     async def _convert_price(self, price, from_currency="EUR", from_unit="MWh", to_subunit=None, exchange_rate=None):
         """Convert price using centralized conversion logic."""
-        return await self.price_converter.convert_price(
-            price, from_currency, from_unit, to_subunit, exchange_rate
+        use_subunit = to_subunit
+        if use_subunit is None:
+            if Config.DISPLAY_UNIT in self.config:
+                use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
+            else:
+                use_subunit = self.config.get("price_in_cents", False)
+                
+        return await async_convert_energy_price(
+            price=price,
+            from_unit=from_unit,
+            to_unit="kWh",
+            from_currency=from_currency,
+            to_currency=self._currency,
+            vat=self.vat,
+            to_subunit=use_subunit,
+            session=self.session,
+            exchange_rate=None  # Always use exchange service for accurate rates
         )
 
     async def close(self):
