@@ -2,7 +2,7 @@
 import logging
 import datetime
 
-from ..const import ENTSOE_AREA_MAPPING, Source
+from ..const import AreaMapping, Source
 from ..api import create_api
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ async def validate_entso_e_api_key(api_key, area, session=None):
 
 def get_entso_e_api_key_description(area):
     """Get description for ENTSO-E API key entry."""
-    is_supported = area in ENTSOE_AREA_MAPPING
+    is_supported = area in AreaMapping.ENTSOE_MAPPING
     # Show different message based on whether area is directly supported
     description = (
         "Optional API key for ENTSO-E (recommended for better reliability)"
