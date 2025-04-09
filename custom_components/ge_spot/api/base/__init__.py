@@ -8,9 +8,7 @@ from homeassistant.util import dt as dt_util
 
 from .session_manager import ensure_session, close_session
 from .data_fetch import DataFetcher
-from ...price.conversion import async_convert_energy_price
 from ...timezone import localize_datetime
-from ...const import Config, DisplayUnit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,27 +40,6 @@ class BaseEnergyAPI(ABC):
     async def fetch_day_ahead_prices(self, area, currency, date, hass=None):
         """Fetch day-ahead prices for a specific area and date."""
         return await self.data_fetcher.fetch_day_ahead_prices(area, currency, date, hass)
-
-    async def _convert_price(self, price, from_currency="EUR", from_unit="MWh", to_subunit=None, exchange_rate=None):
-        """Convert price using centralized conversion logic."""
-        use_subunit = to_subunit
-        if use_subunit is None:
-            if Config.DISPLAY_UNIT in self.config:
-                use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
-            else:
-                use_subunit = self.config.get("price_in_cents", False)
-                
-        return await async_convert_energy_price(
-            price=price,
-            from_unit=from_unit,
-            to_unit="kWh",
-            from_currency=from_currency,
-            to_currency=self._currency,
-            vat=self.vat,
-            to_subunit=use_subunit,
-            session=self.session,
-            exchange_rate=None  # Always use exchange service for accurate rates
-        )
 
     async def close(self):
         """Close the session if we own it."""
