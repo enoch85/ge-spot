@@ -10,6 +10,7 @@ from ..const import (
     Config,
     Source,
     Defaults,
+    AreaMapping
 )
 from ..api import get_sources_for_region, create_api
 from .utils import (
