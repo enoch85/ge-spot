@@ -1,10 +1,8 @@
 """Base API package for energy prices."""
-from .base_api import BaseEnergyAPI
 from .session_manager import ensure_session, close_session, fetch_with_retry, register_shutdown_task
 from .data_fetch import DataFetcher
 
 __all__ = [
-    'BaseEnergyAPI',
     'ensure_session',
     'close_session',
     'fetch_with_retry',
