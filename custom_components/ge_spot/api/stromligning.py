@@ -5,10 +5,10 @@ from typing import Dict, Any, Optional
 
 from .base import BaseEnergyAPI
 from ..const import (
-    CONF_DISPLAY_UNIT,
-    DISPLAY_UNIT_CENTS,
-    CURRENCY_SUBUNIT_NAMES,
-    ATTR_CURRENCY
+    Config,
+    DisplayUnit,
+    CurrencyInfo,
+    Attributes
 )
 from ..timezone import ensure_timezone_aware
 
@@ -64,8 +64,8 @@ class StromligningAPI(BaseEnergyAPI):
         
         try:
             # Get display unit setting from config
-            display_unit = self.config.get(CONF_DISPLAY_UNIT)
-            use_subunit = display_unit == DISPLAY_UNIT_CENTS
+            display_unit = self.config.get(Config.DISPLAY_UNIT)
+            use_subunit = display_unit == DisplayUnit.CENTS
             
             # Extract price area
             price_area = data.get("priceArea", self.config.get("area"))
