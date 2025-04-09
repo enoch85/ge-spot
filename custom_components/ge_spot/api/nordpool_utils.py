@@ -3,7 +3,7 @@ import logging
 import datetime
 from ..price.conversion import async_convert_energy_price
 from ..timezone import convert_to_local_time
-from ..const import CURRENCY_SUBUNIT_NAMES, REGION_TO_CURRENCY
+from ..const import CurrencyInfo
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
             return None
 
         # Get target currency based on area
-        target_currency = REGION_TO_CURRENCY.get(area, currency)
+        target_currency = CurrencyInfo.REGION_TO_CURRENCY.get(area, currency)
 
         _LOGGER.debug(f"Using target currency {target_currency} for area {area}")
 
@@ -169,7 +169,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
                         "raw": raw_price,
                         "unit": f"{api_currency}/MWh",
                         "final": final_price,
-                        "currency": target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
+                        "currency": target_currency if not use_subunit else CurrencyInfo.SUBUNIT_NAMES.get(target_currency, "cents"),
                         "vat_rate": vat_rate
                     }
 
@@ -182,7 +182,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
                         "raw": raw_price,
                         "unit": f"{api_currency}/MWh",
                         "final": final_price,
-                        "currency": target_currency if not use_subunit else CURRENCY_SUBUNIT_NAMES.get(target_currency, "cents"),
+                        "currency": target_currency if not use_subunit else CurrencyInfo.SUBUNIT_NAMES.get(target_currency, "cents"),
                         "vat_rate": vat_rate
                     }
 
