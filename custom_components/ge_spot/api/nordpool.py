@@ -60,7 +60,7 @@ async def _fetch_data(client, config, area, reference_time):
         params = {
             "currency": Currency.EUR,  # Always request in EUR, convert later
             "date": today,
-            "market": "Elspot",
+            "market": Nordpool.MARKET_DAYAHEAD,
             "deliveryArea": delivery_area
         }
         
