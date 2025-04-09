@@ -7,8 +7,8 @@ from .base import BaseEnergyAPI
 from ..const import (
     Config,
     DisplayUnit,
-    CurrencyInfo,
-    Attributes
+    Currency,
+    EnergyUnit
 )
 from ..timezone import ensure_timezone_aware
 
@@ -63,10 +63,6 @@ class StromligningAPI(BaseEnergyAPI):
             return None
         
         try:
-            # Get display unit setting from config
-            display_unit = self.config.get(Config.DISPLAY_UNIT)
-            use_subunit = display_unit == DisplayUnit.CENTS
-            
             # Extract price area
             price_area = data.get("priceArea", self.config.get("area"))
             
@@ -77,6 +73,7 @@ class StromligningAPI(BaseEnergyAPI):
             
             now = self._get_now()
             current_hour = now.hour
+            raw_values = {}
             
             for price_entry in data["prices"]:
                 # Extract timestamp and price
@@ -123,19 +120,13 @@ class StromligningAPI(BaseEnergyAPI):
                         }
                     })
                     
-                    # Convert price using centralized method if needed (for currency conversion)
-                    # Note: Stromligning returns prices in DKK/kWh already, so we only need to convert
-                    # if target currency is not DKK or if subunit display is requested
-                    if self._currency != StromligningConstants.DEFAULT_CURRENCY or use_subunit:
-                        converted_price = await self._convert_price(
-                            price=total_price,
-                            from_currency=StromligningConstants.DEFAULT_CURRENCY,
-                            from_unit="kWh",
-                            to_subunit=use_subunit,
-                        )
-                    else:
-                        # If no conversion needed, use as is
-                        converted_price = total_price
+                    # Use centralized conversion method
+                    # Note: Stromligning returns prices in DKK/kWh already, so we only need to convert currency if needed
+                    converted_price = await self._convert_price(
+                        price=total_price,
+                        from_currency=StromligningConstants.DEFAULT_CURRENCY,
+                        from_unit=EnergyUnit.KWH  # Already in kWh
+                    )
                     
                     # Store in hourly prices
                     hour_str = f"{local_dt.hour:02d}:00"
@@ -145,7 +136,7 @@ class StromligningAPI(BaseEnergyAPI):
                     # Check if this is current hour
                     if local_dt.hour == current_hour and local_dt.date() == now.date():
                         current_price = converted_price
-                        raw_values_current = {
+                        raw_values["current_price"] = {
                             "raw": total_price,
                             "unit": f"{StromligningConstants.DEFAULT_CURRENCY}/kWh",
                             "components": {
@@ -162,7 +153,7 @@ class StromligningAPI(BaseEnergyAPI):
                     next_hour = (now + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
                     if local_dt.hour == next_hour.hour and local_dt.date() == next_hour.date():
                         next_hour_price = converted_price
-                        raw_values_next = {
+                        raw_values["next_hour_price"] = {
                             "raw": total_price,
                             "unit": f"{StromligningConstants.DEFAULT_CURRENCY}/kWh",
                             "components": {
@@ -190,22 +181,18 @@ class StromligningAPI(BaseEnergyAPI):
             peak_price = max(all_prices) if all_prices else None
             off_peak_price = min(all_prices) if all_prices else None
             
-            # Store all raw values for comprehensive attributes
-            raw_values = {
-                "current_price": raw_values_current if 'raw_values_current' in locals() else None,
-                "next_hour_price": raw_values_next if 'raw_values_next' in locals() else None,
-                "day_average_price": {
-                    "value": day_average_price,
-                    "calculation": "average of all hourly prices"
-                },
-                "peak_price": {
-                    "value": peak_price,
-                    "calculation": "maximum of all hourly prices"
-                },
-                "off_peak_price": {
-                    "value": off_peak_price,
-                    "calculation": "minimum of all hourly prices"
-                }
+            # Store value calculations in raw_values
+            raw_values["day_average_price"] = {
+                "value": day_average_price,
+                "calculation": "average of all hourly prices"
+            }
+            raw_values["peak_price"] = {
+                "value": peak_price,
+                "calculation": "maximum of all hourly prices"
+            }
+            raw_values["off_peak_price"] = {
+                "value": off_peak_price,
+                "calculation": "minimum of all hourly prices"
             }
             
             # Build final result
