@@ -4,7 +4,6 @@ from typing import Optional, Dict, Any
 
 from .currency import convert_to_subunit, get_subunit_name
 from .energy import convert_energy_unit
-from ..utils.exchange_service import ExchangeRateService, get_exchange_service
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,20 +22,6 @@ async def convert_energy_price(price, from_unit="MWh", to_unit="kWh",
                              exchange_rate=None, session=None):
     """
     Unified energy price conversion function.
-
-    Args:
-        price: Price value to convert
-        from_unit: Source energy unit (e.g., "MWh")
-        to_unit: Target energy unit (e.g., "kWh")
-        from_currency: Source currency (e.g., "EUR")
-        to_currency: Target currency (e.g., "SEK")
-        vat: VAT rate to apply (0-1)
-        to_subunit: Whether to convert to subunit (e.g., SEK → öre)
-        exchange_rate: Optional explicit exchange rate to use
-        session: Optional aiohttp session
-
-    Returns:
-        Converted price value
     """
     if price is None:
         return None
@@ -59,6 +44,8 @@ async def convert_energy_price(price, from_unit="MWh", to_unit="kWh",
                 _LOGGER.debug(f"Currency conversion using provided rate: {price} {from_currency} → {converted_price} {to_currency} (rate: {exchange_rate})")
                 price = converted_price
             else:
+                # Import here to avoid circular imports
+                from ..utils.exchange_service import get_exchange_service
                 # Use exchange service
                 service = await get_exchange_service(session)
                 original_price_in_from_currency = price  # Store for logging
