@@ -70,8 +70,7 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
                 "price": raw_price
             })
 
-            # Convert using centralized method
-            # DO NOT pass exchange_rate from API as it may be incorrect
+            # Use centralized conversion method
             converted_price = await self._convert_price(
                 price=raw_price,
                 from_currency=api_currency,
