@@ -5,7 +5,8 @@ from bs4 import BeautifulSoup
 from .base import BaseEnergyAPI
 from ..const import (
     Config,
-    DisplayUnit
+    Currency,
+    EnergyUnit
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,10 +53,6 @@ class EpexAPI(BaseEnergyAPI):
             return None
 
         try:
-            # Get display unit setting from config
-            display_unit = self.config.get(Config.DISPLAY_UNIT)
-            use_subunit = display_unit == DisplayUnit.CENTS
-
             # Parse HTML
             soup = BeautifulSoup(data, 'html.parser')
 
@@ -85,6 +82,7 @@ class EpexAPI(BaseEnergyAPI):
             hourly_prices = {}
             all_prices = []
             raw_prices = []
+            raw_values = {}
 
             now = self._get_now()
             current_hour = now.hour
@@ -135,18 +133,44 @@ class EpexAPI(BaseEnergyAPI):
                         "price": price
                     })
 
+                    # EPEX prices are in EUR/MWh
+                    api_currency = Currency.EUR
+                    from_unit = EnergyUnit.MWH
+
                     # Convert price using centralized method
                     converted_price = await self._convert_price(
                         price=price,
-                        from_currency="EUR",
-                        from_unit="MWh",
-                        to_subunit=use_subunit
+                        from_currency=api_currency,
+                        from_unit=from_unit
                     )
 
                     # Format hour string and store price
                     hour_str = f"{hour:02d}:00"
                     hourly_prices[hour_str] = converted_price
                     all_prices.append(converted_price)
+
+                    # Check if this is current hour
+                    if hour == current_hour:
+                        current_price = converted_price
+                        raw_values["current_price"] = {
+                            "raw": price,
+                            "unit": f"{api_currency}/{from_unit}",
+                            "final": converted_price,
+                            "currency": self._currency,
+                            "vat_rate": self.vat
+                        }
+
+                    # Check if this is next hour
+                    next_hour = (current_hour + 1) % 24
+                    if hour == next_hour:
+                        next_hour_price = converted_price
+                        raw_values["next_hour_price"] = {
+                            "raw": price,
+                            "unit": f"{api_currency}/{from_unit}",
+                            "final": converted_price,
+                            "currency": self._currency,
+                            "vat_rate": self.vat
+                        }
 
                 except Exception as e:
                     _LOGGER.warning(f"Error processing row {i}: {e}")
@@ -160,6 +184,20 @@ class EpexAPI(BaseEnergyAPI):
             peak_price = max(all_prices) if all_prices else None
             off_peak_price = min(all_prices) if all_prices else None
 
+            # Store raw values for statistics
+            raw_values["day_average_price"] = {
+                "value": day_average_price,
+                "calculation": "average of all hourly prices"
+            }
+            raw_values["peak_price"] = {
+                "value": peak_price,
+                "calculation": "maximum of all hourly prices"
+            }
+            raw_values["off_peak_price"] = {
+                "value": off_peak_price,
+                "calculation": "minimum of all hourly prices"
+            }
+
             current_hour_str = f"{current_hour:02d}:00"
             next_hour_str = f"{(current_hour + 1) % 24:02d}:00"
 
@@ -171,12 +209,7 @@ class EpexAPI(BaseEnergyAPI):
                 "off_peak_price": off_peak_price,
                 "hourly_prices": hourly_prices,
                 "raw_prices": raw_prices,
-                "raw_values": {
-                    "current_price": {"hour": current_hour, "raw": price if current_hour_str in hourly_prices else None},
-                    "peak_price": {"value": peak_price},
-                    "off_peak_price": {"value": off_peak_price},
-                    "day_average_price": {"value": day_average_price}
-                },
+                "raw_values": raw_values,
                 "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "data_source": "EPEX SPOT",
                 "currency": self._currency
