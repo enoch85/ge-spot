@@ -10,7 +10,8 @@ from ..timezone import localize_datetime, parse_datetime
 from ..const import (
     Timezone,
     Config,
-    DisplayUnit
+    Currency,
+    EnergyUnit
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,8 +22,6 @@ class OmieConstants:
     BASE_URL_TEMPLATE = "https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{day}_{month}_{year}_{day}_{month}_{year}.TXT"
     PRICE_FIELD_ES = "Precio marginal en el sistema español (EUR/MWh)"
     PRICE_FIELD_PT = "Precio marginal en el sistema portugués (EUR/MWh)"
-    DEFAULT_CURRENCY = "EUR"
-    DEFAULT_ENERGY_UNIT = "MWh"
     DEFAULT_TIMEOUT = 30
 
 class OmieAPI(BaseEnergyAPI):
@@ -81,10 +80,6 @@ class OmieAPI(BaseEnergyAPI):
             return None
 
         try:
-            # Get display unit setting from config
-            display_unit = self.config.get(Config.DISPLAY_UNIT)
-            use_subunit = display_unit == DisplayUnit.CENTS
-
             raw_data = data["raw_data"]
             target_date = data["target_date"]
 
@@ -155,9 +150,8 @@ class OmieAPI(BaseEnergyAPI):
                             # Convert price using centralized method
                             converted_price = await self._convert_price(
                                 price=price,
-                                from_unit=OmieConstants.DEFAULT_ENERGY_UNIT,
-                                from_currency=OmieConstants.DEFAULT_CURRENCY,
-                                to_subunit=use_subunit
+                                from_currency=Currency.EUR,
+                                from_unit=EnergyUnit.MWH
                             )
 
                             hour_str = f"{hour:02d}:00"
@@ -169,8 +163,10 @@ class OmieAPI(BaseEnergyAPI):
                                 current_price = converted_price
                                 raw_values["current_price"] = {
                                     "raw": price,
-                                    "converted": converted_price,
-                                    "hour": hour
+                                    "unit": f"{Currency.EUR}/MWh",
+                                    "final": converted_price,
+                                    "currency": self._currency,
+                                    "vat_rate": self.vat
                                 }
 
                             # Check if this is next hour
@@ -178,8 +174,10 @@ class OmieAPI(BaseEnergyAPI):
                                 next_hour_price = converted_price
                                 raw_values["next_hour_price"] = {
                                     "raw": price,
-                                    "converted": converted_price,
-                                    "hour": hour
+                                    "unit": f"{Currency.EUR}/MWh",
+                                    "final": converted_price,
+                                    "currency": self._currency,
+                                    "vat_rate": self.vat
                                 }
 
                         # We found the row we needed, can break now
