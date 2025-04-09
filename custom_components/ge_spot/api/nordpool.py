@@ -9,7 +9,7 @@ from ..timezone.parsers import parse_datetime
 from ..timezone.converters import localize_datetime
 from ..const import (
     Currency, AreaMapping, TimeFormat, EnergyUnit, 
-    Network, Config, DisplayUnit
+    Network, Config, DisplayUnit, Nordpool
 )
 
 _LOGGER = logging.getLogger(__name__)
