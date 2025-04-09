@@ -23,7 +23,6 @@ from ..timezone import localize_datetime
 from .utils import (
     get_deduplicated_regions,
     validate_entso_e_api_key,
-    ApiValidator,
 )
 from .schemas import (
     get_source_priority_schema,
