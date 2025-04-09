@@ -65,15 +65,6 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
 
         _LOGGER.debug(f"Using target currency {target_currency} for area {area}")
 
-        # Get exchange rate from API data if available
-        exchange_rate = None
-        if "exchangeRate" in data:
-            try:
-                exchange_rate = float(data["exchangeRate"])
-                _LOGGER.debug(f"Using exchange rate from API data: {exchange_rate}")
-            except (ValueError, TypeError):
-                _LOGGER.warning(f"Invalid exchange rate in API data: {data.get('exchangeRate')}")
-
         # If there's a currency specified in API data, use it
         api_currency = data.get("currency", NordpoolUtilsConstants.DEFAULT_CURRENCY)
         _LOGGER.debug(f"API data currency: {api_currency}")
@@ -133,6 +124,7 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
             _LOGGER.debug(f"Raw price value from API: {raw_price} {api_currency}/MWh for {start_time}")
 
             # Use the comprehensive conversion function (async version)
+            # DO NOT use exchange_rate from API as it may be incorrect
             final_price = await async_convert_energy_price(
                 price=raw_price,
                 from_unit=NordpoolUtilsConstants.DEFAULT_ENERGY_UNIT,
@@ -141,7 +133,6 @@ async def process_day_data(data, area, current_hour=None, use_subunit=False, cur
                 to_currency=target_currency,
                 vat=vat_rate,
                 to_subunit=use_subunit,
-                exchange_rate=exchange_rate,
                 session=session
             )
 
