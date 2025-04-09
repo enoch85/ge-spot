@@ -48,18 +48,8 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
         raw_values = {}
         raw_prices = []
 
-        # Extract exchange rate if available
-        exchange_rate = None
-        if "currency" in data and data["currency"] != self._currency:
-            api_currency = data.get("currency", "DKK")
-            if "exchangeRate" in data:
-                try:
-                    exchange_rate = float(data["exchangeRate"])
-                    _LOGGER.debug(f"Using exchange rate from API: {exchange_rate}")
-                except (ValueError, TypeError):
-                    _LOGGER.warning(f"Invalid exchange rate in API data: {data.get('exchangeRate')}")
-        else:
-            api_currency = "DKK"  # Default for this API
+        # Get the API's currency - default to DKK for this API
+        api_currency = data.get("currency", "DKK")
 
         for record in records:
             hour_dk = datetime.datetime.fromisoformat(record["HourDK"].replace("Z", "+00:00"))
@@ -81,11 +71,11 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
             })
 
             # Convert using centralized method
+            # DO NOT pass exchange_rate from API as it may be incorrect
             converted_price = await self._convert_price(
                 price=raw_price,
                 from_currency=api_currency,
-                from_unit="MWh",
-                exchange_rate=exchange_rate
+                from_unit="MWh"
             )
 
             all_prices.append(converted_price)
