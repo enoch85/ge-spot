@@ -3,6 +3,8 @@ import logging
 import datetime
 import json
 from .base import BaseEnergyAPI
+from ..price.conversion import async_convert_energy_price
+from ..const import Config, DisplayUnit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +53,13 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
         # Get the API's currency - default to DKK for this API
         api_currency = data.get("currency", "DKK")
 
+        # Determine if we should convert to subunit
+        use_subunit = None
+        if Config.DISPLAY_UNIT in self.config:
+            use_subunit = self.config[Config.DISPLAY_UNIT] == DisplayUnit.CENTS
+        else:
+            use_subunit = self.config.get("price_in_cents", False)
+
         for record in records:
             hour_dk = datetime.datetime.fromisoformat(record["HourDK"].replace("Z", "+00:00"))
 
@@ -70,11 +79,17 @@ class EnergiDataServiceAPI(BaseEnergyAPI):
                 "price": raw_price
             })
 
-            # Use centralized conversion method
-            converted_price = await self._convert_price(
+            # Use core conversion function directly
+            converted_price = await async_convert_energy_price(
                 price=raw_price,
+                from_unit="MWh",
+                to_unit="kWh",
                 from_currency=api_currency,
-                from_unit="MWh"
+                to_currency=self._currency,
+                vat=self.vat,
+                to_subunit=use_subunit,
+                session=self.session,
+                exchange_rate=None
             )
 
             all_prices.append(converted_price)
