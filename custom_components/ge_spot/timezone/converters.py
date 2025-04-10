@@ -152,11 +152,15 @@ def classify_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] = 
 
         # Ensure datetime is timezone aware
         start = ensure_timezone_aware(period["start"])
-        period_date = start.date()
-
-        if period_date == today:
+        
+        # Check both UTC and local date to handle periods near midnight
+        utc_date = start.astimezone(dt_util.UTC).date()
+        local_date = start.astimezone(dt_util.DEFAULT_TIME_ZONE).date()
+        
+        # If date is today in either timezone, classify as today
+        if local_date == today or utc_date == today:
             classified[PeriodType.TODAY].append(period)
-        elif period_date == tomorrow:
+        elif local_date == tomorrow or utc_date == tomorrow:
             classified[PeriodType.TOMORROW].append(period)
         else:
             classified[PeriodType.OTHER].append(period)
