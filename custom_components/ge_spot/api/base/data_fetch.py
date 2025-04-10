@@ -32,6 +32,9 @@ class DataFetcher:
         self._cache_ttl = api_instance._cache_ttl
         self.session = api_instance.session
         self._owns_session = api_instance._owns_session
+        # Track failed requests to implement proper backoff
+        self._consecutive_failures = getattr(api_instance, '_consecutive_failures', 0)
+        self._last_failure_time = getattr(api_instance, '_last_failure_time', None)
 
     async def validate_api_key(self, api_key=None):
         """Validate an API key.
@@ -142,9 +145,16 @@ class DataFetcher:
 
             if raw_data:
                 _LOGGER.debug(f"API {self.api.__class__.__name__} raw response received")
-
-            if not raw_data:
-                _LOGGER.error(f"No data received from API for {area} on {date_str}")
+                # Reset failure counter on success
+                self._consecutive_failures = 0
+                self.api._consecutive_failures = 0
+            else:
+                # Increment failure counter
+                self._consecutive_failures += 1
+                self.api._consecutive_failures = self._consecutive_failures
+                self._last_failure_time = current_time
+                self.api._last_failure_time = current_time
+                _LOGGER.error(f"No data received from API for {area} on {date_str} (failures: {self._consecutive_failures})")
                 return None
 
             # Make sure display unit is properly passed
@@ -199,6 +209,12 @@ class DataFetcher:
             return processed_data
 
         except Exception as e:
+            # Update failure tracking
+            self._consecutive_failures += 1
+            self.api._consecutive_failures = self._consecutive_failures
+            self._last_failure_time = datetime.datetime.now()
+            self.api._last_failure_time = self._last_failure_time
+            
             _LOGGER.error(f"Error fetching day-ahead prices: {str(e)}", exc_info=True)
             return None
 
@@ -244,6 +260,14 @@ class DataFetcher:
         if time_diff < 15:
             _LOGGER.debug(f"Rate limiting: Last fetch was only {time_diff:.1f} minutes ago")
             return True
+            
+        # Apply progressive backoff based on consecutive failures
+        if self._consecutive_failures > 0:
+            # Exponential backoff: 30 min after 1 failure, 60 min after 2, 120 min after 3, etc.
+            backoff_minutes = 30 * (2 ** (self._consecutive_failures - 1))
+            if self._last_failure_time and (current_time - self._last_failure_time).total_seconds() / 60 < backoff_minutes:
+                _LOGGER.debug(f"Rate limiting: Backing off due to {self._consecutive_failures} consecutive failures. Waiting {backoff_minutes} minutes.")
+                return True
 
         # Check time of day for special cases
         hour = current_time.hour
