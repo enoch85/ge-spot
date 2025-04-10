@@ -126,8 +126,14 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 if hass:
                     local_dt = localize_datetime(timestamp, hass)
                 
-                # Extract price value (DKK/kWh with VAT)
-                total_price = price_entry["price"]["total"]
+                # For Danish areas, use only the electricity component (not grid fees or taxes)
+                # This matches the Nord Pool spot price
+                if area.startswith("DK"):
+                    # Extract only electricity price for Danish areas
+                    total_price = price_entry["details"]["electricity"]["total"]
+                else:
+                    # Use total price for non-Danish areas
+                    total_price = price_entry["price"]["total"]
                 
                 # For logging and diagnostics, extract the price components
                 electricity_price = price_entry["details"]["electricity"]["total"]
@@ -239,5 +245,5 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
         return result
         
     except Exception as e:
-        _LOGGER.error(f"Error processing Stromligning data: {e}", exc_info=True)
+        _LOGGER.error(f"Error processing Stromligning data: {e}")
         return None
