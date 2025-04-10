@@ -14,7 +14,7 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-BASE_URL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
+BASE_URL = Network.URLs.NORDPOOL
 
 async def fetch_day_ahead_prices(config, area, currency, reference_time=None, hass=None, session=None):
     """Fetch day-ahead prices using Nordpool API."""
