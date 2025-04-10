@@ -61,8 +61,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 Attributes.TODAY: data.get(Attributes.TODAY, []),
                 Attributes.TOMORROW: data.get(Attributes.TOMORROW, []),
                 Attributes.TOMORROW_VALID: data.get(Attributes.TOMORROW_VALID, False),
-                "exchange_service_timestamp": data.get("exchange_rate_info", {}).get("timestamp"),
-                "exchange_service_rate": data.get("exchange_rate_info", {}).get("formatted"),
+                # Removed duplicate exchange rate attributes
                 "entso_e_api_key": data.get(Attributes.API_KEY_STATUS, {}).get(Source.ENTSO_E, {})
             }
         },
