@@ -32,3 +32,8 @@ class Attributes:
     AVAILABLE_FALLBACKS = "available_fallbacks"  # List of available fallback sources
     IS_USING_FALLBACK = "is_using_fallback"  # Whether currently using a fallback
     API_KEY_STATUS = "api_key_status"  # Status of API key (valid/invalid)
+    
+    # Exchange rate attributes
+    EXCHANGE_RATE = "exchange_rate"
+    EXCHANGE_RATE_FORMATTED = "exchange_rate_formatted"
+    EXCHANGE_RATE_TIMESTAMP = "exchange_rate_timestamp"
