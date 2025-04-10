@@ -22,13 +22,14 @@ _LOGGER = logging.getLogger(__name__)
 class ExchangeRateService:
     """Service to fetch and cache currency exchange rates."""
 
-    def __init__(self, session=None, cache_file=None, cache_ttl=Network.Defaults.CACHE_TTL):
+    def __init__(self, session=None, cache_file=None):
         """Initialize the exchange rate service."""
         self.session = session
         self.cache_file = cache_file or self._get_default_cache_path()
-        self.cache_ttl = cache_ttl
         self.rates = {}
         self.last_update = 0
+        self.hass = None
+        self._update_listeners = []
 
     def _get_default_cache_path(self):
         """Get default path for cache file."""
@@ -99,13 +100,7 @@ class ExchangeRateService:
 
         try:
             modified_time = os.path.getmtime(self.cache_file)
-            age = time.time() - modified_time
-
-            # If cache is too old, don't use it
-            if age > self.cache_ttl:
-                _LOGGER.debug(f"Exchange rate cache is too old ({age:.1f}s > {self.cache_ttl}s)")
-                return False
-
+            
             async with aiofiles.open(self.cache_file, "r") as f:
                 content = await f.read()
                 data = json.loads(content)
@@ -116,6 +111,7 @@ class ExchangeRateService:
             self.rates = data["rates"]
             self.last_update = data.get("timestamp", modified_time)
 
+            age = time.time() - self.last_update
             _LOGGER.info(f"Loaded exchange rates from cache (age: {age:.1f}s, currencies: {len(self.rates)})")
             return True
         except Exception as e:
@@ -147,13 +143,13 @@ class ExchangeRateService:
         """Get exchange rates (from cache or fresh fetch)."""
         now = time.time()
 
-        # Try to load from cache if we don't have rates or if they're stale
-        if not self.rates or now - self.last_update > self.cache_ttl or force_refresh:
+        # Try to load from cache if we don't have rates or force refresh requested
+        if not self.rates or force_refresh:
             # Try to load from cache first (unless forced refresh)
             if not force_refresh and await self._load_cache():
                 return self.rates
 
-            # Fetch fresh rates if cache is unavailable or too old
+            # Fetch fresh rates if cache is unavailable or refresh is requested
             fresh_rates = await self._fetch_ecb_rates()
             if fresh_rates:
                 self.rates = fresh_rates
@@ -246,6 +242,57 @@ class ExchangeRateService:
                     result["rates"][currency] = converted_rate
 
             return result
+
+    def register_update_handlers(self, hass):
+        """Register update handlers with Home Assistant.
+        
+        This sets up scheduled updates at specific times and on restart.
+        
+        Args:
+            hass: Home Assistant instance
+        """
+        if not hass:
+            _LOGGER.warning("Cannot register update handlers: no Home Assistant instance")
+            return
+
+        self.hass = hass
+        
+        # Update on startup
+        self.hass.bus.async_listen_once("homeassistant_started", self._handle_startup_update)
+        
+        # Set up scheduled updates at specific times
+        update_times = [
+            {"hour": 0, "minute": 0},  # Midnight (00:00)
+            {"hour": 6, "minute": 0},  # 06:00
+            {"hour": 12, "minute": 0}, # 12:00
+            {"hour": 18, "minute": 0}  # 18:00
+        ]
+        
+        for update_time in update_times:
+            listener = self.hass.helpers.event.async_track_time_change(
+                self._handle_scheduled_update,
+                hour=update_time["hour"],
+                minute=update_time["minute"]
+            )
+            self._update_listeners.append(listener)
+        
+        _LOGGER.info("Registered exchange rate update handlers")
+
+    async def _handle_startup_update(self, _event):
+        """Handle exchange rate update on HA startup."""
+        _LOGGER.info("Updating exchange rates on Home Assistant startup")
+        try:
+            await self.get_rates(force_refresh=True)
+        except Exception as e:
+            _LOGGER.error(f"Error updating exchange rates on startup: {e}")
+
+    async def _handle_scheduled_update(self, _now):
+        """Handle scheduled exchange rate update."""
+        _LOGGER.info(f"Running scheduled exchange rate update at {_now.strftime('%H:%M')}")
+        try:
+            await self.get_rates(force_refresh=True)
+        except Exception as e:
+            _LOGGER.error(f"Error in scheduled exchange rate update: {e}")
 
 # Global instance for reuse
 _EXCHANGE_SERVICE = None
