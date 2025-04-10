@@ -263,10 +263,11 @@ class DataFetcher:
             
         # Apply progressive backoff based on consecutive failures
         if self._consecutive_failures > 0:
-            # Exponential backoff: 30 min after 1 failure, 60 min after 2, 120 min after 3, etc.
-            backoff_minutes = 30 * (2 ** (self._consecutive_failures - 1))
+            # Exponential backoff: doubling with each failure, capped at 45 minutes
+            backoff_minutes = min(45, 2 ** (self._consecutive_failures - 1))
             if self._last_failure_time and (current_time - self._last_failure_time).total_seconds() / 60 < backoff_minutes:
-                _LOGGER.debug(f"Rate limiting: Backing off due to {self._consecutive_failures} consecutive failures. Waiting {backoff_minutes} minutes.")
+                next_retry = self._last_failure_time + datetime.timedelta(minutes=backoff_minutes)
+                _LOGGER.info(f"Rate limiting: Backing off due to {self._consecutive_failures} consecutive failures. Waiting {backoff_minutes} minutes until {next_retry.strftime('%H:%M:%S')}.")
                 return True
 
         # Check time of day for special cases
