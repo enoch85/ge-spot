@@ -77,18 +77,22 @@ class BaseElectricityPriceSensor(SensorEntity):
         if not self.coordinator.data:
             return {}
 
+        # Base attributes
         attrs = {
             Attributes.CURRENCY: self._currency,
             Attributes.AREA: self._area,
             Attributes.VAT: self._vat,
             Attributes.LAST_UPDATED: self.coordinator.data.get(Attributes.LAST_UPDATED),
-            Attributes.DATA_SOURCE: self.coordinator.data.get(Attributes.DATA_SOURCE),
-            "is_using_fallback": self.coordinator.data.get(Attributes.IS_USING_FALLBACK, False),
             "display_unit": self._display_unit,
             "use_subunit": self._use_subunit
         }
 
-        # Add exchange rate information if available
+        # Add data_source from source_info - no duplication
+        if "source_info" in self.coordinator.data:
+            source_info = self.coordinator.data["source_info"]
+            attrs[Attributes.DATA_SOURCE] = source_info.get("active_source")
+
+        # Add exchange rate information if available - unified representation
         if "exchange_rate_info" in self.coordinator.data:
             exchange_info = self.coordinator.data.get("exchange_rate_info", {})
             if "rate" in exchange_info:
@@ -97,6 +101,10 @@ class BaseElectricityPriceSensor(SensorEntity):
                 attrs["exchange_rate_formatted"] = exchange_info["formatted"]
             if "timestamp" in exchange_info:
                 attrs["exchange_rate_timestamp"] = exchange_info["timestamp"]
+
+        # Add source_info but don't include duplicated attributes
+        if "source_info" in self.coordinator.data:
+            attrs["source_info"] = self.coordinator.data["source_info"]
 
         # Add raw value information if available
         if "raw_values" in self.coordinator.data and self._sensor_type in self.coordinator.data["raw_values"]:
@@ -107,14 +115,6 @@ class BaseElectricityPriceSensor(SensorEntity):
                     attrs["raw_value"] = raw_info["raw"]
                 if "unit" in raw_info:
                     attrs["raw_unit"] = raw_info["unit"]
-
-        # Add source information if available
-        if "source_info" in self.coordinator.data:
-            attrs["source_info"] = self.coordinator.data["source_info"]
-
-        # Add available fallbacks information
-        if Attributes.AVAILABLE_FALLBACKS in self.coordinator.data:
-            attrs["available_fallbacks"] = self.coordinator.data[Attributes.AVAILABLE_FALLBACKS]
 
         # Add next update time
         if "next_update" in self.coordinator.data:
