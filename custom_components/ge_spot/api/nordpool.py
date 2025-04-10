@@ -43,45 +43,44 @@ async def fetch_day_ahead_prices(config, area, currency, reference_time=None, ha
         if not session and client:
             await client.close()
 
-async def _fetch_data(client, config, area, reference_time):
+async def _fetch_data(self):
     """Fetch data from Nordpool."""
     try:
-        if reference_time is None:
-            reference_time = datetime.datetime.now(datetime.timezone.utc)
+        now = self._get_now()
+        today = now.strftime(TimeFormat.DATE_ONLY)
+        tomorrow = (now + datetime.timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
+
+        area = self.config.get("area", Nordpool.DEFAULT_AREA)
         
-        today = reference_time.strftime(TimeFormat.DATE_ONLY)
-        tomorrow = (reference_time + datetime.timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
+        # Map to region name instead of delivery area
+        region = AreaMapping.NORDPOOL_REGION_MAPPING.get(area, "Sweden")
+        _LOGGER.debug(f"Fetching Nordpool data for region: {region}")
         
-        # Map area to Nordpool delivery area
-        delivery_area = AreaMapping.NORDPOOL_DELIVERY.get(area, area)
-        _LOGGER.debug(f"Fetching Nordpool data for area: {delivery_area}")
-        
-        # Fetch today's data
+        # Updated parameters for v2 API
         params = {
-            "currency": Currency.EUR,  # Always request in EUR, convert later
+            "region": region,
             "date": today,
-            "market": Nordpool.MARKET_DAYAHEAD,
-            "deliveryArea": delivery_area
+            "currency": Currency.EUR  # Keep requesting in EUR for consistency
         }
         
-        today_data = await client.fetch(BASE_URL, params=params)
+        today_data = await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
         
-        # Fetch tomorrow's data if after 13:00 CET
+        # Same logic for tomorrow data
         tomorrow_data = None
         now_utc = datetime.datetime.now(datetime.timezone.utc)
         now_cet = now_utc.astimezone(datetime.timezone(datetime.timedelta(hours=1)))
         
         if now_cet.hour >= 13:
             params["date"] = tomorrow
-            tomorrow_data = await client.fetch(BASE_URL, params=params)
-        
+            tomorrow_data = await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
+            
         return {
-            "today": today_data,
+            "today": today_data, 
             "tomorrow": tomorrow_data,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
         }
     except Exception as e:
-        _LOGGER.error(f"Error fetching Nordpool data: {e}", exc_info=True)
+        _LOGGER.error(f"Error in _fetch_data: {str(e)}", exc_info=True)
         return None
 
 async def _process_data(data, area, currency, vat, use_subunit, reference_time, hass, session):
