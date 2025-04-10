@@ -39,7 +39,8 @@ class ApiClient:
             try:
                 _LOGGER.debug(f"API request attempt {attempt+1}/{self._retry_count}: {url}")
                 async with self.session.get(url, params=params, timeout=timeout) as response:
-                    if response.status != 200:
+                    # Consider 2xx responses as success
+                    if not (200 <= response.status < 300):
                         _LOGGER.error(f"HTTP error {response.status} fetching from {url} (attempt {attempt+1}/{self._retry_count})")
 
                         # Try to get error details for better diagnostics
@@ -54,7 +55,12 @@ class ApiClient:
                             await self._do_backoff(attempt)
                             continue
                         return None
-
+                    
+                    # Handle 204 No Content as a successful empty response
+                    if response.status == 204:
+                        _LOGGER.debug(f"Received 204 No Content from {url}")
+                        return None
+                        
                     # Get the content type to handle response appropriately
                     content_type = response.headers.get('Content-Type', '').lower()
 
