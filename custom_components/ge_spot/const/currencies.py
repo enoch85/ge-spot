@@ -29,10 +29,7 @@ class CurrencyInfo:
         "DK2": Currency.DKK,
         "FI": Currency.EUR,
         "NO1": Currency.NOK,
-        "NO1A": Currency.NOK,
         "NO2": Currency.NOK,
-        "NO2A": Currency.NOK,
-        "NO2NSL": Currency.NOK,
         "NO3": Currency.NOK,
         "NO4": Currency.NOK,
         "NO5": Currency.NOK,
@@ -91,13 +88,6 @@ class CurrencyInfo:
         "SA1": Currency.AUD,
         "TAS1": Currency.AUD,
         "VIC1": Currency.AUD,
-        # Additional mappings (Norwegian regions)
-        "Oslo": Currency.NOK,
-        "Kr.sand": Currency.NOK,
-        "Bergen": Currency.NOK,
-        "Molde": Currency.NOK,
-        "Tr.heim": Currency.NOK,
-        "Tromsø": Currency.NOK,
     }
 
     # Currency subunit multipliers
