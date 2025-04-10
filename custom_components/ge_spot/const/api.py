@@ -14,7 +14,7 @@ class EntsoE:
 class Nordpool:
     """Nordpool API constants."""
     DEFAULT_AREA = Area.OSLO
-    MARKET_DAYAHEAD = "Day-ahead"
+    MARKET_DAYAHEAD = "DayAhead"
 
 
 class Omie:
