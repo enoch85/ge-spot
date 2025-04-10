@@ -12,7 +12,7 @@ class Network:
 
     class URLs:
         """Base URLs for various APIs."""
-        NORDPOOL = "https://data-api.nordpoolgroup.com/api/v2/Auction/DayAhead/PricesByRegion"
+        NORDPOOL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
         ENTSOE = "https://web-api.tp.entsoe.eu/api"
         STROMLIGNING = "https://stromligning.dk/api/prices"
         AEMO = "https://visualisations.aemo.com.au/aemo/apps/api/report/ELEC_NEM_SUMMARY"
