@@ -9,6 +9,8 @@ import os
 import time
 from typing import Dict, Optional
 
+from homeassistant.helpers.event import async_track_time_change
+
 from ..const import (
     Currency, 
     CurrencyInfo,
@@ -269,7 +271,8 @@ class ExchangeRateService:
         ]
         
         for update_time in update_times:
-            listener = self.hass.helpers.event.async_track_time_change(
+            listener = async_track_time_change(
+                self.hass,
                 self._handle_scheduled_update,
                 hour=update_time["hour"],
                 minute=update_time["minute"]
