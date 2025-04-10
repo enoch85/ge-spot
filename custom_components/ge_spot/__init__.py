@@ -11,9 +11,18 @@ from .const import DOMAIN, Config, Defaults
 from .price.currency import get_default_currency
 from .coordinator.region import RegionPriceCoordinator
 from .api.base.session_manager import register_shutdown_task
+from .utils.exchange_service import get_exchange_service
 
 PLATFORMS = [Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)
+
+async def async_setup(hass: HomeAssistant, config):
+    """Set up the GE-Spot component."""
+    # Initialize exchange rate service and register update handlers
+    exchange_service = await get_exchange_service()
+    exchange_service.register_update_handlers(hass)
+    
+    return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up from a config entry."""
