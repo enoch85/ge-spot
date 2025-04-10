@@ -9,23 +9,15 @@ class Area:
     SE4 = "SE4"
     DK1 = "DK1"
     DK2 = "DK2"
-    NO1 = "NO1"
-    NO2 = "NO2"
-    NO3 = "NO3"
-    NO4 = "NO4"
-    NO5 = "NO5"
+    NO1 = "NO1"  # East Norway
+    NO2 = "NO2"  # South Norway
+    NO3 = "NO3"  # Central Norway
+    NO4 = "NO4"  # North Norway
+    NO5 = "NO5"  # West Norway
     FI = "FI"
     EE = "EE"
     LV = "LV"
     LT = "LT"
-    
-    # Norway names
-    OSLO = "Oslo"
-    KRSAND = "Kr.sand"
-    BERGEN = "Bergen"
-    MOLDE = "Molde"
-    TRHEIM = "Tr.heim"
-    TROMSO = "Tromsø"
     
     # Central Europe
     DE = "DE"
@@ -58,10 +50,7 @@ class Timezone:
         Area.LT: "Europe/Vilnius",
         Area.LV: "Europe/Riga",
         Area.NO1: "Europe/Oslo",
-        "NO1A": "Europe/Oslo",
         Area.NO2: "Europe/Oslo",
-        "NO2A": "Europe/Oslo",
-        "NO2NSL": "Europe/Oslo",
         Area.NO3: "Europe/Oslo",
         Area.NO4: "Europe/Oslo",
         Area.NO5: "Europe/Oslo",
@@ -97,12 +86,6 @@ class Timezone:
         "AM": "Asia/Yerevan",
         "GE": "Asia/Tbilisi",
         "AZ": "Asia/Baku",
-        Area.OSLO: "Europe/Oslo",
-        Area.KRSAND: "Europe/Oslo",
-        Area.BERGEN: "Europe/Oslo",
-        Area.MOLDE: "Europe/Oslo",
-        Area.TRHEIM: "Europe/Oslo",
-        Area.TROMSO: "Europe/Oslo",
         Area.ES: "Europe/Madrid",
         Area.PT: "Europe/Lisbon",
         Area.CH: "Europe/Zurich",
@@ -115,12 +98,11 @@ class AreaMapping:
     
     # Nordpool delivery area mapping
     NORDPOOL_DELIVERY = {
-        Area.OSLO: Area.OSLO,
-        Area.KRSAND: Area.KRSAND,
-        Area.BERGEN: Area.BERGEN,
-        Area.MOLDE: Area.MOLDE,
-        Area.TRHEIM: Area.TRHEIM,
-        Area.TROMSO: Area.TROMSO,
+        Area.NO1: Area.NO1,
+        Area.NO2: Area.NO2,
+        Area.NO3: Area.NO3, 
+        Area.NO4: Area.NO4,
+        Area.NO5: Area.NO5,
         Area.SE1: Area.SE1,
         Area.SE2: Area.SE2,
         Area.SE3: Area.SE3,
@@ -154,12 +136,11 @@ class AreaMapping:
 
     # Nordpool areas display names
     NORDPOOL_AREAS = {
-        Area.OSLO: "Norway (Oslo)",
-        Area.KRSAND: "Norway (Kr.sand)",
-        Area.BERGEN: "Norway (Bergen)",
-        Area.MOLDE: "Norway (Molde)",
-        Area.TRHEIM: "Norway (Tr.heim)",
-        Area.TROMSO: "Norway (Tromsø)",
+        Area.NO1: "NO1 (Øst/East)",
+        Area.NO2: "NO2 (Sør/South)",
+        Area.NO3: "NO3 (Midt/Central)",
+        Area.NO4: "NO4 (Nord/North)",
+        Area.NO5: "NO5 (Vest/West)",
         Area.SE1: "Sweden (SE1)",
         Area.SE2: "Sweden (SE2)",
         Area.SE3: "Sweden (SE3)",
@@ -188,10 +169,7 @@ class AreaMapping:
         Area.DK1: "10YDK-1--------W",
         Area.DK2: "10YDK-2--------M",
         Area.NO1: "10YNO-1--------2",
-        "NO1A": "10Y1001A1001A64J",
         Area.NO2: "10YNO-2--------T",
-        "NO2A": "10Y1001C--001219",
-        "NO2NSL": "50Y0JVU59B4JWQCU",
         Area.NO3: "10YNO-3--------J",
         Area.NO4: "10YNO-4--------9",
         Area.NO5: "10Y1001A1001A48H",
@@ -272,14 +250,11 @@ class AreaMapping:
         Area.SE4: "Sweden (SE4)",
         Area.DK1: "Denmark (DK1)",
         Area.DK2: "Denmark (DK2)",
-        Area.NO1: "Norway (NO1)",
-        "NO1A": "Norway (NO1A)",
-        Area.NO2: "Norway (NO2)",
-        "NO2A": "Norway (NO2A)",
-        "NO2NSL": "Norway (NO2NSL)",
-        Area.NO3: "Norway (NO3)",
-        Area.NO4: "Norway (NO4)",
-        Area.NO5: "Norway (NO5)",
+        Area.NO1: "NO1 (Øst/East)",
+        Area.NO2: "NO2 (Sør/South)",
+        Area.NO3: "NO3 (Midt/Central)",
+        Area.NO4: "NO4 (Nord/North)",
+        Area.NO5: "NO5 (Vest/West)",
         "DK1-NO1": "Denmark-Norway (DK1-NO1)",
         Area.FI: "Finland",
         Area.EE: "Estonia",
