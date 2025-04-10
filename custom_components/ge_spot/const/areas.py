@@ -132,6 +132,25 @@ class AreaMapping:
         Area.LV: Area.LV,
         Area.LT: Area.LT,
     }
+    
+    # Nordpool region mapping for v2 API
+    NORDPOOL_REGION_MAPPING = {
+        Area.SE1: "Sweden",
+        Area.SE2: "Sweden", 
+        Area.SE3: "Sweden", 
+        Area.SE4: "Sweden",
+        Area.FI: "Finland", 
+        Area.DK1: "Denmark", 
+        Area.DK2: "Denmark",
+        Area.NO1: "Norway", 
+        Area.NO2: "Norway", 
+        Area.NO3: "Norway", 
+        Area.NO4: "Norway", 
+        Area.NO5: "Norway",
+        Area.LT: "Lithuania", 
+        Area.LV: "Latvia", 
+        Area.EE: "Estonia"
+    }
 
     # Nordpool areas display names
     NORDPOOL_AREAS = {
@@ -235,7 +254,7 @@ class AreaMapping:
         # Eastern Europe and Caucasus
         "UA": "10Y1001C--00003F",
         "UA-IPS": "10Y1001C--000182",
-        "UA-DobTPP": "10Y1001A1001A869",
+        "UA-DobTPP": "10Y1001A1001B869",
         "AM": "10Y1001A1001B004",
         "GE": "10Y1001A1001B012",
         "AZ": "10Y1001A1001B05V",
