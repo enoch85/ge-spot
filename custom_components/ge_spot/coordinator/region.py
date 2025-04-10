@@ -260,7 +260,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     "error": str(e)
                 }
 
-            # Build result data for sensors
+            # Build result data for sensors - remove duplicated attributes
             result = {
                 "adapter": self.adapter,
                 "current_price": self.adapter.get_current_price(),
@@ -271,13 +271,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 "tomorrow_valid": self.adapter.is_tomorrow_valid(),
                 Attributes.LAST_UPDATED: dt_util.now().isoformat(),
                 "next_update": next_update.isoformat(),
-                Attributes.DATA_SOURCE: self._active_source,
-                Attributes.FALLBACK_USED: self._fallback_used,
-                Attributes.IS_USING_FALLBACK: self._fallback_used,
-                Attributes.AVAILABLE_FALLBACKS: available_fallbacks,
                 Attributes.API_KEY_STATUS: api_key_status,
                 "source_info": source_info,
-                "timezone": str(self.hass.config.time_zone),
                 "exchange_rate_info": exchange_rate_info,
                 "display_unit": self.display_unit,
                 "use_subunit": self.use_subunit,
