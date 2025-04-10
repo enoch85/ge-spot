@@ -81,7 +81,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         attrs = {
             Attributes.CURRENCY: self._currency,
             Attributes.AREA: self._area,
-            Attributes.VAT: self._vat,
+            Attributes.VAT: f"{self._vat}%",  # Format VAT as percentage
             Attributes.LAST_UPDATED: self.coordinator.data.get(Attributes.LAST_UPDATED),
             "display_unit": self._display_unit,
             "use_subunit": self._use_subunit
