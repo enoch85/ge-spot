@@ -15,7 +15,8 @@ from ..const import (
     Currency, 
     CurrencyInfo,
     Network,
-    ECB
+    ECB,
+    Attributes
 )
 from ..utils.error_handler import retry_async
 
@@ -192,6 +193,8 @@ class ExchangeRateService:
 
     def get_exchange_rate_info(self, from_currency=Currency.EUR, to_currency=None):
         """Get exchange rate information between two currencies.
+        
+        Centralized implementation that returns consistently formatted exchange rate info.
 
         Args:
             from_currency: Source currency
@@ -207,14 +210,14 @@ class ExchangeRateService:
         # If no rates available or missing currencies
         if not self.rates or from_currency not in self.rates:
             return {
-                "timestamp": last_updated_iso,
+                Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso,
                 "rates": None
             }
 
         if to_currency and to_currency not in self.rates:
             _LOGGER.warning(f"Currency {to_currency} not found in exchange rates")
             return {
-                "timestamp": last_updated_iso,
+                Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso,
                 "rates": None,
                 "error": f"Currency {to_currency} not found"
             }
@@ -225,15 +228,16 @@ class ExchangeRateService:
             to_rate = self.rates[to_currency]
             exchange_rate = to_rate / from_rate
 
+            # Return using standardized attribute constants
             return {
-                "timestamp": last_updated_iso,
-                "rate": exchange_rate,
-                "formatted": f"1 {from_currency} = {exchange_rate:.4f} {to_currency}"
+                Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso,
+                Attributes.EXCHANGE_RATE: exchange_rate,
+                Attributes.EXCHANGE_RATE_FORMATTED: f"1 {from_currency} = {exchange_rate:.4f} {to_currency}"
             }
         else:
             # Return all rates relative to from_currency
             result = {
-                "timestamp": last_updated_iso,
+                Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso,
                 "base": from_currency,
                 "rates": {}
             }
