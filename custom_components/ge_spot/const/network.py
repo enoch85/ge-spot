@@ -7,7 +7,7 @@ class Network:
         TIMEOUT = 30
         RETRY_COUNT = 3
         RETRY_BASE_DELAY = 2.0
-        CACHE_TTL = 86400  # 24 hours in seconds
+        CACHE_TTL = 21600  # 6 hours in seconds
         USER_AGENT = "HomeAssistantGESpot/1.0"
 
     class URLs:
