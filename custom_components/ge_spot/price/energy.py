@@ -38,6 +38,7 @@ def convert_energy_unit(price: Optional[float], from_unit: str, to_unit: str) ->
 
     # For price conversion, the formula is inverse of energy conversion
     # e.g., MWh to kWh: price per MWh / 1000 = price per kWh
+    # The correct ratio for price conversion is from_factor / to_factor
     result = price * (from_factor / to_factor)
 
     _LOGGER.debug(f"Energy unit conversion: {price} {from_unit} → {result} {to_unit}")
