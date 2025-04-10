@@ -116,6 +116,7 @@ class AreaMapping:
     }
     
     # Nordpool region mapping for v2 API
+    # Is this needed?
     NORDPOOL_REGION_MAPPING = {
         Area.SE1: "Sweden",
         Area.SE2: "Sweden", 
@@ -136,21 +137,21 @@ class AreaMapping:
 
     # Nordpool areas display names
     NORDPOOL_AREAS = {
-        Area.NO1: "NO1 (Øst/East)",
-        Area.NO2: "NO2 (Sør/South)",
-        Area.NO3: "NO3 (Midt/Central)",
-        Area.NO4: "NO4 (Nord/North)",
-        Area.NO5: "NO5 (Vest/West)",
+        Area.NO1: "Norway (NO1)",
+        Area.NO2: "Norway (NO2)",
+        Area.NO3: "Norway (NO3)",
+        Area.NO4: "Norway (NO4)",
+        Area.NO5: "Norway (NO5)",
         Area.SE1: "Sweden (SE1)",
         Area.SE2: "Sweden (SE2)",
         Area.SE3: "Sweden (SE3)",
         Area.SE4: "Sweden (SE4)",
         Area.DK1: "Denmark (DK1)",
         Area.DK2: "Denmark (DK2)",
-        Area.FI: "Finland",
-        Area.EE: "Estonia",
-        Area.LV: "Latvia",
-        Area.LT: "Lithuania",
+        Area.FI: "Finland (FI)", 
+        Area.EE: "Estonia (EE)",
+        Area.LV: "Latvia (LV)",
+        Area.LT: "Lithuania (LT)"
     }
 
     # Energi Data Service areas
