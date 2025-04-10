@@ -14,7 +14,7 @@ from ..const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-BASE_URL = Network.URLs.NORDPOOL
+BASE_URL = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
 
 async def fetch_day_ahead_prices(config, area, currency, reference_time=None, hass=None, session=None):
     """Fetch day-ahead prices using Nordpool API."""
@@ -43,44 +43,52 @@ async def fetch_day_ahead_prices(config, area, currency, reference_time=None, ha
         if not session and client:
             await client.close()
 
-async def _fetch_data(self):
+async def _fetch_data(client, config, area, reference_time):
     """Fetch data from Nordpool."""
     try:
-        now = self._get_now()
-        today = now.strftime(TimeFormat.DATE_ONLY)
-        tomorrow = (now + datetime.timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
-
-        area = self.config.get("area", Nordpool.DEFAULT_AREA)
+        if reference_time is None:
+            reference_time = datetime.datetime.now(datetime.timezone.utc)
         
-        # Map to region name instead of delivery area
-        region = AreaMapping.NORDPOOL_REGION_MAPPING.get(area, "Sweden")
-        _LOGGER.debug(f"Fetching Nordpool data for region: {region}")
+        today = reference_time.strftime(TimeFormat.DATE_ONLY)
+        tomorrow = (reference_time + datetime.timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
         
-        # Updated parameters for v2 API
-        params = {
-            "region": region,
+        # Map from area code to delivery area
+        delivery_area = AreaMapping.NORDPOOL_DELIVERY.get(area, area)
+        
+        _LOGGER.debug(f"Fetching Nordpool data for area: {area}, delivery area: {delivery_area}")
+        
+        # Fetch today's data
+        params_today = {
+            "currency": Currency.EUR,
             "date": today,
-            "currency": Currency.EUR  # Keep requesting in EUR for consistency
+            "market": "DayAhead",
+            "deliveryArea": delivery_area
         }
         
-        today_data = await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
+        today_data = await client.fetch(BASE_URL, params=params_today)
         
-        # Same logic for tomorrow data
+        # Try to fetch tomorrow's data if it's after 13:00 CET (when typically available)
         tomorrow_data = None
         now_utc = datetime.datetime.now(datetime.timezone.utc)
         now_cet = now_utc.astimezone(datetime.timezone(datetime.timedelta(hours=1)))
         
         if now_cet.hour >= 13:
-            params["date"] = tomorrow
-            tomorrow_data = await self.data_fetcher.fetch_with_retry(self.BASE_URL, params=params)
+            params_tomorrow = {
+                "currency": Currency.EUR,
+                "date": tomorrow,
+                "market": "DayAhead",
+                "deliveryArea": delivery_area
+            }
             
+            tomorrow_data = await client.fetch(BASE_URL, params=params_tomorrow)
+        
         return {
-            "today": today_data, 
+            "today": today_data,
             "tomorrow": tomorrow_data,
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
         }
     except Exception as e:
-        _LOGGER.error(f"Error in _fetch_data: {str(e)}", exc_info=True)
+        _LOGGER.error(f"Error in _fetch_data for Nordpool: {str(e)}", exc_info=True)
         return None
 
 async def _process_data(data, area, currency, vat, use_subunit, reference_time, hass, session):
@@ -91,8 +99,8 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
     today_data = data["today"]
     tomorrow_data = data.get("tomorrow")
     
-    if "multiAreaEntries" not in today_data:
-        _LOGGER.error("Missing multiAreaEntries in Nordpool data")
+    if not today_data or "multiAreaEntries" not in today_data:
+        _LOGGER.error("Missing or invalid multiAreaEntries in Nordpool data")
         return None
     
     # Get current time
@@ -171,7 +179,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             all_prices.append(converted_price)
             
             # Check if current hour
-            if hour == current_hour:
+            if hour == current_hour and local_dt.date() == now.date():
                 result["current_price"] = converted_price
                 result["raw_values"]["current_price"] = {
                     "raw": raw_price,
@@ -182,7 +190,8 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 }
             
             # Check if next hour
-            if hour == (current_hour + 1) % 24:
+            next_hour = (current_hour + 1) % 24
+            if hour == next_hour and local_dt.date() == now.date():
                 result["next_hour_price"] = converted_price
                 result["raw_values"]["next_hour_price"] = {
                     "raw": raw_price,
@@ -196,7 +205,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             _LOGGER.error(f"Error processing timestamp {start_time}: {e}")
             continue
     
-    # Check if we have exactly 24 prices
+    # Check if we have exactly 24 hourly prices
     if len(hourly_prices) != 24 and len(hourly_prices) > 0:
         _LOGGER.warning(f"Expected 24 hourly prices, got {len(hourly_prices)}. Prices may be incomplete.")
     
