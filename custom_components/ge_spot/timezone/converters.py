@@ -80,7 +80,22 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
 
     _LOGGER.debug(f"Finding price for time: {reference_time.isoformat()} among {len(periods)} periods")
 
-    # Look for exact match only - no approximations
+    # First check for periods on the current day - more efficient 
+    current_date = reference_time.date()
+    current_hour = reference_time.hour
+    
+    # Look for direct hour match on the current day
+    for period in periods:
+        start = period.get("start")
+        if not start:
+            continue
+        
+        start = ensure_timezone_aware(start)
+        if start.date() == current_date and start.hour == current_hour:
+            _LOGGER.debug(f"Found period by direct hour match: {start.isoformat()}, price: {period.get('price')}")
+            return period
+    
+    # If not found, do a more thorough search
     for period in periods:
         start = period.get("start")
         end = period.get("end")
@@ -104,15 +119,14 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
             _LOGGER.debug(f"Found matching period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
             return period
 
-    # If still not found, try matching by hour
-    current_hour = reference_time.hour
+    # If we get here, no matching period was found
+    # Last resort: match by hour regardless of date
     for period in periods:
         start = period.get("start")
         if start and hasattr(start, "hour") and start.hour == current_hour:
             _LOGGER.debug(f"Found period by hour match: {start.isoformat()}, price: {period.get('price')}")
             return period
 
-    # If we get here, no matching period was found
     if periods:
         first_period = periods[0]
         start = first_period.get("start")
