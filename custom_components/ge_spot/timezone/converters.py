@@ -46,13 +46,21 @@ def normalize_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] =
         
         for period in periods:
             # Handle nested timestamps in dictionaries
-            for key, value in period.items():
+            for key, value in list(period.items()):  # Use list() to avoid modification during iteration
                 # Handle start/end timestamps
                 if key in ["start", "end"] and value:
                     if isinstance(value, str):
                         period[key] = parse_datetime(value)
                     if hasattr(period[key], 'tzinfo'):
-                        period[key] = ensure_timezone_aware(period[key]).astimezone(tz)
+                        # Ensure UTC for consistent conversion
+                        dt_obj = ensure_timezone_aware(period[key])
+                        # Convert to local timezone
+                        local_dt = dt_obj.astimezone(tz)
+                        period[key] = local_dt
+                        # Add debug logging for important timestamps
+                        if key == "start":
+                            _LOGGER.debug(f"Normalized timestamp: {value} → {local_dt.isoformat()} (hour: {local_dt.hour})")
+                            
                 # Handle nested dictionaries with timestamps
                 elif isinstance(value, dict) and ("start" in value or "end" in value):
                     for nested_key in ["start", "end"]:
@@ -60,11 +68,21 @@ def normalize_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] =
                             if isinstance(value[nested_key], str):
                                 value[nested_key] = parse_datetime(value[nested_key])
                             if hasattr(value[nested_key], 'tzinfo'):
-                                value[nested_key] = ensure_timezone_aware(value[nested_key]).astimezone(tz)
+                                dt_obj = ensure_timezone_aware(value[nested_key])
+                                value[nested_key] = dt_obj.astimezone(tz)
+            
+            # Also ensure "day" and "hour" fields match the normalized start time
+            if "start" in period and period["start"]:
+                start_time = period["start"]
+                period["day"] = start_time.date()
+                period["hour"] = start_time.hour
+        
+        # Sort periods by start time to ensure correct processing order
+        periods.sort(key=lambda x: x.get("start") if x.get("start") else datetime.max.replace(tzinfo=dt_util.UTC))
         
         _LOGGER.debug(f"Normalized {len(periods)} price periods to {local_tz} timezone")
     except Exception as e:
-        _LOGGER.error(f"Error normalizing price periods: {e}")
+        _LOGGER.error(f"Error normalizing price periods: {e}", exc_info=True)
         
     return periods
 
@@ -121,26 +139,7 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
     current_utc_date = current_utc.date()
     current_utc_hour = current_utc.hour
     
-    # Step 1: Try direct hour match on the current day - fastest path
-    for period in periods:
-        start = period.get("start")
-        if not start:
-            continue
-        
-        start = ensure_timezone_aware(start)
-        
-        # Match both hour and date to avoid mixing days
-        if start.date() == current_local_date and start.hour == current_local_hour:
-            _LOGGER.debug(f"Found period by direct hour match: {start.isoformat()}, price: {period.get('price')}")
-            return period
-            
-        # Also compare in UTC to handle timezone differences
-        start_utc = start.astimezone(dt_util.UTC)
-        if start_utc.date() == current_utc_date and start_utc.hour == current_utc_hour:
-            _LOGGER.debug(f"Found period by direct UTC hour match: {start.isoformat()}, price: {period.get('price')}")
-            return period
-    
-    # Step 2: If direct match fails, search by time range (period contains reference time)
+    # Step 1: Try time range match first (most accurate method)
     for period in periods:
         start = period.get("start")
         end = period.get("end") 
@@ -158,10 +157,55 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
             end = ensure_timezone_aware(end)
 
         if start <= reference_time < end:
-            _LOGGER.debug(f"Found matching period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
+            _LOGGER.debug(f"Found matching period by time range: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
+            return period
+    
+    # Step 2: Try direct hour match on the current day
+    today_periods = []
+    for period in periods:
+        start = period.get("start")
+        if not start:
+            continue
+        
+        start = ensure_timezone_aware(start)
+        
+        # Collect today's periods for later use
+        if start.date() == current_local_date:
+            today_periods.append(period)
+        
+        # Match both hour and date to avoid mixing days
+        if start.date() == current_local_date and start.hour == current_local_hour:
+            _LOGGER.debug(f"Found period by direct hour match: {start.isoformat()}, price: {period.get('price')}")
+            return period
+            
+        # Also compare in UTC to handle timezone differences
+        start_utc = start.astimezone(dt_util.UTC)
+        if start_utc.date() == current_utc_date and start_utc.hour == current_utc_hour:
+            _LOGGER.debug(f"Found period by direct UTC hour match: {start.isoformat()}, price: {period.get('price')}")
             return period
 
-    # Step 3: Check if we have only tomorrow's data
+    # Step 3: If we have today's data but no exact match, find closest hour
+    if today_periods:
+        closest_period = None
+        closest_diff = float('inf')
+        
+        for period in today_periods:
+            start = ensure_timezone_aware(period.get("start"))
+            # Convert both to minutes since midnight for comparison
+            period_minutes = start.hour * 60 + start.minute
+            reference_minutes = reference_time.hour * 60 + reference_time.minute
+            diff = abs(period_minutes - reference_minutes)
+            
+            if diff < closest_diff:
+                closest_diff = diff
+                closest_period = period
+        
+        if closest_period:
+            start = ensure_timezone_aware(closest_period.get("start"))
+            _LOGGER.debug(f"Using closest today period: {start.isoformat()}, hour diff: {closest_diff/60:.1f}h, price: {closest_period.get('price')}")
+            return closest_period
+
+    # Step 4: Last resort - check if we only have future/tomorrow data
     if len(periods) > 0:
         # Check if we have only future data
         tomorrow_only = True
@@ -174,8 +218,10 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
                 tomorrow_only = False
                 break
                     
-        # If we have only future data, use matching hour from future as fallback
+        # Only if we have ONLY future data, use matching hour from future as fallback
         if tomorrow_only:
+            _LOGGER.warning(f"Only future price data available, trying to find best match for hour {current_local_hour}")
+            
             closest_hour_period = None
             closest_hour_diff = 24  # Initialize with maximum hour difference
             
@@ -197,15 +243,18 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
             # Return closest hour period if found
             if closest_hour_period:
                 start = ensure_timezone_aware(closest_hour_period["start"])
-                _LOGGER.debug(f"Using closest future hour {start.hour} (diff: {closest_hour_diff}) for current hour {current_local_hour}: {closest_hour_period.get('price')}")
+                _LOGGER.warning(f"Using closest future hour {start.hour} (diff: {closest_hour_diff}) for current hour {current_local_hour}: {closest_hour_period.get('price')}")
                 return closest_hour_period
     
     # No match found
     if periods:
-        first_period = periods[0]
-        if "start" in first_period:
-            start = ensure_timezone_aware(first_period["start"])
-            _LOGGER.warning(f"No matching period found for {reference_time.isoformat()}. First period: {start.isoformat()}")
+        period_details = []
+        for period in periods[:3]:  # Show first 3 periods for debugging
+            if "start" in period:
+                start = ensure_timezone_aware(period["start"])
+                period_details.append(f"{start.isoformat()} (hour {start.hour})")
+        
+        _LOGGER.warning(f"No matching period found for {reference_time.isoformat()} (hour {reference_time.hour}). Sample periods: {', '.join(period_details)}")
 
     return None
 
