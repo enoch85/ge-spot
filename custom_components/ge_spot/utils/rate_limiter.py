@@ -16,7 +16,8 @@ class RateLimiter:
         current_time: datetime.datetime,
         consecutive_failures: int = 0,
         last_failure_time: Optional[datetime.datetime] = None,
-        last_successful_fetch: Optional[Dict[str, Any]] = None
+        last_successful_fetch: Optional[Dict[str, Any]] = None,
+        configured_interval: Optional[int] = None
     ) -> Tuple[bool, str]:
         """Determine if we should skip fetching based on rate limiting rules.
         
@@ -26,6 +27,7 @@ class RateLimiter:
             consecutive_failures: Number of consecutive failures (for backoff)
             last_failure_time: When the last failure occurred
             last_successful_fetch: Last successful fetch data (for checking hourly prices)
+            configured_interval: User-configured update interval in minutes
             
         Returns:
             Tuple of (should_skip, reason)
@@ -36,8 +38,14 @@ class RateLimiter:
         # Calculate time since last fetch in minutes
         time_diff = (current_time - last_fetched).total_seconds() / 60  # in minutes
 
-        # If less than minimum fetch interval, always skip
+        # Get effective interval - respect user configuration but enforce minimum
         min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+        
+        # Use user's configured interval if it's set and longer than the minimum
+        effective_interval = configured_interval or min_interval
+        effective_interval = max(min_interval, effective_interval)
+
+        # If less than minimum fetch interval, always skip
         if time_diff < min_interval:
             reason = f"Last fetch was only {time_diff:.1f} minutes ago (minimum: {min_interval})"
             return True, reason
@@ -59,22 +67,21 @@ class RateLimiter:
                 return False, reason
 
         # Check if we have hourly prices for the current hour
-        std_interval = Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
         if last_successful_fetch and "hourly_prices" in last_successful_fetch:
             hourly_prices = last_successful_fetch["hourly_prices"]
-            # If we already have prices for the current hour, limit API calls to the standard interval
+            # If we already have prices for the current hour, use the effective interval
             current_hour_str = f"{current_time.hour:02d}:00"
             if current_hour_str in hourly_prices:
-                if time_diff < std_interval:
-                    reason = f"Already have price for current hour and last fetch was {time_diff:.1f} min ago (standard: {std_interval})"
+                if time_diff < effective_interval:
+                    reason = f"Already have price for current hour and last fetch was {time_diff:.1f} min ago (configured: {effective_interval})"
                     return True, reason
                 else:
-                    reason = f"Have price for current hour but {time_diff:.1f} min since last fetch exceeds standard interval"
+                    reason = f"Have price for current hour but {time_diff:.1f} min since last fetch exceeds configured interval"
                     return False, reason
 
-        # Standard rate limiting - don't fetch more than once per standard interval
-        if time_diff < std_interval:
-            reason = f"Last fetch was {time_diff:.1f} minutes ago (standard interval: {std_interval})"
+        # Standard rate limiting - don't fetch more often than the effective interval
+        if time_diff < effective_interval:
+            reason = f"Last fetch was {time_diff:.1f} minutes ago (configured interval: {effective_interval})"
             return True, reason
             
-        return False, f"Time since last fetch ({time_diff:.1f} min) exceeds standard interval ({std_interval} min)"
+        return False, f"Time since last fetch ({time_diff:.1f} min) exceeds configured interval ({effective_interval} min)"
