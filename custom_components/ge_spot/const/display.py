@@ -14,22 +14,22 @@ class DisplayUnit:
 
 class UpdateInterval:
     """Update interval options."""
-    HOUR = 60          # 1 hour in minutes
-    SIX_HOURS = 360    # 6 hours in minutes
-    TWELVE_HOURS = 720 # 12 hours in minutes
-    DAY = 1440         # 24 hours (full day) in minutes
+    FIFTEEN_MINUTES = 15  # 15 minutes
+    HOUR = 60             # 1 hour in minutes
+    TWELVE_HOURS = 720    # 12 hours in minutes
+    DAY = 1440            # 24 hours (full day) in minutes
 
     OPTIONS = [
+        {"value": FIFTEEN_MINUTES, "label": "15 minutes"},
         {"value": HOUR, "label": "1 hour"},
-        {"value": SIX_HOURS, "label": "6 hours"},
         {"value": TWELVE_HOURS, "label": "12 hours"},
         {"value": DAY, "label": "24 hours"},
     ]
 
     # For selectors in configurations
     OPTIONS_DICT = {
+        FIFTEEN_MINUTES: "15 minutes",
         HOUR: "1 hour",
-        SIX_HOURS: "6 hours",
         TWELVE_HOURS: "12 hours",
         DAY: "24 hours",
     }
