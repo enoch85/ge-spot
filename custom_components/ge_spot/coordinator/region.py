@@ -56,6 +56,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         self._last_api_fetch = None  # Track last successful API fetch time
         self._consecutive_failures = 0
         self._last_failure_time = None
+        
+        # API key status cache
+        self._api_key_status = {}
 
         # Ensure display unit is available
         self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
@@ -111,7 +114,23 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     "status": "not_configured"
                 }
 
+        self._api_key_status = api_key_status
         return api_key_status
+
+    def _get_cached_result(self):
+        """Get a cached result with updated metadata."""
+        updated_data = dict(self._last_successful_data)
+        
+        # Use existing adapter to avoid triggering timezone processing
+        updated_data["adapter"] = self.adapter
+        updated_data[Attributes.LAST_UPDATED] = dt_util.now().isoformat()
+        updated_data["next_update"] = (dt_util.now() + self.update_interval).isoformat()
+        updated_data["using_cached_data"] = True
+        
+        # Use cached API key status
+        updated_data[Attributes.API_KEY_STATUS] = self._api_key_status
+        
+        return updated_data
 
     async def _async_update_data(self):
         """Fetch data from appropriate API for this region."""
@@ -128,24 +147,11 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 configured_interval=self.configured_update_interval
             )
             
-            if should_skip and self._last_successful_data:
+            if should_skip and self._last_successful_data and self.adapter:
                 _LOGGER.debug(f"Skipping API fetch for area {self.area}: {reason}")
+                # Return cached data without rebuilding adapter
+                return self._get_cached_result()
                 
-                # Create a copy of the cached data to avoid modifying the original
-                cached_result = dict(self._last_successful_data)
-                cached_result["using_cached_data"] = True  # Update this flag
-                
-                # Update last_updated timestamp
-                cached_result[Attributes.LAST_UPDATED] = dt_util.now().isoformat()
-                
-                # Check API key status to keep it fresh
-                api_key_status = await self.check_api_key_status()
-                cached_result[Attributes.API_KEY_STATUS] = api_key_status
-                
-                return cached_result
-                
-            # If no cached data or not rate limited, proceed with normal fetch
-
             # Only log at INFO level when actually making an API call
             _LOGGER.info(f"Updating data for area {self.area} with currency {self.currency}")
 
@@ -276,18 +282,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             # If we couldn't get today's data from any source
             if not source_data["today"]:
                 _LOGGER.error(f"Failed to fetch today's price data. Attempted: {', '.join(self._attempted_sources)}")
-                if self._last_successful_data:
+                if self._last_successful_data and self.adapter:
                     _LOGGER.warning("Using cached data from last successful update")
-                    
-                    # Create a copy and mark it as cached
-                    cached_result = dict(self._last_successful_data)
-                    cached_result["using_cached_data"] = True
-                    
-                    # Check API key status
-                    api_key_status = await self.check_api_key_status()
-                    cached_result[Attributes.API_KEY_STATUS] = api_key_status
-                    
-                    return cached_result
+                    return self._get_cached_result()
                 return None
 
             # Choose the best sources for today and tomorrow
@@ -323,15 +320,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
             if not self.adapter:
                 _LOGGER.error("Failed to create price adapter")
-                if self._last_successful_data:
-                    # Create a copy and mark it as cached
-                    cached_result = dict(self._last_successful_data)
-                    cached_result["using_cached_data"] = True
-                    
-                    # Check API key status
-                    api_key_status = await self.check_api_key_status()
-                    cached_result[Attributes.API_KEY_STATUS] = api_key_status
-                    return cached_result
+                if self._last_successful_data and self.adapter:
+                    return self._get_cached_result()
                 return None
 
             # Process statistics for today and tomorrow
@@ -366,8 +356,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             # Calculate next update time
             next_update = dt_util.now() + self.update_interval
 
-            # Check API key status
-            api_key_status = await self.check_api_key_status()
+            # Check API key status only when fetching fresh data
+            if fetched_fresh_data:
+                self._api_key_status = await self.check_api_key_status()
 
             # Get exchange rate info
             try:
@@ -393,7 +384,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 "tomorrow_valid": self.adapter.is_tomorrow_valid(),
                 Attributes.LAST_UPDATED: dt_util.now().isoformat(),
                 "next_update": next_update.isoformat(),
-                Attributes.API_KEY_STATUS: api_key_status,
+                Attributes.API_KEY_STATUS: self._api_key_status,
                 "source_info": source_info,
                 "display_unit": self.display_unit,
                 "use_subunit": self.use_subunit,
@@ -412,18 +403,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             self._last_failure_time = dt_util.now()
             _LOGGER.error(f"Error fetching electricity price data: {err}")
             
-            if self._last_successful_data:
+            if self._last_successful_data and self.adapter:
                 _LOGGER.warning("Using cached data from last successful update")
-
-                # Create a copy of the cache and mark it as cached
-                cached_result = dict(self._last_successful_data)
-                cached_result["using_cached_data"] = True
-                
-                # Check API key status
-                api_key_status = await self.check_api_key_status()
-                cached_result[Attributes.API_KEY_STATUS] = api_key_status
-
-                return cached_result
+                return self._get_cached_result()
             raise
 
     def _select_primary_source_data(self, source_data):
