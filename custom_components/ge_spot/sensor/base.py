@@ -92,15 +92,15 @@ class BaseElectricityPriceSensor(SensorEntity):
             source_info = self.coordinator.data["source_info"]
             attrs[Attributes.DATA_SOURCE] = source_info.get("active_source")
 
-        # Add exchange rate information if available - unified representation
+        # Add exchange rate information if available
         if "exchange_rate_info" in self.coordinator.data:
             exchange_info = self.coordinator.data.get("exchange_rate_info", {})
-            if "rate" in exchange_info:
-                attrs["exchange_rate"] = exchange_info["rate"]
-            if "formatted" in exchange_info:
-                attrs["exchange_rate_formatted"] = exchange_info["formatted"]
-            if "timestamp" in exchange_info:
-                attrs["exchange_rate_timestamp"] = exchange_info["timestamp"]
+            # Include direct attributes for exchange rate at the root level
+            attrs["exchange_rate"] = exchange_info.get("rate")
+            attrs["exchange_rate_formatted"] = exchange_info.get("formatted")
+            attrs["exchange_rate_timestamp"] = exchange_info.get("timestamp")
+            # Include full exchange info object as well
+            attrs["exchange_info"] = exchange_info
 
         # Add source_info but don't include duplicated attributes
         if "source_info" in self.coordinator.data:
