@@ -253,12 +253,14 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 from ..utils.exchange_service import get_exchange_service
                 exchange_service = await get_exchange_service(self.session)
                 exchange_rate_info = exchange_service.get_exchange_rate_info("EUR", self.currency)
+                
+                # Add exchange info directly to source_info
+                source_info["exchange_rate"] = exchange_rate_info.get("rate")
+                source_info["exchange_rate_formatted"] = exchange_rate_info.get("formatted")  
+                source_info["exchange_rate_timestamp"] = exchange_rate_info.get("timestamp")
             except Exception as e:
                 _LOGGER.error(f"Error getting exchange rate info: {e}")
-                exchange_rate_info = {
-                    "timestamp": None,
-                    "error": str(e)
-                }
+                source_info["exchange_rate_error"] = str(e)
 
             # Build result data for sensors - remove duplicated attributes
             result = {
@@ -273,7 +275,6 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 "next_update": next_update.isoformat(),
                 Attributes.API_KEY_STATUS: api_key_status,
                 "source_info": source_info,
-                "exchange_rate_info": exchange_rate_info,
                 "display_unit": self.display_unit,
                 "use_subunit": self.use_subunit,
                 # Include raw values from the source if available
