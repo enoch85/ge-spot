@@ -22,12 +22,13 @@ class ApiClient:
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession()
 
-    async def fetch(self, url: str, params: Optional[Dict] = None, timeout: int = 30) -> Any:
+    async def fetch(self, url: str, params: Optional[Dict] = None, headers: Optional[Dict] = None, timeout: int = 30) -> Any:
         """Fetch data with improved error handling and logging.
 
         Args:
             url: The URL to fetch
             params: Optional query parameters
+            headers: Optional request headers
             timeout: Request timeout in seconds
 
         Returns:
@@ -38,7 +39,7 @@ class ApiClient:
         for attempt in range(self._retry_count):
             try:
                 _LOGGER.debug(f"API request attempt {attempt+1}/{self._retry_count}: {url}")
-                async with self.session.get(url, params=params, timeout=timeout) as response:
+                async with self.session.get(url, params=params, headers=headers, timeout=timeout) as response:
                     # Consider 2xx responses as success
                     if not (200 <= response.status < 300):
                         _LOGGER.error(f"HTTP error {response.status} fetching from {url} (attempt {attempt+1}/{self._retry_count})")
