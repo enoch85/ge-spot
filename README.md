@@ -8,10 +8,11 @@ This custom integration allows you to fetch day-ahead electricity spot prices fr
 
 - **Nordpool** - Prices for Nordic and Baltic countries
 - **Energi Data Service** - Prices for Denmark
-- **ENTSO-E** - European Network of Transmission System Operators for Electricity (requires API key)
-- **EPEX SPOT** - European Power Exchange for Central Europe
-- **OMIE** - Iberian Electricity Market Operator for Spain and Portugal
-- **AEMO** - Australian Energy Market Operator
+- **Stromligning** - Prices for Denmark
+- *WIP*: **ENTSO-E** - European Network of Transmission System Operators for Electricity (requires API key)
+- *WIP*: **EPEX SPOT** - European Power Exchange for Central Europe
+- *WIP*: **OMIE** - Iberian Electricity Market Operator for Spain and Portugal
+- *WIP*: **AEMO** - Australian Energy Market Operator
 
 ## Features
 
