@@ -1,7 +1,7 @@
 """Rate limiting utilities for GE-Spot integration."""
 import logging
 import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
 from ..const.network import Network
 
@@ -15,7 +15,8 @@ class RateLimiter:
         last_fetched: Optional[datetime.datetime], 
         current_time: datetime.datetime,
         consecutive_failures: int = 0,
-        last_failure_time: Optional[datetime.datetime] = None
+        last_failure_time: Optional[datetime.datetime] = None,
+        last_successful_fetch: Optional[Dict[str, Any]] = None
     ) -> Tuple[bool, str]:
         """Determine if we should skip fetching based on rate limiting rules.
         
@@ -24,6 +25,7 @@ class RateLimiter:
             current_time: The current time
             consecutive_failures: Number of consecutive failures (for backoff)
             last_failure_time: When the last failure occurred
+            last_successful_fetch: Last successful fetch data (for checking hourly prices)
             
         Returns:
             Tuple of (should_skip, reason)
@@ -56,8 +58,21 @@ class RateLimiter:
                 reason = f"In special hour window {start_hour}-{end_hour}, allowing fetch"
                 return False, reason
 
-        # Standard rate limiting - don't fetch more than once per standard interval
+        # Check if we have hourly prices for the current hour
         std_interval = Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
+        if last_successful_fetch and "hourly_prices" in last_successful_fetch:
+            hourly_prices = last_successful_fetch["hourly_prices"]
+            # If we already have prices for the current hour, limit API calls to the standard interval
+            current_hour_str = f"{current_time.hour:02d}:00"
+            if current_hour_str in hourly_prices:
+                if time_diff < std_interval:
+                    reason = f"Already have price for current hour and last fetch was {time_diff:.1f} min ago (standard: {std_interval})"
+                    return True, reason
+                else:
+                    reason = f"Have price for current hour but {time_diff:.1f} min since last fetch exceeds standard interval"
+                    return False, reason
+
+        # Standard rate limiting - don't fetch more than once per standard interval
         if time_diff < std_interval:
             reason = f"Last fetch was {time_diff:.1f} minutes ago (standard interval: {std_interval})"
             return True, reason
