@@ -32,51 +32,38 @@ class ElectricityPriceAdapter:
         self.use_subunit = use_subunit
         self.using_cached_data = using_cached_data
         self.local_tz = dt_util.get_time_zone(hass.config.time_zone)
-        _LOGGER.debug(f"Initializing price adapter with Home Assistant timezone: {self.local_tz}")
-        _LOGGER.debug(f"Price adapter using subunit conversion: {self.use_subunit}")
-        _LOGGER.debug(f"Price adapter using cached data: {self.using_cached_data}")
-
-        # Transform raw data format if necessary
+        
+        # Initialize empty structures
         self.processed_raw_data = []
+        self.price_periods = []
+        self.classified_periods = {
+            "today": [],
+            "tomorrow": []
+        }
 
-        # Skip full processing if using cached data to improve performance
-        if not self.using_cached_data:
-            # Process all available raw data formats
+        _LOGGER.debug(f"Initializing price adapter (cached: {using_cached_data}, subunit: {use_subunit})")
+
+        # Skip processing if using cached data
+        if not using_cached_data:
             self._process_raw_data()
-
-            # Process data into periods with proper timezone handling
             self.price_periods = process_price_data(self.processed_raw_data, self.local_tz)
-
-            # Classify periods by date (today, tomorrow, etc.)
             self.classified_periods = classify_price_periods(self.price_periods, self.hass)
-
-            # Log first and last periods for debugging
+            
             if self.price_periods:
-                first_period = self.price_periods[0]
-                last_period = self.price_periods[-1]
-                _LOGGER.debug(f"First period: {first_period['start'].isoformat()} - {first_period['price']}")
-                _LOGGER.debug(f"Last period: {last_period['start'].isoformat()} - {last_period['price']}")
-
-            _LOGGER.debug(f"Created {len(self.price_periods)} price periods "
-                        f"(today: {len(self.classified_periods['today'])}, "
-                        f"tomorrow: {len(self.classified_periods['tomorrow'])})")
-        else:
-            # Just initialize empty structures for cached data case
-            self.price_periods = []
-            self.classified_periods = {
-                "today": [],
-                "tomorrow": []
-            }
-            _LOGGER.debug(f"Using cached data - skipping full data processing")
+                _LOGGER.debug(f"Created {len(self.price_periods)} price periods "
+                            f"(today: {len(self.classified_periods['today'])}, "
+                            f"tomorrow: {len(self.classified_periods['tomorrow'])})")
 
     def _process_raw_data(self):
         """Process various raw data formats into a standardized structure."""
+        if self.using_cached_data:
+            return
+            
         for item in self.raw_data:
-            # Skip non-dictionary items
             if not isinstance(item, dict):
                 continue
 
-            # Extract currency information - used for subunit conversion
+            # Extract currency information
             currency = item.get("currency")
 
             # Handle API response with hourly_prices dictionary
@@ -107,10 +94,7 @@ class ElectricityPriceAdapter:
         # Process hourly prices
         for hour_str, price in item.get("hourly_prices", {}).items():
             try:
-                # Parse hour string (format: "HH:00")
                 hour = int(hour_str.split(":")[0])
-
-                # Create timestamps for this hour in local time
                 start_time = dt_util.as_local(dt_util.start_of_local_day(base_date))
                 start_time = start_time.replace(hour=hour)
                 end_time = start_time + timedelta(hours=1)
@@ -124,12 +108,11 @@ class ElectricityPriceAdapter:
             except Exception as e:
                 _LOGGER.warning(f"Error processing hourly price {hour_str}: {e}")
 
-        # Also check for tomorrow_hourly_prices if this data contains today's prices
+        # Also check for tomorrow_hourly_prices
         if not is_tomorrow and "tomorrow_hourly_prices" in item:
             for hour_str, price in item.get("tomorrow_hourly_prices", {}).items():
                 try:
                     hour = int(hour_str.split(":")[0])
-
                     start_time = dt_util.as_local(dt_util.start_of_local_day(tomorrow_date))
                     start_time = start_time.replace(hour=hour)
                     end_time = start_time + timedelta(hours=1)
@@ -148,14 +131,7 @@ class ElectricityPriceAdapter:
         for entry in entries:
             if isinstance(entry, dict) and "start" in entry and ("price" in entry or "value" in entry):
                 start_time = parse_datetime(entry["start"])
-
-                # Handle end time
-                if "end" in entry and entry["end"]:
-                    end_time = parse_datetime(entry["end"])
-                else:
-                    end_time = start_time + timedelta(hours=1)
-
-                # Handle price/value field name variations
+                end_time = parse_datetime(entry["end"]) if "end" in entry and entry["end"] else start_time + timedelta(hours=1)
                 price = entry.get("price") if "price" in entry else entry.get("value")
 
                 self.processed_raw_data.append({
@@ -168,11 +144,8 @@ class ElectricityPriceAdapter:
     def _process_direct_entry(self, item, currency=None):
         """Process entries already in start/end/value format."""
         try:
-            # Parse timestamps if needed
             start_time = parse_datetime(item["start"]) if isinstance(item["start"], str) else item["start"]
             end_time = parse_datetime(item["end"]) if isinstance(item["end"], str) else item["end"]
-
-            # Handle price field name variations
             price = item.get("value", item.get("price"))
 
             self.processed_raw_data.append({
@@ -184,52 +157,30 @@ class ElectricityPriceAdapter:
         except Exception as e:
             _LOGGER.warning(f"Error processing price entry: {e}")
 
-    def _get_currency(self):
-        """Get the currency from the raw data."""
-        # First check if any period has currency
-        for period in self.price_periods:
-            if "currency" in period and period["currency"]:
-                return period["currency"]
-
-        # Then check raw data
-        for item in self.raw_data:
-            if isinstance(item, dict) and "currency" in item and item["currency"]:
-                return item["currency"]
-
-        # Default fallback
-        return "EUR"
-
     def get_current_price(self, reference_time: Optional[datetime] = None) -> Optional[float]:
         """Get price for the current period."""
-        # If we're using cached data from coordinator, use that
+        # For cached data, access directly from the raw_data
         if self.using_cached_data and self.raw_data and isinstance(self.raw_data[0], dict):
             return self.raw_data[0].get("current_price")
             
-        if reference_time is None:
-            reference_time = dt_util.now()
-            _LOGGER.debug(f"Using current time as reference: {reference_time.isoformat()}")
-
-        # Use the utility function to find the current price
-        price = find_current_price(self.price_periods, reference_time)
-
-        return price
+        # Otherwise use the utility function
+        return find_current_price(self.price_periods, reference_time)
 
     def get_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
         """Get all prices for a specific day (today + offset)."""
-        # If using cached data and it's already available in raw_data
+        # For cached data, use the data directly
         if self.using_cached_data and self.raw_data:
             if day_offset == 0 and "today" in self.raw_data[0]:
                 return self.raw_data[0]["today"]
             elif day_offset == 1 and "tomorrow" in self.raw_data[0]:
                 return self.raw_data[0]["tomorrow"]
 
-        # Otherwise use normal processing
+        # Otherwise use the classified periods
         if day_offset == 0:
             return self.classified_periods["today"]
         elif day_offset == 1:
             return self.classified_periods["tomorrow"]
         else:
-            # For other offsets, fallback to the original method
             return get_prices_for_day(self.price_periods, day_offset, self.hass)
 
     def get_raw_prices_for_day(self, day_offset: int = 0) -> List[Dict]:
@@ -239,42 +190,38 @@ class ElectricityPriceAdapter:
 
     def get_today_prices(self) -> List[float]:
         """Get list of today's prices in chronological order."""
-        # If using cached data and already available
-        if self.using_cached_data and self.raw_data and "today" in self.raw_data[0]:
-            return self.raw_data[0]["today"]
+        # For cached data, directly return the stored list
+        if self.using_cached_data and self.raw_data:
+            if "today" in self.raw_data[0]:
+                return self.raw_data[0]["today"]
         
         return get_price_list(self.classified_periods["today"])
 
     def get_tomorrow_prices(self) -> List[float]:
         """Get list of tomorrow's prices in chronological order."""
-        # If using cached data and already available
-        if self.using_cached_data and self.raw_data and "tomorrow" in self.raw_data[0]:
-            return self.raw_data[0]["tomorrow"]
+        # For cached data, directly return the stored list
+        if self.using_cached_data and self.raw_data:
+            if "tomorrow" in self.raw_data[0]:
+                return self.raw_data[0]["tomorrow"]
             
         return get_price_list(self.classified_periods["tomorrow"])
 
     def get_day_statistics(self, day_offset: int = 0) -> Dict[str, Any]:
         """Calculate statistics for a particular day."""
-        from ..utils.debug_utils import log_statistics
-
-        # If using cached data and stats are already available
+        # For cached data, use the stored statistics
         if self.using_cached_data and self.raw_data:
             if day_offset == 0 and "today_stats" in self.raw_data[0]:
                 return self.raw_data[0]["today_stats"]
             elif day_offset == 1 and "tomorrow_stats" in self.raw_data[0]:
                 return self.raw_data[0]["tomorrow_stats"]
 
+        # Otherwise calculate statistics
         day_data = self.get_prices_for_day(day_offset)
-        stats = get_statistics(day_data)
-
-        # Log calculation details
-        log_statistics(stats, day_offset)
-
-        return stats
+        return get_statistics(day_data)
 
     def is_tomorrow_valid(self) -> bool:
         """Check if tomorrow's data is available."""
-        # If using cached data, check the flag directly
+        # For cached data, use the stored flag
         if self.using_cached_data and self.raw_data:
             return self.raw_data[0].get("tomorrow_valid", False)
             
