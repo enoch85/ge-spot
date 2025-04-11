@@ -8,6 +8,7 @@ from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import DOMAIN, Config, Defaults
+from .const.network import Network
 from .price.currency import get_default_currency
 from .coordinator.region import RegionPriceCoordinator
 from .api.base.session_manager import register_shutdown_task
@@ -45,6 +46,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         Config.UPDATE_INTERVAL,
         entry.data.get(Config.UPDATE_INTERVAL, Defaults.UPDATE_INTERVAL)
     ))
+    
+    # Ensure update interval respects minimum from rate limiting
+    min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+    if update_interval < min_interval:
+        _LOGGER.info(f"Increasing update interval from {update_interval} to {min_interval} minutes to match API rate limiting")
+        update_interval = min_interval
 
     coordinator = RegionPriceCoordinator(hass, area, currency, timedelta(minutes=update_interval), config)
     register_shutdown_task(hass)
