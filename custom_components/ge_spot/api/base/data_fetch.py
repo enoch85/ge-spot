@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 
 from .session_manager import ensure_session, fetch_with_retry
 from ...const import Config, DisplayUnit
-from ...const.network import Network
+from ...utils.rate_limiter import RateLimiter
 from ...timezone import localize_datetime
 
 _LOGGER = logging.getLogger(__name__)
@@ -125,18 +125,35 @@ class DataFetcher:
             # Check if we have a valid cached response
             cached_data = await self._check_cache(cache_key)
             if cached_data:
+                # Mark data as cached
+                if "using_cached_data" not in cached_data:
+                    cached_data["using_cached_data"] = True
                 return cached_data
 
             # Check rate limiting
             current_time = datetime.datetime.now()
-            if self._should_skip_fetch(current_time):
-                _LOGGER.debug(f"Rate limiting: Skipping fetch for {area} on {date_str} (minimum interval: {Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES} min)")
+            should_skip, reason = RateLimiter.should_skip_fetch(
+                self._last_fetched, 
+                current_time,
+                self._consecutive_failures,
+                self._last_failure_time,
+                self._last_successful_fetch
+            )
+            
+            if should_skip:
+                _LOGGER.debug(f"Rate limiting: {reason}")
                 if cache_key in self._cache:
-                    _LOGGER.debug(f"Using older cached data despite expiry due to rate limiting")
-                    return self._cache[cache_key]['data']
+                    _LOGGER.debug(f"Using older cached data due to rate limiting")
+                    cached_data = self._cache[cache_key]['data']
+                    if "using_cached_data" not in cached_data:
+                        cached_data["using_cached_data"] = True
+                    return cached_data
                 elif self._last_successful_fetch:
                     _LOGGER.debug(f"Using last successful fetch result due to rate limiting")
-                    return self._last_successful_fetch
+                    last_data = self._last_successful_fetch
+                    if "using_cached_data" not in last_data:
+                        last_data["using_cached_data"] = True
+                    return last_data
 
             self._last_fetched = current_time
             self.api._last_fetched = current_time
@@ -190,6 +207,9 @@ class DataFetcher:
                 if self.api.hass:
                     processed_data["ha_timezone"] = str(self.api.hass.config.time_zone)
 
+                # Mark data as fresh
+                processed_data["using_cached_data"] = False
+                
                 # Log conversions for debugging
                 self._log_conversions(processed_data)
 
@@ -249,53 +269,6 @@ class DataFetcher:
                     currency_from = raw_info.get("unit", "EUR/MWh").split("/")[0]
                     currency_to = self.api._currency
                     _LOGGER.debug(f"  - {key}: {raw} {currency_from} → {converted} {currency_to} (applied VAT {self.api.vat:.2%})")
-
-    def _should_skip_fetch(self, current_time):
-        """Determine if we should skip fetching based on rate limiting rules."""
-        if not self._last_fetched:
-            return False
-
-        # Calculate time since last fetch in minutes
-        time_diff = (current_time - self._last_fetched).total_seconds() / 60  # in minutes
-
-        # If less than minimum fetch interval, always skip
-        min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
-        if time_diff < min_interval:
-            _LOGGER.debug(f"Rate limiting: Last fetch was only {time_diff:.1f} minutes ago (minimum: {min_interval})")
-            return True
-            
-        # Apply progressive backoff based on consecutive failures
-        if self._consecutive_failures > 0:
-            # Exponential backoff: doubling with each failure, capped at 45 minutes
-            backoff_minutes = min(45, 2 ** (self._consecutive_failures - 1) * min_interval)
-            if self._last_failure_time and (current_time - self._last_failure_time).total_seconds() / 60 < backoff_minutes:
-                next_retry = self._last_failure_time + datetime.timedelta(minutes=backoff_minutes)
-                _LOGGER.info(f"Rate limiting: Backing off due to {self._consecutive_failures} consecutive failures. Waiting {backoff_minutes} minutes until {next_retry.strftime('%H:%M:%S')}.")
-                return True
-
-        # Check for special time windows when data should be fetched regardless of standard intervals
-        hour = current_time.hour
-        for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
-            if start_hour <= hour < end_hour:
-                _LOGGER.debug(f"Rate limiting: In special hour window {start_hour}-{end_hour}, allowing fetch")
-                return False
-
-        # Check if we have hourly prices in cache
-        std_interval = Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
-        if self._last_successful_fetch and "hourly_prices" in self._last_successful_fetch:
-            hourly_prices = self._last_successful_fetch["hourly_prices"]
-            # If we already have prices for the current hour, limit API calls to the standard interval
-            current_hour_str = f"{current_time.hour:02d}:00"
-            if current_hour_str in hourly_prices:
-                _LOGGER.debug(f"Rate limiting: Already have price for current hour {current_hour_str}")
-                return time_diff < std_interval
-
-        # Standard rate limiting - don't fetch more than once per standard interval
-        if time_diff < std_interval:
-            _LOGGER.debug(f"Rate limiting: Last fetch was {time_diff:.1f} minutes ago (standard interval: {std_interval})")
-            return True
-            
-        return False
 
     async def fetch_with_retry(self, url, params=None, headers=None, timeout=30, max_retries=3):
         """Fetch data from URL with retry mechanism."""
