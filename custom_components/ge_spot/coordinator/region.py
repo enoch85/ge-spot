@@ -128,15 +128,11 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 configured_interval=self.configured_update_interval
             )
             
-            if should_skip:
+            if should_skip and self._last_successful_data:
                 _LOGGER.debug(f"Skipping API fetch for area {self.area}: {reason}")
-                if self._last_successful_data:
-                    # Update API key status in cached data
-                    api_key_status = await self.check_api_key_status()
-                    self._last_successful_data[Attributes.API_KEY_STATUS] = api_key_status
-                    return self._last_successful_data
-                # If no cached data, proceed anyway
-                _LOGGER.warning(f"No cached data available for {self.area}. Proceeding with API fetch despite rate limiting.")
+                return self._last_successful_data
+                
+            # If no cached data or not rate limited, proceed with normal fetch
 
             # Only log at INFO level when actually making an API call
             _LOGGER.info(f"Updating data for area {self.area} with currency {self.currency}")
