@@ -45,15 +45,22 @@ def normalize_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] =
         tz = dt_util.get_time_zone(local_tz)
         
         for period in periods:
-            if "start" in period and period["start"]:
-                if isinstance(period["start"], str):
-                    period["start"] = parse_datetime(period["start"])
-                period["start"] = ensure_timezone_aware(period["start"]).astimezone(tz)
-                
-            if "end" in period and period["end"]:
-                if isinstance(period["end"], str):
-                    period["end"] = parse_datetime(period["end"])
-                period["end"] = ensure_timezone_aware(period["end"]).astimezone(tz)
+            # Handle nested timestamps in dictionaries
+            for key, value in period.items():
+                # Handle start/end timestamps
+                if key in ["start", "end"] and value:
+                    if isinstance(value, str):
+                        period[key] = parse_datetime(value)
+                    if hasattr(period[key], 'tzinfo'):
+                        period[key] = ensure_timezone_aware(period[key]).astimezone(tz)
+                # Handle nested dictionaries with timestamps
+                elif isinstance(value, dict) and ("start" in value or "end" in value):
+                    for nested_key in ["start", "end"]:
+                        if nested_key in value and value[nested_key]:
+                            if isinstance(value[nested_key], str):
+                                value[nested_key] = parse_datetime(value[nested_key])
+                            if hasattr(value[nested_key], 'tzinfo'):
+                                value[nested_key] = ensure_timezone_aware(value[nested_key]).astimezone(tz)
         
         _LOGGER.debug(f"Normalized {len(periods)} price periods to {local_tz} timezone")
     except Exception as e:
