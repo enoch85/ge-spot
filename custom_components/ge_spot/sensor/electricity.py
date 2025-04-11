@@ -27,7 +27,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up the electricity price sensors from config entries."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
     area = config_entry.data.get(Config.AREA)
-    vat = config_entry.data.get(Config.VAT, 0)
+    
+    # Get VAT from options first, then fallback to data
+    vat = config_entry.options.get(Config.VAT, config_entry.data.get(Config.VAT, 0))
 
     # Determine currency based on area
     currency = config_entry.data.get(Config.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(area))
