@@ -122,7 +122,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 self._last_api_fetch, 
                 current_time,
                 self._consecutive_failures,
-                self._last_failure_time
+                self._last_failure_time,
+                self._last_successful_data
             )
             
             if should_skip:
@@ -194,6 +195,10 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                     # If data is valid, store it
                     if data and ApiValidator.is_data_adequate(data):
+                        # Check if data is fresh (not from cache)
+                        if not data.get("using_cached_data", False):
+                            fetched_fresh_data = True
+                            
                         source_data["today"][source] = data
                         self._today_source = source
                         
@@ -201,9 +206,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                         if not self._active_source:
                             self._active_source = source
                             self._fallback_used = source != source_priority[0]
-                            # We got data - consider it a successful fetch
-                            fetched_fresh_data = True
-                            # Reset failure counter
+                            # Reset failure counter if we got data
                             self._consecutive_failures = 0
 
                         # Check for tomorrow data
@@ -339,7 +342,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 "display_unit": self.display_unit,
                 "use_subunit": self.use_subunit,
                 # Include raw values from the source if available
-                "raw_values": today_data.get("raw_values", {})
+                "raw_values": today_data.get("raw_values", {}),
+                # Mark whether we used cached data
+                "using_cached_data": not fetched_fresh_data
             }
 
             _LOGGER.info(f"Successfully updated data with current price: {result['current_price']}")
