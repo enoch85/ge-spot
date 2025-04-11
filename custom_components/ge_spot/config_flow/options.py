@@ -13,10 +13,10 @@ from ..const import (
     AreaMapping
 )
 from ..api import get_sources_for_region, create_api
+from ..api import entsoe
 from .utils import (
     get_options_schema, 
-    get_default_values, 
-    validate_entso_e_api_key
+    get_default_values
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,27 +58,20 @@ class GSpotOptionsFlow(OptionsFlow):
                     if api_key != self._data.get(Config.API_KEY, ""):
                         _LOGGER.debug(f"Validating updated ENTSO-E API key")
 
-                        # Create an API instance to validate the key
-                        config = {"area": self._area, "api_key": api_key}
-                        api = create_api(Source.ENTSO_E, config)
+                        # Validate key directly using entsoe module
+                        valid_key = await entsoe.validate_api_key(api_key, self._area)
 
-                        if api and hasattr(api, "validate_api_key"):
-                            valid_key = await api.validate_api_key(api_key)
-
-                            if valid_key:
-                                # Update the stored data with the new API key
-                                updated_data = dict(self._data)
-                                updated_data[Config.API_KEY] = api_key
-                                # Update the config entry data
-                                self.hass.config_entries.async_update_entry(
-                                    self.hass.config_entries.async_get_entry(self.entry_id),
-                                    data=updated_data
-                                )
-                            else:
-                                self._errors[f"{Source.ENTSO_E}_api_key"] = "invalid_api_key"
-                                return await self._show_form()
+                        if valid_key:
+                            # Update the stored data with the new API key
+                            updated_data = dict(self._data)
+                            updated_data[Config.API_KEY] = api_key
+                            # Update the config entry data
+                            self.hass.config_entries.async_update_entry(
+                                self.hass.config_entries.async_get_entry(self.entry_id),
+                                data=updated_data
+                            )
                         else:
-                            self._errors[f"{Source.ENTSO_E}_api_key"] = "api_creation_failed"
+                            self._errors[f"{Source.ENTSO_E}_api_key"] = "invalid_api_key_in_options"
                             return await self._show_form()
 
                     # Remove the API key field from options to avoid duplication
