@@ -59,12 +59,7 @@ def get_source_priority_schema(supported_sources):
                 vol.Coerce(float),
                 vol.Range(min=0, max=100),
             ),
-            vol.Optional(Config.UPDATE_INTERVAL, default=60): vol.In({
-                60: "1 hour",
-                360: "6 hours",
-                720: "12 hours",
-                1440: "24 hours"
-            }),
+            vol.Optional(Config.UPDATE_INTERVAL, default=60): vol.In(UpdateInterval.OPTIONS_DICT),
             vol.Optional(Config.DISPLAY_UNIT, default=DisplayUnit.DECIMAL): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
@@ -107,12 +102,7 @@ def get_options_schema(defaults, supported_sources):
             vol.Coerce(float),
             vol.Range(min=0, max=100),
         ),
-        vol.Optional(Config.UPDATE_INTERVAL, default=defaults.get(Config.UPDATE_INTERVAL, 60)): vol.In({
-            60: "1 hour",
-            360: "6 hours",
-            720: "12 hours",
-            1440: "24 hours"
-        }),
+        vol.Optional(Config.UPDATE_INTERVAL, default=defaults.get(Config.UPDATE_INTERVAL, 60)): vol.In(UpdateInterval.OPTIONS_DICT),
         vol.Optional(Config.DISPLAY_UNIT, default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
