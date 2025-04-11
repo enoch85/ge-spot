@@ -43,8 +43,17 @@ class ElectricityPriceAdapter:
 
         _LOGGER.debug(f"Initializing price adapter (cached: {using_cached_data}, subunit: {use_subunit})")
 
-        # Skip processing if using cached data
-        if not using_cached_data:
+        # When using cached data, get values directly from raw_data
+        if using_cached_data:
+            # Load cached data structures if available 
+            if self.raw_data and isinstance(self.raw_data[0], dict):
+                cache_data = self.raw_data[0]
+                if "today" in cache_data:
+                    self.classified_periods["today"] = cache_data["today"]
+                if "tomorrow" in cache_data:
+                    self.classified_periods["tomorrow"] = cache_data["tomorrow"]
+        else:
+            # Process data normally
             self._process_raw_data()
             self.price_periods = process_price_data(self.processed_raw_data, self.local_tz)
             self.classified_periods = classify_price_periods(self.price_periods, self.hass)
