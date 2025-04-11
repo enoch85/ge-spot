@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryNotReady
 
-from .const import DOMAIN, Config, Defaults
+from .const import DOMAIN, Config, Defaults, Network
 from .const.network import Network
 from .price.currency import get_default_currency
 from .coordinator.region import RegionPriceCoordinator
