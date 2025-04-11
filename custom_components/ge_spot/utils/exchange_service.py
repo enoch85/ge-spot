@@ -228,11 +228,11 @@ class ExchangeRateService:
             to_rate = self.rates[to_currency]
             exchange_rate = to_rate / from_rate
 
-            # Return using standardized attribute constants
+            # Return using keys that will be directly used in attributes
             return {
-                Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso,
-                Attributes.EXCHANGE_RATE: exchange_rate,
-                Attributes.EXCHANGE_RATE_FORMATTED: f"1 {from_currency} = {exchange_rate:.4f} {to_currency}"
+                "timestamp": last_updated_iso,
+                "rate": exchange_rate,
+                "formatted": f"1 {from_currency} = {exchange_rate:.4f} {to_currency}"
             }
         else:
             # Return all rates relative to from_currency
