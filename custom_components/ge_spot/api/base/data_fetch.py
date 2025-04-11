@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 
 from .session_manager import ensure_session, fetch_with_retry
 from ...const import Config, DisplayUnit
+from ...const.network import Network
 from ...timezone import localize_datetime
 
 _LOGGER = logging.getLogger(__name__)
@@ -129,11 +130,12 @@ class DataFetcher:
             # Check rate limiting
             current_time = datetime.datetime.now()
             if self._should_skip_fetch(current_time):
-                _LOGGER.debug(f"Skipping fetch for {area} on {date_str} due to rate limiting")
+                _LOGGER.debug(f"Rate limiting: Skipping fetch for {area} on {date_str} (minimum interval: {Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES} min)")
                 if cache_key in self._cache:
                     _LOGGER.debug(f"Using older cached data despite expiry due to rate limiting")
                     return self._cache[cache_key]['data']
                 elif self._last_successful_fetch:
+                    _LOGGER.debug(f"Using last successful fetch result due to rate limiting")
                     return self._last_successful_fetch
 
             self._last_fetched = current_time
@@ -253,47 +255,47 @@ class DataFetcher:
         if not self._last_fetched:
             return False
 
-        # Define different rate limiting rules based on data type
+        # Calculate time since last fetch in minutes
         time_diff = (current_time - self._last_fetched).total_seconds() / 60  # in minutes
 
-        # If less than 15 minutes since last fetch, always skip
-        if time_diff < 15:
-            _LOGGER.debug(f"Rate limiting: Last fetch was only {time_diff:.1f} minutes ago")
+        # If less than minimum fetch interval, always skip
+        min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+        if time_diff < min_interval:
+            _LOGGER.debug(f"Rate limiting: Last fetch was only {time_diff:.1f} minutes ago (minimum: {min_interval})")
             return True
             
         # Apply progressive backoff based on consecutive failures
         if self._consecutive_failures > 0:
             # Exponential backoff: doubling with each failure, capped at 45 minutes
-            backoff_minutes = min(45, 2 ** (self._consecutive_failures - 1))
+            backoff_minutes = min(45, 2 ** (self._consecutive_failures - 1) * min_interval)
             if self._last_failure_time and (current_time - self._last_failure_time).total_seconds() / 60 < backoff_minutes:
                 next_retry = self._last_failure_time + datetime.timedelta(minutes=backoff_minutes)
                 _LOGGER.info(f"Rate limiting: Backing off due to {self._consecutive_failures} consecutive failures. Waiting {backoff_minutes} minutes until {next_retry.strftime('%H:%M:%S')}.")
                 return True
 
-        # Check time of day for special cases
+        # Check for special time windows when data should be fetched regardless of standard intervals
         hour = current_time.hour
-
-        # Between midnight and 1 AM - fetch today's new prices
-        if 0 <= hour < 1:
-            _LOGGER.debug("Rate limiting: First hour of day, allowing fetch for new daily prices")
-            return False
-
-        # Between 13:00-14:00 - fetch tomorrow's prices which typically become available
-        if 13 <= hour < 14:
-            _LOGGER.debug("Rate limiting: 13:00-14:00, allowing fetch for tomorrow's prices")
-            return False
+        for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
+            if start_hour <= hour < end_hour:
+                _LOGGER.debug(f"Rate limiting: In special hour window {start_hour}-{end_hour}, allowing fetch")
+                return False
 
         # Check if we have hourly prices in cache
+        std_interval = Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
         if self._last_successful_fetch and "hourly_prices" in self._last_successful_fetch:
             hourly_prices = self._last_successful_fetch["hourly_prices"]
-            # If we already have prices for the current hour, limit API calls
+            # If we already have prices for the current hour, limit API calls to the standard interval
             current_hour_str = f"{current_time.hour:02d}:00"
             if current_hour_str in hourly_prices:
                 _LOGGER.debug(f"Rate limiting: Already have price for current hour {current_hour_str}")
-                return time_diff < 60  # Only fetch once per hour if we have current price
+                return time_diff < std_interval
 
-        # Standard rate limiting - don't fetch more than once per hour
-        return time_diff < 60
+        # Standard rate limiting - don't fetch more than once per standard interval
+        if time_diff < std_interval:
+            _LOGGER.debug(f"Rate limiting: Last fetch was {time_diff:.1f} minutes ago (standard interval: {std_interval})")
+            return True
+            
+        return False
 
     async def fetch_with_retry(self, url, params=None, headers=None, timeout=30, max_retries=3):
         """Fetch data from URL with retry mechanism."""
