@@ -80,18 +80,24 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
 
     _LOGGER.debug(f"Finding price for time: {reference_time.isoformat()} among {len(periods)} periods")
 
-    # First check for periods on the current day - more efficient 
+    # First check for direct hour match on the current day
     current_date = reference_time.date()
     current_hour = reference_time.hour
     
-    # Look for direct hour match on the current day
+    # Look for direct hour match on the current day, checking both UTC and local time
     for period in periods:
         start = period.get("start")
         if not start:
             continue
         
         start = ensure_timezone_aware(start)
-        if start.date() == current_date and start.hour == current_hour:
+        
+        # Check in both UTC and local timezone
+        start_utc_date = start.astimezone(dt_util.UTC).date()
+        
+        # Match either on same date+hour or just hour if UTC date matches
+        if (start.date() == current_date and start.hour == current_hour) or \
+           (start_utc_date == current_date and start.hour == current_hour):
             _LOGGER.debug(f"Found period by direct hour match: {start.isoformat()}, price: {period.get('price')}")
             return period
     
@@ -119,13 +125,21 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
             _LOGGER.debug(f"Found matching period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
             return period
 
-    # If we get here, no matching period was found
-    # Last resort: match by hour regardless of date
+    # If we get here, no matching period was found - last resort: match by hour regardless of date
+    hour_match = None
     for period in periods:
         start = period.get("start")
-        if start and hasattr(start, "hour") and start.hour == current_hour:
-            _LOGGER.debug(f"Found period by hour match: {start.isoformat()}, price: {period.get('price')}")
-            return period
+        if start and hasattr(start, "hour"):
+            # Check for hour match in local time or UTC time
+            start_utc = start.astimezone(dt_util.UTC)
+            if start.hour == current_hour or start_utc.hour == current_hour:
+                # Find the period with closest date (prefer tomorrow over yesterday for example)
+                if not hour_match or abs((reference_time.date() - start.date()).days) < abs((reference_time.date() - hour_match["start"].date()).days):
+                    hour_match = period
+    
+    if hour_match:
+        _LOGGER.debug(f"Found period by hour match: {hour_match['start'].isoformat()}, price: {hour_match.get('price')}")
+        return hour_match
 
     if periods:
         first_period = periods[0]
