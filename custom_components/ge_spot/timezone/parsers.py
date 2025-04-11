@@ -27,32 +27,55 @@ def parse_datetime(timestamp: Union[str, datetime]) -> datetime:
         return dt_util.now()
 
     try:
-        # Handle UTC indicator (Z)
-        if isinstance(timestamp, str) and timestamp.endswith('Z'):
-            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-            _LOGGER.debug(f"Parsed UTC timestamp: {timestamp} → {dt.isoformat()}")
-            return dt
-
-        # Handle explicit timezone offset or standard ISO format
         if isinstance(timestamp, str):
-            dt = datetime.fromisoformat(timestamp)
+            original_timestamp = timestamp
+            
+            # Handle UTC indicator (Z)
+            if timestamp.endswith('Z'):
+                timestamp = timestamp.replace('Z', '+00:00')
+            
+            # Try parsing with built-in fromisoformat
+            try:
+                dt = datetime.fromisoformat(timestamp)
+                
+                # Add UTC timezone if not provided
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=dt_util.UTC)
+                    _LOGGER.debug(f"Added UTC timezone to naive datetime: {original_timestamp} → {dt.isoformat()}")
+                else:
+                    _LOGGER.debug(f"Parsed timezone-aware timestamp: {original_timestamp} → {dt.isoformat()}")
+                
+                return dt
+            except ValueError:
+                # Try more format patterns if fromisoformat fails
+                pass
 
-            # Add UTC timezone if not provided
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=dt_util.UTC)
+            # Try common alternative formats
+            for fmt in [
+                "%Y-%m-%dT%H:%M:%S",  # ISO without timezone
+                "%Y-%m-%dT%H:%M",      # ISO without seconds or timezone
+                "%Y-%m-%d %H:%M:%S",   # Space separator
+                "%Y-%m-%d %H:%M",      # Space separator without seconds
+                "%Y%m%d%H%M%S",        # Compact format (ENTSOE)
+                "%Y%m%d%H%M"           # Compact format without seconds
+            ]:
+                try:
+                    dt = datetime.strptime(timestamp, fmt)
+                    dt = dt.replace(tzinfo=dt_util.UTC)
+                    _LOGGER.debug(f"Parsed timestamp with format {fmt}: {original_timestamp} → {dt.isoformat()}")
+                    return dt
+                except ValueError:
+                    continue
 
+        # If we get here, try HA's parser as fallback
+        dt = dt_util.parse_datetime(timestamp)
+        if dt:
+            _LOGGER.debug(f"Parsed timestamp using HA parser: {timestamp} → {dt.isoformat()}")
             return dt
 
-    except (ValueError, TypeError) as e:
-        # Try HA's parser as fallback
-        try:
-            dt = dt_util.parse_datetime(timestamp)
-            if dt:
-                return dt
-        except Exception:
-            pass
-
+    except Exception as e:
         _LOGGER.error(f"Error parsing datetime {timestamp}: {e}")
 
-    # Default fallback
+    # Default fallback - this should be avoided if possible
+    _LOGGER.warning(f"Failed to parse timestamp '{timestamp}', using current time as fallback")
     return dt_util.now()
