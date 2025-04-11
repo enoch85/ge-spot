@@ -163,47 +163,43 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
 
     # Step 3: Check if we have only tomorrow's data
     if len(periods) > 0:
-        have_only_tomorrow = True
+        # Check if we have only future data
+        tomorrow_only = True
         for period in periods:
-            if "start" in period and period["start"]:
-                start = ensure_timezone_aware(period["start"])
-                if start.date() == current_local_date:  # If any period is for today
-                    have_only_tomorrow = False
-                    break
+            if "start" not in period or not period["start"]:
+                continue
+                
+            start = ensure_timezone_aware(period["start"])
+            if start.date() <= current_local_date:  # If any period is for today or earlier
+                tomorrow_only = False
+                break
                     
-        # If we have only tomorrow's data, use matching hour from tomorrow as fallback
-        if have_only_tomorrow:
+        # If we have only future data, use matching hour from future as fallback
+        if tomorrow_only:
+            closest_hour_period = None
+            closest_hour_diff = 24  # Initialize with maximum hour difference
+            
             for period in periods:
-                start = period.get("start")
-                if not start:
+                if "start" not in period or not period["start"]:
                     continue
                     
-                start = ensure_timezone_aware(start)
-                # Match only by hour when we only have tomorrow's data
-                if start.hour == current_local_hour:
-                    _LOGGER.debug(f"Using tomorrow's price for hour {current_local_hour}: {period.get('price')}")
+                start = ensure_timezone_aware(period["start"])
+                # Find the hour closest to current hour
+                hour_diff = abs(start.hour - current_local_hour)
+                if hour_diff < closest_hour_diff:
+                    closest_hour_diff = hour_diff
+                    closest_hour_period = period
+                # Exact match is best
+                if hour_diff == 0:
+                    _LOGGER.debug(f"Using future date price for hour {current_local_hour}: {period.get('price')}")
                     return period
+            
+            # Return closest hour period if found
+            if closest_hour_period:
+                start = ensure_timezone_aware(closest_hour_period["start"])
+                _LOGGER.debug(f"Using closest future hour {start.hour} (diff: {closest_hour_diff}) for current hour {current_local_hour}: {closest_hour_period.get('price')}")
+                return closest_hour_period
     
-    # Step 4: Last resort - look for matching hour regardless of date
-    # But only for today's data to prevent mixing up days
-    hour_match = None
-    for period in periods:
-        start = period.get("start")
-        if not start:
-            continue
-        
-        start = ensure_timezone_aware(start)
-        start_utc = start.astimezone(dt_util.UTC)
-        
-        # Match on either local or UTC hour but only for today
-        if (start.hour == current_local_hour or start_utc.hour == current_utc_hour) and start.date() == current_local_date:
-            hour_match = period
-            break
-    
-    if hour_match:
-        _LOGGER.debug(f"Found period by hour match: {hour_match['start'].isoformat()}, price: {hour_match.get('price')}")
-        return hour_match
-
     # No match found
     if periods:
         first_period = periods[0]
