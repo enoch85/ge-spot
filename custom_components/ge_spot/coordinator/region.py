@@ -22,6 +22,7 @@ from ..api import fetch_day_ahead_prices, get_sources_for_region
 from ..utils.debug_utils import log_raw_data
 from ..utils.api_validator import ApiValidator
 from ..utils.rate_limiter import RateLimiter
+from ..timezone.converters import normalize_price_periods
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -222,6 +223,10 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                     # If data is valid, store it
                     if data and ApiValidator.is_data_adequate(data):
+                        # Normalize timestamps to Home Assistant timezone
+                        if "raw_prices" in data:
+                            data["raw_prices"] = normalize_price_periods(data["raw_prices"], self.hass)
+                            
                         # Check if data is fresh (not from cache)
                         if not data.get("using_cached_data", False):
                             fetched_fresh_data = True
@@ -266,8 +271,21 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                                         )
                                         
                                         if tomorrow_data and (tomorrow_data.get("tomorrow_valid", False) or 
-                                                            "tomorrow_hourly_prices" in tomorrow_data or
-                                                            len(tomorrow_data.get("hourly_prices", {})) > 0):
+                                                           "tomorrow_hourly_prices" in tomorrow_data or
+                                                           len(tomorrow_data.get("hourly_prices", {})) > 0):
+                                            # Normalize timestamps
+                                            if "raw_prices" in tomorrow_data:
+                                                tomorrow_data["raw_prices"] = normalize_price_periods(
+                                                    tomorrow_data["raw_prices"], self.hass
+                                                )
+                                            
+                                            # Clear current/next price fields from tomorrow data to prevent confusion
+                                            tomorrow_data.pop("current_price", None)
+                                            tomorrow_data.pop("next_hour_price", None)
+                                            if "raw_values" in tomorrow_data:
+                                                tomorrow_data["raw_values"].pop("current_price", None)
+                                                tomorrow_data["raw_values"].pop("next_hour_price", None)
+                                            
                                             source_data["tomorrow"][fallback_source] = tomorrow_data
                                             self._tomorrow_source = fallback_source
                                             break
