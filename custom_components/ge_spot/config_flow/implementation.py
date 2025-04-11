@@ -17,12 +17,12 @@ from ..const import (
     CurrencyInfo,
 )
 from ..api import get_sources_for_region
+from ..api import entsoe
 from ..price.conversion import async_convert_energy_price
 from ..timezone import localize_datetime
 
 from .utils import (
     get_deduplicated_regions,
-    validate_entso_e_api_key,
 )
 from .schemas import (
     get_source_priority_schema,
@@ -150,7 +150,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 # Validate ENTSO-E API key if provided
                 entsoe_key = user_input.get(f"{Source.ENTSO_E}_api_key")
                 if entsoe_key:
-                    valid_key = await validate_entso_e_api_key(
+                    valid_key = await entsoe.validate_api_key(
                         entsoe_key,
                         self._data.get(Config.AREA)
                     )
