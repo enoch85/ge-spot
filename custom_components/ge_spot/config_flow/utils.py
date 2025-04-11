@@ -274,7 +274,7 @@ async def validate_entso_e_api_key(api_key, area, session=None):
             "area": area,
             "api_key": api_key
         }
-        api = create_api(Source.ENTSO_E, config)
+        api = await create_api(Source.ENTSO_E, config)  # Added await here
 
         # Use provided session if available
         if session and hasattr(api, "session"):
