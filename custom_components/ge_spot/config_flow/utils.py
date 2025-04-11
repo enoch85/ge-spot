@@ -274,7 +274,7 @@ async def validate_entso_e_api_key(api_key, area, session=None):
             "area": area,
             "api_key": api_key
         }
-        api = await create_api(Source.ENTSO_E, config)  # Added await here
+        api = await create_api(Source.ENTSO_E, config)
 
         # Use provided session if available
         if session and hasattr(api, "session"):
@@ -288,7 +288,7 @@ async def validate_entso_e_api_key(api_key, area, session=None):
                 result = await api.__class__.validate_api_key(api_key, area, session)
             else:
                 # For other API types that use the instance method
-                result = await api.validate_api_key(api_key)
+                result = await api.validate_api_key(api_key, area)
         else:
             # Fall back to fetching data as a validation test
             result = False
