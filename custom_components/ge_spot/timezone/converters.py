@@ -46,8 +46,13 @@ def normalize_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] =
         
         for period in periods:
             if "start" in period and period["start"]:
+                if isinstance(period["start"], str):
+                    period["start"] = parse_datetime(period["start"])
                 period["start"] = ensure_timezone_aware(period["start"]).astimezone(tz)
+                
             if "end" in period and period["end"]:
+                if isinstance(period["end"], str):
+                    period["end"] = parse_datetime(period["end"])
                 period["end"] = ensure_timezone_aware(period["end"]).astimezone(tz)
         
         _LOGGER.debug(f"Normalized {len(periods)} price periods to {local_tz} timezone")
