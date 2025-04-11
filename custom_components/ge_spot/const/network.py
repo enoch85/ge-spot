@@ -9,6 +9,16 @@ class Network:
         RETRY_BASE_DELAY = 2.0
         CACHE_TTL = 21600  # 6 hours in seconds
         USER_AGENT = "HomeAssistantGESpot/1.0"
+        
+        # Rate limiting constants
+        MIN_UPDATE_INTERVAL_MINUTES = 15  # Minimum time between fetches
+        STANDARD_UPDATE_INTERVAL_MINUTES = 60  # Standard interval
+        
+        # Special time windows for updates
+        SPECIAL_HOUR_WINDOWS = [
+            (0, 1),   # 00:00-01:00 - For today's new prices
+            (13, 14)  # 13:00-14:00 - For tomorrow's prices
+        ]
 
     class URLs:
         """Base URLs for various APIs."""
