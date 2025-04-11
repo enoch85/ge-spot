@@ -161,8 +161,31 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
             _LOGGER.debug(f"Found matching period: {start.isoformat()} → {end.isoformat()}, price: {period.get('price')}")
             return period
 
-    # Step 3: Last resort - look for matching hour regardless of date
-    # This handles cases where we have tomorrow's data but not today's
+    # Step 3: Check if we have only tomorrow's data
+    if len(periods) > 0:
+        have_only_tomorrow = True
+        for period in periods:
+            if "start" in period and period["start"]:
+                start = ensure_timezone_aware(period["start"])
+                if start.date() == current_local_date:  # If any period is for today
+                    have_only_tomorrow = False
+                    break
+                    
+        # If we have only tomorrow's data, use matching hour from tomorrow as fallback
+        if have_only_tomorrow:
+            for period in periods:
+                start = period.get("start")
+                if not start:
+                    continue
+                    
+                start = ensure_timezone_aware(start)
+                # Match only by hour when we only have tomorrow's data
+                if start.hour == current_local_hour:
+                    _LOGGER.debug(f"Using tomorrow's price for hour {current_local_hour}: {period.get('price')}")
+                    return period
+    
+    # Step 4: Last resort - look for matching hour regardless of date
+    # But only for today's data to prevent mixing up days
     hour_match = None
     for period in periods:
         start = period.get("start")
@@ -172,14 +195,10 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
         start = ensure_timezone_aware(start)
         start_utc = start.astimezone(dt_util.UTC)
         
-        # Match on either local or UTC hour
-        if start.hour == current_local_hour or start_utc.hour == current_utc_hour:
-            # Find the period with closest date (prefer today over tomorrow)
-            date_diff = abs((reference_time.date() - start.date()).days)
-            
-            # Only use hour match if it's for today (date_diff=0) to avoid using tomorrow's prices
-            if date_diff == 0 and (not hour_match or date_diff < abs((reference_time.date() - hour_match["start"].date()).days)):
-                hour_match = period
+        # Match on either local or UTC hour but only for today
+        if (start.hour == current_local_hour or start_utc.hour == current_utc_hour) and start.date() == current_local_date:
+            hour_match = period
+            break
     
     if hour_match:
         _LOGGER.debug(f"Found period by hour match: {hour_match['start'].isoformat()}, price: {hour_match.get('price')}")
