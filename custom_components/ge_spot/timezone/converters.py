@@ -35,6 +35,27 @@ def localize_datetime(dt: datetime, hass: Optional[HomeAssistant] = None) -> dat
     # Fall back to dt_util's handling
     return dt.astimezone(dt_util.DEFAULT_TIME_ZONE)
 
+def normalize_price_periods(periods: List[Dict], hass: Optional[HomeAssistant] = None) -> List[Dict]:
+    """Normalize all price period timestamps to HA's timezone."""
+    if not periods or not hass:
+        return periods
+        
+    try:
+        local_tz = hass.config.time_zone
+        tz = dt_util.get_time_zone(local_tz)
+        
+        for period in periods:
+            if "start" in period and period["start"]:
+                period["start"] = ensure_timezone_aware(period["start"]).astimezone(tz)
+            if "end" in period and period["end"]:
+                period["end"] = ensure_timezone_aware(period["end"]).astimezone(tz)
+        
+        _LOGGER.debug(f"Normalized {len(periods)} price periods to {local_tz} timezone")
+    except Exception as e:
+        _LOGGER.error(f"Error normalizing price periods: {e}")
+        
+    return periods
+
 def convert_to_local_time(dt: datetime, area: str) -> datetime:
     """Convert a datetime to the local time for a given area."""
     if dt.tzinfo is None:
@@ -96,7 +117,7 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
         
         start = ensure_timezone_aware(start)
         
-        # Compare in local timezone
+        # Match both hour and date to avoid mixing days
         if start.date() == current_local_date and start.hour == current_local_hour:
             _LOGGER.debug(f"Found period by direct hour match: {start.isoformat()}, price: {period.get('price')}")
             return period
@@ -141,8 +162,11 @@ def find_current_price_period(periods: List[Dict], reference_time: Optional[date
         
         # Match on either local or UTC hour
         if start.hour == current_local_hour or start_utc.hour == current_utc_hour:
-            # Find the period with closest date (prefer tomorrow over yesterday)
-            if not hour_match or abs((reference_time.date() - start.date()).days) < abs((reference_time.date() - hour_match["start"].date()).days):
+            # Find the period with closest date (prefer today over tomorrow)
+            date_diff = abs((reference_time.date() - start.date()).days)
+            
+            # Only use hour match if it's for today (date_diff=0) to avoid using tomorrow's prices
+            if date_diff == 0 and (not hour_match or date_diff < abs((reference_time.date() - hour_match["start"].date()).days)):
                 hour_match = period
     
     if hour_match:
