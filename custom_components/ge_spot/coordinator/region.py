@@ -15,7 +15,8 @@ from ..const import (
     Source,
     Attributes,
     Defaults,
-    DisplayUnit
+    DisplayUnit,
+    Network
 )
 from ..api import fetch_day_ahead_prices, get_sources_for_region
 from ..utils.debug_utils import log_raw_data
@@ -49,6 +50,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         self._last_successful_data = None
         self._last_primary_check = None
         self.session = None  # Initialize session attribute to None
+        self.configured_update_interval = int(config.get(Config.UPDATE_INTERVAL, Defaults.UPDATE_INTERVAL))
 
         # Rate limiting state
         self._last_api_fetch = None  # Track last successful API fetch time
@@ -114,27 +116,30 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from appropriate API for this region."""
         try:
-            _LOGGER.info(f"Updating data for area {self.area} with currency {self.currency}")
             current_time = dt_util.now()
 
             # Check if we should skip API fetch due to rate limiting
             should_skip, reason = RateLimiter.should_skip_fetch(
                 self._last_api_fetch, 
                 current_time,
-                self._consecutive_failures,
-                self._last_failure_time,
-                self._last_successful_data
+                consecutive_failures=self._consecutive_failures,
+                last_failure_time=self._last_failure_time,
+                last_successful_fetch=self._last_successful_data,
+                configured_interval=self.configured_update_interval
             )
             
             if should_skip:
-                _LOGGER.info(f"Skipping API fetch: {reason}. Using cached data.")
+                _LOGGER.debug(f"Skipping API fetch for area {self.area}: {reason}")
                 if self._last_successful_data:
                     # Update API key status in cached data
                     api_key_status = await self.check_api_key_status()
                     self._last_successful_data[Attributes.API_KEY_STATUS] = api_key_status
                     return self._last_successful_data
-                # If no cached data, we'll proceed anyway
-                _LOGGER.warning("No cached data available. Proceeding with API fetch despite rate limiting.")
+                # If no cached data, proceed anyway
+                _LOGGER.warning(f"No cached data available for {self.area}. Proceeding with API fetch despite rate limiting.")
+
+            # Only log at INFO level when actually making an API call
+            _LOGGER.info(f"Updating data for area {self.area} with currency {self.currency}")
 
             # Reset tracking variables
             self._fallback_used = False
