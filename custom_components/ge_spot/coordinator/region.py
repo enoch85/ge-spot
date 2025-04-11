@@ -119,17 +119,25 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
     def _get_cached_result(self):
         """Get a cached result with updated metadata."""
+        if not self._last_successful_data:
+            return None
+            
         updated_data = dict(self._last_successful_data)
         
-        # Use existing adapter to avoid triggering timezone processing
-        updated_data["adapter"] = self.adapter
+        # Update timestamps
         updated_data[Attributes.LAST_UPDATED] = dt_util.now().isoformat()
         updated_data["next_update"] = (dt_util.now() + self.update_interval).isoformat()
+        
+        # Explicitly mark as cached data
         updated_data["using_cached_data"] = True
         
         # Use cached API key status
         updated_data[Attributes.API_KEY_STATUS] = self._api_key_status
         
+        # Update source info to reflect cached status
+        if "source_info" in updated_data:
+            updated_data["source_info"]["using_cached_data"] = True
+            
         return updated_data
 
     async def _async_update_data(self):
@@ -246,12 +254,14 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                                         fallback_config = dict(self.config)
                                         fallback_config["session"] = self.session
                                         
+                                        # Create a reference time for tomorrow
+                                        tomorrow = dt_util.now() + datetime.timedelta(days=1)
                                         tomorrow_data = await fetch_day_ahead_prices(
                                             fallback_source, 
                                             fallback_config, 
                                             self.area, 
                                             self.currency, 
-                                            dt_util.now() + datetime.timedelta(days=1), 
+                                            tomorrow, 
                                             self.hass
                                         )
                                         
@@ -445,9 +455,12 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 return source_data[source]
 
         # Fallback to first available
-        first_source = next(iter(source_data.keys()))
-        self._tomorrow_source = first_source
-        return source_data[first_source]
+        if source_data:
+            first_source = next(iter(source_data.keys()))
+            self._tomorrow_source = first_source
+            return source_data[first_source]
+            
+        return None
 
     async def async_close(self):
         """Close all API sessions."""
