@@ -22,7 +22,8 @@ from ..api import fetch_day_ahead_prices, get_sources_for_region
 from ..utils.debug_utils import log_raw_data
 from ..utils.api_validator import ApiValidator
 from ..utils.rate_limiter import RateLimiter
-from ..timezone.converters import normalize_price_periods
+from ..timezone.converters import normalize_price_periods, ensure_timezone_aware, localize_datetime
+from ..timezone.parsers import parse_datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -78,6 +79,64 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         # Track separate sources for today and tomorrow data
         self._today_source = None
         self._tomorrow_source = None
+        
+    def ensure_all_timestamps_normalized(self, data, hass):
+        """Ensure all timestamps in data are normalized to HA timezone."""
+        if not data:
+            return data
+            
+        # Normalize raw_prices array
+        if "raw_prices" in data:
+            data["raw_prices"] = normalize_price_periods(data["raw_prices"], hass)
+        
+        # Also normalize any raw_tomorrow data
+        if "raw_tomorrow" in data:
+            data["raw_tomorrow"] = normalize_price_periods(data["raw_tomorrow"], hass)
+        
+        # Normalize hourly_prices keys to ensure consistent hour format
+        if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
+            # Convert string hour keys to actual datetime objects for normalization
+            today = dt_util.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            normalized_prices = {}
+            
+            for hour_str, price in data["hourly_prices"].items():
+                try:
+                    # Parse hour from string (e.g., "00:00" -> 0)
+                    hour = int(hour_str.split(":")[0])
+                    # Create datetime for this hour
+                    dt_obj = today.replace(hour=hour)
+                    # Make timezone aware and normalize to HA timezone
+                    dt_obj = ensure_timezone_aware(dt_obj)
+                    local_dt = localize_datetime(dt_obj, hass)
+                    # Use normalized hour for the key
+                    new_hour_str = f"{local_dt.hour:02d}:00"
+                    normalized_prices[new_hour_str] = price
+                    
+                except (ValueError, IndexError):
+                    # Keep original if we can't parse
+                    normalized_prices[hour_str] = price
+                    
+            data["hourly_prices"] = normalized_prices
+            
+        # Do the same for tomorrow_hourly_prices if it exists
+        if "tomorrow_hourly_prices" in data and isinstance(data["tomorrow_hourly_prices"], dict):
+            tomorrow = (dt_util.now() + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            normalized_prices = {}
+            
+            for hour_str, price in data["tomorrow_hourly_prices"].items():
+                try:
+                    hour = int(hour_str.split(":")[0])
+                    dt_obj = tomorrow.replace(hour=hour)
+                    dt_obj = ensure_timezone_aware(dt_obj)
+                    local_dt = localize_datetime(dt_obj, hass)
+                    new_hour_str = f"{local_dt.hour:02d}:00"
+                    normalized_prices[new_hour_str] = price
+                except (ValueError, IndexError):
+                    normalized_prices[hour_str] = price
+                    
+            data["tomorrow_hourly_prices"] = normalized_prices
+            
+        return data
 
     async def check_api_key_status(self):
         """Check status of configured API keys and report in attributes."""
@@ -223,9 +282,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
                     # If data is valid, store it
                     if data and ApiValidator.is_data_adequate(data):
-                        # Normalize timestamps to Home Assistant timezone
-                        if "raw_prices" in data:
-                            data["raw_prices"] = normalize_price_periods(data["raw_prices"], self.hass)
+                        # Apply comprehensive timestamp normalization
+                        data = self.ensure_all_timestamps_normalized(data, self.hass)
+                        _LOGGER.debug(f"All timestamps normalized for area {self.area}")
                             
                         # Check if data is fresh (not from cache)
                         if not data.get("using_cached_data", False):
@@ -273,11 +332,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                                         if tomorrow_data and (tomorrow_data.get("tomorrow_valid", False) or 
                                                            "tomorrow_hourly_prices" in tomorrow_data or
                                                            len(tomorrow_data.get("hourly_prices", {})) > 0):
-                                            # Normalize timestamps
-                                            if "raw_prices" in tomorrow_data:
-                                                tomorrow_data["raw_prices"] = normalize_price_periods(
-                                                    tomorrow_data["raw_prices"], self.hass
-                                                )
+                                            # Apply timestamp normalization to tomorrow data                                            
+                                            tomorrow_data = self.ensure_all_timestamps_normalized(tomorrow_data, self.hass)
                                             
                                             # Clear current/next price fields from tomorrow data to prevent confusion
                                             tomorrow_data.pop("current_price", None)
