@@ -20,6 +20,7 @@ from ..const import (
 from ..api import fetch_day_ahead_prices, get_sources_for_region
 from ..utils.debug_utils import log_raw_data
 from ..utils.api_validator import ApiValidator
+from ..utils.rate_limiter import RateLimiter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +49,11 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         self._last_successful_data = None
         self._last_primary_check = None
         self.session = None  # Initialize session attribute to None
+
+        # Rate limiting state
+        self._last_api_fetch = None  # Track last successful API fetch time
+        self._consecutive_failures = 0
+        self._last_failure_time = None
 
         # Ensure display unit is available
         self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
@@ -109,8 +115,25 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         """Fetch data from appropriate API for this region."""
         try:
             _LOGGER.info(f"Updating data for area {self.area} with currency {self.currency}")
-            _LOGGER.debug(f"Home Assistant timezone: {self.hass.config.time_zone}")
-            _LOGGER.debug(f"Using display unit: {self.display_unit}, subunit: {self.use_subunit}")
+            current_time = dt_util.now()
+
+            # Check if we should skip API fetch due to rate limiting
+            should_skip, reason = RateLimiter.should_skip_fetch(
+                self._last_api_fetch, 
+                current_time,
+                self._consecutive_failures,
+                self._last_failure_time
+            )
+            
+            if should_skip:
+                _LOGGER.info(f"Skipping API fetch: {reason}. Using cached data.")
+                if self._last_successful_data:
+                    # Update API key status in cached data
+                    api_key_status = await self.check_api_key_status()
+                    self._last_successful_data[Attributes.API_KEY_STATUS] = api_key_status
+                    return self._last_successful_data
+                # If no cached data, we'll proceed anyway
+                _LOGGER.warning("No cached data available. Proceeding with API fetch despite rate limiting.")
 
             # Reset tracking variables
             self._fallback_used = False
@@ -130,6 +153,9 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             if not source_priority:
                 source_priority = self._supported_sources
 
+            # Flag to track if any source fetched fresh data
+            fetched_fresh_data = False
+
             # Try to fetch data from sources in priority order
             for source in source_priority:
                 if source not in self._supported_sources:
@@ -143,15 +169,28 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     api_config = dict(self.config)
                     api_config["session"] = self.session
                     
-                    # Fetch data from this source
-                    data = await fetch_day_ahead_prices(
-                        source, 
-                        api_config, 
-                        self.area, 
-                        self.currency, 
-                        dt_util.now(), 
-                        self.hass
-                    )
+                    # For first source only, try to fetch fresh data
+                    if source == source_priority[0]:
+                        # Try to get fresh data from primary source
+                        data = await fetch_day_ahead_prices(
+                            source, 
+                            api_config, 
+                            self.area, 
+                            self.currency, 
+                            dt_util.now(), 
+                            self.hass
+                        )
+                    else:
+                        # For fallback sources, always allow cached data
+                        # We've already decided to fetch, but secondary sources can use cache
+                        data = await fetch_day_ahead_prices(
+                            source, 
+                            api_config, 
+                            self.area, 
+                            self.currency, 
+                            dt_util.now(), 
+                            self.hass
+                        )
 
                     # If data is valid, store it
                     if data and ApiValidator.is_data_adequate(data):
@@ -162,14 +201,31 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                         if not self._active_source:
                             self._active_source = source
                             self._fallback_used = source != source_priority[0]
+                            # We got data - consider it a successful fetch
+                            fetched_fresh_data = True
+                            # Reset failure counter
+                            self._consecutive_failures = 0
 
                         # Check for tomorrow data
                         if data.get("tomorrow_valid", False) or "tomorrow_hourly_prices" in data:
                             source_data["tomorrow"][source] = data
                             self._tomorrow_source = source
                             
+                        # If we got data from first source, don't try fallbacks
+                        if source == source_priority[0]:
+                            break
+                            
                 except Exception as e:
                     _LOGGER.error(f"Error fetching data from {source}: {e}")
+                    # Count as failure only for primary source
+                    if source == source_priority[0]:
+                        self._consecutive_failures += 1
+                        self._last_failure_time = current_time
+
+            # Update last fetch time if we got fresh data
+            if fetched_fresh_data:
+                self._last_api_fetch = current_time
+                _LOGGER.debug(f"Updated last API fetch time to {self._last_api_fetch.isoformat()}")
 
             # If we couldn't get today's data from any source
             if not source_data["today"]:
@@ -239,7 +295,13 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 "is_using_fallback": self._fallback_used,
                 "attempted_sources": self._attempted_sources,
                 "available_fallbacks": available_fallbacks,
-                "timezone": str(self.hass.config.time_zone)
+                "timezone": str(self.hass.config.time_zone),
+                "last_api_fetch": self._last_api_fetch.isoformat() if self._last_api_fetch else None,
+                "using_cached_data": not fetched_fresh_data,
+                "rate_limit_status": {
+                    "consecutive_failures": self._consecutive_failures,
+                    "last_failure": self._last_failure_time.isoformat() if self._last_failure_time else None
+                }
             }
 
             # Calculate next update time
@@ -285,7 +347,10 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             return result
 
         except Exception as err:
+            self._consecutive_failures += 1
+            self._last_failure_time = dt_util.now()
             _LOGGER.error(f"Error fetching electricity price data: {err}")
+            
             if self._last_successful_data:
                 _LOGGER.warning("Using cached data from last successful update")
 
