@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir release
+          cp -r custom_components/ge_spot release/
+          cp README.md release/
+          cp LICENSE release/
+
+      - name: Create ZIP
+        run: |
+          cd release
+          zip -r ../ge_spot.zip .
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+        run: |
+          if [[ "$tag" == *-beta* ]]; then
+            gh release create "$tag" \
+                --repo="$GITHUB_REPOSITORY" \
+                --title="GE-Spot Home Assistant $tag" \
+                --generate-notes \
+                --prerelease \
+                ge_spot.zip#"GE-Spot Home Assistant $tag"
+          else
+            gh release create "$tag" \
+                --repo="$GITHUB_REPOSITORY" \
+                --title="GE-Spot Home Assistant $tag" \
+                --generate-notes \
+                --latest \
+                ge_spot.zip#"GE-Spot Home Assistant $tag"
+          fi

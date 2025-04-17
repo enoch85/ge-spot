@@ -1,0 +1,477 @@
+"""Parser for ENTSO-E API responses."""
+import logging
+import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, List, Tuple
+
+from ...const.sources import Source
+from ...utils.validation import validate_data
+from ..base.price_parser import BasePriceParser
+
+_LOGGER = logging.getLogger(__name__)
+
+class EntsoeParser(BasePriceParser):
+    """Parser for ENTSO-E API responses."""
+
+    def __init__(self):
+        """Initialize the parser."""
+        super().__init__(Source.ENTSOE)
+
+    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse ENTSO-E API response.
+
+        Args:
+            data: Raw API response data
+
+        Returns:
+            Parsed data with hourly prices
+        """
+        # Validate data
+        data = validate_data(data, self.source)
+
+        result = {
+            "hourly_prices": {},
+            "currency": data.get("currency", "EUR"),
+            "source": self.source
+        }
+
+        # If hourly prices were already processed
+        if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
+            result["hourly_prices"] = data["hourly_prices"]
+
+            # Add current and next hour prices if available
+            if "current_price" in data:
+                result["current_price"] = data["current_price"]
+
+            if "next_hour_price" in data:
+                result["next_hour_price"] = data["next_hour_price"]
+
+            # Calculate current and next hour prices if not provided
+            if "current_price" not in result:
+                result["current_price"] = self._get_current_price(result["hourly_prices"])
+
+            if "next_hour_price" not in result:
+                result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
+
+            # Calculate day average if enough prices
+            if len(result["hourly_prices"]) >= 12:
+                result["day_average_price"] = self._calculate_day_average(result["hourly_prices"])
+
+            return result
+
+        # Parse XML response
+        if "raw_data" in data and isinstance(data["raw_data"], str):
+            try:
+                return self._parse_xml(data["raw_data"])
+            except Exception as e:
+                _LOGGER.error(f"Failed to parse ENTSO-E XML: {e}")
+
+        return result
+
+    def extract_metadata(self, data: Any) -> Dict[str, Any]:
+        """Extract metadata from ENTSO-E API response.
+
+        Args:
+            data: Raw API response data
+
+        Returns:
+            Metadata dictionary
+        """
+        metadata = {
+            "currency": "EUR",  # Default currency for ENTSO-E
+        }
+
+        # If data is a string (XML), try to parse it
+        if isinstance(data, str):
+            try:
+                # Parse XML
+                root = ET.fromstring(data)
+
+                # ENTSO-E uses a specific namespace
+                ns = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
+
+                # Find time series elements
+                time_series = root.findall(".//ns:TimeSeries", ns)
+
+                for ts in time_series:
+                    # Check if this is a day-ahead price time series
+                    business_type = ts.find(".//ns:businessType", ns)
+                    if business_type is None or business_type.text != "A62":
+                        # If not A62 (Day-ahead allocation), try A44 (Day-ahead)
+                        if business_type is None or business_type.text != "A44":
+                            # If neither A62 nor A44, skip this time series
+                            continue
+
+                    # Get currency
+                    currency = ts.find(".//ns:currency_Unit.name", ns)
+                    if currency is not None:
+                        metadata["currency"] = currency.text
+                        break
+
+            except Exception as e:
+                _LOGGER.error(f"Failed to extract metadata from ENTSO-E XML: {e}")
+
+        return metadata
+
+    def parse_hourly_prices(self, data: Any, area: str) -> Dict[str, float]:
+        """Parse hourly prices from ENTSO-E API response.
+
+        Args:
+            data: Raw API response data
+            area: Area code
+
+        Returns:
+            Dictionary of hourly prices with hour string keys (HH:00)
+        """
+        hourly_prices = {}
+
+        # If data is a string (XML), try to parse it
+        if isinstance(data, str):
+            try:
+                # Parse XML
+                root = ET.fromstring(data)
+
+                # ENTSO-E uses a specific namespace
+                ns = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
+
+                # Find time series elements
+                time_series = root.findall(".//ns:TimeSeries", ns)
+
+                for ts in time_series:
+                    # Check if this is a day-ahead price time series
+                    business_type = ts.find(".//ns:businessType", ns)
+                    if business_type is None or business_type.text != "A62":
+                        # If not A62 (Day-ahead allocation), try A44 (Day-ahead)
+                        if business_type is None or business_type.text != "A44":
+                            # If neither A62 nor A44, skip this time series
+                            continue
+
+                    # Get period start time
+                    period = ts.find(".//ns:Period", ns)
+                    if period is None:
+                        continue
+
+                    start_str = period.find(".//ns:timeInterval/ns:start", ns)
+                    if start_str is None:
+                        continue
+
+                    try:
+                        # Parse start time
+                        start_time = datetime.fromisoformat(start_str.text.replace('Z', '+00:00'))
+
+                        # Get price points
+                        points = ts.findall(".//ns:Point", ns)
+
+                        # Parse points
+                        for point in points:
+                            position = point.find("ns:position", ns)
+                            price = point.find("ns:price.amount", ns)
+
+                            if position is not None and price is not None:
+                                try:
+                                    pos = int(position.text)
+                                    price_val = float(price.text)
+
+                                    # Calculate hour
+                                    hour_time = start_time + timedelta(hours=pos-1)
+
+                                    # Use the utility function to normalize the hour value if needed
+                                    try:
+                                        # Use relative import to avoid module not found error
+                                        from ...timezone.timezone_utils import normalize_hour_value
+                                        normalized_hour, adjusted_date = normalize_hour_value(hour_time.hour, hour_time.date())
+
+                                        # Create normalized hour key
+                                        hour_key = f"{normalized_hour:02d}:00"
+                                    except ValueError as e:
+                                        # Skip invalid hours
+                                        _LOGGER.warning(f"Skipping invalid hour value in ENTSOE data: {hour_time.hour}:00 - {e}")
+                                        continue
+                                    except ImportError as e:
+                                        _LOGGER.warning(f"Import error for timezone utils: {e}, using original hour")
+                                        hour_key = f"{hour_time.hour:02d}:00"
+
+                                    # Add to hourly prices
+                                    hourly_prices[hour_key] = price_val
+                                except (ValueError, TypeError) as e:
+                                    _LOGGER.warning(f"Failed to parse point: {e}")
+
+                    except (ValueError, TypeError) as e:
+                        _LOGGER.warning(f"Failed to parse start time: {e}")
+
+            except Exception as e:
+                _LOGGER.error(f"Failed to parse hourly prices from ENTSO-E XML: {e}")
+
+        return hourly_prices
+
+    def _select_best_time_series(self, all_series):
+        """Select the best TimeSeries to use for price data.
+
+        Args:
+            all_series: List of dictionaries with metadata and prices
+
+        Returns:
+            The best TimeSeries or None if no valid series found
+        """
+        if not all_series:
+            return None
+
+        # If only one series, use it
+        if len(all_series) == 1:
+            return all_series[0]
+
+        # First try to identify by businessType
+        # A62 (Day-ahead allocation) is the correct spot price data
+        for series in all_series:
+            if series["metadata"]["business_type"] == "A62":
+                return series
+
+        # Next, try A44 (Day-ahead)
+        for series in all_series:
+            if series["metadata"]["business_type"] == "A44":
+                return series
+
+        # Fallback: try a heuristic approach
+        # Use overnight prices as a heuristic (should be lower)
+        overnight_averages = []
+        for series in all_series:
+            overnight_prices = []
+            for hour_str, price in series["prices"].items():
+                try:
+                    hour_dt = datetime.fromisoformat(hour_str)
+                    hour = hour_dt.hour
+                    if 0 <= hour <= 6:  # Overnight hours
+                        overnight_prices.append(price)
+                except (ValueError, TypeError):
+                    # Try simple hour format
+                    try:
+                        hour = int(hour_str.split(":")[0])
+                        if 0 <= hour <= 6:  # Overnight hours
+                            overnight_prices.append(price)
+                    except (ValueError, TypeError, IndexError):
+                        continue
+
+            if overnight_prices:
+                avg = sum(overnight_prices) / len(overnight_prices)
+                overnight_averages.append({
+                    "series": series,
+                    "overnight_avg": avg
+                })
+
+        # Choose the series with the lowest overnight average
+        if overnight_averages:
+            overnight_averages.sort(key=lambda x: x["overnight_avg"])
+            return overnight_averages[0]["series"]
+
+        # If all else fails, use the first series
+        return all_series[0]
+
+    def _parse_xml(self, xml_data: str) -> Dict[str, Any]:
+        """Parse ENTSO-E XML response.
+
+        Args:
+            xml_data: XML response data
+
+        Returns:
+            Parsed data with hourly prices
+        """
+        result = {
+            "hourly_prices": {},
+            "currency": "EUR",
+            "source": self.source
+        }
+
+        try:
+            # Parse XML
+            root = ET.fromstring(xml_data)
+
+            # ENTSO-E uses a specific namespace
+            ns = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
+
+            # Find time series elements
+            time_series = root.findall(".//ns:TimeSeries", ns)
+
+            # Store data from all TimeSeries to compare
+            all_hourly_prices = []
+
+            # Process each TimeSeries to find the best one
+            for ts_index, ts in enumerate(time_series):
+                # Extract metadata
+                business_type_elem = ts.find(".//ns:businessType", ns)
+                business_type = business_type_elem.text if business_type_elem is not None else "unknown"
+
+                curve_type_elem = ts.find(".//ns:curveType", ns)
+                curve_type = curve_type_elem.text if curve_type_elem is not None else "unknown"
+
+                currency_elem = ts.find(".//ns:currency_Unit.name", ns)
+                entsoe_currency = currency_elem.text if currency_elem is not None else "EUR"
+
+                unit_name_elem = ts.find(".//ns:price_Measure_Unit.name", ns)
+                unit_name = unit_name_elem.text if unit_name_elem is not None else "unknown"
+
+                # Process periods in this time series
+                raw_hourly_prices = {}
+                metadata = {
+                    "business_type": business_type,
+                    "curve_type": curve_type,
+                    "currency": entsoe_currency,
+                    "unit": unit_name,
+                    "index": ts_index
+                }
+
+                # Get period start time
+                period = ts.find(".//ns:Period", ns)
+                if period is None:
+                    continue
+
+                start_str = period.find(".//ns:timeInterval/ns:start", ns)
+                if start_str is None:
+                    continue
+
+                try:
+                    # Parse start time
+                    start_time = datetime.fromisoformat(start_str.text.replace('Z', '+00:00'))
+
+                    # Get price points
+                    points = ts.findall(".//ns:Point", ns)
+
+                    # Parse points
+                    for point in points:
+                        position = point.find("ns:position", ns)
+                        price = point.find("ns:price.amount", ns)
+
+                        if position is not None and price is not None:
+                            try:
+                                pos = int(position.text)
+                                price_val = float(price.text)
+
+                                # Calculate hour
+                                hour_time = start_time + timedelta(hours=pos-1)
+
+                                # Use the utility function to normalize the hour value if needed
+                                try:
+                                    # Use relative import to avoid module not found error
+                                    from ...timezone.timezone_utils import normalize_hour_value
+                                    normalized_hour, adjusted_date = normalize_hour_value(hour_time.hour, hour_time.date())
+
+                                    # Create normalized datetime
+                                    normalized_time = datetime.combine(adjusted_date, datetime.time(hour=normalized_hour))
+                                    normalized_time = normalized_time.replace(tzinfo=hour_time.tzinfo)
+
+                                    # Format as ISO string
+                                    hour_key = normalized_time.strftime("%Y-%m-%dT%H:00:00")
+
+                                    # Add to hourly prices
+                                    raw_hourly_prices[hour_key] = price_val
+                                except ValueError as e:
+                                    # Skip invalid hours
+                                    _LOGGER.warning(f"Skipping invalid hour value in ENTSOE data: {hour_time.hour}:00 - {e}")
+                                    continue
+                                except ImportError as e:
+                                    _LOGGER.warning(f"Import error for timezone utils: {e}, using original hour")
+                                    hour_key = hour_time.strftime("%Y-%m-%dT%H:00:00")
+                                    raw_hourly_prices[hour_key] = price_val
+                            except (ValueError, TypeError) as e:
+                                _LOGGER.warning(f"Failed to parse point: {e}")
+
+                    # Store this TimeSeries prices for comparison
+                    if raw_hourly_prices:
+                        all_hourly_prices.append({
+                            "metadata": metadata,
+                            "prices": raw_hourly_prices
+                        })
+
+                except (ValueError, TypeError) as e:
+                    _LOGGER.warning(f"Failed to parse start time: {e}")
+
+            # Select the best TimeSeries
+            selected_series = self._select_best_time_series(all_hourly_prices)
+            if not selected_series:
+                _LOGGER.error("Failed to identify any valid price TimeSeries")
+                return result
+
+            # Process the selected series
+            result["hourly_prices"] = selected_series["prices"]
+            result["currency"] = selected_series["metadata"]["currency"]
+
+        except Exception as e:
+            _LOGGER.error(f"Failed to parse ENTSO-E XML: {e}")
+
+        # Calculate current and next hour prices
+        result["current_price"] = self._get_current_price(result["hourly_prices"])
+        result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
+
+        # Calculate day average if enough prices
+        if len(result["hourly_prices"]) >= 12:
+            result["day_average_price"] = self._calculate_day_average(result["hourly_prices"])
+
+        return result
+
+    def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
+        """Get current hour price.
+
+        Args:
+            hourly_prices: Dictionary of hourly prices
+
+        Returns:
+            Current hour price or None if not available
+        """
+        if not hourly_prices:
+            return None
+
+        # Use timezone-aware datetime
+        now = datetime.now(datetime.timezone.utc)
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
+
+        return hourly_prices.get(current_hour_key)
+
+    def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
+        """Get next hour price.
+
+        Args:
+            hourly_prices: Dictionary of hourly prices
+
+        Returns:
+            Next hour price or None if not available
+        """
+        if not hourly_prices:
+            return None
+
+        now = datetime.now(datetime.timezone.utc)
+        next_hour = (now.replace(minute=0, second=0, microsecond=0) +
+                    timedelta(hours=1))
+        next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
+
+        return hourly_prices.get(next_hour_key)
+
+    def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
+        """Calculate day average price.
+
+        Args:
+            hourly_prices: Dictionary of hourly prices
+
+        Returns:
+            Day average price or None if not enough data
+        """
+        if not hourly_prices:
+            return None
+
+        # Get today's date
+        today = datetime.now(datetime.timezone.utc).date()
+
+        # Filter prices for today
+        today_prices = []
+        for hour_key, price in hourly_prices.items():
+            try:
+                hour_dt = datetime.fromisoformat(hour_key)
+                if hour_dt.date() == today:
+                    today_prices.append(price)
+            except (ValueError, TypeError):
+                continue
+
+        # Calculate average if we have enough prices
+        if len(today_prices) >= 12:
+            return sum(today_prices) / len(today_prices)
+
+        return None

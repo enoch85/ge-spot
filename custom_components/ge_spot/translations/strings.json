@@ -1,0 +1,103 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure GE-Spot",
+        "description": "Select your price area",
+        "data": {
+          "area": "Price Area"
+        }
+      },
+      "source_priority": {
+        "title": "Configure Data Sources",
+        "description": "Select which sources to use for price data in priority order",
+        "data": {
+          "source_priority": "Data Source Priority",
+          "vat": "VAT Rate (%)",
+          "update_interval": "Update Frequency",
+          "display_unit": "Price Display Format"
+        },
+        "data_description": {
+          "source_priority": "Select which sources to use in order of priority (first = highest priority)",
+          "vat": "Enter your local VAT percentage (e.g., 25 for 25%)",
+          "update_interval": "How often to check for new price data",
+          "display_unit": "Choose how prices should be displayed"
+        }
+      },
+      "api_keys": {
+        "title": "API Keys",
+        "description": "Enter API keys for selected sources",
+        "data": {
+          "entsoe_api_key": "ENTSO-E API Key"
+        }
+      }
+    },
+    "error": {
+      "no_sources_for_region": "No data sources available for this region",
+      "error_sources_for_region": "Error retrieving sources for region",
+      "api_key_required": "API key is required",
+      "invalid_api_key": "Invalid API key. Please check the key or try again later.",
+      "api_creation_failed": "Failed to create API connection. Please try again.",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This price area is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "GE-Spot Options",
+        "description": "Configure price settings",
+        "data": {
+          "source_priority": "Data Source Priority",
+          "vat": "VAT Rate (%)",
+          "update_interval": "Update Frequency",
+          "display_unit": "Price Display Format",
+          "timezone_reference": "Time Reference",
+          "entsoe_api_key": "ENTSO-E API Key",
+          "clear_cache": "Clear Price Cache"
+        },
+        "data_description": {
+          "source_priority": "Select which sources to use in order of priority (first = highest priority)",
+          "vat": "Enter your local VAT percentage (e.g., 25 for 25%)",
+          "update_interval": "How often to check for new price data",
+          "display_unit": "Choose how prices should be displayed",
+          "timezone_reference": "Choose which timezone to use for displaying hourly prices",
+          "entsoe_api_key": "Required for using ENTSO-E as a data source",
+          "clear_cache": "Clear the price cache to force a fresh data fetch"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "Invalid API key. Please check the key or try again later.",
+      "api_creation_failed": "Failed to create API connection. Please try again.",
+      "cache_cleared": "Price cache cleared successfully!",
+      "cache_clear_failed": "Failed to clear price cache. Please try again."
+    }
+  },
+  "selector": {
+    "update_interval": {
+      "options": {
+        "15": "15 minutes",
+        "30": "30 minutes",
+        "60": "1 hour"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "api_key_status": {
+        "state": {
+          "valid": "Valid",
+          "invalid": "Invalid",
+          "not_configured": "Not Configured",
+          "unknown": "Unknown Status"
+        },
+        "state_attributes": {
+          "last_checked": "Last Validation"
+        }
+      }
+    }
+  }
+}

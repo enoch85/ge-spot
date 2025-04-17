@@ -1,0 +1,346 @@
+"""Area constants for GE-Spot integration."""
+
+class Area:
+    """Area code constants."""
+    # Nordic regions
+    SE1 = "SE1"
+    SE2 = "SE2"
+    SE3 = "SE3"
+    SE4 = "SE4"
+    DK1 = "DK1"
+    DK2 = "DK2"
+    NO1 = "NO1"  # East Norway
+    NO2 = "NO2"  # South Norway
+    NO3 = "NO3"  # Central Norway
+    NO4 = "NO4"  # North Norway
+    NO5 = "NO5"  # West Norway
+    FI = "FI"
+    EE = "EE"
+    LV = "LV"
+    LT = "LT"
+
+    # Central Europe
+    DE = "DE"
+    DE_LU = "DE-LU"
+    AT = "AT"
+    FR = "FR"
+    BE = "BE"
+    NL = "NL"
+    CH = "CH"
+
+    # Iberia
+    ES = "ES"
+    PT = "PT"
+
+    # Australia
+    NSW1 = "NSW1"
+    QLD1 = "QLD1"
+    SA1 = "SA1"
+    TAS1 = "TAS1"
+    VIC1 = "VIC1"
+
+
+class Timezone:
+    """Timezone mappings for areas."""
+    AREA_TIMEZONES = {
+        # European regions
+        Area.DK1: "Europe/Copenhagen",
+        Area.DK2: "Europe/Copenhagen",
+        Area.FI: "Europe/Helsinki",
+        Area.EE: "Europe/Tallinn",
+        Area.LT: "Europe/Vilnius",
+        Area.LV: "Europe/Riga",
+        Area.NO1: "Europe/Oslo",
+        Area.NO2: "Europe/Oslo",
+        Area.NO3: "Europe/Oslo",
+        Area.NO4: "Europe/Oslo",
+        Area.NO5: "Europe/Oslo",
+        Area.SE1: "Europe/Stockholm",
+        Area.SE2: "Europe/Stockholm",
+        Area.SE3: "Europe/Stockholm",
+        Area.SE4: "Europe/Stockholm",
+        "SYS": "Europe/Stockholm",
+        Area.FR: "Europe/Paris",
+        Area.NL: "Europe/Amsterdam",
+        Area.BE: "Europe/Brussels",
+        Area.AT: "Europe/Vienna",
+        Area.DE_LU: "Europe/Berlin",
+        "GER": "Europe/Berlin",
+        "IT": "Europe/Rome",
+        "IT-North": "Europe/Rome",
+        "IT-Centre-North": "Europe/Rome",
+        "IT-Centre-South": "Europe/Rome",
+        "IT-South": "Europe/Rome",
+        "IT-South-2": "Europe/Rome",
+        "IT-Calabria": "Europe/Rome",
+        "IT-Sicily": "Europe/Rome",
+        "IT-Sardinia": "Europe/Rome",
+        "MT": "Europe/Malta",
+        "GB": "Europe/London",
+        "GB(IFA)": "Europe/London",
+        "GB(IFA2)": "Europe/London",
+        "GB(ElecLink)": "Europe/London",
+        "XK": "Europe/Belgrade",
+        "MD": "Europe/Chisinau",
+        "UA": "Europe/Kiev",
+        "UA-IPS": "Europe/Kiev",
+        "UA-DobTPP": "Europe/Kiev",
+        "AM": "Asia/Yerevan",
+        "GE": "Asia/Tbilisi",
+        "AZ": "Asia/Baku",
+        Area.ES: "Europe/Madrid",
+        Area.PT: "Europe/Lisbon",
+        Area.CH: "Europe/Zurich",
+        "PL": "Europe/Warsaw",
+
+        # Australian regions
+        Area.NSW1: "Australia/Sydney",
+        Area.QLD1: "Australia/Brisbane",
+        Area.SA1: "Australia/Adelaide",
+        Area.TAS1: "Australia/Hobart",
+        Area.VIC1: "Australia/Melbourne",
+    }
+
+
+class AreaMapping:
+    """Area mappings for different sources."""
+
+    # Nordpool delivery area mapping
+    NORDPOOL_DELIVERY = {
+        Area.NO1: Area.NO1,
+        Area.NO2: Area.NO2,
+        Area.NO3: Area.NO3,
+        Area.NO4: Area.NO4,
+        Area.NO5: Area.NO5,
+        Area.SE1: Area.SE1,
+        Area.SE2: Area.SE2,
+        Area.SE3: Area.SE3,
+        Area.SE4: Area.SE4,
+        Area.DK1: Area.DK1,
+        Area.DK2: Area.DK2,
+        Area.FI: Area.FI,
+        Area.EE: Area.EE,
+        Area.LV: Area.LV,
+        Area.LT: Area.LT,
+    }
+
+    # Nordpool region mapping for v2 API
+    # Is this needed?
+    NORDPOOL_REGION_MAPPING = {
+        Area.SE1: "Sweden",
+        Area.SE2: "Sweden",
+        Area.SE3: "Sweden",
+        Area.SE4: "Sweden",
+        Area.FI: "Finland",
+        Area.DK1: "Denmark",
+        Area.DK2: "Denmark",
+        Area.NO1: "Norway",
+        Area.NO2: "Norway",
+        Area.NO3: "Norway",
+        Area.NO4: "Norway",
+        Area.NO5: "Norway",
+        Area.LT: "Lithuania",
+        Area.LV: "Latvia",
+        Area.EE: "Estonia"
+    }
+
+    # Nordpool areas display names
+    NORDPOOL_AREAS = {
+        Area.NO1: "Norway (NO1)",
+        Area.NO2: "Norway (NO2)",
+        Area.NO3: "Norway (NO3)",
+        Area.NO4: "Norway (NO4)",
+        Area.NO5: "Norway (NO5)",
+        Area.SE1: "Sweden (SE1)",
+        Area.SE2: "Sweden (SE2)",
+        Area.SE3: "Sweden (SE3)",
+        Area.SE4: "Sweden (SE4)",
+        Area.DK1: "Denmark (DK1)",
+        Area.DK2: "Denmark (DK2)",
+        Area.FI: "Finland (FI)",
+        Area.EE: "Estonia (EE)",
+        Area.LV: "Latvia (LV)",
+        Area.LT: "Lithuania (LT)"
+    }
+
+    # Energi Data Service areas
+    ENERGI_DATA_AREAS = {
+        Area.DK1: "Denmark (DK1)",
+        Area.DK2: "Denmark (DK2)",
+    }
+
+    # ENTSO-E area mapping from our area codes to ENTSO-E area codes
+    ENTSOE_MAPPING = {
+        # Core European Market Bidding Zones (SDAC)
+        Area.AT: "10YAT-APG------L",
+        Area.BE: "10YBE----------2",
+        "BG": "10YCA-BULGARIA-R",
+        "HR": "10YHR-HEP------M",
+        "CZ": "10YCZ-CEPS-----N",
+        Area.DK1: "10YDK-1--------W",
+        Area.DK2: "10YDK-2--------M",
+        Area.EE: "10Y1001A1001A39I",  # Updated EIC code (was: 10Y1001A1001A816)
+        Area.FI: "10YFI-1--------U",
+        Area.FR: "10YFR-RTE------C",
+        Area.DE_LU: "10Y1001A1001A82H",
+        "GR": "10YGR-HTSO-----Y",
+        "HU": "10YHU-MAVIR----U",
+        "IT": "10Y1001A1001A70O",  # Italy mainland
+        "IT-North": "10Y1001A1001A71M",  # Italy north
+        # "IT-Centre-North": "10Y1001A1001A72K",  # Not working - removed
+        "IT-Centre-South": "10Y1001A1001A788",  # Italy centre-south
+        "IT-South": "10Y1001A1001A885",  # Italy south
+        "IT-South-2": "10Y1001A1001A75E",  # Additional Italian region
+        "IT-Sardinia": "10Y1001A1001A73I",  # Updated EIC code (was: 10YIT-SARDGN--19)
+        "IT-Sicily": "10Y1001A1001A74G",  # Updated EIC code (was: 10YIT-SICILY---A)
+        # Area.LV: "10YLV-1001A0074",  # Not working - commented out
+        # Area.LT: "10Y1001A1001A990",  # Not working - commented out
+        Area.NL: "10YNL----------L",
+        Area.NO1: "10Y1001A1001A48H",  # Updated EIC code (was: 10Y1001A1001A840)
+        Area.NO2: "10YNO-2--------T",  # Updated EIC code (was: 10Y1001A1001A85Y)
+        Area.NO3: "10YNO-3--------J",  # Updated EIC code (was: 10Y1001A1001A86W)
+        Area.NO4: "10YNO-4--------9",  # Updated EIC code (was: 10Y1001A1001A87U)
+        # Area.NO5: "10YNO-5--------0",  # Not working - commented out
+        "PL": "10YPL-AREA-----S",
+        Area.PT: "10YPT-REN------W",
+        "RO": "10YRO-TEL------P",
+        "SK": "10YSK-SEPS-----K",
+        "SI": "10YSI-ELES-----O",
+        Area.ES: "10YES-REE------0",
+        Area.SE1: "10Y1001A1001A44P",  # Updated EIC code (was: 10YSE-1--------K)
+        Area.SE2: "10Y1001A1001A45N",  # Updated EIC code (was: 10YSE-2--------E)
+        Area.SE3: "10Y1001A1001A46L",  # Updated EIC code (was: 10YSE-3--------Y)
+        Area.SE4: "10Y1001A1001A47J",  # Updated EIC code (was: 10YSE-4--------4)
+        Area.CH: "10YCH-SWISSGRIDZ",
+
+        # Other ENTSO-E Areas
+        "GB": "10Y1001A1001A59C",  # Updated to use IE(SEM) code - working!
+        "IE(SEM)": "10Y1001A1001A59C",
+        # "AL": "10YAL-KESH-----5",  # Not working - commented out
+        # "BA": "10YBA-JPCC-----D",  # Not working - commented out
+        "ME": "10YCS-CG-TSO---S",  # Updated EIC code (was: 10YME-CGES-----S)
+        "MK": "10YMK-MEPSO----8",
+        "RS": "10YCS-SERBIATSOV",  # Updated EIC code (was: 10YRS-EMS------W)
+        # "TR": "10YTR-TEIAS----W",  # Not working - commented out
+        # "UA": "10Y1001C-00182",  # Not working - commented out
+        # "UA-BEI": "10YUA-WEPS-----0",  # Not working - commented out
+        # "CY": "10YCY-1001A0003J"  # Not working - commented out
+    }
+
+    # ENTSO-E areas (Display names)
+    ENTSOE_AREAS = {
+        # Core European Market Bidding Zones (SDAC)
+        Area.AT: "Austria (AT)",
+        Area.BE: "Belgium (BE)",
+        "BG": "Bulgaria (BG)",
+        "HR": "Croatia (HR)",
+        "CZ": "Czech Republic (CZ)",
+        Area.DK1: "Denmark (DK1, West Denmark)",
+        Area.DK2: "Denmark (DK2, East Denmark)",
+        Area.EE: "Estonia (EE)",
+        Area.FI: "Finland (FI)",
+        Area.FR: "France (FR)",
+        Area.DE_LU: "Germany-Luxembourg (DE-LU)",
+        "GR": "Greece (GR)",
+        "HU": "Hungary (HU)",
+        "IT": "Italy (IT, Mainland)",
+        "IT-North": "Italy (IT-North)",
+        "IT-Centre-North": "Italy (IT-Centre-North)",
+        "IT-Centre-South": "Italy (IT-Centre-South)",
+        "IT-South": "Italy (IT-South)",
+        "IT-South-2": "Italy (IT-South-2)",
+        "IT-Sardinia": "Italy (IT-Sardinia)",
+        "IT-Sicily": "Italy (IT-Sicily)",
+        Area.LV: "Latvia (LV)",
+        Area.LT: "Lithuania (LT)",
+        Area.NL: "Netherlands (NL)",
+        Area.NO1: "Norway (NO1, Oslo/East)",
+        Area.NO2: "Norway (NO2, Kristiansand/South)",
+        Area.NO3: "Norway (NO3, Trondheim/Central)",
+        Area.NO4: "Norway (NO4, Tromsø/North)",
+        Area.NO5: "Norway (NO5, Bergen/West)",
+        "PL": "Poland (PL)",
+        Area.PT: "Portugal (PT)",
+        "RO": "Romania (RO)",
+        "SK": "Slovakia (SK)",
+        "SI": "Slovenia (SI)",
+        Area.ES: "Spain (ES)",
+        Area.SE1: "Sweden (SE1, Luleå/North)",
+        Area.SE2: "Sweden (SE2, Sundsvall/North-Central)",
+        Area.SE3: "Sweden (SE3, Stockholm/South-Central)",
+        Area.SE4: "Sweden (SE4, Malmö/South)",
+        Area.CH: "Switzerland (CH)",
+
+        # Other ENTSO-E Areas
+        "GB": "Great Britain (GB)",
+        "IE(SEM)": "Ireland/Northern Ireland (SEM)",
+        "AL": "Albania (AL)",
+        "BA": "Bosnia and Herzegovina (BA)",
+        "ME": "Montenegro (ME)",
+        "MK": "North Macedonia (MK)",
+        "RS": "Serbia (RS)",
+        "TR": "Turkey (TR)",
+        "UA": "Ukraine (UA)",
+        "UA-BEI": "Ukraine-West (UA-BEI)",
+        "CY": "Cyprus (CY)"
+    }
+
+    # EPEX areas
+    EPEX_AREAS = {
+        Area.DE_LU: "Germany-Luxembourg",
+        Area.FR: "France",
+        Area.BE: "Belgium",
+        Area.NL: "Netherlands",
+        Area.AT: "Austria",
+    }
+
+    # OMIE areas
+    OMIE_AREAS = {
+        Area.ES: "Spain",
+        Area.PT: "Portugal",
+    }
+
+    # AEMO areas
+    AEMO_AREAS = {
+        Area.NSW1: "New South Wales (NSW1)",
+        Area.QLD1: "Queensland (QLD1)",
+        Area.SA1: "South Australia (SA1)",
+        Area.TAS1: "Tasmania (TAS1)",
+        Area.VIC1: "Victoria (VIC1)",
+    }
+
+    # Stromligning areas
+    STROMLIGNING_AREAS = {
+        Area.DK1: "Denmark (DK1)",
+        Area.DK2: "Denmark (DK2)",
+    }
+
+    # ComEd areas
+    COMED_AREAS = {
+        "5minutefeed": "ComEd 5 Minute Price",
+        "currenthouraverage": "ComEd Current Hour Average Price"
+    }
+
+    # All areas combined for lookup
+    ALL_AREAS = {
+        'nordpool': NORDPOOL_AREAS,
+        'energi_data_service': ENERGI_DATA_AREAS,
+        'entsoe': ENTSOE_AREAS,
+        'epex': EPEX_AREAS,
+        'omie': OMIE_AREAS,
+        'aemo': AEMO_AREAS,
+        'stromligning': STROMLIGNING_AREAS,
+        'comed': COMED_AREAS
+    }
+
+    # Default areas for each source
+    DEFAULT_AREAS = {
+        "nordpool": Area.SE4,
+        "energi_data_service": Area.DK1,
+        "entsoe": "10Y1001A1001A47J",  # SE4 EIC Code (updated)
+        "epex": Area.DE_LU,
+        "omie": Area.ES,
+        "aemo": Area.NSW1,
+        "stromligning": Area.DK1,
+        "comed": "5minutefeed",
+    }

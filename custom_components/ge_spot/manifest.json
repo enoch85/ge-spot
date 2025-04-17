@@ -1,0 +1,19 @@
+{
+    "domain": "ge_spot",
+    "name": "Global Electricity Spot Prices",
+    "codeowners": ["@enoch85"],
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://github.com/enoch85/ge-spot",
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://github.com/enoch85/ge-spot/issues",
+    "requirements": [
+        "aiohttp>=3.8.0",
+        "beautifulsoup4>=4.11.0",
+        "voluptuous>=0.13.0",
+        "xmltodict>=0.13.0",
+        "PyJWT>=2.6.0",
+        "aiofiles"
+    ],
+    "version": "0.0.1"
+}
