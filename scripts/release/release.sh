@@ -12,11 +12,11 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Integration naming constants
-MAIN_NAME="OVMS Home Assistant"
-SHORT_NAME="OVMS"
-FULL_NAME="Open Vehicle Monitoring System HA"
-REPO_NAME="ovms-home-assistant"
-INTEGRATION_PATH="custom_components/ovms"
+MAIN_NAME="GE-Spot"
+SHORT_NAME="GE-Spot"
+FULL_NAME="Global Electricity Spot Prices"
+REPO_NAME="ge-spot"
+INTEGRATION_PATH="custom_components/ge_spot"
 MANIFEST_PATH="${INTEGRATION_PATH}/manifest.json"
 
 # Release flags
