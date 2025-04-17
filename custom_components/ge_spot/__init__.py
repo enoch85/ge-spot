@@ -6,8 +6,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
+
+# Define CONFIG_SCHEMA to fix the warning
+CONFIG_SCHEMA = cv.config_entry_only_schema(DOMAIN)
 from .const.config import Config
 from .const.defaults import Defaults
 from .const.network import Network

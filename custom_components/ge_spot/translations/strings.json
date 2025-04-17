@@ -95,7 +95,9 @@
           "unknown": "Unknown Status"
         },
         "state_attributes": {
-          "last_checked": "Last Validation"
+          "last_checked": {
+            "name": "Last Validation"
+          }
         }
       }
     }
