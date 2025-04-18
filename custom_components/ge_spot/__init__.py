@@ -11,7 +11,7 @@ from homeassistant.helpers import config_validation as cv
 from .const import DOMAIN
 
 # Define CONFIG_SCHEMA to fix the warning
-CONFIG_SCHEMA = cv.config_entry_only_schema(DOMAIN)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 from .const.config import Config
 from .const.defaults import Defaults
 from .const.network import Network
