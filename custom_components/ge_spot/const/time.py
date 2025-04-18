@@ -35,7 +35,7 @@ class TimezoneReference:
         LOCAL_AREA: "Local Area Time (show prices for each area's current hour)"
     }
 
-    DEFAULT = HOME_ASSISTANT  # Default to Home Assistant Time as requested
+    DEFAULT = LOCAL_AREA  # Default to Local Area Time for more intuitive behavior
 
 class TimeInterval:
     """Time interval constants."""
