@@ -44,10 +44,10 @@ class HourCalculator:
                 elif hour_diff < -12:
                     hour_diff += 24
 
-                # Apply the offset correctly to compensate
-                adjusted_hour = (now.hour + hour_diff) % 24
+                # Apply the offset in reverse to compensate
+                adjusted_hour = (now.hour - hour_diff) % 24
                 hour_key = f"{adjusted_hour:02d}:00"
-                _LOGGER.debug(f"Applied timezone compensation of {hour_diff} hours: {now.hour}:00 → {adjusted_hour}:00")
+                _LOGGER.debug(f"Applied timezone compensation of {-hour_diff} hours: {now.hour}:00 → {adjusted_hour}:00")
                 return hour_key
 
         # If area timezone is provided and using Local Area Time mode, use it for determining the current hour
