@@ -1,7 +1,7 @@
 """Parser for ENTSO-E API responses."""
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone, time
 from typing import Dict, Any, Optional, List, Tuple
 
 from ...const.sources import Source
@@ -220,6 +220,54 @@ class EntsoeParser(BasePriceParser):
         if len(all_series) == 1:
             return all_series[0]
 
+        # Get current date in UTC
+        today = datetime.now(timezone.utc).date()
+        
+        # Filter series that contain today's data
+        today_series = []
+        for series in all_series:
+            # Extract hour keys
+            hour_keys = list(series["prices"].keys())
+            if not hour_keys:
+                continue
+                
+            # Try to find a price entry for today
+            for hour_key in hour_keys:
+                try:
+                    hour_dt = datetime.fromisoformat(hour_key)
+                    if hour_dt.date() == today:
+                        today_series.append(series)
+                        break
+                except (ValueError, TypeError):
+                    continue
+        
+        # If we found series containing today's data, use those
+        if today_series:
+            _LOGGER.debug(f"Found {len(today_series)} TimeSeries containing today's data")
+            
+            # If only one series contains today's data, use it
+            if len(today_series) == 1:
+                _LOGGER.debug("Using the only TimeSeries that contains today's data")
+                return today_series[0]
+                
+            # If multiple series contain today's data, use business type criteria
+            for series in today_series:
+                if series["metadata"]["business_type"] == "A62":
+                    _LOGGER.debug("Selected TimeSeries with business_type A62 containing today's data")
+                    return series
+                    
+            for series in today_series:
+                if series["metadata"]["business_type"] == "A44":
+                    _LOGGER.debug("Selected TimeSeries with business_type A44 containing today's data")
+                    return series
+                    
+            # Fall back to first series containing today's data
+            _LOGGER.debug("Falling back to first TimeSeries containing today's data")
+            return today_series[0]
+        
+        _LOGGER.debug("No TimeSeries contains today's data, falling back to business type criteria")
+        
+        # If no series contains today's data, fall back to business type criteria
         # First try to identify by businessType
         # A62 (Day-ahead allocation) is the correct spot price data
         for series in all_series:
@@ -355,7 +403,8 @@ class EntsoeParser(BasePriceParser):
                                     normalized_hour, adjusted_date = normalize_hour_value(hour_time.hour, hour_time.date())
 
                                     # Create normalized datetime
-                                    normalized_time = datetime.combine(adjusted_date, datetime.time(hour=normalized_hour))
+                                    from datetime import time
+                                    normalized_time = datetime.combine(adjusted_date, time(hour=normalized_hour))
                                     normalized_time = normalized_time.replace(tzinfo=hour_time.tzinfo)
 
                                     # Format as ISO string
@@ -420,7 +469,7 @@ class EntsoeParser(BasePriceParser):
             return None
 
         # Use timezone-aware datetime
-        now = datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
         current_hour = now.replace(minute=0, second=0, microsecond=0)
         current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
 
@@ -438,7 +487,7 @@ class EntsoeParser(BasePriceParser):
         if not hourly_prices:
             return None
 
-        now = datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
         next_hour = (now.replace(minute=0, second=0, microsecond=0) +
                     timedelta(hours=1))
         next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
@@ -458,7 +507,7 @@ class EntsoeParser(BasePriceParser):
             return None
 
         # Get today's date
-        today = datetime.now(datetime.timezone.utc).date()
+        today = datetime.now(timezone.utc).date()
 
         # Filter prices for today
         today_prices = []
