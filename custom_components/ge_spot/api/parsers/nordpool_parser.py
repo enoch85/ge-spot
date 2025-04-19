@@ -194,7 +194,7 @@ class NordpoolPriceParser(BasePriceParser):
             area: Area code
 
         Returns:
-            Dictionary of hourly prices
+            Dictionary of hourly prices with ISO format timestamp keys
         """
         hourly_prices = {}
 
@@ -218,10 +218,19 @@ class NordpoolPriceParser(BasePriceParser):
                         # Parse timestamp
                         dt = self._parse_timestamp(start_time)
                         if dt:
-                            # Format as ISO format hour key for compatibility with improved adapter
-                            # This ensures the date information is preserved
+                            # ALWAYS format as ISO format with full date and time
+                            # This is crucial for the adapter to recognize the correct date
                             hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
+                            
+                            # Ensure the timestamp is in UTC for consistency
+                            if dt.tzinfo is None:
+                                # If no timezone info, assume UTC
+                                from datetime import timezone
+                                dt = dt.replace(tzinfo=timezone.utc)
+                                hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
+                                
                             hourly_prices[hour_key] = float(raw_price)
+                            _LOGGER.debug(f"Added hourly price with ISO timestamp: {hour_key} = {raw_price}")
 
         return hourly_prices
 
@@ -233,7 +242,7 @@ class NordpoolPriceParser(BasePriceParser):
             area: Area code
 
         Returns:
-            Dictionary of hourly prices
+            Dictionary of hourly prices with ISO format timestamp keys
         """
         hourly_prices = {}
 
@@ -265,10 +274,19 @@ class NordpoolPriceParser(BasePriceParser):
                         # Parse timestamp
                         dt = self._parse_timestamp(start_time)
                         if dt:
-                            # Format as ISO format hour key for compatibility with improved adapter
-                            # This ensures the date information is preserved
+                            # ALWAYS format as ISO format with full date and time
+                            # This is crucial for the adapter to recognize tomorrow's data
                             hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
+                            
+                            # Ensure the timestamp is in UTC for consistency
+                            if dt.tzinfo is None:
+                                # If no timezone info, assume UTC
+                                from datetime import timezone
+                                _LOGGER.debug(f"Adding timezone info to timestamp: {hour_key}")
+                                dt = dt.replace(tzinfo=timezone.utc)
+                                hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
+                                
                             hourly_prices[hour_key] = float(raw_price)
-                            _LOGGER.debug(f"Added tomorrow price: {hour_key} = {raw_price}")
+                            _LOGGER.debug(f"Added tomorrow price with ISO timestamp: {hour_key} = {raw_price}")
 
         return hourly_prices

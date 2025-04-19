@@ -1,6 +1,6 @@
 """Price data adapter for electricity spot prices."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from homeassistant.core import HomeAssistant
@@ -17,9 +17,19 @@ class ElectricityPriceAdapter:
         self.raw_data = raw_data or []
         self.use_subunit = use_subunit
 
+        # Get today's and tomorrow's dates for comparison
+        self.today = datetime.now(timezone.utc).date()
+        self.tomorrow = self.today + timedelta(days=1)
+
         # Extract core data once for reuse
-        self.hourly_prices = self._extract_hourly_prices()
-        self.tomorrow_prices = self._extract_tomorrow_prices()
+        self.hourly_prices, self.dates_by_hour = self._extract_hourly_prices()
+        self.tomorrow_prices, self.tomorrow_dates_by_hour = self._extract_tomorrow_prices()
+
+        # If we don't have tomorrow prices but have dates in hourly prices,
+        # try to extract tomorrow's data from hourly_prices
+        if not self.tomorrow_prices and self.dates_by_hour:
+            self._extract_tomorrow_from_hourly()
+            
         self.price_list = self._convert_to_price_list(self.hourly_prices)
         self.tomorrow_list = self._convert_to_price_list(self.tomorrow_prices)
 
@@ -41,10 +51,7 @@ class ElectricityPriceAdapter:
                 hour = int(hour_key.split(":")[0])
                 if 0 <= hour < 24:  # Only accept valid hours
                     # Create a datetime for tomorrow with this hour
-                    from homeassistant.util import dt as dt_util
-                    today = dt_util.now().date()
-                    tomorrow = today + timedelta(days=1)
-                    dt = datetime.combine(tomorrow, datetime.min.time().replace(hour=hour))
+                    dt = datetime.combine(self.tomorrow, datetime.min.time().replace(hour=hour), timezone.utc)
                     return hour, dt
             except (ValueError, IndexError):
                 pass
@@ -70,16 +77,15 @@ class ElectricityPriceAdapter:
         _LOGGER.warning(f"Could not parse hour from: {hour_str}")
         return None, None
 
-    def _extract_hourly_prices(self) -> Dict[str, float]:
-        """Extract hourly prices from raw data."""
-        hourly_prices = {}
+    def _extract_hourly_prices(self) -> Tuple[Dict[str, float], Dict[str, datetime]]:
+        """Extract hourly prices from raw data.
         
-        # Track tomorrow's data found in hourly_prices
-        tomorrow_in_hourly = {}
-        from datetime import datetime, timedelta
-        from homeassistant.util import dt as dt_util
-        today = dt_util.now().date()
-        tomorrow = today + timedelta(days=1)
+        Returns:
+            Tuple of (hourly_prices, dates_by_hour) where hourly_prices is a dict of hour_key -> price
+            and dates_by_hour is a dict of hour_key -> datetime
+        """
+        hourly_prices = {}
+        dates_by_hour = {}
 
         for item in self.raw_data:
             if not isinstance(item, dict):
@@ -89,44 +95,29 @@ class ElectricityPriceAdapter:
                 # Store formatted hour -> price mapping
                 _LOGGER.debug(f"Found hourly_prices in raw data: {len(item['hourly_prices'])} entries")
                 for hour_str, price in item["hourly_prices"].items():
-                    # Check if this is a tomorrow hour from timezone conversion
+                    # Skip tomorrow prefixed hours - they will be handled by _extract_tomorrow_prices
                     if hour_str.startswith("tomorrow_"):
-                        # Extract the hour key without the prefix
-                        hour_key = hour_str[9:]  # Remove "tomorrow_" prefix
-                        tomorrow_in_hourly[hour_key] = price
-                        _LOGGER.debug(f"Found tomorrow's data in hourly_prices with prefix: {hour_str} -> {hour_key}")
-                        continue  # Skip adding to hourly_prices
+                        continue
                     
                     hour, dt = self._parse_hour_from_string(hour_str)
                     if hour is not None:
                         hour_key = f"{hour:02d}:00"
-                        
-                        # Check if this is tomorrow's data
-                        if dt is not None and dt.date() == tomorrow:
-                            # This is tomorrow's data, store it separately
-                            tomorrow_in_hourly[hour_key] = price
-                            _LOGGER.debug(f"Found tomorrow's data in hourly_prices: {hour_key} -> {price}")
-                            continue  # Skip adding to hourly_prices
-                                
                         hourly_prices[hour_key] = price
-
-        # If we found tomorrow's data in hourly_prices, add it to tomorrow_hourly_prices
-        if tomorrow_in_hourly:
-            _LOGGER.info(f"Found {len(tomorrow_in_hourly)} hours of tomorrow's data in hourly_prices")
-            for item in self.raw_data:
-                if isinstance(item, dict):
-                    if "tomorrow_hourly_prices" not in item:
-                        item["tomorrow_hourly_prices"] = {}
-                    # Add tomorrow's data to tomorrow_hourly_prices
-                    item["tomorrow_hourly_prices"].update(tomorrow_in_hourly)
-                    break
+                        if dt is not None:
+                            dates_by_hour[hour_key] = dt
 
         _LOGGER.debug(f"Extracted {len(hourly_prices)} hourly prices: {sorted(hourly_prices.keys())}")
-        return hourly_prices
+        return hourly_prices, dates_by_hour
 
-    def _extract_tomorrow_prices(self) -> Dict[str, float]:
-        """Extract tomorrow's hourly prices from raw data."""
+    def _extract_tomorrow_prices(self) -> Tuple[Dict[str, float], Dict[str, datetime]]:
+        """Extract tomorrow's hourly prices from raw data.
+        
+        Returns:
+            Tuple of (tomorrow_prices, tomorrow_dates_by_hour) where tomorrow_prices is a dict of hour_key -> price
+            and tomorrow_dates_by_hour is a dict of hour_key -> datetime
+        """
         tomorrow_prices = {}
+        tomorrow_dates_by_hour = {}
 
         for item in self.raw_data:
             if not isinstance(item, dict):
@@ -142,6 +133,15 @@ class ElectricityPriceAdapter:
                         hour_key = hour_str[9:]  # Remove "tomorrow_" prefix
                         # We can use this directly
                         tomorrow_prices[hour_key] = price
+                        
+                        # Create a datetime for tomorrow with this hour
+                        try:
+                            hour = int(hour_key.split(":")[0])
+                            dt = datetime.combine(self.tomorrow, datetime.min.time().replace(hour=hour), timezone.utc)
+                            tomorrow_dates_by_hour[hour_key] = dt
+                        except (ValueError, IndexError):
+                            pass
+                            
                         _LOGGER.debug(f"Added prefixed tomorrow price: {hour_key} -> {price}")
             
             # Then try the standard tomorrow_hourly_prices
@@ -153,10 +153,37 @@ class ElectricityPriceAdapter:
                     if hour is not None:
                         hour_key = f"{hour:02d}:00"
                         tomorrow_prices[hour_key] = price
+                        if dt is not None:
+                            tomorrow_dates_by_hour[hour_key] = dt
                         _LOGGER.debug(f"Added tomorrow price: {hour_key} -> {price}")
 
         _LOGGER.debug(f"Extracted {len(tomorrow_prices)} tomorrow prices: {sorted(tomorrow_prices.keys())}")
-        return tomorrow_prices
+        return tomorrow_prices, tomorrow_dates_by_hour
+
+    def _extract_tomorrow_from_hourly(self) -> None:
+        """Extract tomorrow's data from hourly_prices if dates are available."""
+        if not self.dates_by_hour:
+            return
+            
+        # Look for hours with tomorrow's date
+        tomorrow_hour_keys = []
+        for hour_key, dt in self.dates_by_hour.items():
+            if dt.date() == self.tomorrow:
+                # This is tomorrow's data, move it to tomorrow_prices
+                self.tomorrow_prices[hour_key] = self.hourly_prices[hour_key]
+                self.tomorrow_dates_by_hour[hour_key] = dt
+                tomorrow_hour_keys.append(hour_key)
+                
+        # Remove tomorrow's data from hourly_prices if we found any
+        if self.tomorrow_prices:
+            _LOGGER.info(f"Extracted {len(self.tomorrow_prices)} hours of tomorrow's data from hourly_prices")
+            
+            # Remove tomorrow's hours from hourly_prices
+            for hour_key in tomorrow_hour_keys:
+                if hour_key in self.hourly_prices:
+                    del self.hourly_prices[hour_key]
+                    
+            _LOGGER.info(f"Kept {len(self.hourly_prices)} hours of today's data in hourly_prices")
 
     def _convert_to_price_list(self, price_dict: Dict[str, float]) -> List[float]:
         """Convert price dictionary to ordered list."""

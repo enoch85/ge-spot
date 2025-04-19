@@ -282,10 +282,13 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 # This is critical for adapter to distinguish tomorrow from today
                 tomorrow_converted_prices = tomorrow_raw_prices
                 
+                # Debug log all tomorrow raw prices
+                _LOGGER.debug(f"Tomorrow raw prices before conversion: {list(tomorrow_raw_prices.items())[:5]}")
+                
                 # Preserve the original ISO format for direct use with improved adapter
                 result["tomorrow_original_prices"] = tomorrow_raw_prices.copy()
                 
-                # Apply price conversions
+                # Apply price conversions with ISO format timestamps
                 result["tomorrow_hourly_prices"] = {}
                 for hour_str, price in tomorrow_converted_prices.items():
                     converted_price = await async_convert_energy_price(
@@ -301,6 +304,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
 
                     # IMPORTANT: Store with the original ISO format key to preserve date information
                     result["tomorrow_hourly_prices"][hour_str] = converted_price
+                    _LOGGER.debug(f"Added tomorrow hourly price: {hour_str} = {converted_price}")
                 
                 # Also add a new dictionary with full tomorrow date prefixed values for compatibility
                 # with standard adapter that can't handle ISO format
@@ -312,9 +316,11 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                         hour = dt.hour
                         hour_key = f"tomorrow_{hour:02d}:00"
                         result["tomorrow_prefixed_prices"][hour_key] = price
+                        _LOGGER.debug(f"Added tomorrow prefixed price: {hour_key} = {price}")
                     except (ValueError, TypeError):
                         # If parsing fails, use the original key
                         result["tomorrow_prefixed_prices"][f"tomorrow_{hour_str}"] = price
+                        _LOGGER.debug(f"Added tomorrow prefixed price (fallback): tomorrow_{hour_str} = {price}")
                 
                 # Log successful addition of tomorrow data
                 _LOGGER.info(f"Added {len(result['tomorrow_hourly_prices'])} tomorrow price entries")
