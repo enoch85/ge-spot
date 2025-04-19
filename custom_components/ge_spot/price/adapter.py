@@ -59,12 +59,12 @@ class ElectricityPriceAdapter:
         # Try simple "HH:00" format first
         try:
             hour = int(hour_str.split(":")[0])
-            if 0 <= hour < 24:  # Only accept valid hours
+            if 0 <= hour < 24:
                 return hour, None
         except (ValueError, IndexError):
             pass
             
-        # Try ISO format (e.g., "2025-04-19T00:00:00+00:00")
+        # Try ISO format
         if "T" in hour_str:
             try:
                 # Handle ISO format with timezone
@@ -95,10 +95,6 @@ class ElectricityPriceAdapter:
                 # Store formatted hour -> price mapping
                 _LOGGER.debug(f"Found hourly_prices in raw data: {len(item['hourly_prices'])} entries")
                 for hour_str, price in item["hourly_prices"].items():
-                    # Skip tomorrow prefixed hours - they will be handled by _extract_tomorrow_prices
-                    if hour_str.startswith("tomorrow_"):
-                        continue
-                    
                     hour, dt = self._parse_hour_from_string(hour_str)
                     if hour is not None:
                         hour_key = f"{hour:02d}:00"

@@ -34,74 +34,14 @@ except ImportError as e:
     sys.exit(1)
 
 class ImprovedElectricityPriceAdapter(ElectricityPriceAdapter):
-    """Improved adapter for electricity price data that can handle ISO format dates."""
-
-    def _extract_hourly_prices(self) -> Dict[str, float]:
-        """Extract hourly prices from raw data."""
-        hourly_prices = {}
-        
-        # Track tomorrow's data found in hourly_prices
-        tomorrow_in_hourly = {}
-        from datetime import datetime, timedelta
-        from homeassistant.util import dt as dt_util
-        today = dt_util.now().date()
-        tomorrow = today + timedelta(days=1)
-
-        for item in self.raw_data:
-            if not isinstance(item, dict):
-                continue
-
-            if "hourly_prices" in item and isinstance(item["hourly_prices"], dict):
-                # Store formatted hour -> price mapping
-                logger.debug(f"Found hourly_prices in raw data: {len(item['hourly_prices'])} entries")
-                for hour_str, price in item["hourly_prices"].items():
-                    # Check if this is an ISO format date
-                    if "T" in hour_str:
-                        try:
-                            dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
-                            hour = dt.hour
-                            hour_key = f"{hour:02d}:00"
-                            
-                            # Check if this is tomorrow's data
-                            if dt.date() == tomorrow:
-                                # This is tomorrow's data, store it separately
-                                logger.info(f"Found tomorrow's data in hourly_prices: {hour_str} -> {hour_key}")
-                                tomorrow_in_hourly[hour_key] = price
-                                continue  # Skip adding to hourly_prices
-                            elif dt.date() == today:
-                                # This is today's data, add it to hourly_prices
-                                hourly_prices[hour_key] = price
-                            else:
-                                # This is data for another day, skip it
-                                logger.debug(f"Skipping data for another day: {hour_str}")
-                                continue
-                        except (ValueError, TypeError) as e:
-                            logger.warning(f"Failed to parse ISO date: {hour_str} - {e}")
-                            # Try simple format as fallback
-                            hour = self._parse_hour_from_string(hour_str)
-                            if hour is not None:
-                                hour_key = f"{hour:02d}:00"
-                                hourly_prices[hour_key] = price
-                    else:
-                        # Simple format (HH:00)
-                        hour = self._parse_hour_from_string(hour_str)
-                        if hour is not None:
-                            hour_key = f"{hour:02d}:00"
-                            hourly_prices[hour_key] = price
-
-        # If we found tomorrow's data in hourly_prices, add it to tomorrow_hourly_prices
-        if tomorrow_in_hourly:
-            logger.info(f"Found {len(tomorrow_in_hourly)} hours of tomorrow's data in hourly_prices")
-            for item in self.raw_data:
-                if isinstance(item, dict):
-                    if "tomorrow_hourly_prices" not in item:
-                        item["tomorrow_hourly_prices"] = {}
-                    # Add tomorrow's data to tomorrow_hourly_prices
-                    item["tomorrow_hourly_prices"].update(tomorrow_in_hourly)
-                    break
-
-        logger.debug(f"Extracted {len(hourly_prices)} hourly prices: {sorted(hourly_prices.keys())}")
-        return hourly_prices
+    """
+    This class now extends the standard ElectricityPriceAdapter.
+    
+    The improved functionality has been incorporated into the main ElectricityPriceAdapter class.
+    This class is kept for backward compatibility with existing tests.
+    """
+    # Since all the improved functionality is now in the parent class,
+    # we don't need to implement any additional methods
 
 def load_entsoe_response(file_path: str) -> str:
     """Load ENTSO-E XML response from file.

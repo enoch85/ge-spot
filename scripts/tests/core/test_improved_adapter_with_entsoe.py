@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Test script for verifying the ImprovedElectricityPriceAdapter's handling of ENTSOE data.
+"""Test script for verifying the ElectricityPriceAdapter's handling of ENTSOE data.
 
-This script tests the ImprovedElectricityPriceAdapter's ability to correctly extract tomorrow's data
+This script tests the ElectricityPriceAdapter's ability to correctly extract tomorrow's data
 from the ENTSOE API response, which contains ISO format dates.
 """
 import sys
@@ -27,7 +27,6 @@ try:
     from custom_components.ge_spot.price.adapter import ElectricityPriceAdapter
     from custom_components.ge_spot.api.parsers.entsoe_parser import EntsoeParser
     from scripts.tests.mocks.hass import MockHass
-    from scripts.tests.core.adapter_testing import ImprovedElectricityPriceAdapter
     IMPORTS_SUCCESSFUL = True
 except ImportError as e:
     logger.error(f"Failed to import from custom_components: {e}")
@@ -103,8 +102,8 @@ def test_original_adapter(xml_data: str, area: str = "SE4"):
         "tomorrow_prices": tomorrow_prices
     }
 
-def test_improved_adapter(xml_data: str, area: str = "SE4"):
-    """Test the improved ElectricityPriceAdapter with ENTSO-E data.
+def test_enhanced_adapter(xml_data: str, area: str = "SE4"):
+    """Test the enhanced ElectricityPriceAdapter with ENTSO-E data.
     
     Args:
         xml_data: ENTSO-E XML response
@@ -131,8 +130,8 @@ def test_improved_adapter(xml_data: str, area: str = "SE4"):
         "area": area
     }
     
-    # Create improved adapter
-    adapter = ImprovedElectricityPriceAdapter(hass, [raw_data], False)
+    # Create adapter with enhanced functionality
+    adapter = ElectricityPriceAdapter(hass, [raw_data], False)
     
     # Check if adapter correctly extracts tomorrow's data
     tomorrow_prices = adapter.tomorrow_prices
@@ -187,23 +186,23 @@ def main():
         logger.info("\n--- Testing with original adapter ---\n")
         original_result = test_original_adapter(xml_data)
         
-        # Test with improved adapter
-        logger.info("\n--- Testing with improved adapter ---\n")
-        improved_result = test_improved_adapter(xml_data)
+        # Test with enhanced adapter
+        logger.info("\n--- Testing with enhanced adapter ---\n")
+        enhanced_result = test_enhanced_adapter(xml_data)
         
         # Compare results
         logger.info("\n--- Comparison ---\n")
         logger.info(f"Original adapter: Tomorrow valid: {original_result['is_tomorrow_valid']}, Tomorrow hours: {original_result['tomorrow_hours']}")
-        logger.info(f"Improved adapter: Tomorrow valid: {improved_result['is_tomorrow_valid']}, Tomorrow hours: {improved_result['tomorrow_hours']}")
+        logger.info(f"Enhanced adapter: Tomorrow valid: {enhanced_result['is_tomorrow_valid']}, Tomorrow hours: {enhanced_result['tomorrow_hours']}")
         
-        if improved_result['is_tomorrow_valid'] and not original_result['is_tomorrow_valid']:
-            logger.info("RESULT: Improved adapter successfully extracted tomorrow's data, but original adapter did not.")
-        elif original_result['is_tomorrow_valid'] and improved_result['is_tomorrow_valid']:
+        if enhanced_result['is_tomorrow_valid'] and not original_result['is_tomorrow_valid']:
+            logger.info("RESULT: Enhanced adapter successfully extracted tomorrow's data, but original adapter did not.")
+        elif original_result['is_tomorrow_valid'] and enhanced_result['is_tomorrow_valid']:
             logger.info("RESULT: Both adapters successfully extracted tomorrow's data.")
-        elif not original_result['is_tomorrow_valid'] and not improved_result['is_tomorrow_valid']:
+        elif not original_result['is_tomorrow_valid'] and not enhanced_result['is_tomorrow_valid']:
             logger.info("RESULT: Neither adapter could extract tomorrow's data.")
         else:
-            logger.info("RESULT: Original adapter extracted tomorrow's data, but improved adapter did not.")
+            logger.info("RESULT: Original adapter extracted tomorrow's data, but enhanced adapter did not.")
     
     return 0
 

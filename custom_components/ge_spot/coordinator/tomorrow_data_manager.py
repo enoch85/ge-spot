@@ -16,14 +16,8 @@ from ..utils.fallback import FallbackManager
 
 _LOGGER = logging.getLogger(__name__)
 
-# Try to import ImprovedElectricityPriceAdapter from the test scripts
-try:
-    from scripts.tests.core.adapter_testing import ImprovedElectricityPriceAdapter
-    _IMPROVED_ADAPTER_AVAILABLE = True
-    _LOGGER.info("Using ImprovedElectricityPriceAdapter for tomorrow data management")
-except ImportError:
-    _IMPROVED_ADAPTER_AVAILABLE = False
-    _LOGGER.debug("ImprovedElectricityPriceAdapter not available, using standard adapter")
+# The ElectricityPriceAdapter now has all improvements incorporated
+_LOGGER.debug("Using enhanced ElectricityPriceAdapter for tomorrow data management")
 
 class TomorrowDataManager:
     """Manager for searching and retrieving tomorrow's price data."""
@@ -170,14 +164,6 @@ class TomorrowDataManager:
                             self._has_tomorrow_data = True
 
                             # Create adapter to validate the data
-                            if _IMPROVED_ADAPTER_AVAILABLE:
-                                # Try with improved adapter first
-                                improved_adapter = ImprovedElectricityPriceAdapter(self.hass, [data], self._use_subunit)
-                                if improved_adapter.is_tomorrow_valid():
-                                    _LOGGER.info("Tomorrow's data in cache is valid (improved adapter)")
-                                    return True
-                            
-                            # Fall back to standard adapter if improved adapter not available or didn't validate
                             adapter = ElectricityPriceAdapter(self.hass, [data], self._use_subunit)
                             if adapter.is_tomorrow_valid():
                                 _LOGGER.info("Tomorrow's data in cache is valid")
@@ -293,23 +279,11 @@ class TomorrowDataManager:
         if result["data"]:
             data = result["data"]
 
-            # Check if tomorrow data is valid using appropriate adapter
-            has_tomorrow_data = False
-            
-            # Try with improved adapter first if available
-            if _IMPROVED_ADAPTER_AVAILABLE:
-                improved_adapter = ImprovedElectricityPriceAdapter(self.hass, [data], self._use_subunit)
-                improved_has_tomorrow = improved_adapter.is_tomorrow_valid()
-                if improved_has_tomorrow:
-                    _LOGGER.info(f"ImprovedAdapter found valid tomorrow data from {result['source']}")
-                    has_tomorrow_data = True
-            
-            # Also check with standard adapter (or fallback if improved not available)
+            # Check if tomorrow data is valid
             adapter = ElectricityPriceAdapter(self.hass, [data], self._use_subunit)
-            standard_has_tomorrow = adapter.is_tomorrow_valid()
-            if standard_has_tomorrow:
-                _LOGGER.info(f"StandardAdapter found valid tomorrow data from {result['source']}")
-                has_tomorrow_data = standard_has_tomorrow
+            has_tomorrow_data = adapter.is_tomorrow_valid()
+            if has_tomorrow_data:
+                _LOGGER.info(f"Found valid tomorrow data from {result['source']}")
 
             if has_tomorrow_data:
                 _LOGGER.info(f"Successfully found tomorrow's data from {result['source']}")
