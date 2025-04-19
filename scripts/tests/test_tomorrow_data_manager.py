@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Tests for the TomorrowDataManager."""
+"""Tests for the TomorrowDataManager and date handling in ElectricityPriceAdapter.
+
+This script tests the TomorrowDataManager's ability to find and process tomorrow's data,
+as well as the ElectricityPriceAdapter's handling of date information in hourly prices.
+"""
 import sys
 import os
 import asyncio
 import unittest
 import logging
+import json
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, List, Optional
 
 # Configure logging
 logging.basicConfig(
@@ -19,7 +25,9 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from custom_components.ge_spot.coordinator.tomorrow_data_manager import TomorrowDataManager
+from custom_components.ge_spot.price.adapter import ElectricityPriceAdapter
 from custom_components.ge_spot.const.network import Network
+from scripts.tests.mocks.hass import MockHass
 
 class TestTomorrowDataManager(unittest.TestCase):
     """Test the TomorrowDataManager class."""
@@ -185,6 +193,170 @@ class TestTomorrowDataManager(unittest.TestCase):
         # Next attempt should be 30 minutes after last attempt
         expected_next = (self.manager._last_attempt + timedelta(minutes=30)).isoformat()
         self.assertEqual(status["next_attempt"], expected_next)
+
+class TestAdapterDateHandling(unittest.TestCase):
+    """Test the date handling in ElectricityPriceAdapter."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.hass = MockHass()
+        
+        # Get current date and tomorrow's date
+        self.today = datetime.now(timezone.utc).date()
+        self.tomorrow = self.today + timedelta(days=1)
+        
+        # Create test data with dates in hourly_prices
+        self.test_data_with_dates = self._create_test_data_with_dates()
+        self.test_data_without_dates = self._create_test_data_without_dates()
+        self.test_data_mixed = self._create_test_data_mixed()
+        
+    def _load_sample_data(self, filename: str) -> Dict[str, Any]:
+        """Load sample data from a JSON file.
+        
+        Args:
+            filename: Name of the JSON file in the data directory
+            
+        Returns:
+            Dictionary with sample data
+        """
+        file_path = os.path.join(os.path.dirname(__file__), "data", filename)
+        with open(file_path, "r") as f:
+            return json.load(f)
+    
+    def _create_test_data_with_dates(self) -> Dict[str, Any]:
+        """Create test data with ISO format dates in hourly_prices."""
+        # Load sample data from file
+        return self._load_sample_data("sample_data_with_dates.json")
+    
+    def _create_test_data_without_dates(self) -> Dict[str, Any]:
+        """Create test data without dates in hourly_prices."""
+        # Load sample data from file
+        data = self._load_sample_data("sample_data_with_separate_tomorrow.json")
+        # Remove tomorrow_hourly_prices to get just today's data
+        if "tomorrow_hourly_prices" in data:
+            data.pop("tomorrow_hourly_prices")
+        return data
+    
+    def _create_test_data_mixed(self) -> Dict[str, Any]:
+        """Create test data with mixed today's and tomorrow's data in hourly_prices."""
+        # Load sample data from file
+        return self._load_sample_data("sample_data_with_dates.json")
+    
+    def test_adapter_with_dates(self):
+        """Test ElectricityPriceAdapter with dates in hourly_prices."""
+        # Create adapter with data that has dates
+        adapter = ElectricityPriceAdapter(self.hass, [self.test_data_with_dates], False)
+        
+        # Check if adapter preserves dates
+        hourly_prices = adapter.hourly_prices
+        
+        # Log the keys to see what format they are in
+        logger.info(f"Hourly price keys: {list(hourly_prices.keys())[:5]}")
+        
+        # The adapter should now handle ISO format dates correctly
+        self.assertEqual(len(hourly_prices), 24, "Adapter should extract 24 hours for today")
+        
+        # Check if all hours are present
+        for hour in range(24):
+            hour_key = f"{hour:02d}:00"
+            self.assertIn(hour_key, hourly_prices, f"Hour {hour_key} should be present")
+            
+        # Check if tomorrow's data is correctly extracted
+        tomorrow_prices = adapter.tomorrow_prices
+        self.assertEqual(len(tomorrow_prices), 24, "Adapter should extract 24 hours for tomorrow")
+        
+        # Check if is_tomorrow_valid returns True
+        self.assertTrue(adapter.is_tomorrow_valid(), "Adapter should validate tomorrow's data")
+    
+    def test_adapter_without_dates(self):
+        """Test ElectricityPriceAdapter without dates in hourly_prices."""
+        # Create adapter with data that doesn't have dates
+        adapter = ElectricityPriceAdapter(self.hass, [self.test_data_without_dates], False)
+        
+        # Check if adapter has all hours
+        hourly_prices = adapter.hourly_prices
+        self.assertEqual(len(hourly_prices), 24, "Adapter should have 24 hours")
+        
+        # Check if the hours are in the expected format (HH:00)
+        for hour in range(24):
+            hour_key = f"{hour:02d}:00"
+            self.assertIn(hour_key, hourly_prices, f"Hour {hour_key} should be present")
+    
+    def test_adapter_with_mixed_data(self):
+        """Test ElectricityPriceAdapter with mixed today's and tomorrow's data."""
+        # Create adapter with mixed data
+        adapter = ElectricityPriceAdapter(self.hass, [self.test_data_mixed], False)
+        
+        # Check if adapter has all hours
+        hourly_prices = adapter.hourly_prices
+        
+        # Log the keys to see what format they are in
+        logger.info(f"Hourly price keys: {list(hourly_prices.keys())}")
+        
+        # The adapter should now extract tomorrow's data from hourly_prices
+        # and move it to tomorrow_prices
+        self.assertEqual(len(hourly_prices), 24, "Adapter should have 24 hours for today")
+        
+        # Check if tomorrow's data is correctly identified
+        tomorrow_prices = adapter.tomorrow_prices
+        self.assertEqual(len(tomorrow_prices), 24, "Adapter should extract 24 hours for tomorrow")
+        
+        # Check if is_tomorrow_valid returns True
+        self.assertTrue(adapter.is_tomorrow_valid(), "Adapter should validate tomorrow's data")
+    
+    def test_adapter_with_separate_tomorrow_data(self):
+        """Test ElectricityPriceAdapter with separate tomorrow_hourly_prices."""
+        # Create data with separate tomorrow_hourly_prices
+        data = self._create_test_data_without_dates()
+        
+        # Add tomorrow's data
+        tomorrow_hourly_prices = {}
+        for hour in range(24):
+            hour_key = f"{hour:02d}:00"
+            tomorrow_hourly_prices[hour_key] = 50.0 + hour
+        
+        data["tomorrow_hourly_prices"] = tomorrow_hourly_prices
+        
+        # Create adapter
+        adapter = ElectricityPriceAdapter(self.hass, [data], False)
+        
+        # Check if adapter correctly identifies tomorrow's data
+        self.assertEqual(len(adapter.tomorrow_prices), 24, "Adapter should have 24 hours for tomorrow")
+        self.assertTrue(adapter.is_tomorrow_valid(), "Adapter should validate tomorrow's data")
+    
+    def test_adapter_with_dates_in_tomorrow_data(self):
+        """Test ElectricityPriceAdapter with dates in tomorrow_hourly_prices."""
+        # Create data with dates in tomorrow_hourly_prices
+        data = self._create_test_data_without_dates()
+        
+        # Add tomorrow's data with dates
+        tomorrow_hourly_prices = {}
+        for hour in range(24):
+            dt = datetime.combine(self.tomorrow, datetime.min.time().replace(hour=hour), timezone.utc)
+            iso_key = dt.isoformat()
+            tomorrow_hourly_prices[iso_key] = 50.0 + hour
+        
+        data["tomorrow_hourly_prices"] = tomorrow_hourly_prices
+        
+        # Create adapter
+        adapter = ElectricityPriceAdapter(self.hass, [data], False)
+        
+        # Check if adapter correctly processes tomorrow_hourly_prices with ISO format dates
+        tomorrow_prices = adapter.tomorrow_prices
+        
+        # Log the keys to see what format they are in
+        logger.info(f"Tomorrow price keys: {list(tomorrow_prices.keys())[:5]}")
+        
+        # The adapter should now handle ISO format dates correctly
+        self.assertEqual(len(tomorrow_prices), 24, "Adapter should extract 24 hours for tomorrow")
+        
+        # Check if all hours are present
+        for hour in range(24):
+            hour_key = f"{hour:02d}:00"
+            self.assertIn(hour_key, tomorrow_prices, f"Hour {hour_key} should be present in tomorrow_prices")
+            
+        # Check if is_tomorrow_valid returns True
+        self.assertTrue(adapter.is_tomorrow_valid(), "Adapter should validate tomorrow's data")
 
 if __name__ == "__main__":
     unittest.main()

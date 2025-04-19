@@ -1,6 +1,6 @@
-# GE-Spot API Testing
+# GE-Spot Testing Framework
 
-This directory contains testing tools for the GE-Spot integration APIs.
+This directory contains comprehensive testing tools for the GE-Spot integration, including API tests, adapter tests, and data manager tests.
 
 ## Directory Structure
 
@@ -9,11 +9,16 @@ scripts/tests/
 ├── api/                   # API testing functionality
 │   ├── __init__.py
 │   ├── api_testing.py     # API-specific testing logic
-│   └── date_range_testing.py # Date range testing functionality
+│   ├── date_range_testing.py # Date range testing functionality
+│   └── tomorrow_api_testing.py # Tomorrow data API testing
 ├── core/                  # Core testing components
 │   ├── __init__.py
+│   ├── adapter_testing.py # Adapter testing utilities
 │   ├── reporting.py       # Test result reporting
 │   └── runner.py          # Test runner and session management
+├── data/                  # Sample data for testing
+│   ├── sample_data_with_dates.json        # Sample data with ISO format dates
+│   └── sample_data_with_separate_tomorrow.json # Sample data with separate tomorrow data
 ├── mocks/                 # Mock objects for testing
 │   ├── __init__.py
 │   └── hass.py            # Mock Home Assistant classes
@@ -23,22 +28,47 @@ scripts/tests/
 │   └── import_utils.py    # Utilities for import testing
 ├── __init__.py
 ├── README.md              # This file
-├── test_all_apis.py       # Entry point for API testing
-├── test_date_range_apis.py # Entry point for date range testing
-├── test_date_range_unit.py # Unit tests for date range utility
-└── test_import.py         # Entry point for import testing
+├── test_all_apis.py       # Tests API functionality
+├── test_date_range.py     # Tests date range functionality
+├── test_import.py         # Tests module imports
+├── test_summary.py        # Main entry point for all tests
+├── test_today_data_manager.py  # Tests today's data manager
+└── test_tomorrow_data_manager.py # Tests tomorrow's data manager
 ```
 
-## Main Entry Points
+## Main Entry Point
 
-There are several main test scripts:
+The main entry point for running tests is `test_summary.py`. This script runs all core tests and presents a comprehensive summary of the results.
 
-1. **test_all_apis.py** - Tests API functionality by fetching price data from all supported APIs
-2. **test_date_range_apis.py** - Tests the date range utility with all APIs
-3. **test_date_range_unit.py** - Unit tests for the date range utility
-4. **test_import.py** - Tests that all modules can be imported without errors
+```bash
+# Run all tests
+python scripts/tests/test_summary.py
 
-## Usage: API Tests
+# Run specific test categories
+python scripts/tests/test_summary.py --tests today tomorrow adapter api import date_range
+
+# Run tests for specific APIs
+python scripts/tests/test_summary.py --apis nordpool entsoe comed
+
+# Run tests for specific regions
+python scripts/tests/test_summary.py --regions SE1 SE2 DE-LU 5minutefeed
+
+# Set log level
+python scripts/tests/test_summary.py --log-level DEBUG
+```
+
+### Options for Summary Tests
+
+- `--tests TEST1 TEST2 ...`: Specific test categories to run (choices: today, tomorrow, adapter, api, import, date_range, all)
+- `--apis API1 API2 ...`: Specific APIs to test (default: all)
+- `--regions REGION1 ...`: Specific regions to test (default: all)
+- `--log-level LEVEL`: Set logging level (DEBUG, INFO, WARNING, ERROR)
+
+## Individual Test Scripts
+
+While `test_summary.py` is the recommended way to run tests, you can also run individual test scripts directly:
+
+### API Tests
 
 ```bash
 # Test all APIs and regions
@@ -49,72 +79,34 @@ python scripts/tests/test_all_apis.py --apis nordpool entsoe comed
 
 # Test specific regions
 python scripts/tests/test_all_apis.py --regions SE1 SE2 DE-LU 5minutefeed
-
-# Set log level
-python scripts/tests/test_all_apis.py --log-level DEBUG
-
-# Set request timeout
-python scripts/tests/test_all_apis.py --timeout 60
 ```
 
-### Options for API Tests
-
-- `--apis API1 API2 ...`: Specific APIs to test (default: all)
-- `--regions REGION1 ...`: Specific regions to test (default: all)
-- `--log-level LEVEL`: Set logging level (DEBUG, INFO, WARNING, ERROR)
-- `--timeout SECONDS`: Set request timeout in seconds
-
-## Usage: Date Range Tests
-
-The date range tests verify that the date range utility works correctly with all APIs.
-This is particularly important for ensuring that APIs can handle different time ranges
-and timezone conversions correctly.
+### Date Range Tests
 
 ```bash
-# Test all APIs with date range utility
-python scripts/tests/test_date_range_apis.py
+# Test date range functionality
+python scripts/tests/test_date_range.py
 
-# Test specific APIs
-python scripts/tests/test_date_range_apis.py --apis nordpool entsoe comed
-
-# Test specific regions
-python scripts/tests/test_date_range_apis.py --regions SE1 SE2 DE-LU 5minutefeed
-
-# Set log level
-python scripts/tests/test_date_range_apis.py --log-level DEBUG
-
-# Set request timeout
-python scripts/tests/test_date_range_apis.py --timeout 60
-
-# Test with a specific reference time
-python scripts/tests/test_date_range_apis.py --reference-time "2023-01-01T12:00:00Z"
-
-# Test specifically for tomorrow's data
-python scripts/tests/test_date_range_apis.py --test-tomorrow
+# Test with specific APIs
+python scripts/tests/test_date_range.py --apis nordpool entsoe
 ```
 
-### Options for Date Range Tests
+### Today/Tomorrow Data Manager Tests
 
-- `--apis API1 API2 ...`: Specific APIs to test (default: all)
-- `--regions REGION1 ...`: Specific regions to test (default: all)
-- `--log-level LEVEL`: Set logging level (DEBUG, INFO, WARNING, ERROR)
-- `--timeout SECONDS`: Set request timeout in seconds
-- `--reference-time TIME`: Set reference time for testing (ISO format)
-- `--test-tomorrow`: Test specifically for tomorrow's data
+```bash
+# Test today's data manager
+python scripts/tests/test_today_data_manager.py
 
-## Usage: Import Tests
+# Test tomorrow's data manager
+python scripts/tests/test_tomorrow_data_manager.py
+```
+
+### Import Tests
 
 ```bash
 # Test all imports
 python scripts/tests/test_import.py
-
-# Set log level
-python scripts/tests/test_import.py --log-level DEBUG
 ```
-
-### Options for Import Tests
-
-- `--log-level LEVEL`: Set logging level (DEBUG, INFO, WARNING, ERROR)
 
 ## Environment Variables
 
@@ -129,7 +121,7 @@ export RTE_CLIENT_ID=your_rte_client_id
 export RTE_CLIENT_SECRET=your_rte_client_secret
 
 # Run tests with environment variables
-python scripts/tests/test_all_apis.py
+python scripts/tests/test_summary.py
 ```
 
 ## Adding New Tests
@@ -141,3 +133,14 @@ When adding a new API to the GE-Spot integration, ensure it is properly register
 3. `custom_components/ge_spot/api/__init__.py` - Register in SOURCE_REGION_SUPPORT and SOURCE_RELIABILITY
 
 The test framework will automatically discover your new API and test it with all its supported regions.
+
+## Testing the ElectricityPriceAdapter
+
+The ElectricityPriceAdapter is tested in the `test_tomorrow_data_manager.py` file, which includes tests for:
+
+1. Handling ISO format dates in hourly_prices
+2. Handling ISO format dates in tomorrow_hourly_prices
+3. Extracting tomorrow's data from hourly_prices when it has dates
+4. Validating tomorrow's data
+
+These tests use sample data files from the `data/` directory to verify that the adapter correctly handles different data formats.
