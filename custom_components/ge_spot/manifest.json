@@ -15,5 +15,5 @@
         "PyJWT>=2.6.0",
         "aiofiles"
     ],
-    "version": "v1.0.8"
+    "version": "v1.0.9"
 }
