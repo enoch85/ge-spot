@@ -1,5 +1,6 @@
 """Mock Home Assistant classes for testing."""
 import logging
+import asyncio
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ class MockHass:
         """Initialize with default config and empty data."""
         self.config = MockConfig()
         self.data = {}
+        self.loop = asyncio.get_event_loop()
         
     async def async_add_executor_job(self, func: Callable, *args) -> Any:
         """Mock the async_add_executor_job method.

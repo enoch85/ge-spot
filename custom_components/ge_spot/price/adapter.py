@@ -23,9 +23,47 @@ class ElectricityPriceAdapter:
         self.price_list = self._convert_to_price_list(self.hourly_prices)
         self.tomorrow_list = self._convert_to_price_list(self.tomorrow_prices)
 
+    def _parse_hour_from_string(self, hour_str: str) -> Optional[int]:
+        """Parse hour from hour string.
+        
+        Args:
+            hour_str: Hour string in either "HH:00" or ISO format
+            
+        Returns:
+            Hour as an integer (0-23) or None if parsing fails
+        """
+        # Try simple "HH:00" format first
+        try:
+            hour = int(hour_str.split(":")[0])
+            if 0 <= hour < 24:  # Only accept valid hours
+                return hour
+        except (ValueError, IndexError):
+            pass
+            
+        # Try ISO format (e.g., "2025-04-19T00:00:00+00:00")
+        if "T" in hour_str:
+            try:
+                # Handle ISO format with timezone
+                from datetime import datetime
+                dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
+                return dt.hour
+            except (ValueError, TypeError):
+                pass
+                
+        # If we get here, we couldn't parse the hour
+        _LOGGER.warning(f"Invalid hour format in hourly_prices: {hour_str}")
+        return None
+
     def _extract_hourly_prices(self) -> Dict[str, float]:
         """Extract hourly prices from raw data."""
         hourly_prices = {}
+        
+        # Track tomorrow's data found in hourly_prices
+        tomorrow_in_hourly = {}
+        from datetime import datetime, timedelta
+        from homeassistant.util import dt as dt_util
+        today = dt_util.now().date()
+        tomorrow = today + timedelta(days=1)
 
         for item in self.raw_data:
             if not isinstance(item, dict):
@@ -35,12 +73,33 @@ class ElectricityPriceAdapter:
                 # Store formatted hour -> price mapping
                 _LOGGER.debug(f"Found hourly_prices in raw data: {len(item['hourly_prices'])} entries")
                 for hour_str, price in item["hourly_prices"].items():
-                    try:
-                        hour = int(hour_str.split(":")[0])
-                        if 0 <= hour < 24:  # Only accept valid hours
-                            hourly_prices[f"{hour:02d}:00"] = price
-                    except (ValueError, IndexError):
-                        _LOGGER.warning(f"Invalid hour format in hourly_prices: {hour_str}")
+                    hour = self._parse_hour_from_string(hour_str)
+                    if hour is not None:
+                        hour_key = f"{hour:02d}:00"
+                        
+                        # Check if this is tomorrow's data
+                        if "T" in hour_str:
+                            try:
+                                dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
+                                if dt.date() == tomorrow:
+                                    # This is tomorrow's data, store it separately
+                                    tomorrow_in_hourly[hour_key] = price
+                                    continue  # Skip adding to hourly_prices
+                            except (ValueError, TypeError):
+                                pass
+                                
+                        hourly_prices[hour_key] = price
+
+        # If we found tomorrow's data in hourly_prices, add it to tomorrow_hourly_prices
+        if tomorrow_in_hourly:
+            _LOGGER.info(f"Found {len(tomorrow_in_hourly)} hours of tomorrow's data in hourly_prices")
+            for item in self.raw_data:
+                if isinstance(item, dict):
+                    if "tomorrow_hourly_prices" not in item:
+                        item["tomorrow_hourly_prices"] = {}
+                    # Add tomorrow's data to tomorrow_hourly_prices
+                    item["tomorrow_hourly_prices"].update(tomorrow_in_hourly)
+                    break
 
         _LOGGER.debug(f"Extracted {len(hourly_prices)} hourly prices: {sorted(hourly_prices.keys())}")
         return hourly_prices
@@ -57,12 +116,10 @@ class ElectricityPriceAdapter:
                 # Store formatted hour -> price mapping
                 _LOGGER.debug(f"Found tomorrow_hourly_prices in raw data: {len(item['tomorrow_hourly_prices'])} entries")
                 for hour_str, price in item["tomorrow_hourly_prices"].items():
-                    try:
-                        hour = int(hour_str.split(":")[0])
-                        if 0 <= hour < 24:  # Only accept valid hours
-                            tomorrow_prices[f"{hour:02d}:00"] = price
-                    except (ValueError, IndexError):
-                        _LOGGER.warning(f"Invalid hour format in tomorrow_hourly_prices: {hour_str}")
+                    hour = self._parse_hour_from_string(hour_str)
+                    if hour is not None:
+                        hour_key = f"{hour:02d}:00"
+                        tomorrow_prices[hour_key] = price
 
         _LOGGER.debug(f"Extracted {len(tomorrow_prices)} tomorrow prices: {sorted(tomorrow_prices.keys())}")
         return tomorrow_prices
