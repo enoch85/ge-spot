@@ -33,20 +33,20 @@ def log_statistics(stats: Dict[str, Any], day_offset: int = 0) -> None:
 
 def sanitize_sensitive_data(data: Dict[str, Any], sensitive_keys: List[str] = None) -> Dict[str, Any]:
     """Sanitize sensitive data for logging.
-    
+
     Args:
         data: Dictionary containing data to sanitize
         sensitive_keys: List of keys to sanitize (default: ['securityToken', 'api_key', 'token'])
-        
+
     Returns:
         Sanitized copy of the data
     """
     if sensitive_keys is None:
         sensitive_keys = ['securityToken', 'api_key', 'token']
-    
+
     # Create a deep copy to avoid modifying the original
     sanitized = copy.deepcopy(data)
-    
+
     for key in sensitive_keys:
         if key in sanitized and sanitized[key]:
             # Mask all but first and last 4 characters
@@ -55,12 +55,12 @@ def sanitize_sensitive_data(data: Dict[str, Any], sensitive_keys: List[str] = No
                 sanitized[key] = f"{value[:4]}{'*' * (len(value) - 8)}{value[-4:]}"
             else:
                 sanitized[key] = "****"
-    
+
     return sanitized
 
 def log_rate_limiting(area: str, decision: bool, reason: str, source: Optional[str] = None) -> None:
     """Log rate limiting decisions.
-    
+
     Args:
         area: The area/region code
         decision: True if fetch should be skipped, False otherwise

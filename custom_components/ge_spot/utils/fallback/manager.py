@@ -409,12 +409,12 @@ class FallbackManager:
                         primary_source = None
                         if self.default_priority and len(self.default_priority) > 0:
                             primary_source = self.default_priority[0]
-                        
+
                         # Determine if fallback was used
                         fallback_used = False
                         if primary_source is not None and source is not None:
                             fallback_used = source != primary_source
-                        
+
                         result = {
                             "data": data,
                             "source": source,
@@ -453,7 +453,7 @@ class FallbackManager:
             primary_source = None
             if self.default_priority and len(self.default_priority) > 0:
                 primary_source = self.default_priority[0]
-            
+
             return {
                 "data": cached_data,
                 "source": cached_source,

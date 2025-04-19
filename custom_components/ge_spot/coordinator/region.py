@@ -129,7 +129,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 _async_cleanup_cache,
                 timedelta(days=1)
             )
-            
+
             # Schedule independent tomorrow data check
             # This ensures tomorrow data search continues even when using cached data for today
             async def _async_check_tomorrow_data(*_):
@@ -137,7 +137,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 if self._tomorrow_data_manager.should_search(now):
                     _LOGGER.info("Scheduled check for tomorrow's data")
                     await self._tomorrow_data_manager.fetch_data()
-                    
+
             # Check every 5 minutes - the tomorrow data manager will handle rate limiting internally
             self.tomorrow_data_job = async_track_time_interval(
                 hass,
@@ -175,7 +175,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
 
             # Check if we have current hour price in cache
             has_current_hour_price = self._cache_manager.has_current_hour_price(self.area)
-            
+
             # Determine if we need to fetch today's data from API
             need_api_fetch, api_fetch_reason = self._fetch_decision_maker.should_fetch(
                 now=now,
@@ -183,7 +183,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 fetch_interval=self._api_fetch_interval,
                 has_current_hour_price=has_current_hour_price
             )
-            
+
             # Additional rate limiter check for today's data
             if need_api_fetch and has_current_hour_price:
                 from ..utils.rate_limiter import RateLimiter
@@ -196,7 +196,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     source=self._active_source,
                     area=self.area
                 )
-                
+
                 if should_skip:
                     _LOGGER.debug(f"Rate limiter suggests skipping today's data fetch: {skip_reason}")
                     need_api_fetch = False
@@ -454,13 +454,13 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
             self.tomorrow_data_job()
             self.tomorrow_data_job = None
             _LOGGER.debug("Cancelled tomorrow data job")
-            
+
         # Cancel the cleanup job if it exists
         if hasattr(self, 'cleanup_job') and self.cleanup_job:
             self.cleanup_job()
             self.cleanup_job = None
             _LOGGER.debug("Cancelled cache cleanup job")
-            
+
         # Close the session if it exists
         if self.session:
             await close_session(self)

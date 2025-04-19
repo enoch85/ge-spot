@@ -375,7 +375,7 @@ async def validate_api_key(api_key, area, session=None):
                         "periodStart": period_start,
                         "periodEnd": period_end,
                     }
-                    
+
                     # Sanitize params before logging to hide security token
                     sanitized_params = sanitize_sensitive_data(params)
                     _LOGGER.debug(f"ENTSO-E validation params: {sanitized_params}")

@@ -35,16 +35,16 @@ class HourCalculator:
                 # Get the current time in both timezones to calculate the correct offset
                 now_system = datetime.now(self.system_timezone)
                 now_area = datetime.now(self.area_timezone)
-                
+
                 # Log the actual times for debugging
                 _LOGGER.debug(f"System time: {now_system.isoformat()}, Area time: {now_area.isoformat()}")
-                
+
                 # Calculate total seconds difference to handle DST and other edge cases
                 time_diff_seconds = (now_area.replace(tzinfo=None) - now_system.replace(tzinfo=None)).total_seconds()
                 hour_diff = round(time_diff_seconds / 3600)  # Convert to hours and round to nearest hour
-                
+
                 _LOGGER.debug(f"Time difference: {time_diff_seconds} seconds, {hour_diff} hours")
-                
+
                 # Apply the offset in reverse to compensate
                 adjusted_hour = (now.hour - hour_diff) % 24
                 hour_key = f"{adjusted_hour:02d}:00"

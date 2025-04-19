@@ -74,7 +74,7 @@ class TomorrowDataManager:
         if self._check_if_has_tomorrow_data():
             _LOGGER.debug("Already have tomorrow's data, no need to search")
             return False
-            
+
         # Reset search at midnight
         if now.hour == 0 and now.minute < 15:
             if self._search_active:
@@ -135,11 +135,55 @@ class TomorrowDataManager:
         """
         # First check our internal tracking
         if self._has_tomorrow_data:
+            _LOGGER.debug("Internal tracking indicates we have tomorrow's data")
             return True
 
         # Then check if we have last_successful_data with tomorrow_valid
         if self._last_successful_data and self._last_successful_data.get("tomorrow_valid", False):
+            _LOGGER.debug("Last successful data indicates we have tomorrow's data")
             return True
+
+        # Check if tomorrow's data is in the cache
+        try:
+            # Get tomorrow's date
+            tomorrow = dt_util.now().date() + timedelta(days=1)
+            tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+
+            # Check if we have data for tomorrow in the cache
+            if hasattr(self._price_cache, "_cache") and self.area in self._price_cache._cache:
+                if tomorrow_str in self._price_cache._cache[self.area]:
+                    # We have data for tomorrow in the cache
+                    for source, data in self._price_cache._cache[self.area][tomorrow_str].items():
+                        if "hourly_prices" in data and len(data["hourly_prices"]) >= 20:
+                            _LOGGER.info(f"Found tomorrow's data in cache for source {source}")
+
+                            # Update our tracking variables
+                            self._has_tomorrow_data = True
+
+                            # Create adapter to validate the data
+                            adapter = ElectricityPriceAdapter(self.hass, [data], self._use_subunit)
+                            if adapter.is_tomorrow_valid():
+                                _LOGGER.info("Tomorrow's data in cache is valid")
+                                return True
+
+                # Check if we have tomorrow's data in today's cache
+                today_str = dt_util.now().date().strftime("%Y-%m-%d")
+                if today_str in self._price_cache._cache[self.area]:
+                    # We have data for today in the cache
+                    for source, data in self._price_cache._cache[self.area][today_str].items():
+                        if "tomorrow_hourly_prices" in data and len(data["tomorrow_hourly_prices"]) >= 20:
+                            _LOGGER.info(f"Found tomorrow's data in today's cache for source {source}")
+
+                            # Update our tracking variables
+                            self._has_tomorrow_data = True
+
+                            # Create adapter to validate the data
+                            adapter = ElectricityPriceAdapter(self.hass, [data], self._use_subunit)
+                            if adapter.is_tomorrow_valid():
+                                _LOGGER.info("Tomorrow's data in today's cache is valid")
+                                return True
+        except Exception as e:
+            _LOGGER.error(f"Error checking cache for tomorrow's data: {e}")
 
         return False
 
@@ -205,7 +249,7 @@ class TomorrowDataManager:
             consecutive_failures=0,  # We track our own failures
             min_interval=Defaults.TOMORROW_DATA_INITIAL_RETRY_MINUTES
         )
-        
+
         if should_skip:  # No special window exception anymore, just use rate limiter consistently
             _LOGGER.debug(f"Rate limiter suggests skipping tomorrow data fetch: {skip_reason}")
             return False
@@ -252,26 +296,26 @@ class TomorrowDataManager:
                 return True
             else:
                 _LOGGER.info(f"Source {result['source']} returned data but no valid tomorrow data")
-                
+
                 # Try fallback sources if available
                 for fb_source in result.get("fallback_sources", []):
                     if fb_source != result["source"] and f"fallback_data_{fb_source}" in result:
                         fb_data = result[f"fallback_data_{fb_source}"]
                         fb_adapter = ElectricityPriceAdapter(self.hass, [fb_data], self._use_subunit)
-                        
+
                         if fb_adapter.is_tomorrow_valid():
                             _LOGGER.info(f"Found tomorrow's data in fallback source {fb_source}")
-                            
+
                             # Store the fallback data in cache
                             self._price_cache.store(fb_data, self.area, fb_source, dt_util.now())
-                            
+
                             # Update our tracking variables
                             self._search_active = False
                             self._has_tomorrow_data = True
-                            
+
                             # Force a regular update to use the new data
                             await self._request_refresh_callback()
-                            
+
                             return True
 
         # If we reach here, we didn't find tomorrow's data

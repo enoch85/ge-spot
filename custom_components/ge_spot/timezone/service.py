@@ -178,10 +178,10 @@ class TimezoneService:
         now_utc = datetime.now(timezone.utc)
         now_ha = datetime.now(self.ha_timezone)
         now_area = datetime.now(self.area_timezone) if self.area_timezone else None
-        
-        _LOGGER.debug(f"Current time - UTC: {now_utc.strftime('%H:%M:%S')}, HA: {now_ha.strftime('%H:%M:%S')}" + 
+
+        _LOGGER.debug(f"Current time - UTC: {now_utc.strftime('%H:%M:%S')}, HA: {now_ha.strftime('%H:%M:%S')}" +
                      (f", Area ({self.area}): {now_area.strftime('%H:%M:%S')}" if now_area else ""))
-        
+
         hour_key = self.hour_calculator.get_current_hour_key()
 
         # Log which timezone is being used based on the timezone reference setting

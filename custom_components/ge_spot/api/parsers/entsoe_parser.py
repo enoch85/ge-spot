@@ -222,7 +222,7 @@ class EntsoeParser(BasePriceParser):
 
         # Get current date in UTC
         today = datetime.now(timezone.utc).date()
-        
+
         # Filter series that contain today's data
         today_series = []
         for series in all_series:
@@ -230,7 +230,7 @@ class EntsoeParser(BasePriceParser):
             hour_keys = list(series["prices"].keys())
             if not hour_keys:
                 continue
-                
+
             # Try to find a price entry for today
             for hour_key in hour_keys:
                 try:
@@ -240,33 +240,33 @@ class EntsoeParser(BasePriceParser):
                         break
                 except (ValueError, TypeError):
                     continue
-        
+
         # If we found series containing today's data, use those
         if today_series:
             _LOGGER.debug(f"Found {len(today_series)} TimeSeries containing today's data")
-            
+
             # If only one series contains today's data, use it
             if len(today_series) == 1:
                 _LOGGER.debug("Using the only TimeSeries that contains today's data")
                 return today_series[0]
-                
+
             # If multiple series contain today's data, use business type criteria
             for series in today_series:
                 if series["metadata"]["business_type"] == "A62":
                     _LOGGER.debug("Selected TimeSeries with business_type A62 containing today's data")
                     return series
-                    
+
             for series in today_series:
                 if series["metadata"]["business_type"] == "A44":
                     _LOGGER.debug("Selected TimeSeries with business_type A44 containing today's data")
                     return series
-                    
+
             # Fall back to first series containing today's data
             _LOGGER.debug("Falling back to first TimeSeries containing today's data")
             return today_series[0]
-        
+
         _LOGGER.debug("No TimeSeries contains today's data, falling back to business type criteria")
-        
+
         # If no series contains today's data, fall back to business type criteria
         # First try to identify by businessType
         # A62 (Day-ahead allocation) is the correct spot price data

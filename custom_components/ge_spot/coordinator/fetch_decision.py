@@ -64,12 +64,12 @@ class FetchDecisionMaker:
             current_time=now,
             min_interval=fetch_interval
         )
-        
+
         if should_skip and has_current_hour_price:
             reason = f"Rate limiter suggests skipping fetch: {skip_reason}"
             _LOGGER.debug(reason)
             return False, reason
-            
+
         # Check if API fetch interval has passed
         if not need_api_fetch and last_fetch:
             time_since_fetch = (now - last_fetch).total_seconds() / 60
