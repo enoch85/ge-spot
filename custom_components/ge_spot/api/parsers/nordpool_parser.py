@@ -1,6 +1,6 @@
 """Parser for Nordpool API responses."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List, Tuple
 
 from ...const.sources import Source
@@ -93,11 +93,19 @@ class NordpoolPriceParser(BasePriceParser):
         """
         try:
             # Try ISO format
-            return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            # Ensure it's timezone-aware
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
         except (ValueError, AttributeError):
             try:
                 # Try Nordpool specific format
-                return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
+                dt = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
+                # Ensure it's timezone-aware
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
             except (ValueError, AttributeError):
                 _LOGGER.warning(f"Failed to parse timestamp: {timestamp_str}")
                 return None
@@ -130,11 +138,30 @@ class NordpoolPriceParser(BasePriceParser):
         if not hourly_prices:
             return None
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         current_hour = now.replace(minute=0, second=0, microsecond=0)
         current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
 
-        return hourly_prices.get(current_hour_key)
+        # First try exact ISO format key match
+        if current_hour_key in hourly_prices:
+            return hourly_prices[current_hour_key]
+        
+        # Try alternative format (HH:00)
+        simple_key = f"{current_hour.hour:02d}:00"
+        if simple_key in hourly_prices:
+            return hourly_prices[simple_key]
+            
+        # If neither found, look for any matching hour regardless of date
+        for key, price in hourly_prices.items():
+            if "T" in key:
+                try:
+                    dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
+                    if dt.hour == current_hour.hour:
+                        return price
+                except (ValueError, TypeError):
+                    continue
+                    
+        return None
 
     def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
         """Get next hour price.
@@ -148,12 +175,30 @@ class NordpoolPriceParser(BasePriceParser):
         if not hourly_prices:
             return None
 
-        now = datetime.now()
-        next_hour = (now.replace(minute=0, second=0, microsecond=0) +
-                    timedelta(hours=1))
+        now = datetime.now(timezone.utc)
+        next_hour = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
         next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
 
-        return hourly_prices.get(next_hour_key)
+        # First try exact ISO format key match
+        if next_hour_key in hourly_prices:
+            return hourly_prices[next_hour_key]
+        
+        # Try alternative format (HH:00)
+        simple_key = f"{next_hour.hour:02d}:00"
+        if simple_key in hourly_prices:
+            return hourly_prices[simple_key]
+            
+        # If neither found, look for any matching hour regardless of date
+        for key, price in hourly_prices.items():
+            if "T" in key:
+                try:
+                    dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
+                    if dt.hour == next_hour.hour:
+                        return price
+                except (ValueError, TypeError):
+                    continue
+                    
+        return None
 
     def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
         """Calculate day average price.
@@ -168,15 +213,16 @@ class NordpoolPriceParser(BasePriceParser):
             return None
 
         # Get today's date
-        today = datetime.now().date()
+        today = datetime.now(timezone.utc).date()
 
         # Filter prices for today
         today_prices = []
         for hour_key, price in hourly_prices.items():
             try:
-                hour_dt = datetime.fromisoformat(hour_key)
-                if hour_dt.date() == today:
-                    today_prices.append(price)
+                if "T" in hour_key:
+                    hour_dt = datetime.fromisoformat(hour_key.replace('Z', '+00:00'))
+                    if hour_dt.date() == today:
+                        today_prices.append(price)
             except (ValueError, TypeError):
                 continue
 
@@ -197,8 +243,39 @@ class NordpoolPriceParser(BasePriceParser):
             Dictionary of hourly prices with ISO format timestamp keys
         """
         hourly_prices = {}
+        
+        # Handle the new unified data format (direct API response)
+        if "data" in data and isinstance(data["data"], dict):
+            api_data = data["data"]
+            
+            # Check if we have multiAreaEntries directly in the response
+            if "multiAreaEntries" in api_data:
+                entries = api_data.get("multiAreaEntries", [])
+                _LOGGER.debug(f"Processing {len(entries)} entries from multiAreaEntries")
+                
+                for entry in entries:
+                    if not isinstance(entry, dict) or "entryPerArea" not in entry:
+                        continue
 
-        # Process today's data
+                    if area not in entry["entryPerArea"]:
+                        continue
+
+                    # Extract values
+                    start_time = entry.get("deliveryStart")
+                    raw_price = entry["entryPerArea"][area]
+
+                    if start_time and raw_price is not None:
+                        # Parse timestamp
+                        dt = self._parse_timestamp(start_time)
+                        if dt:
+                            # Always format as ISO format with full date and time
+                            hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
+                            hourly_prices[hour_key] = float(raw_price)
+                            _LOGGER.debug(f"Added hourly price with ISO timestamp: {hour_key} = {raw_price}")
+                
+            return hourly_prices
+            
+        # Handle "today" data in the old format structure for backward compatibility
         if "today" in data and data["today"]:
             today_data = data["today"]
 
@@ -219,16 +296,7 @@ class NordpoolPriceParser(BasePriceParser):
                         dt = self._parse_timestamp(start_time)
                         if dt:
                             # ALWAYS format as ISO format with full date and time
-                            # This is crucial for the adapter to recognize the correct date
                             hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
-                            
-                            # Ensure the timestamp is in UTC for consistency
-                            if dt.tzinfo is None:
-                                # If no timezone info, assume UTC
-                                from datetime import timezone
-                                dt = dt.replace(tzinfo=timezone.utc)
-                                hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
-                                
                             hourly_prices[hour_key] = float(raw_price)
                             _LOGGER.debug(f"Added hourly price with ISO timestamp: {hour_key} = {raw_price}")
 
@@ -236,6 +304,9 @@ class NordpoolPriceParser(BasePriceParser):
 
     def parse_tomorrow_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
         """Parse tomorrow's hourly prices from Nordpool data.
+        
+        Note: This method is kept for backward compatibility but should no longer be needed
+        with the improved adapter, which extracts tomorrow data from hourly_prices based on dates.
 
         Args:
             data: Raw API response data
@@ -277,15 +348,6 @@ class NordpoolPriceParser(BasePriceParser):
                             # ALWAYS format as ISO format with full date and time
                             # This is crucial for the adapter to recognize tomorrow's data
                             hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
-                            
-                            # Ensure the timestamp is in UTC for consistency
-                            if dt.tzinfo is None:
-                                # If no timezone info, assume UTC
-                                from datetime import timezone
-                                _LOGGER.debug(f"Adding timezone info to timestamp: {hour_key}")
-                                dt = dt.replace(tzinfo=timezone.utc)
-                                hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
-                                
                             hourly_prices[hour_key] = float(raw_price)
                             _LOGGER.debug(f"Added tomorrow price with ISO timestamp: {hour_key} = {raw_price}")
 

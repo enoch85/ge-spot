@@ -215,18 +215,21 @@ async def test_parsers_with_api(
     
     return results
 
-async def test_nordpool_direct_api() -> Dict[str, Any]:
-    """Test Nordpool API directly for tomorrow's data.
+async def test_api_direct(api_name: str, area: str) -> Dict[str, Any]:
+    """Test any API directly for tomorrow's data, similar to test_nordpool_direct_api.
     
+    Args:
+        api_name: Name of the API to test
+        area: Area code to test
+        
     Returns:
         Dictionary with test results
     """
-    logger.info("Testing Nordpool API directly for tomorrow's data")
+    logger.info(f"Testing {api_name} API directly for tomorrow's data (area: {area})")
     
-    area = "SE3"
     results = {
         "area": area,
-        "api": "nordpool",
+        "api": api_name,
         "direct_api_success": False,
         "adapter_success": False,
         "improved_adapter_success": False,
@@ -236,110 +239,112 @@ async def test_nordpool_direct_api() -> Dict[str, Any]:
     }
     
     try:
-        # Create a session for API requests
-        session = aiohttp.ClientSession()
+        # Set up test
+        mock_hass = MockHass()
+        config = build_api_key_config(api_name, area)
         
-        try:
-            # Set up Nordpool test
-            mock_hass = MockHass()
-            config = build_api_key_config("nordpool", area)
+        # Fetch data from the API
+        data = await fetch_day_ahead_prices(
+            source_type=api_name,
+            config=config,
+            area=area,
+            currency=Currency.EUR,
+            hass=mock_hass
+        )
+        
+        if not data:
+            logger.error(f"No data returned from {api_name} API")
+            return results
+        
+        # Log the raw data structure
+        logger.info(f"Raw data keys: {data.keys()}")
+        
+        # Check if we have hourly_prices
+        if "hourly_prices" in data:
+            hourly_prices = data["hourly_prices"]
+            results["today_hours"] = len(hourly_prices)
+            logger.info(f"Hourly prices: {len(hourly_prices)} entries")
             
-            # Fetch data from the Nordpool API
-            data = await fetch_day_ahead_prices(
-                source_type="nordpool",
-                config=config,
-                area=area,
-                currency=Currency.EUR,
-                hass=mock_hass
-            )
+            # Log sample entries
+            sample_entries = list(hourly_prices.items())[:5]
+            logger.info(f"Sample hourly prices: {sample_entries}")
+        
+        # Check if we have tomorrow_hourly_prices
+        if "tomorrow_hourly_prices" in data:
+            tomorrow_hourly_prices = data["tomorrow_hourly_prices"]
+            results["tomorrow_hours"] = len(tomorrow_hourly_prices)
+            logger.info(f"Tomorrow hourly prices: {len(tomorrow_hourly_prices)} entries")
             
-            if not data:
-                logger.error("No data returned from Nordpool API")
-                return results
+            # Log sample entries
+            sample_entries = list(tomorrow_hourly_prices.items())[:5]
+            logger.info(f"Sample tomorrow hourly prices: {sample_entries}")
             
-            # Log the raw data structure
-            logger.info(f"Raw data keys: {data.keys()}")
-            
-            # Check if we have hourly_prices
-            if "hourly_prices" in data:
-                hourly_prices = data["hourly_prices"]
-                results["today_hours"] = len(hourly_prices)
-                logger.info(f"Hourly prices: {len(hourly_prices)} entries")
-                
-                # Log sample entries
-                sample_entries = list(hourly_prices.items())[:5]
-                logger.info(f"Sample hourly prices: {sample_entries}")
-            
-            # Check if we have tomorrow_hourly_prices
-            if "tomorrow_hourly_prices" in data:
-                tomorrow_hourly_prices = data["tomorrow_hourly_prices"]
-                results["tomorrow_hours"] = len(tomorrow_hourly_prices)
-                logger.info(f"Tomorrow hourly prices: {len(tomorrow_hourly_prices)} entries")
-                
-                # Log sample entries
-                sample_entries = list(tomorrow_hourly_prices.items())[:5]
-                logger.info(f"Sample tomorrow hourly prices: {sample_entries}")
-                
-                # Direct API has tomorrow data
-                results["direct_api_success"] = True
-            else:
-                logger.warning("No tomorrow_hourly_prices found in data")
-            
-            # Test with standard adapter
-            adapter = ElectricityPriceAdapter(mock_hass, [data], False)
-            
-            # Log details about adapter data
-            logger.info(f"Adapter hourly price keys: {list(adapter.hourly_prices.keys())[:5]}")
-            
-            # Check if adapter has tomorrow prices
-            tomorrow_prices = adapter.tomorrow_prices
-            if tomorrow_prices:
-                logger.info(f"Adapter tomorrow price keys: {list(tomorrow_prices.keys())[:5]}")
-            else:
-                logger.info("Adapter tomorrow price keys: None")
-            
-            # Check if tomorrow's data is correctly identified by the adapter
-            is_tomorrow_valid = adapter.is_tomorrow_valid()
-            logger.info(f"Tomorrow data validation: {is_tomorrow_valid}")
-            
-            # Store the result
-            results["adapter_success"] = is_tomorrow_valid
-            
-            # Test with improved adapter
-            improved_adapter = ImprovedElectricityPriceAdapter(mock_hass, [data], False)
-            
-            # Log details about improved adapter data
-            logger.info(f"Improved adapter hourly price keys: {list(improved_adapter.hourly_prices.keys())[:5]}")
-            
-            # Check if improved adapter has tomorrow prices
-            improved_tomorrow_prices = improved_adapter.tomorrow_prices
-            if improved_tomorrow_prices:
-                logger.info(f"Improved adapter tomorrow price keys: {list(improved_tomorrow_prices.keys())[:5]}")
-            else:
-                logger.info("Improved adapter tomorrow price keys: None")
-            
-            # Check if tomorrow's data is correctly identified by the improved adapter
-            improved_is_tomorrow_valid = improved_adapter.is_tomorrow_valid()
-            logger.info(f"Improved adapter tomorrow data validation: {improved_is_tomorrow_valid}")
-            
-            # Store the result
-            results["improved_adapter_success"] = improved_is_tomorrow_valid
-            
-            # Test direct API access
+            # Direct API has tomorrow data
+            results["direct_api_success"] = True
+        else:
+            logger.warning(f"No tomorrow_hourly_prices found in {api_name} data")
+        
+        # Test with standard adapter
+        adapter = ElectricityPriceAdapter(mock_hass, [data], False)
+        
+        # Log details about adapter data
+        logger.info(f"Adapter hourly price keys: {list(adapter.hourly_prices.keys())[:5]}")
+        
+        # Check if adapter has tomorrow prices
+        tomorrow_prices = adapter.tomorrow_prices
+        if tomorrow_prices:
+            logger.info(f"Adapter tomorrow price keys: {list(tomorrow_prices.keys())[:5]}")
+            logger.info(f"Adapter tomorrow hours: {len(tomorrow_prices)}")
+        else:
+            logger.info("Adapter tomorrow price keys: None")
+        
+        # Check if tomorrow's data is correctly identified by the adapter
+        is_tomorrow_valid = adapter.is_tomorrow_valid()
+        logger.info(f"Tomorrow data validation: {is_tomorrow_valid}")
+        
+        # Store the result
+        results["adapter_success"] = is_tomorrow_valid
+        results["adapter_tomorrow_hours"] = len(tomorrow_prices) if tomorrow_prices else 0
+        
+        # Test with improved adapter
+        improved_adapter = ImprovedElectricityPriceAdapter(mock_hass, [data], False)
+        
+        # Log details about improved adapter data
+        logger.info(f"Improved adapter hourly price keys: {list(improved_adapter.hourly_prices.keys())[:5]}")
+        
+        # Check if improved adapter has tomorrow prices
+        improved_tomorrow_prices = improved_adapter.tomorrow_prices
+        if improved_tomorrow_prices:
+            logger.info(f"Improved adapter tomorrow price keys: {list(improved_tomorrow_prices.keys())[:5]}")
+            logger.info(f"Improved adapter tomorrow hours: {len(improved_tomorrow_prices)}")
+        else:
+            logger.info("Improved adapter tomorrow price keys: None")
+        
+        # Check if tomorrow's data is correctly identified by the improved adapter
+        improved_is_tomorrow_valid = improved_adapter.is_tomorrow_valid()
+        logger.info(f"Improved adapter tomorrow data validation: {improved_is_tomorrow_valid}")
+        
+        # Store the result
+        results["improved_adapter_success"] = improved_is_tomorrow_valid
+        results["improved_adapter_tomorrow_hours"] = len(improved_tomorrow_prices) if improved_tomorrow_prices else 0
+        
+        # Additional direct API test for Nordpool
+        if api_name == "nordpool":
             await test_direct_nordpool_api(results)
             
-        except Exception as e:
-            logger.error(f"Error during Nordpool test: {e}")
-            results["error"] = str(e)
-        finally:
-            # Close the session
-            if session and not session.closed:
-                await session.close()
     except Exception as e:
-        logger.error(f"Error creating aiohttp session: {e}")
+        logger.error(f"Error during {api_name} direct test: {e}")
         results["error"] = str(e)
     
     return results
+
+async def test_nordpool_direct_api() -> Dict[str, Any]:
+    """Test Nordpool API directly for tomorrow's data.
+    
+    Returns:
+        Dictionary with test results
+    """
+    return await test_api_direct("nordpool", "SE3")
 
 async def test_direct_nordpool_api(results: Dict[str, Any]) -> None:
     """Test Nordpool API directly using low-level aiohttp calls.
@@ -490,7 +495,7 @@ def parse_args() -> argparse.Namespace:
     
     # Test selection options
     parser.add_argument("--test-all", action="store_true", help="Run all tests")
-    parser.add_argument("--test-direct-nordpool", action="store_true", help="Test Nordpool API directly")
+    parser.add_argument("--test-direct-api", action="store_true", help="Test APIs directly")
     parser.add_argument("--test-tdm", action="store_true", help="Test TomorrowDataManager with real API")
     
     # API key option
@@ -521,14 +526,14 @@ def setup_logging(debug: bool) -> None:
 
 def print_summary(
     all_results: Dict[str, Any] = None,
-    nordpool_results: Dict[str, Any] = None,
+    direct_api_results: Dict[str, Dict[str, Any]] = None,
     tdm_results: Dict[str, Any] = None
 ) -> None:
     """Print a summary of the test results.
     
     Args:
         all_results: Results from testing all parsers
-        nordpool_results: Results from testing Nordpool directly
+        direct_api_results: Results from testing APIs directly
         tdm_results: Results from testing TomorrowDataManager
     """
     print("\n" + "=" * 80)
@@ -548,15 +553,17 @@ def print_summary(
         total_count = all_results.get("summary", {}).get("total_count", 0)
         print(f"{valid_count} out of {total_count} parsers have valid tomorrow data")
     
-    if nordpool_results:
-        print("\n=== Nordpool Direct API Summary ===")
-        print(f"Direct API success: {nordpool_results.get('direct_api_success', False)}")
-        print(f"Standard adapter success: {nordpool_results.get('adapter_success', False)}")
-        print(f"Improved adapter success: {nordpool_results.get('improved_adapter_success', False)}")
-        print(f"Today hours: {nordpool_results.get('today_hours', 0)}, Tomorrow hours: {nordpool_results.get('tomorrow_hours', 0)}")
-        
-        if "direct_api_tomorrow_entries" in nordpool_results:
-            print(f"Direct tomorrow API entries: {nordpool_results.get('direct_api_tomorrow_entries', 0)}")
+    if direct_api_results:
+        for api_name, results in direct_api_results.items():
+            print(f"\n=== {api_name.capitalize()} Direct API Summary ===")
+            print(f"Area: {results.get('area', 'unknown')}")
+            print(f"Direct API success: {results.get('direct_api_success', False)}")
+            print(f"Standard adapter success: {results.get('adapter_success', False)} ({results.get('adapter_tomorrow_hours', 0)} hours)")
+            print(f"Improved adapter success: {results.get('improved_adapter_success', False)} ({results.get('improved_adapter_tomorrow_hours', 0)} hours)")
+            print(f"Today hours: {results.get('today_hours', 0)}, Tomorrow hours: {results.get('tomorrow_hours', 0)}")
+            
+            if "direct_api_tomorrow_entries" in results:
+                print(f"Direct tomorrow API entries: {results.get('direct_api_tomorrow_entries', 0)}")
     
     if tdm_results:
         print("\n=== TomorrowDataManager Test Summary ===")
@@ -591,9 +598,27 @@ async def main() -> int:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Determine which tests to run
-    run_all = args.test_all or not (args.test_direct_nordpool or args.test_tdm)
-    run_nordpool = run_all or args.test_direct_nordpool
+    run_all = args.test_all or not (args.test_direct_api or args.test_tdm)
+    run_direct_api = run_all or args.test_direct_api
     run_tdm = run_all and api_key or args.test_tdm
+    
+    # Define which APIs to test
+    api_list = ["entsoe", "nordpool", "epex", "omie", "energi_data_service"]
+    
+    # Filter API list if parser is specified
+    if args.parser:
+        if args.parser in api_list:
+            api_list = [args.parser]
+        else:
+            logger.warning(f"Unknown parser: {args.parser}, will test all APIs")
+    
+    # Store all results
+    all_results = None
+    direct_api_results = {}
+    tdm_results = None
+    
+    # Always run the parser tests, since it's our main functionality
+    logger.info("=== Testing parsers for tomorrow's data ===")
     
     # Filter parsers if specified
     parsers = None
@@ -604,13 +629,6 @@ async def main() -> int:
                             "aemo": "NSW1", "comed": "US", "stromligning": "NO1"}.get(args.parser)
         parsers = [{"name": args.parser, "area": area}]
     
-    # Store all results
-    all_results = None
-    nordpool_results = None
-    tdm_results = None
-    
-    # Always run the parser tests, since it's our main functionality
-    logger.info("=== Testing parsers for tomorrow's data ===")
     all_results = await test_parsers_with_api(
         parsers=parsers,
         use_improved_adapter=args.use_improved_adapter,
@@ -618,10 +636,24 @@ async def main() -> int:
     )
     save_results(all_results, f"tomorrow_parsers_{timestamp}.json", args.results_dir)
     
-    if run_nordpool:
-        logger.info("=== Testing Nordpool API directly ===")
-        nordpool_results = await test_nordpool_direct_api()
-        save_results(nordpool_results, f"tomorrow_nordpool_{timestamp}.json", args.results_dir)
+    if run_direct_api:
+        logger.info("=== Testing APIs directly ===")
+        
+        for api_name in api_list:
+            if args.area:
+                area = args.area
+            else:
+                area = {"entsoe": "SE4", "nordpool": "SE3", "epex": "DE", 
+                      "omie": "ES", "energi_data_service": "DK1"}.get(api_name, "SE4")
+            
+            logger.info(f"Testing {api_name} API directly for area {area}")
+            
+            # Test this API directly
+            api_results = await test_api_direct(api_name, area)
+            direct_api_results[api_name] = api_results
+            
+            # Save results for this API
+            save_results(api_results, f"tomorrow_{api_name}_{timestamp}.json", args.results_dir)
     
     if run_tdm and api_key:
         logger.info("=== Testing TomorrowDataManager with real API ===")
@@ -637,7 +669,7 @@ async def main() -> int:
         save_results(tdm_results, f"tomorrow_tdm_{api_name}_{timestamp}.json", args.results_dir)
     
     # Print summary
-    print_summary(all_results, nordpool_results, tdm_results)
+    print_summary(all_results, direct_api_results, tdm_results)
     
     logger.info("All tests completed successfully")
     return 0

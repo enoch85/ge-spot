@@ -3,8 +3,6 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 
-import aiohttp
-
 from ..utils.api_client import ApiClient
 from ..price.conversion import async_convert_energy_price
 from ..timezone import TimezoneService
@@ -51,7 +49,7 @@ async def fetch_day_ahead_prices(source_type, config, area, currency, reference_
         await client.close()
 
 async def _fetch_data(client, config, area, reference_time):
-    """Fetch data from Nordpool."""
+    """Fetch data from Nordpool using a single API call with expanded date range."""
     try:
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
@@ -61,92 +59,62 @@ async def _fetch_data(client, config, area, reference_time):
 
         _LOGGER.debug(f"Fetching Nordpool data for area: {area}, delivery area: {delivery_area}")
 
-        # Generate date ranges to try
-        # For Nordpool, we need to handle today and tomorrow separately
-        # We'll use the date range utility to generate the ranges, but we'll process them differently
+        # Generate date ranges to try - similar to ENTSO-E approach
         date_ranges = generate_date_ranges(reference_time, Source.NORDPOOL)
-
-        # Fetch today's data (first range is today to tomorrow)
-        today_start, today_end = date_ranges[0]
-        today = today_start.strftime(TimeFormat.DATE_ONLY)
-
-        params_today = {
-            "currency": Currency.EUR,
-            "date": today,
-            "market": "DayAhead",
-            "deliveryArea": delivery_area
-        }
-
-        today_data = await client.fetch(BASE_URL, params=params_today)
-
-        # Always try to fetch tomorrow's data
-        tomorrow_data = None
         
-        # Use the third range which is today to day after tomorrow
-        # Extract tomorrow's date from it
-        if len(date_ranges) >= 3:
-            _, tomorrow_end = date_ranges[2]
-            tomorrow = tomorrow_end.strftime(TimeFormat.DATE_ONLY)
-        else:
-            # Fallback to simple calculation if needed
-            tomorrow = (reference_time + timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
-
-        params_tomorrow = {
-            "currency": Currency.EUR,
-            "date": tomorrow,
-            "market": "DayAhead",
-            "deliveryArea": delivery_area
-        }
-
-        # Always try to fetch tomorrow's data directly with a separate API call
-        # This is more reliable than using the client.fetch method
-        try:
-            # Create a new session for direct API access
-            async with aiohttp.ClientSession() as direct_session:
-                # Use the date format directly in the URL
-                tomorrow_url = f"{BASE_URL}?currency=EUR&date={tomorrow}&market=DayAhead&deliveryArea={delivery_area}"
-                _LOGGER.debug(f"Directly fetching tomorrow's data from: {tomorrow_url}")
-                
-                async with direct_session.get(tomorrow_url) as response:
-                    if response.status == 200:
-                        # Get data directly from the API
-                        direct_tomorrow_data = await response.json()
-                        _LOGGER.debug(f"Successfully fetched tomorrow's data for {area}: {len(direct_tomorrow_data.get('multiAreaEntries', []))} entries")
-                        # Important: Use the direct API response for the tomorrow data
-                        tomorrow_data = direct_tomorrow_data
-                    else:
-                        _LOGGER.debug(f"Failed to fetch tomorrow's data for {area}: {response.status}")
-                        tomorrow_data = {}  # Use empty dict instead of None
-        except Exception as e:
-            _LOGGER.debug(f"Error fetching tomorrow's data for {area}: {e}")
-            tomorrow_data = {}  # Use empty dict instead of None
+        # Try different date ranges to maximize chance of getting both today and tomorrow data
+        for start_date, end_date in date_ranges:
+            # Use the date range parameters
+            start_date_str = start_date.strftime(TimeFormat.DATE_ONLY)
+            end_date_str = end_date.strftime(TimeFormat.DATE_ONLY)
+            
+            # If start and end date are the same, use a single date parameter
+            if start_date_str == end_date_str:
+                params = {
+                    "currency": Currency.EUR,
+                    "date": start_date_str,
+                    "market": "DayAhead",
+                    "deliveryArea": delivery_area
+                }
+            else:
+                # Use a date range - Nordpool API doesn't support true date ranges,
+                # so we request the end date which should include data for that day
+                params = {
+                    "currency": Currency.EUR,
+                    "date": end_date_str,
+                    "market": "DayAhead",
+                    "deliveryArea": delivery_area
+                }
+            
+            _LOGGER.debug(f"Trying Nordpool with date range: {start_date_str} to {end_date_str}, using date param: {params['date']}")
+            response = await client.fetch(BASE_URL, params=params)
+            
+            if response and isinstance(response, dict) and "multiAreaEntries" in response:
+                # Check if we got data
+                entries = response.get("multiAreaEntries", [])
+                if entries and any(area in entry.get("entryPerArea", {}) for entry in entries):
+                    _LOGGER.info(f"Successfully fetched Nordpool data for area {area} ({len(entries)} entries)")
+                    
+                    # Log some details about the data timestamps to help debug
+                    for entry in entries[:3]:  # Log a few entries for debugging
+                        if "deliveryStart" in entry:
+                            _LOGGER.debug(f"Sample entry deliveryStart: {entry['deliveryStart']}")
+                    
+                    # Return the data directly, similar to ENTSO-E structure
+                    return response
+            
+            _LOGGER.debug(f"No data found for date range {start_date_str} to {end_date_str}, trying next range")
         
-        # Log the data we have for debugging
-        if tomorrow_data:
-            _LOGGER.debug(f"Tomorrow data before returning: {type(tomorrow_data)}")
-            if isinstance(tomorrow_data, dict):
-                _LOGGER.debug(f"Tomorrow data keys: {tomorrow_data.keys()}")
-                if "multiAreaEntries" in tomorrow_data:
-                    _LOGGER.debug(f"Tomorrow data has {len(tomorrow_data['multiAreaEntries'])} multiAreaEntries")
-
-        return {
-            "today": today_data,
-            "tomorrow": tomorrow_data,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
+        # If we've tried all date ranges and still don't have data
+        _LOGGER.warning(f"No data found for Nordpool area {area} after trying multiple date ranges")
+        return None
     except Exception as e:
         _LOGGER.error(f"Error in _fetch_data for Nordpool: {str(e)}", exc_info=True)
         return None
 
 async def _process_data(data, area, currency, vat, use_subunit, reference_time, hass, session, config):
     """Process data from Nordpool."""
-    if not data or "today" not in data:
-        return None
-
-    today_data = data["today"]
-    tomorrow_data = data.get("tomorrow")
-
-    if not today_data or "multiAreaEntries" not in today_data:
+    if not data or "multiAreaEntries" not in data:
         _LOGGER.error("Missing or invalid multiAreaEntries in Nordpool data")
         return None
 
@@ -155,10 +123,10 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
     _LOGGER.debug(f"Initialized TimezoneService for area {area} with timezone {tz_service.area_timezone or tz_service.ha_timezone}")
 
     # Extract source timezone from data or use default for Nordpool
-    source_timezone = tz_service.extract_source_timezone(today_data, Source.NORDPOOL)
+    source_timezone = tz_service.extract_source_timezone(data, Source.NORDPOOL)
     _LOGGER.debug(f"Using source timezone for Nordpool: {source_timezone}")
 
-    # Initialize result structure
+    # Initialize result structure similar to ENTSO-E
     result = {
         "current_price": None,
         "next_hour_price": None,
@@ -172,7 +140,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
     }
 
     # Store raw price data for reference
-    for entry in today_data.get("multiAreaEntries", []):
+    for entry in data.get("multiAreaEntries", []):
         if not isinstance(entry, dict) or "entryPerArea" not in entry:
             continue
 
@@ -195,11 +163,14 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
         # Use the NordpoolPriceParser to parse hourly prices
         parser = NordpoolPriceParser()
 
-        # Parse today's hourly prices
-        raw_hourly_prices = parser.parse_hourly_prices(data, area)
-
-        # Convert hourly prices to area-specific timezone (or HA timezone) in a single step
+        # Parse hourly prices with ISO timestamps
+        raw_hourly_prices = parser.parse_hourly_prices({"data": data}, area)
+        
+        # Log the raw hourly prices with ISO timestamps to help with debugging
         if raw_hourly_prices:
+            _LOGGER.debug(f"Raw hourly prices with ISO timestamps: {list(raw_hourly_prices.items())[:5]} ({len(raw_hourly_prices)} total)")
+            
+            # Convert hourly prices to area-specific timezone (or HA timezone) in a single step
             converted_hourly_prices = tz_service.normalize_hourly_prices(
                 raw_hourly_prices, source_timezone)
 
@@ -265,75 +236,8 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                     "value": result["off_peak_price"],
                     "calculation": "minimum of all hourly prices"
                 }
-
-        # Process tomorrow data if available
-        if tomorrow_data and isinstance(tomorrow_data, dict) and not tomorrow_data.get("error") and "multiAreaEntries" in tomorrow_data:
-            # Parse tomorrow's hourly prices directly
-            tomorrow_raw_prices = parser.parse_tomorrow_prices({"tomorrow": tomorrow_data}, area)
-
-            # Get tomorrow's date in HA timezone for proper conversion
-            tomorrow_date = tz_service.converter.convert(datetime.now(), source_tz=source_timezone).date() + timedelta(days=1)
-
-            # Convert tomorrow hourly prices to area-specific timezone (or HA timezone) in a single step
-            if tomorrow_raw_prices:
-                _LOGGER.debug(f"Tomorrow raw prices before conversion: {tomorrow_raw_prices}")
                 
-                # Do NOT normalize to simple HH:00 format - keep ISO timestamps
-                # This is critical for adapter to distinguish tomorrow from today
-                tomorrow_converted_prices = tomorrow_raw_prices
-                
-                # Debug log all tomorrow raw prices
-                _LOGGER.debug(f"Tomorrow raw prices before conversion: {list(tomorrow_raw_prices.items())[:5]}")
-                
-                # Preserve the original ISO format for direct use with improved adapter
-                result["tomorrow_original_prices"] = tomorrow_raw_prices.copy()
-                
-                # Apply price conversions with ISO format timestamps
-                result["tomorrow_hourly_prices"] = {}
-                for hour_str, price in tomorrow_converted_prices.items():
-                    converted_price = await async_convert_energy_price(
-                        price=price,
-                        from_unit=EnergyUnit.MWH,
-                        to_unit="kWh",
-                        from_currency=Currency.EUR,
-                        to_currency=currency,
-                        vat=vat,
-                        to_subunit=use_subunit,
-                        session=session
-                    )
-
-                    # IMPORTANT: Store with the original ISO format key to preserve date information
-                    result["tomorrow_hourly_prices"][hour_str] = converted_price
-                    _LOGGER.debug(f"Added tomorrow hourly price: {hour_str} = {converted_price}")
-                
-                # Also add a new dictionary with full tomorrow date prefixed values for compatibility
-                # with standard adapter that can't handle ISO format
-                result["tomorrow_prefixed_prices"] = {}
-                for hour_str, price in result["tomorrow_hourly_prices"].items():
-                    # Extract hour from ISO format
-                    try:
-                        dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
-                        hour = dt.hour
-                        hour_key = f"tomorrow_{hour:02d}:00"
-                        result["tomorrow_prefixed_prices"][hour_key] = price
-                        _LOGGER.debug(f"Added tomorrow prefixed price: {hour_key} = {price}")
-                    except (ValueError, TypeError):
-                        # If parsing fails, use the original key
-                        result["tomorrow_prefixed_prices"][f"tomorrow_{hour_str}"] = price
-                        _LOGGER.debug(f"Added tomorrow prefixed price (fallback): tomorrow_{hour_str} = {price}")
-                
-                # Log successful addition of tomorrow data
-                _LOGGER.info(f"Added {len(result['tomorrow_hourly_prices'])} tomorrow price entries")
-
-                # Calculate tomorrow statistics
-                tomorrow_prices = list(result["tomorrow_hourly_prices"].values())
-                if tomorrow_prices:
-                    result["tomorrow_average_price"] = sum(tomorrow_prices) / len(tomorrow_prices)
-                    result["tomorrow_peak_price"] = max(tomorrow_prices)
-                    result["tomorrow_off_peak_price"] = min(tomorrow_prices)
-                    result["tomorrow_valid"] = len(tomorrow_prices) >= 20
+        return result
     except Exception as e:
         _LOGGER.error(f"Error processing Nordpool data: {e}", exc_info=True)
         return None
-
-    return result
