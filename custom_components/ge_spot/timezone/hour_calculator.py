@@ -32,18 +32,19 @@ class HourCalculator:
         # If using Home Assistant Time mode, we need to compensate for timezone differences
         if self.timezone_reference == TimezoneReference.HOME_ASSISTANT:
             if self.area_timezone and self.area_timezone != self.system_timezone:
-                # Calculate the time difference between Home Assistant and the price area
-                # Create same time in both timezones to calculate offset
+                # Get the current time in both timezones to calculate the correct offset
                 now_system = datetime.now(self.system_timezone)
                 now_area = datetime.now(self.area_timezone)
-
-                # Calculate hour difference (may include DST differences)
-                hour_diff = now_area.hour - now_system.hour
-                if hour_diff > 12:  # Handle day boundary cases
-                    hour_diff -= 24
-                elif hour_diff < -12:
-                    hour_diff += 24
-
+                
+                # Log the actual times for debugging
+                _LOGGER.debug(f"System time: {now_system.isoformat()}, Area time: {now_area.isoformat()}")
+                
+                # Calculate total seconds difference to handle DST and other edge cases
+                time_diff_seconds = (now_area.replace(tzinfo=None) - now_system.replace(tzinfo=None)).total_seconds()
+                hour_diff = round(time_diff_seconds / 3600)  # Convert to hours and round to nearest hour
+                
+                _LOGGER.debug(f"Time difference: {time_diff_seconds} seconds, {hour_diff} hours")
+                
                 # Apply the offset in reverse to compensate
                 adjusted_hour = (now.hour - hour_diff) % 24
                 hour_key = f"{adjusted_hour:02d}:00"

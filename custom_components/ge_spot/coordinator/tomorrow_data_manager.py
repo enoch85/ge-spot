@@ -80,14 +80,25 @@ class TomorrowDataManager:
                 self._search_end_time = None
             return False
 
-        # Check if we're past the special window for tomorrow's data (13:00-14:00)
+        # Check if we're in or past the special window for tomorrow's data (13:00-14:00)
+        in_special_window = False
         past_special_window = False
         for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
-            if start_hour == 13 and now.hour >= end_hour:
-                past_special_window = True
-                _LOGGER.debug(f"Past special window for tomorrow's data: {start_hour}:00-{end_hour}:00, current hour: {now.hour}:00")
-                break
+            if start_hour == 13:
+                if start_hour <= now.hour < end_hour:
+                    in_special_window = True
+                    _LOGGER.debug(f"In special window for tomorrow's data: {start_hour}:00-{end_hour}:00, current hour: {now.hour}:00")
+                    break
+                elif now.hour >= end_hour:
+                    past_special_window = True
+                    _LOGGER.debug(f"Past special window for tomorrow's data: {start_hour}:00-{end_hour}:00, current hour: {now.hour}:00")
+                    break
 
+        # If we're in the special window, we should search
+        if in_special_window:
+            _LOGGER.info(f"In special window for tomorrow's data: 13:00-14:00, current hour: {now.hour}:00")
+            return True
+        
         # If we're not past the special window, don't search
         if not past_special_window:
             _LOGGER.debug(f"Not past special window for tomorrow's data yet, current hour: {now.hour}:00")
