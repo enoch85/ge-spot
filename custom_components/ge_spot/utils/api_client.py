@@ -111,7 +111,10 @@ class ApiClient:
                     async with self.session.get(url, params=params, headers=merged_headers,
                                               timeout=timeout_obj) as response:
                         # Check for HTTP errors
-                        if response.status != 200:
+                        if response.status == 204:  # No Content is a success response
+                            _LOGGER.debug(f"API request returned 204 No Content: {url}")
+                            return {}  # Return empty dict for No Content
+                        elif response.status != 200:
                             _LOGGER.error(f"API request failed with status {response.status}: {url}")
 
                             # Try to get more detailed error information
@@ -152,7 +155,10 @@ class ApiClient:
                     async with aiohttp.ClientSession() as session:
                         async with session.get(url, params=params, headers=merged_headers,
                                              timeout=timeout_obj) as response:
-                            if response.status != 200:
+                            if response.status == 204:  # No Content is a success response
+                                _LOGGER.debug(f"API request returned 204 No Content: {url}")
+                                return {}  # Return empty dict for No Content
+                            elif response.status != 200:
                                 _LOGGER.error(f"API request failed with status {response.status}: {url}")
 
                                 try:

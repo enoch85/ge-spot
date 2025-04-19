@@ -3,6 +3,8 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 
+import aiohttp
+
 from ..utils.api_client import ApiClient
 from ..price.conversion import async_convert_energy_price
 from ..timezone import TimezoneService
@@ -77,29 +79,55 @@ async def _fetch_data(client, config, area, reference_time):
 
         today_data = await client.fetch(BASE_URL, params=params_today)
 
-        # Try to fetch tomorrow's data if it's after 13:00 CET (when typically available)
+        # Always try to fetch tomorrow's data
         tomorrow_data = None
-        now_utc = datetime.now(timezone.utc)
-        now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
+        
+        # Use the third range which is today to day after tomorrow
+        # Extract tomorrow's date from it
+        if len(date_ranges) >= 3:
+            _, tomorrow_end = date_ranges[2]
+            tomorrow = tomorrow_end.strftime(TimeFormat.DATE_ONLY)
+        else:
+            # Fallback to simple calculation if needed
+            tomorrow = (reference_time + timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
 
-        if now_cet.hour >= 13:
-            # Use the third range which is today to day after tomorrow
-            # Extract tomorrow's date from it
-            if len(date_ranges) >= 3:
-                _, tomorrow_end = date_ranges[2]
-                tomorrow = tomorrow_end.strftime(TimeFormat.DATE_ONLY)
-            else:
-                # Fallback to simple calculation if needed
-                tomorrow = (reference_time + timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
+        params_tomorrow = {
+            "currency": Currency.EUR,
+            "date": tomorrow,
+            "market": "DayAhead",
+            "deliveryArea": delivery_area
+        }
 
-            params_tomorrow = {
-                "currency": Currency.EUR,
-                "date": tomorrow,
-                "market": "DayAhead",
-                "deliveryArea": delivery_area
-            }
-
-            tomorrow_data = await client.fetch(BASE_URL, params=params_tomorrow)
+        # Always try to fetch tomorrow's data directly with a separate API call
+        # This is more reliable than using the client.fetch method
+        try:
+            # Create a new session for direct API access
+            async with aiohttp.ClientSession() as direct_session:
+                # Use the date format directly in the URL
+                tomorrow_url = f"{BASE_URL}?currency=EUR&date={tomorrow}&market=DayAhead&deliveryArea={delivery_area}"
+                _LOGGER.debug(f"Directly fetching tomorrow's data from: {tomorrow_url}")
+                
+                async with direct_session.get(tomorrow_url) as response:
+                    if response.status == 200:
+                        # Get data directly from the API
+                        direct_tomorrow_data = await response.json()
+                        _LOGGER.debug(f"Successfully fetched tomorrow's data for {area}: {len(direct_tomorrow_data.get('multiAreaEntries', []))} entries")
+                        # Important: Use the direct API response for the tomorrow data
+                        tomorrow_data = direct_tomorrow_data
+                    else:
+                        _LOGGER.debug(f"Failed to fetch tomorrow's data for {area}: {response.status}")
+                        tomorrow_data = {}  # Use empty dict instead of None
+        except Exception as e:
+            _LOGGER.debug(f"Error fetching tomorrow's data for {area}: {e}")
+            tomorrow_data = {}  # Use empty dict instead of None
+        
+        # Log the data we have for debugging
+        if tomorrow_data:
+            _LOGGER.debug(f"Tomorrow data before returning: {type(tomorrow_data)}")
+            if isinstance(tomorrow_data, dict):
+                _LOGGER.debug(f"Tomorrow data keys: {tomorrow_data.keys()}")
+                if "multiAreaEntries" in tomorrow_data:
+                    _LOGGER.debug(f"Tomorrow data has {len(tomorrow_data['multiAreaEntries'])} multiAreaEntries")
 
         return {
             "today": today_data,
@@ -239,18 +267,24 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 }
 
         # Process tomorrow data if available
-        if tomorrow_data and "multiAreaEntries" in tomorrow_data:
-            # Parse tomorrow's hourly prices
-            tomorrow_raw_prices = parser.parse_tomorrow_prices(data, area)
+        if tomorrow_data and isinstance(tomorrow_data, dict) and not tomorrow_data.get("error") and "multiAreaEntries" in tomorrow_data:
+            # Parse tomorrow's hourly prices directly
+            tomorrow_raw_prices = parser.parse_tomorrow_prices({"tomorrow": tomorrow_data}, area)
 
             # Get tomorrow's date in HA timezone for proper conversion
             tomorrow_date = tz_service.converter.convert(datetime.now(), source_tz=source_timezone).date() + timedelta(days=1)
 
             # Convert tomorrow hourly prices to area-specific timezone (or HA timezone) in a single step
             if tomorrow_raw_prices:
-                tomorrow_converted_prices = tz_service.normalize_hourly_prices(
-                    tomorrow_raw_prices, source_timezone, tomorrow_date)
-
+                _LOGGER.debug(f"Tomorrow raw prices before conversion: {tomorrow_raw_prices}")
+                
+                # Do NOT normalize to simple HH:00 format - keep ISO timestamps
+                # This is critical for adapter to distinguish tomorrow from today
+                tomorrow_converted_prices = tomorrow_raw_prices
+                
+                # Preserve the original ISO format for direct use with improved adapter
+                result["tomorrow_original_prices"] = tomorrow_raw_prices.copy()
+                
                 # Apply price conversions
                 result["tomorrow_hourly_prices"] = {}
                 for hour_str, price in tomorrow_converted_prices.items():
@@ -265,7 +299,25 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                         session=session
                     )
 
+                    # IMPORTANT: Store with the original ISO format key to preserve date information
                     result["tomorrow_hourly_prices"][hour_str] = converted_price
+                
+                # Also add a new dictionary with full tomorrow date prefixed values for compatibility
+                # with standard adapter that can't handle ISO format
+                result["tomorrow_prefixed_prices"] = {}
+                for hour_str, price in result["tomorrow_hourly_prices"].items():
+                    # Extract hour from ISO format
+                    try:
+                        dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
+                        hour = dt.hour
+                        hour_key = f"tomorrow_{hour:02d}:00"
+                        result["tomorrow_prefixed_prices"][hour_key] = price
+                    except (ValueError, TypeError):
+                        # If parsing fails, use the original key
+                        result["tomorrow_prefixed_prices"][f"tomorrow_{hour_str}"] = price
+                
+                # Log successful addition of tomorrow data
+                _LOGGER.info(f"Added {len(result['tomorrow_hourly_prices'])} tomorrow price entries")
 
                 # Calculate tomorrow statistics
                 tomorrow_prices = list(result["tomorrow_hourly_prices"].values())

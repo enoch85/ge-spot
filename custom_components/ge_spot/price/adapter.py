@@ -1,7 +1,7 @@
 """Price data adapter for electricity spot prices."""
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -23,20 +23,37 @@ class ElectricityPriceAdapter:
         self.price_list = self._convert_to_price_list(self.hourly_prices)
         self.tomorrow_list = self._convert_to_price_list(self.tomorrow_prices)
 
-    def _parse_hour_from_string(self, hour_str: str) -> Optional[int]:
-        """Parse hour from hour string.
+    def _parse_hour_from_string(self, hour_str: str) -> Tuple[Optional[int], Optional[datetime]]:
+        """Parse hour and date from hour string.
         
         Args:
-            hour_str: Hour string in either "HH:00" or ISO format
+            hour_str: Hour string in either "HH:00", "tomorrow_HH:00", or ISO format
             
         Returns:
-            Hour as an integer (0-23) or None if parsing fails
+            Tuple of (hour, datetime) where hour is an integer 0-23 and datetime is the full datetime
+            if available, or None if not available
         """
+        # Check if this is a tomorrow hour from timezone conversion
+        if hour_str.startswith("tomorrow_"):
+            # Extract the hour key without the prefix
+            hour_key = hour_str[9:]  # Remove "tomorrow_" prefix
+            try:
+                hour = int(hour_key.split(":")[0])
+                if 0 <= hour < 24:  # Only accept valid hours
+                    # Create a datetime for tomorrow with this hour
+                    from homeassistant.util import dt as dt_util
+                    today = dt_util.now().date()
+                    tomorrow = today + timedelta(days=1)
+                    dt = datetime.combine(tomorrow, datetime.min.time().replace(hour=hour))
+                    return hour, dt
+            except (ValueError, IndexError):
+                pass
+        
         # Try simple "HH:00" format first
         try:
             hour = int(hour_str.split(":")[0])
             if 0 <= hour < 24:  # Only accept valid hours
-                return hour
+                return hour, None
         except (ValueError, IndexError):
             pass
             
@@ -44,15 +61,14 @@ class ElectricityPriceAdapter:
         if "T" in hour_str:
             try:
                 # Handle ISO format with timezone
-                from datetime import datetime
                 dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
-                return dt.hour
+                return dt.hour, dt
             except (ValueError, TypeError):
                 pass
                 
         # If we get here, we couldn't parse the hour
-        _LOGGER.warning(f"Invalid hour format in hourly_prices: {hour_str}")
-        return None
+        _LOGGER.warning(f"Could not parse hour from: {hour_str}")
+        return None, None
 
     def _extract_hourly_prices(self) -> Dict[str, float]:
         """Extract hourly prices from raw data."""
@@ -73,20 +89,24 @@ class ElectricityPriceAdapter:
                 # Store formatted hour -> price mapping
                 _LOGGER.debug(f"Found hourly_prices in raw data: {len(item['hourly_prices'])} entries")
                 for hour_str, price in item["hourly_prices"].items():
-                    hour = self._parse_hour_from_string(hour_str)
+                    # Check if this is a tomorrow hour from timezone conversion
+                    if hour_str.startswith("tomorrow_"):
+                        # Extract the hour key without the prefix
+                        hour_key = hour_str[9:]  # Remove "tomorrow_" prefix
+                        tomorrow_in_hourly[hour_key] = price
+                        _LOGGER.debug(f"Found tomorrow's data in hourly_prices with prefix: {hour_str} -> {hour_key}")
+                        continue  # Skip adding to hourly_prices
+                    
+                    hour, dt = self._parse_hour_from_string(hour_str)
                     if hour is not None:
                         hour_key = f"{hour:02d}:00"
                         
                         # Check if this is tomorrow's data
-                        if "T" in hour_str:
-                            try:
-                                dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
-                                if dt.date() == tomorrow:
-                                    # This is tomorrow's data, store it separately
-                                    tomorrow_in_hourly[hour_key] = price
-                                    continue  # Skip adding to hourly_prices
-                            except (ValueError, TypeError):
-                                pass
+                        if dt is not None and dt.date() == tomorrow:
+                            # This is tomorrow's data, store it separately
+                            tomorrow_in_hourly[hour_key] = price
+                            _LOGGER.debug(f"Found tomorrow's data in hourly_prices: {hour_key} -> {price}")
+                            continue  # Skip adding to hourly_prices
                                 
                         hourly_prices[hour_key] = price
 
@@ -112,14 +132,28 @@ class ElectricityPriceAdapter:
             if not isinstance(item, dict):
                 continue
 
-            if "tomorrow_hourly_prices" in item and isinstance(item["tomorrow_hourly_prices"], dict):
+            # First try the prefixed format which is guaranteed to be recognized
+            if "tomorrow_prefixed_prices" in item and isinstance(item["tomorrow_prefixed_prices"], dict):
+                # Store formatted hour -> price mapping
+                _LOGGER.debug(f"Found tomorrow_prefixed_prices in raw data: {len(item['tomorrow_prefixed_prices'])} entries")
+                for hour_str, price in item["tomorrow_prefixed_prices"].items():
+                    if hour_str.startswith("tomorrow_"):
+                        # Extract the hour key without the prefix
+                        hour_key = hour_str[9:]  # Remove "tomorrow_" prefix
+                        # We can use this directly
+                        tomorrow_prices[hour_key] = price
+                        _LOGGER.debug(f"Added prefixed tomorrow price: {hour_key} -> {price}")
+            
+            # Then try the standard tomorrow_hourly_prices
+            elif "tomorrow_hourly_prices" in item and isinstance(item["tomorrow_hourly_prices"], dict):
                 # Store formatted hour -> price mapping
                 _LOGGER.debug(f"Found tomorrow_hourly_prices in raw data: {len(item['tomorrow_hourly_prices'])} entries")
                 for hour_str, price in item["tomorrow_hourly_prices"].items():
-                    hour = self._parse_hour_from_string(hour_str)
+                    hour, dt = self._parse_hour_from_string(hour_str)
                     if hour is not None:
                         hour_key = f"{hour:02d}:00"
                         tomorrow_prices[hour_key] = price
+                        _LOGGER.debug(f"Added tomorrow price: {hour_key} -> {price}")
 
         _LOGGER.debug(f"Extracted {len(tomorrow_prices)} tomorrow prices: {sorted(tomorrow_prices.keys())}")
         return tomorrow_prices

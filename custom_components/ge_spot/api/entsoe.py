@@ -211,13 +211,30 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
 
             # Create raw prices array for reference
             for hour_str, price in hourly_prices.items():
-                hour = int(hour_str.split(":")[0])
-                # Create a timezone-aware datetime using HA timezone
-                now = datetime.now().date()
-                hour_time = datetime.combine(now, time(hour=hour))
-                # Make it timezone-aware using HA timezone - explicitly pass source_timezone
-                hour_time = tz_service.converter.convert(hour_time, source_tz=source_timezone)
-                end_time = hour_time + timedelta(hours=1)
+                # Check if hour_str is in ISO format (contains 'T')
+                if "T" in hour_str:
+                    try:
+                        # Parse ISO format date
+                        hour_time = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
+                        # Make it timezone-aware using HA timezone - explicitly pass source_timezone
+                        hour_time = tz_service.converter.convert(hour_time, source_tz=source_timezone)
+                        end_time = hour_time + timedelta(hours=1)
+                    except (ValueError, TypeError) as e:
+                        _LOGGER.warning(f"Failed to parse ISO date: {hour_str} - {e}")
+                        continue
+                else:
+                    # Original code for "HH:00" format
+                    try:
+                        hour = int(hour_str.split(":")[0])
+                        # Create a timezone-aware datetime using HA timezone
+                        now = datetime.now().date()
+                        hour_time = datetime.combine(now, time(hour=hour))
+                        # Make it timezone-aware using HA timezone - explicitly pass source_timezone
+                        hour_time = tz_service.converter.convert(hour_time, source_tz=source_timezone)
+                        end_time = hour_time + timedelta(hours=1)
+                    except (ValueError, TypeError) as e:
+                        _LOGGER.warning(f"Failed to parse hour: {hour_str} - {e}")
+                        continue
 
                 # Store raw price
                 result["raw_prices"].append({

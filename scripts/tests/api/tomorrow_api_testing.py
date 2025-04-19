@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.api import fetch_day_ahead_prices
-from custom_components.ge_spot.price import ElectricityPriceAdapter
+from custom_components.ge_spot.price.adapter import ElectricityPriceAdapter
 
 from ..mocks.hass import MockHass
 from ..utils.general import build_api_key_config

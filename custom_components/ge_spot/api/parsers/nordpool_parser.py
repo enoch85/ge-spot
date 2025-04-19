@@ -218,9 +218,9 @@ class NordpoolPriceParser(BasePriceParser):
                         # Parse timestamp
                         dt = self._parse_timestamp(start_time)
                         if dt:
-                            # Format as hour key
-                            normalized_hour, adjusted_date = normalize_hour_value(dt.hour, dt.date())
-                            hour_key = f"{normalized_hour:02d}:00"
+                            # Format as ISO format hour key for compatibility with improved adapter
+                            # This ensures the date information is preserved
+                            hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
                             hourly_prices[hour_key] = float(raw_price)
 
         return hourly_prices
@@ -238,10 +238,18 @@ class NordpoolPriceParser(BasePriceParser):
         hourly_prices = {}
 
         # Process tomorrow's data
-        if "tomorrow" in data and data["tomorrow"]:
+        if "tomorrow" in data and data["tomorrow"] is not None:
             tomorrow_data = data["tomorrow"]
-
-            if "multiAreaEntries" in tomorrow_data:
+            
+            # Add debug logging
+            _LOGGER.debug(f"Tomorrow data type: {type(tomorrow_data)}")
+            if isinstance(tomorrow_data, dict):
+                _LOGGER.debug(f"Tomorrow data keys: {tomorrow_data.keys()}")
+            
+            # Ensure tomorrow_data is a dictionary with the expected structure
+            if isinstance(tomorrow_data, dict) and "multiAreaEntries" in tomorrow_data:
+                _LOGGER.debug(f"Tomorrow multiAreaEntries found: {len(tomorrow_data['multiAreaEntries'])}")
+                
                 for entry in tomorrow_data["multiAreaEntries"]:
                     if not isinstance(entry, dict) or "entryPerArea" not in entry:
                         continue
@@ -257,9 +265,10 @@ class NordpoolPriceParser(BasePriceParser):
                         # Parse timestamp
                         dt = self._parse_timestamp(start_time)
                         if dt:
-                            # Format as hour key
-                            normalized_hour, adjusted_date = normalize_hour_value(dt.hour, dt.date())
-                            hour_key = f"{normalized_hour:02d}:00"
+                            # Format as ISO format hour key for compatibility with improved adapter
+                            # This ensures the date information is preserved
+                            hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
                             hourly_prices[hour_key] = float(raw_price)
+                            _LOGGER.debug(f"Added tomorrow price: {hour_key} = {raw_price}")
 
         return hourly_prices

@@ -178,20 +178,26 @@ class EntsoeParser(BasePriceParser):
                                     # Use the utility function to normalize the hour value if needed
                                     try:
                                         # Use relative import to avoid module not found error
-                                        from ...timezone.timezone_utils import normalize_hour_value
+                                        from ...timezone.timezone_utils import normalize_hour_value, format_hour_key
                                         normalized_hour, adjusted_date = normalize_hour_value(hour_time.hour, hour_time.date())
-
-                                        # Create normalized hour key
-                                        hour_key = f"{normalized_hour:02d}:00"
+                                        
+                                        # Create normalized datetime
+                                        from datetime import time
+                                        normalized_time = datetime.combine(adjusted_date, time(hour=normalized_hour))
+                                        normalized_time = normalized_time.replace(tzinfo=hour_time.tzinfo)
+                                        
+                                        # Format as ISO string for consistent date handling
+                                        hour_key = format_hour_key(normalized_time)
                                     except ValueError as e:
                                         # Skip invalid hours
                                         _LOGGER.warning(f"Skipping invalid hour value in ENTSOE data: {hour_time.hour}:00 - {e}")
                                         continue
                                     except ImportError as e:
                                         _LOGGER.warning(f"Import error for timezone utils: {e}, using original hour")
-                                        hour_key = f"{hour_time.hour:02d}:00"
-
-                                    # Add to hourly prices
+                                        # Format as ISO string for consistent date handling
+                                        hour_key = hour_time.strftime("%Y-%m-%dT%H:00:00")
+                                    
+                                    # Add to hourly prices with ISO format date as the key
                                     hourly_prices[hour_key] = price_val
                                 except (ValueError, TypeError) as e:
                                     _LOGGER.warning(f"Failed to parse point: {e}")
@@ -399,7 +405,7 @@ class EntsoeParser(BasePriceParser):
                                 # Use the utility function to normalize the hour value if needed
                                 try:
                                     # Use relative import to avoid module not found error
-                                    from ...timezone.timezone_utils import normalize_hour_value
+                                    from ...timezone.timezone_utils import normalize_hour_value, format_hour_key
                                     normalized_hour, adjusted_date = normalize_hour_value(hour_time.hour, hour_time.date())
 
                                     # Create normalized datetime
@@ -408,7 +414,7 @@ class EntsoeParser(BasePriceParser):
                                     normalized_time = normalized_time.replace(tzinfo=hour_time.tzinfo)
 
                                     # Format as ISO string
-                                    hour_key = normalized_time.strftime("%Y-%m-%dT%H:00:00")
+                                    hour_key = format_hour_key(normalized_time)
 
                                     # Add to hourly prices
                                     raw_hourly_prices[hour_key] = price_val
@@ -471,7 +477,13 @@ class EntsoeParser(BasePriceParser):
         # Use timezone-aware datetime
         now = datetime.now(timezone.utc)
         current_hour = now.replace(minute=0, second=0, microsecond=0)
-        current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
+        
+        # Use the utility function for consistent formatting
+        try:
+            from ...timezone.timezone_utils import format_hour_key
+            current_hour_key = format_hour_key(current_hour)
+        except ImportError:
+            current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
 
         return hourly_prices.get(current_hour_key)
 
@@ -490,7 +502,13 @@ class EntsoeParser(BasePriceParser):
         now = datetime.now(timezone.utc)
         next_hour = (now.replace(minute=0, second=0, microsecond=0) +
                     timedelta(hours=1))
-        next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
+        
+        # Use the utility function for consistent formatting
+        try:
+            from ...timezone.timezone_utils import format_hour_key
+            next_hour_key = format_hour_key(next_hour)
+        except ImportError:
+            next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
 
         return hourly_prices.get(next_hour_key)
 

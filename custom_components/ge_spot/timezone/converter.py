@@ -108,9 +108,20 @@ class TimezoneConverter:
 
             for hour_str, price in hourly_prices.items():
                 try:
-                    # Parse hour in source timezone
-                    hour = int(hour_str.split(":")[0])
-                    source_dt = datetime.combine(today_date, time(hour=hour))
+                    # Check if hour_str is in ISO format (contains 'T')
+                    if "T" in hour_str:
+                        try:
+                            # Parse ISO format date
+                            source_dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
+                            # Already has date information, no need to combine with today_date
+                        except (ValueError, TypeError) as e:
+                            _LOGGER.error(f"Failed to parse ISO date: {hour_str} - {e}")
+                            converted[hour_str] = price  # Keep original in case of error
+                            continue
+                    else:
+                        # Original code for "HH:00" format
+                        hour = int(hour_str.split(":")[0])
+                        source_dt = datetime.combine(today_date, time(hour=hour))
 
                     # Use timezone_utils functions for conversion
                     source_dt = localize_datetime(source_dt, source_tz)
@@ -126,8 +137,10 @@ class TimezoneConverter:
 
                         # Check if this is a new date (e.g., transition from 23:00 to 00:00)
                         if target_dt.date() != today_date:
-                            # Don't replace since we're focused on today
-                            _LOGGER.debug(f"Skipping hour from next day: {target_dt}")
+                            # This is tomorrow's data, use a different key format to preserve it
+                            tomorrow_key = f"tomorrow_{target_hour_str}"
+                            _LOGGER.debug(f"Preserving hour from next day as {tomorrow_key}: {target_dt}")
+                            converted[tomorrow_key] = price
                             continue
                     else:
                         processed_hours.add(target_hour_str)

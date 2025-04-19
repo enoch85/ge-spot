@@ -36,12 +36,25 @@ class ImprovedElectricityPriceAdapter:
         """Parse hour and date from hour string.
         
         Args:
-            hour_str: Hour string in either "HH:00" or ISO format
+            hour_str: Hour string in either "HH:00", "tomorrow_HH:00", or ISO format
             
         Returns:
             Tuple of (hour, datetime) where hour is an integer 0-23 and datetime is the full datetime
             if available, or None if not available
         """
+        # Check if this is a tomorrow hour from timezone conversion
+        if hour_str.startswith("tomorrow_"):
+            # Extract the hour key without the prefix
+            hour_key = hour_str[9:]  # Remove "tomorrow_" prefix
+            try:
+                hour = int(hour_key.split(":")[0])
+                if 0 <= hour < 24:  # Only accept valid hours
+                    # Create a datetime for tomorrow with this hour
+                    dt = datetime.combine(self.tomorrow, datetime.min.time().replace(hour=hour), timezone.utc)
+                    return hour, dt
+            except (ValueError, IndexError):
+                pass
+        
         # Try simple "HH:00" format first
         try:
             hour = int(hour_str.split(":")[0])
