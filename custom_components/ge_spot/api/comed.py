@@ -178,7 +178,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
 
             # Extract metadata
             metadata = parser.extract_metadata(data)
-            api_currency = metadata.get("currency", Currency.USD)
+            api_currency = metadata.get("currency", Currency.CENTS)
 
             # Parse hourly prices
             raw_hourly_prices = parser.parse_hourly_prices(data, area)
@@ -215,7 +215,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                     try:
                         converted_price = await async_convert_energy_price(
                             price=price,
-                            from_unit=EnergyUnit.KWH,  # ComEd uses cents per kWh
+                            from_unit=EnergyUnit.KWH,  # ComEd API already provides prices in cents/kWh
                             to_unit=EnergyUnit.KWH,
                             from_currency=api_currency,
                             to_currency=currency,

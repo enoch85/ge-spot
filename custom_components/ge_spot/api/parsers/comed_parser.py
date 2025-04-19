@@ -29,7 +29,7 @@ class ComedParser(BasePriceParser):
 
         result = {
             "hourly_prices": {},
-            "currency": Currency.USD,
+            "currency": Currency.CENTS,  # ComEd API returns prices in cents/kWh, not USD/kWh
             "source": self.source
         }
 
@@ -117,7 +117,7 @@ class ComedParser(BasePriceParser):
     def extract_metadata(self, data: Any) -> Dict[str, Any]:
         """Extract metadata from ComEd API response."""
         metadata = {
-            "currency": Currency.USD,
+            "currency": Currency.CENTS,  # ComEd API returns prices in cents/kWh, not USD/kWh
             "timezone": SourceTimezone.API_TIMEZONES.get(Source.COMED)
         }
 

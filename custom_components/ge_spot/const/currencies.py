@@ -14,6 +14,7 @@ class Currency:
     GEL = "GEL"  # Georgian lari
     AZN = "AZN"  # Azerbaijani manat
     USD = "USD"  # US dollar
+    CENTS = "cents"  # US cents (used by ComEd API)
 
 
 class CurrencyInfo:
@@ -90,8 +91,8 @@ class CurrencyInfo:
         "TAS1": Currency.AUD,
         "VIC1": Currency.AUD,
         # United States
-        "5minutefeed": Currency.USD,  # ComEd 5 minute feed
-        "currenthouraverage": Currency.USD,  # ComEd current hour average
+        "5minutefeed": Currency.CENTS,  # ComEd 5 minute feed (already in cents/kWh)
+        "currenthouraverage": Currency.CENTS,  # ComEd current hour average (already in cents/kWh)
     }
 
     # Currency subunit multipliers
@@ -108,6 +109,7 @@ class CurrencyInfo:
         Currency.GEL: 100,  # Georgian lari to tetri
         Currency.AZN: 100,  # Azerbaijani manat to qəpik
         Currency.USD: 100,  # US dollar to cents
+        Currency.CENTS: 1,   # cents are already in the smallest unit
     }
 
     # Currency subunit names
@@ -124,4 +126,5 @@ class CurrencyInfo:
         Currency.GEL: "tetri",
         Currency.AZN: "qəpik",
         Currency.USD: "cents",
+        Currency.CENTS: "cents",  # cents are already in the smallest unit
     }

@@ -82,7 +82,7 @@ class ExchangeRateService:
             }
 
             # ECB always uses EUR as the base currency
-            rates = {Currency.EUR: 1.0}
+            rates = {Currency.EUR: 1.0, Currency.CENTS: 100.0}  # Add cents with fixed rate to EUR
 
             # Find exchange rates in the XML
             for cube in root.findall(".//ecb:Cube[@currency]", ns):
@@ -112,6 +112,11 @@ class ExchangeRateService:
                 return False
 
             self.rates = data["rates"]
+            
+            # Ensure cents currency is always available
+            if Currency.CENTS not in self.rates:
+                self.rates[Currency.CENTS] = 100.0
+                
             self.last_update = data.get("timestamp", modified_time)
 
             age = time.time() - self.last_update
@@ -176,6 +181,19 @@ class ExchangeRateService:
         # Handle same currency early
         if from_currency == to_currency:
             return amount
+            
+        # Special handling for cents currency
+        if from_currency == Currency.CENTS and to_currency == Currency.USD:
+            # Convert from cents to USD (divide by 100)
+            result = amount / 100.0
+            _LOGGER.debug(f"Currency conversion: {amount} {from_currency} → {result} {to_currency} (cents to USD)")
+            return result
+            
+        if from_currency == Currency.USD and to_currency == Currency.CENTS:
+            # Convert from USD to cents (multiply by 100)
+            result = amount * 100.0
+            _LOGGER.debug(f"Currency conversion: {amount} {from_currency} → {result} {to_currency} (USD to cents)")
+            return result
 
         # Check if we have the rates
         if from_currency not in rates or to_currency not in rates:
