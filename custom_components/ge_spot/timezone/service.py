@@ -1,6 +1,6 @@
 """Main timezone service coordinating all timezone operations."""
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 from homeassistant.util import dt as dt_util
@@ -174,6 +174,14 @@ class TimezoneService:
 
     def get_current_hour_key(self):
         """Get the current hour key in the appropriate timezone based on the timezone reference setting."""
+        # Get current time in different timezones for debugging
+        now_utc = datetime.now(timezone.utc)
+        now_ha = datetime.now(self.ha_timezone)
+        now_area = datetime.now(self.area_timezone) if self.area_timezone else None
+        
+        _LOGGER.debug(f"Current time - UTC: {now_utc.strftime('%H:%M:%S')}, HA: {now_ha.strftime('%H:%M:%S')}" + 
+                     (f", Area ({self.area}): {now_area.strftime('%H:%M:%S')}" if now_area else ""))
+        
         hour_key = self.hour_calculator.get_current_hour_key()
 
         # Log which timezone is being used based on the timezone reference setting
@@ -184,7 +192,7 @@ class TimezoneService:
             used_tz = self.ha_timezone
             _LOGGER.debug(f"Using HA timezone {used_tz} for hour key (Home Assistant Time mode)")
 
-        _LOGGER.debug(f"Current hour key from calculator: {hour_key} (timezone: {used_tz})")
+        _LOGGER.debug(f"Current hour key from calculator: {hour_key} (timezone: {used_tz}, area: {self.area})")
         return hour_key
 
     def is_dst_transition_day(self, dt=None):

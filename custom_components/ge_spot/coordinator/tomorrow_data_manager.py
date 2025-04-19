@@ -85,15 +85,15 @@ class TomorrowDataManager:
         for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
             if start_hour == 13 and now.hour >= end_hour:
                 past_special_window = True
+                _LOGGER.debug(f"Past special window for tomorrow's data: {start_hour}:00-{end_hour}:00, current hour: {now.hour}:00")
                 break
 
         # If we're not past the special window, don't search
         if not past_special_window:
+            _LOGGER.debug(f"Not past special window for tomorrow's data yet, current hour: {now.hour}:00")
             return False
 
         # If we already have tomorrow's data, don't search
-        # This requires access to the last_successful_data from the coordinator
-        # We'll need to pass this information in or check the cache
         has_tomorrow_data = self._check_if_has_tomorrow_data()
         if has_tomorrow_data:
             # If search was active, log that we found tomorrow's data
@@ -101,6 +101,7 @@ class TomorrowDataManager:
                 _LOGGER.info("Found tomorrow's data, ending search")
                 self._search_active = False
                 self._attempt_count = 0
+            _LOGGER.debug("Already have tomorrow's data, no need to search")
             return False
 
         # If we're past 23:59, don't search (we'll get it as today's data after midnight)
@@ -112,7 +113,7 @@ class TomorrowDataManager:
 
         # If we haven't started searching yet, start now
         if not self._search_active:
-            _LOGGER.info("Starting search for tomorrow's data after special window")
+            _LOGGER.info(f"Starting search for tomorrow's data after special window (current hour: {now.hour}:00)")
             self._search_active = True
             self._attempt_count = 0
             self._last_attempt = None
@@ -132,7 +133,10 @@ class TomorrowDataManager:
 
             # If enough time has passed, try again
             if time_since_attempt >= wait_time:
+                _LOGGER.debug(f"Time since last attempt ({time_since_attempt:.1f} min) >= wait time ({wait_time:.1f} min), trying again")
                 return True
+            else:
+                _LOGGER.debug(f"Not enough time since last attempt ({time_since_attempt:.1f} min < {wait_time:.1f} min), waiting")
 
         return False
 

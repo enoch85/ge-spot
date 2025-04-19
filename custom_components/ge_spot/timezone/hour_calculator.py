@@ -52,6 +52,7 @@ class HourCalculator:
 
         # If area timezone is provided and using Local Area Time mode, use it for determining the current hour
         elif self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
+            # Use astimezone to properly convert the time to the area timezone
             now_display = now.astimezone(self.area_timezone)
             _LOGGER.debug(f"Using area timezone {self.area_timezone} for hour calculation")
         else:
@@ -78,7 +79,7 @@ class HourCalculator:
         # Normal case - use the current hour in the appropriate timezone
         hour_key = f"{now_display.hour:02d}:00"
         display_tz = self.area_timezone if self.area_timezone else self.system_timezone
-        _LOGGER.debug(f"Current hour determined as {hour_key} from datetime {now_display.isoformat()}")
+        _LOGGER.debug(f"Current hour determined as {hour_key} from datetime {now_display.isoformat()} (timezone: {display_tz})")
         return hour_key
 
     def get_next_hour_key(self) -> str:

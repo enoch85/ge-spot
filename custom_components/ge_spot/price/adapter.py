@@ -33,14 +33,16 @@ class ElectricityPriceAdapter:
 
             if "hourly_prices" in item and isinstance(item["hourly_prices"], dict):
                 # Store formatted hour -> price mapping
+                _LOGGER.debug(f"Found hourly_prices in raw data: {len(item['hourly_prices'])} entries")
                 for hour_str, price in item["hourly_prices"].items():
                     try:
                         hour = int(hour_str.split(":")[0])
                         if 0 <= hour < 24:  # Only accept valid hours
                             hourly_prices[f"{hour:02d}:00"] = price
                     except (ValueError, IndexError):
-                        pass
+                        _LOGGER.warning(f"Invalid hour format in hourly_prices: {hour_str}")
 
+        _LOGGER.debug(f"Extracted {len(hourly_prices)} hourly prices: {sorted(hourly_prices.keys())}")
         return hourly_prices
 
     def _extract_tomorrow_prices(self) -> Dict[str, float]:
@@ -53,14 +55,16 @@ class ElectricityPriceAdapter:
 
             if "tomorrow_hourly_prices" in item and isinstance(item["tomorrow_hourly_prices"], dict):
                 # Store formatted hour -> price mapping
+                _LOGGER.debug(f"Found tomorrow_hourly_prices in raw data: {len(item['tomorrow_hourly_prices'])} entries")
                 for hour_str, price in item["tomorrow_hourly_prices"].items():
                     try:
                         hour = int(hour_str.split(":")[0])
                         if 0 <= hour < 24:  # Only accept valid hours
                             tomorrow_prices[f"{hour:02d}:00"] = price
                     except (ValueError, IndexError):
-                        pass
+                        _LOGGER.warning(f"Invalid hour format in tomorrow_hourly_prices: {hour_str}")
 
+        _LOGGER.debug(f"Extracted {len(tomorrow_prices)} tomorrow prices: {sorted(tomorrow_prices.keys())}")
         return tomorrow_prices
 
     def _convert_to_price_list(self, price_dict: Dict[str, float]) -> List[float]:
@@ -83,14 +87,19 @@ class ElectricityPriceAdapter:
             # Pass area and config to TimezoneService
             tz_service = TimezoneService(self.hass, area, config)
             hour_str = tz_service.get_current_hour_key()
+            _LOGGER.debug(f"Using TimezoneService for area {area} to get current hour: {hour_str}")
+            _LOGGER.debug(f"TimezoneService details - HA timezone: {tz_service.ha_timezone}, Area timezone: {tz_service.area_timezone}, Reference: {tz_service.timezone_reference}")
         else:
             now = dt_util.now()
             hour_str = f"{now.hour:02d}:00"
+            _LOGGER.debug(f"No TimezoneService available, using system time for current hour: {hour_str}")
 
-        _LOGGER.debug(f"Looking for current price at hour {hour_str}")
+        _LOGGER.debug(f"Looking for current price at hour {hour_str}, available hours: {sorted(list(self.hourly_prices.keys()))}")
 
         if hour_str in self.hourly_prices:
-            return self.hourly_prices[hour_str]
+            price = self.hourly_prices[hour_str]
+            _LOGGER.debug(f"Found current price for hour {hour_str}: {price}")
+            return price
 
         # If key not found, log error and return None
         _LOGGER.error(f"Current hour key '{hour_str}' not found in available hours: {sorted(list(self.hourly_prices.keys()))}")
@@ -106,15 +115,19 @@ class ElectricityPriceAdapter:
             current_hour_key = tz_service.get_current_hour_key()
             hour = int(current_hour_key.split(':')[0])
             next_hour = (hour + 1) % 24
+            _LOGGER.debug(f"Using TimezoneService for area {area} to get next hour: current hour {current_hour_key} -> next hour {next_hour:02d}:00")
         else:
             now = dt_util.now()
             next_hour = (now.hour + 1) % 24
+            _LOGGER.debug(f"No TimezoneService available, using system time for next hour: {next_hour:02d}:00")
 
         hour_str = f"{next_hour:02d}:00"
-        _LOGGER.debug(f"Looking for next price at hour {hour_str}")
+        _LOGGER.debug(f"Looking for next price at hour {hour_str}, available hours: {sorted(list(self.hourly_prices.keys()))}")
 
         if hour_str in self.hourly_prices:
-            return self.hourly_prices[hour_str]
+            price = self.hourly_prices[hour_str]
+            _LOGGER.debug(f"Found next price for hour {hour_str}: {price}")
+            return price
 
         # If key not found, log error and return None
         _LOGGER.error(f"Next hour key '{hour_str}' not found in available hours: {sorted(list(self.hourly_prices.keys()))}")
@@ -199,4 +212,6 @@ class ElectricityPriceAdapter:
     def is_tomorrow_valid(self) -> bool:
         """Check if tomorrow's data is available."""
         # Consider valid if we have at least 20 hours of data
-        return len(self.tomorrow_list) >= 20
+        is_valid = len(self.tomorrow_list) >= 20
+        _LOGGER.debug(f"Tomorrow data validation: {len(self.tomorrow_list)}/24 hours available, valid: {is_valid}")
+        return is_valid
