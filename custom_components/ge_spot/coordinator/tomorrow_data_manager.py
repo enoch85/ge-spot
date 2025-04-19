@@ -92,18 +92,6 @@ class TomorrowDataManager:
                 self._search_active = False
             return False
 
-        # Check if we're in the special window for tomorrow's data (13:00-14:00)
-        in_special_window = False
-        for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
-            if start_hour == 13 and start_hour <= now.hour < end_hour:
-                in_special_window = True
-                _LOGGER.debug(f"In special window for tomorrow's data: {start_hour}:00-{end_hour}:00, current hour: {now.hour}:00")
-                break
-
-        # If we're in the special window, always search
-        if in_special_window:
-            _LOGGER.info(f"In special window for tomorrow's data: 13:00-14:00, current hour: {now.hour}:00")
-            return True
 
         # If we're past 13:00, start/continue active search with exponential backoff
         if now.hour >= 13:
@@ -136,7 +124,7 @@ class TomorrowDataManager:
             return True
 
         # Before 13:00, don't actively search (but we'll still check during regular updates)
-        _LOGGER.debug(f"Before special window for tomorrow's data, current hour: {now.hour}:00")
+        _LOGGER.debug(f"Before start time for tomorrow's data search, current hour: {now.hour}:00")
         return False
 
     def _check_if_has_tomorrow_data(self) -> bool:
@@ -218,7 +206,7 @@ class TomorrowDataManager:
             min_interval=Defaults.TOMORROW_DATA_INITIAL_RETRY_MINUTES
         )
         
-        if should_skip and not (13 <= current_time.hour < 14):  # Always allow during special window
+        if should_skip:  # No special window exception anymore, just use rate limiter consistently
             _LOGGER.debug(f"Rate limiter suggests skipping tomorrow data fetch: {skip_reason}")
             return False
 
