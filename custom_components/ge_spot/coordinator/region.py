@@ -161,13 +161,34 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 await self._tomorrow_data_manager.fetch_data()
                 # Continue with normal update regardless of tomorrow data search result
 
+            # Check if we have current hour price in cache
+            has_current_hour_price = self._cache_manager.has_current_hour_price(self.area)
+            
             # Determine if we need to fetch from API
             need_api_fetch, api_fetch_reason = self._fetch_decision_maker.should_fetch(
                 now=now,
                 last_fetch=self._last_api_fetch,
                 fetch_interval=self._api_fetch_interval,
-                has_current_hour_price=self._cache_manager.has_current_hour_price(self.area)
+                has_current_hour_price=has_current_hour_price
             )
+            
+            # Additional rate limiter check
+            if need_api_fetch and has_current_hour_price:
+                from ..utils.rate_limiter import RateLimiter
+                should_skip, skip_reason = RateLimiter.should_skip_fetch(
+                    last_fetched=self._last_api_fetch,
+                    current_time=now,
+                    consecutive_failures=self._consecutive_failures,
+                    last_failure_time=self._last_failure_time,
+                    min_interval=self._api_fetch_interval,
+                    source=self._active_source,
+                    area=self.area
+                )
+                
+                if should_skip:
+                    _LOGGER.debug(f"Rate limiter suggests skipping fetch: {skip_reason}")
+                    need_api_fetch = False
+                    api_fetch_reason = skip_reason
 
             # Get current hour key for later use
             current_hour_key = self._tz_service.get_current_hour_key()

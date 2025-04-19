@@ -148,8 +148,10 @@ class TomorrowDataManager:
                 return True
             else:
                 _LOGGER.debug(f"Not enough time since last attempt ({time_since_attempt:.1f} min < {wait_time:.1f} min), waiting")
+                return False  # Explicitly return False when not enough time has passed
 
-        return False
+        # First attempt after starting search
+        return True
 
     def _check_if_has_tomorrow_data(self) -> bool:
         """Check if we already have tomorrow's data.

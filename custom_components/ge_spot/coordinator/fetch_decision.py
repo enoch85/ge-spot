@@ -45,32 +45,31 @@ class FetchDecisionMaker:
         hour = now.hour
         for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
             if start_hour <= hour < end_hour:
-                # During special windows, only fetch if:
-                # 1. We don't have data for the current hour, or
-                # 2. It's been at least 30 seconds since the last fetch
+                # During special windows, only fetch if we don't have data for the current hour
                 if not has_current_hour_price:
                     reason = f"Special time window ({start_hour}-{end_hour}), no data for current hour, fetching from API"
                     _LOGGER.info(reason)
                     need_api_fetch = True
                     break
-                elif last_fetch:
-                    time_since_fetch = (now - last_fetch).total_seconds()
-                    if time_since_fetch >= 30:  # Only fetch every 30 seconds during special hours
-                        reason = f"Special time window ({start_hour}-{end_hour}), {time_since_fetch:.1f}s since last fetch, fetching from API"
-                        _LOGGER.info(reason)
-                        need_api_fetch = True
-                        break
-                    else:
-                        # We have current hour data and fetched recently, skip this fetch
-                        reason = f"Special time window ({start_hour}-{end_hour}), but fetched {time_since_fetch:.1f}s ago, skipping"
-                        _LOGGER.debug(reason)
                 else:
-                    # No last_fetch time but we have current hour data (unlikely)
-                    reason = f"Special time window ({start_hour}-{end_hour}), forcing API update (no last fetch time)"
-                    _LOGGER.info(reason)
-                    need_api_fetch = True
-                    break
+                    # We have current hour data, no need to fetch during special window
+                    reason = f"Special time window ({start_hour}-{end_hour}), but we already have current hour data, skipping"
+                    _LOGGER.debug(reason)
+                    return False, reason
 
+        # Use the rate limiter to make the decision
+        from ..utils.rate_limiter import RateLimiter
+        should_skip, skip_reason = RateLimiter.should_skip_fetch(
+            last_fetched=last_fetch,
+            current_time=now,
+            min_interval=fetch_interval
+        )
+        
+        if should_skip and has_current_hour_price:
+            reason = f"Rate limiter suggests skipping fetch: {skip_reason}"
+            _LOGGER.debug(reason)
+            return False, reason
+            
         # Check if API fetch interval has passed
         if not need_api_fetch and last_fetch:
             time_since_fetch = (now - last_fetch).total_seconds() / 60
