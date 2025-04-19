@@ -70,6 +70,11 @@ class TomorrowDataManager:
         Returns:
             True if we should search for tomorrow's data
         """
+        # Always check if we already have tomorrow's data first
+        if self._check_if_has_tomorrow_data():
+            _LOGGER.debug("Already have tomorrow's data, no need to search")
+            return False
+            
         # Reset search at midnight
         if now.hour == 0 and now.minute < 15:
             if self._search_active:
@@ -80,78 +85,59 @@ class TomorrowDataManager:
                 self._search_end_time = None
             return False
 
-        # Check if we're in or past the special window for tomorrow's data (13:00-14:00)
-        in_special_window = False
-        past_special_window = False
-        for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
-            if start_hour == 13:
-                if start_hour <= now.hour < end_hour:
-                    in_special_window = True
-                    _LOGGER.debug(f"In special window for tomorrow's data: {start_hour}:00-{end_hour}:00, current hour: {now.hour}:00")
-                    break
-                elif now.hour >= end_hour:
-                    past_special_window = True
-                    _LOGGER.debug(f"Past special window for tomorrow's data: {start_hour}:00-{end_hour}:00, current hour: {now.hour}:00")
-                    break
-
-        # If we're in the special window, we should search
-        if in_special_window:
-            _LOGGER.info(f"In special window for tomorrow's data: 13:00-14:00, current hour: {now.hour}:00")
-            return True
-        
-        # If we're not past the special window, don't search
-        if not past_special_window:
-            _LOGGER.debug(f"Not past special window for tomorrow's data yet, current hour: {now.hour}:00")
-            return False
-
-        # If we already have tomorrow's data, don't search
-        has_tomorrow_data = self._check_if_has_tomorrow_data()
-        if has_tomorrow_data:
-            # If search was active, log that we found tomorrow's data
-            if self._search_active:
-                _LOGGER.info("Found tomorrow's data, ending search")
-                self._search_active = False
-                self._attempt_count = 0
-            _LOGGER.debug("Already have tomorrow's data, no need to search")
-            return False
-
-        # If we're past 23:59, don't search (we'll get it as today's data after midnight)
+        # Stop searching as we approach midnight
         if now.hour >= 23 and now.minute >= 45:
             if self._search_active:
                 _LOGGER.info("Approaching midnight, ending tomorrow data search")
                 self._search_active = False
             return False
 
-        # If we haven't started searching yet, start now
-        if not self._search_active:
-            _LOGGER.info(f"Starting search for tomorrow's data after special window (current hour: {now.hour}:00)")
-            self._search_active = True
-            self._attempt_count = 0
-            self._last_attempt = None
+        # Check if we're in the special window for tomorrow's data (13:00-14:00)
+        in_special_window = False
+        for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
+            if start_hour == 13 and start_hour <= now.hour < end_hour:
+                in_special_window = True
+                _LOGGER.debug(f"In special window for tomorrow's data: {start_hour}:00-{end_hour}:00, current hour: {now.hour}:00")
+                break
 
-            # Set end time to 23:45 today
-            end_time = now.replace(hour=23, minute=45, second=0, microsecond=0)
-            self._search_end_time = end_time
+        # If we're in the special window, always search
+        if in_special_window:
+            _LOGGER.info(f"In special window for tomorrow's data: 13:00-14:00, current hour: {now.hour}:00")
             return True
 
-        # If we're already searching, check if it's time for the next attempt
-        if self._last_attempt:
-            # Calculate time since last attempt
-            time_since_attempt = (now - self._last_attempt).total_seconds() / 60
-
-            # Calculate wait time based on exponential backoff
-            wait_time = self.calculate_wait_time()
-
-            # If enough time has passed, try again
-            if time_since_attempt >= wait_time:
-                _LOGGER.debug(f"Time since last attempt ({time_since_attempt:.1f} min) >= wait time ({wait_time:.1f} min), trying again")
+        # If we're past 13:00, start/continue active search with exponential backoff
+        if now.hour >= 13:
+            # If we haven't started searching yet, start now
+            if not self._search_active:
+                _LOGGER.info(f"Starting search for tomorrow's data (current hour: {now.hour}:00)")
+                self._search_active = True
+                self._attempt_count = 0
+                self._last_attempt = None
+                self._search_end_time = now.replace(hour=23, minute=45, second=0, microsecond=0)
                 return True
-            else:
-                _LOGGER.debug(f"Not enough time since last attempt ({time_since_attempt:.1f} min < {wait_time:.1f} min), waiting")
-                return False  # Explicitly return False when not enough time has passed
 
-        # First attempt after starting search
-        return True
+            # If we're already searching, check if it's time for the next attempt
+            if self._last_attempt:
+                # Calculate time since last attempt
+                time_since_attempt = (now - self._last_attempt).total_seconds() / 60
+
+                # Calculate wait time based on exponential backoff
+                wait_time = self.calculate_wait_time()
+
+                # If enough time has passed, try again
+                if time_since_attempt >= wait_time:
+                    _LOGGER.debug(f"Time since last attempt ({time_since_attempt:.1f} min) >= wait time ({wait_time:.1f} min), trying again")
+                    return True
+                else:
+                    _LOGGER.debug(f"Not enough time since last attempt ({time_since_attempt:.1f} min < {wait_time:.1f} min), waiting")
+                    return False
+
+            # First attempt after starting search
+            return True
+
+        # Before 13:00, don't actively search (but we'll still check during regular updates)
+        _LOGGER.debug(f"Before special window for tomorrow's data, current hour: {now.hour}:00")
+        return False
 
     def _check_if_has_tomorrow_data(self) -> bool:
         """Check if we already have tomorrow's data.
@@ -217,13 +203,32 @@ class TomorrowDataManager:
         Returns:
             True if tomorrow's data was found
         """
+        # Check if we already have tomorrow's data
+        if self._check_if_has_tomorrow_data():
+            _LOGGER.debug("Already have tomorrow's data, skipping fetch")
+            return True
+
+        # Check rate limiter before proceeding
+        current_time = dt_util.now()
+        from ..utils.rate_limiter import RateLimiter
+        should_skip, skip_reason = RateLimiter.should_skip_fetch(
+            last_fetched=self._last_attempt,
+            current_time=current_time,
+            consecutive_failures=0,  # We track our own failures
+            min_interval=Defaults.TOMORROW_DATA_INITIAL_RETRY_MINUTES
+        )
+        
+        if should_skip and not (13 <= current_time.hour < 14):  # Always allow during special window
+            _LOGGER.debug(f"Rate limiter suggests skipping tomorrow data fetch: {skip_reason}")
+            return False
+
         _LOGGER.info(f"Attempting to fetch tomorrow's data (attempt {self._attempt_count + 1})")
 
         # Update attempt tracking
         self._attempt_count += 1
         self._last_attempt = dt_util.now()
 
-        # Use FallbackManager to try all sources
+        # Use FallbackManager to try all sources in parallel
         fallback_mgr = FallbackManager(
             hass=self.hass,
             config=self.config,
@@ -254,13 +259,32 @@ class TomorrowDataManager:
                 self._has_tomorrow_data = True
 
                 # Force a regular update to use the new data
-                # This requires access to the coordinator's async_request_refresh method
-                # We'll need to handle this differently or pass a callback
                 await self._request_refresh_callback()
 
                 return True
             else:
                 _LOGGER.info(f"Source {result['source']} returned data but no valid tomorrow data")
+                
+                # Try fallback sources if available
+                for fb_source in result.get("fallback_sources", []):
+                    if fb_source != result["source"] and f"fallback_data_{fb_source}" in result:
+                        fb_data = result[f"fallback_data_{fb_source}"]
+                        fb_adapter = ElectricityPriceAdapter(self.hass, [fb_data], self._use_subunit)
+                        
+                        if fb_adapter.is_tomorrow_valid():
+                            _LOGGER.info(f"Found tomorrow's data in fallback source {fb_source}")
+                            
+                            # Store the fallback data in cache
+                            self._price_cache.store(fb_data, self.area, fb_source, dt_util.now())
+                            
+                            # Update our tracking variables
+                            self._search_active = False
+                            self._has_tomorrow_data = True
+                            
+                            # Force a regular update to use the new data
+                            await self._request_refresh_callback()
+                            
+                            return True
 
         # If we reach here, we didn't find tomorrow's data
         _LOGGER.info(f"No tomorrow data found, will try again in {self.calculate_wait_time():.1f} minutes")

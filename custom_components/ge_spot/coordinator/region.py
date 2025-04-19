@@ -129,6 +129,21 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 _async_cleanup_cache,
                 timedelta(days=1)
             )
+            
+            # Schedule independent tomorrow data check
+            # This ensures tomorrow data search continues even when using cached data for today
+            async def _async_check_tomorrow_data(*_):
+                now = dt_util.now()
+                if self._tomorrow_data_manager.should_search(now):
+                    _LOGGER.info("Scheduled check for tomorrow's data")
+                    await self._tomorrow_data_manager.fetch_data()
+                    
+            # Check every 5 minutes - the tomorrow data manager will handle rate limiting internally
+            self.tomorrow_data_job = async_track_time_interval(
+                hass,
+                _async_check_tomorrow_data,
+                timedelta(minutes=5)
+            )
 
     async def check_api_key_status(self):
         """Check status of configured API keys and report in attributes."""
@@ -151,20 +166,17 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from cache or API as appropriate."""
         try:
-            # Always check for special time windows
+            # Get current time and hour
             now = dt_util.now()
             hour = now.hour
 
-            # Check if we should search for tomorrow's data
-            if self._tomorrow_data_manager.should_search(now):
-                _LOGGER.info("Searching for tomorrow's data")
-                await self._tomorrow_data_manager.fetch_data()
-                # Continue with normal update regardless of tomorrow data search result
+            # Note: Tomorrow data search is now handled by a separate scheduler
+            # This ensures it continues even when using cached data for today
 
             # Check if we have current hour price in cache
             has_current_hour_price = self._cache_manager.has_current_hour_price(self.area)
             
-            # Determine if we need to fetch from API
+            # Determine if we need to fetch today's data from API
             need_api_fetch, api_fetch_reason = self._fetch_decision_maker.should_fetch(
                 now=now,
                 last_fetch=self._last_api_fetch,
@@ -172,7 +184,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 has_current_hour_price=has_current_hour_price
             )
             
-            # Additional rate limiter check
+            # Additional rate limiter check for today's data
             if need_api_fetch and has_current_hour_price:
                 from ..utils.rate_limiter import RateLimiter
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
@@ -186,7 +198,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 )
                 
                 if should_skip:
-                    _LOGGER.debug(f"Rate limiter suggests skipping fetch: {skip_reason}")
+                    _LOGGER.debug(f"Rate limiter suggests skipping today's data fetch: {skip_reason}")
                     need_api_fetch = False
                     api_fetch_reason = skip_reason
 
@@ -436,6 +448,19 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
     # The tomorrow data functionality has been moved to TomorrowDataManager
 
     async def async_close(self):
-        """Close all API sessions."""
+        """Close all API sessions and cancel scheduled jobs."""
+        # Cancel the tomorrow data job if it exists
+        if hasattr(self, 'tomorrow_data_job') and self.tomorrow_data_job:
+            self.tomorrow_data_job()
+            self.tomorrow_data_job = None
+            _LOGGER.debug("Cancelled tomorrow data job")
+            
+        # Cancel the cleanup job if it exists
+        if hasattr(self, 'cleanup_job') and self.cleanup_job:
+            self.cleanup_job()
+            self.cleanup_job = None
+            _LOGGER.debug("Cancelled cache cleanup job")
+            
+        # Close the session if it exists
         if self.session:
             await close_session(self)
