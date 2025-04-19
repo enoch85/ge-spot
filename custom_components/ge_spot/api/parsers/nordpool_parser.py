@@ -153,7 +153,7 @@ class NordpoolPriceParser(BasePriceParser):
             
         # If neither found, look for any matching hour regardless of date
         for key, price in hourly_prices.items():
-            if "T" in key:
+            if "T" in key:  # Check for ISO format key, matching ENTSO-E approach
                 try:
                     dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
                     if dt.hour == current_hour.hour:
@@ -190,7 +190,7 @@ class NordpoolPriceParser(BasePriceParser):
             
         # If neither found, look for any matching hour regardless of date
         for key, price in hourly_prices.items():
-            if "T" in key:
+            if "T" in key:  # Check for ISO format key, matching ENTSO-E approach
                 try:
                     dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
                     if dt.hour == next_hour.hour:
@@ -219,7 +219,7 @@ class NordpoolPriceParser(BasePriceParser):
         today_prices = []
         for hour_key, price in hourly_prices.items():
             try:
-                if "T" in hour_key:
+                if "T" in hour_key:  # Check for ISO format key, matching ENTSO-E approach
                     hour_dt = datetime.fromisoformat(hour_key.replace('Z', '+00:00'))
                     if hour_dt.date() == today:
                         today_prices.append(price)

@@ -1,6 +1,6 @@
 """API handler for Nordpool."""
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 from typing import Dict, Any, Optional
 
 from ..utils.api_client import ApiClient
@@ -193,8 +193,15 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             current_hour_key = tz_service.get_current_hour_key()
             if current_hour_key in result["hourly_prices"]:
                 result["current_price"] = result["hourly_prices"][current_hour_key]
+                
+                # Create raw value entry - match ENTSO-E approach for handling timestamps
+                original_hour = int(current_hour_key.split(":")[0])
+                current_dt = datetime.now().replace(hour=original_hour)
+                current_dt = tz_service.converter.convert(current_dt, source_tz=source_timezone)
+                original_hour_key = f"{current_dt.hour:02d}:00"
+                
                 result["raw_values"]["current_price"] = {
-                    "raw": raw_hourly_prices.get(current_hour_key),
+                    "raw": raw_hourly_prices.get(original_hour_key),
                     "unit": f"{Currency.EUR}/MWh",
                     "final": result["current_price"],
                     "currency": currency,
