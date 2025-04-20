@@ -86,8 +86,12 @@ class PriceCache:
             source: The data source (e.g., 'nordpool', 'entsoe')
             last_api_fetch: Optional timestamp of when the data was fetched from the API
         """
-        if not data or "hourly_prices" not in data:
+        if not data:
             return False
+            
+        # Initialize hourly_prices if it doesn't exist
+        if "hourly_prices" not in data:
+            data["hourly_prices"] = {}
 
         # Get today's date in area-specific timezone
         tz_service = TimezoneService(self.hass, area, self.config)
@@ -133,6 +137,18 @@ class PriceCache:
 
         # Store tomorrow's data if available
         if "tomorrow_hourly_prices" in data and data["tomorrow_hourly_prices"]:
+            # First check if current hour is in tomorrow data (near day boundary)
+            current_hour_key = tz_service.get_current_hour_key()
+            next_hour = (int(current_hour_key.split(":")[0]) + 1) % 24
+            next_hour_key = f"{next_hour:02d}:00"
+            
+            # Check if current or next hour appears in tomorrow data
+            for hour_key in [current_hour_key, next_hour_key]:
+                if hour_key in data["tomorrow_hourly_prices"]:
+                    _LOGGER.info(f"Found {hour_key} in tomorrow data - moving to today data for proper caching")
+                    # Move this hour from tomorrow to today data to prevent fetch loops
+                    data["hourly_prices"][hour_key] = data["tomorrow_hourly_prices"][hour_key]
+            
             tomorrow_date = now.date() + timedelta(days=1)
             tomorrow_str = tomorrow_date.strftime("%Y-%m-%d")
 

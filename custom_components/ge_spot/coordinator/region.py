@@ -387,11 +387,12 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     if fb_source != result["source"] and f"fallback_data_{fb_source}" in result:
                         self._fallback_data[fb_source] = result[f"fallback_data_{fb_source}"]
 
-                # Store in cache with last API fetch time
-                self._cache_manager.store(data, self.area, result["source"], self._last_api_fetch)
+                # Store in cache with current time
+                current_time = dt_util.now()
+                self._cache_manager.store(data, self.area, result["source"], current_time)
 
                 # Update tracker variables for timestamps
-                self._last_api_fetch = dt_util.now()
+                self._last_api_fetch = current_time
                 self._next_scheduled_api_fetch = self._last_api_fetch + timedelta(minutes=self._api_fetch_interval)
                 
                 # Update global registry to share API fetch time with all components
