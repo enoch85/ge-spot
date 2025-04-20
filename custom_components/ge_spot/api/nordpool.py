@@ -208,8 +208,10 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             result["tomorrow_hourly_prices"] = {}
 
         # Convert and reorganize today and tomorrow prices based on local timezone
+        # Force source_timezone to 'Etc/UTC' for Nordpool as timestamps are UTC with 'Z' suffix
+        # This ensures proper timezone conversion regardless of what extract_source_timezone returns
         converted_today, converted_tomorrow = tz_service.normalize_hourly_prices_with_tomorrow(
-            raw_today_hourly_prices, raw_tomorrow_hourly_prices, source_timezone)
+            raw_today_hourly_prices, raw_tomorrow_hourly_prices, 'Etc/UTC')  # Use standard Etc/UTC format
             
         _LOGGER.debug(f"After normalization: Today prices: {len(converted_today)}, Tomorrow prices: {len(converted_tomorrow)}")
 
