@@ -177,11 +177,17 @@ async def test_parsers_with_api(
                     # Create adapter to test data
                     adapter = ElectricityPriceAdapter(mock_hass, [data], False)
                     
+                    # Get the actual hour count for today's data
+                    today_hours = len(adapter.today_hourly_prices) if hasattr(adapter, "today_hourly_prices") else 0
+                    
+                    # Consider data valid only if we have at least 12 hours
+                    has_valid_data = data is not None and today_hours >= 12
+                    
                     # Store the result
                     results[api_name] = {
                         "area": area,
-                        "has_data": data is not None,
-                        "today_hours": len(adapter.hourly_prices) if hasattr(adapter, "hourly_prices") else 0,
+                        "has_data": has_valid_data,
+                        "today_hours": today_hours,
                         "status": "success" if data else "failure",
                         "data_source": "api"
                     }
@@ -197,10 +203,16 @@ async def test_parsers_with_api(
                 mock_hass = MockHass()
                 adapter = ElectricityPriceAdapter(mock_hass, [data], False)
                 
+                # Get the actual hour count for today's data
+                today_hours = len(adapter.today_hourly_prices) if hasattr(adapter, "today_hourly_prices") else 0
+                
+                # Consider data valid only if we have at least 12 hours
+                has_valid_data = data is not None and today_hours >= 12
+                
                 results[api_name] = {
                     "area": area,
-                    "has_data": data is not None,
-                    "today_hours": len(adapter.hourly_prices) if hasattr(adapter, "hourly_prices") else 0,
+                    "has_data": has_valid_data,
+                    "today_hours": today_hours,
                     "status": "success" if data else "failure",
                     "data_source": "cache"
                 }
@@ -288,8 +300,14 @@ async def test_tdm(
             # Create adapter to test data
             adapter = ElectricityPriceAdapter(mock_hass, [data], False)
             
-            results["has_data"] = True
-            results["today_hours"] = len(adapter.hourly_prices) if hasattr(adapter, "hourly_prices") else 0
+            # Get today hours count
+            today_hours = len(adapter.today_hourly_prices) if hasattr(adapter, "today_hourly_prices") else 0
+            
+            # Consider data valid only if we have enough hours
+            has_valid_data = today_hours >= 12
+            
+            results["has_data"] = has_valid_data
+            results["today_hours"] = today_hours
             results["active_source"] = tdm._active_source
             results["attempted_sources"] = tdm._attempted_sources
             results["consecutive_failures"] = tdm._consecutive_failures

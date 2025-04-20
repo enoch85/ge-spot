@@ -257,14 +257,14 @@ async def test_api_direct(api_name: str, area: str) -> Dict[str, Any]:
         # Log the raw data structure
         logger.info(f"Raw data keys: {data.keys()}")
         
-        # Check if we have hourly_prices
-        if "hourly_prices" in data:
-            hourly_prices = data["hourly_prices"]
-            results["today_hours"] = len(hourly_prices)
-            logger.info(f"Hourly prices: {len(hourly_prices)} entries")
+        # Check if we have today_hourly_prices
+        if "today_hourly_prices" in data:
+            today_hourly_prices = data["today_hourly_prices"]
+            results["today_hours"] = len(today_hourly_prices)
+            logger.info(f"Hourly prices: {len(today_hourly_prices)} entries")
             
             # Log sample entries
-            sample_entries = list(hourly_prices.items())[:5]
+            sample_entries = list(today_hourly_prices.items())[:5]
             logger.info(f"Sample hourly prices: {sample_entries}")
         
         # Check if we have tomorrow_hourly_prices
