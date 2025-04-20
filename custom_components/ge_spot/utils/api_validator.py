@@ -44,8 +44,17 @@ class ApiValidator:
 
         # Additional checks specific to this validator
 
-        # Check number of hours available
-        hour_count = len(data.get("hourly_prices", {}))
+        # Check number of hours available - try new format first, fall back to legacy
+        today_hour_count = len(data.get("today_hourly_prices", {}))
+        tomorrow_hour_count = len(data.get("tomorrow_hourly_prices", {}))
+        legacy_hour_count = len(data.get("hourly_prices", {}))
+        
+        # Use today hours if available, otherwise use legacy format
+        hour_count = today_hour_count if today_hour_count > 0 else legacy_hour_count
+        
+        # Log if we have tomorrow data
+        if tomorrow_hour_count > 0:
+            _LOGGER.debug(f"Found {tomorrow_hour_count} hours of tomorrow's data for {source_name}")
 
         # Special handling for sources with different data availability patterns
         if source_name.lower() == Source.AEMO.lower():
@@ -70,11 +79,14 @@ class ApiValidator:
                 tz_service = TimezoneService()
                 current_hour_key = tz_service.get_current_hour_key()
 
-                if current_hour_key not in data.get("hourly_prices", {}):
+                # Try to find current hour in today_hourly_prices first, then fallback to hourly_prices
+                if "today_hourly_prices" in data and current_hour_key in data["today_hourly_prices"]:
+                    current_price = data["today_hourly_prices"][current_hour_key]
+                elif "hourly_prices" in data and current_hour_key in data["hourly_prices"]:
+                    current_price = data["hourly_prices"][current_hour_key]
+                else:
                     _LOGGER.warning(f"Current hour {current_hour_key} missing from {source_name}")
                     return False
-
-                current_price = data["hourly_prices"][current_hour_key]
                 if current_price is None or not isinstance(current_price, (int, float)):
                     _LOGGER.warning(f"Invalid current hour price from {source_name}: {current_price}")
                     return False

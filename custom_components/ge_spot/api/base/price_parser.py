@@ -120,9 +120,17 @@ class BasePriceParser(ABC):
         Returns:
             Metadata dictionary
         """
+        today_count = len(data.get("today_hourly_prices", {}))
+        tomorrow_count = len(data.get("tomorrow_hourly_prices", {}))
+        
+        # For backward compatibility
+        legacy_count = len(data.get("hourly_prices", {}))
+        
         metadata = {
             "source": self.source,
-            "price_count": len(data.get("hourly_prices", {})),
+            "today_price_count": today_count,
+            "tomorrow_price_count": tomorrow_count,
+            "price_count": legacy_count or today_count,  # For backward compatibility
             "currency": data.get("currency", "EUR"),
             "has_current_price": "current_price" in data and data["current_price"] is not None,
             "has_next_hour_price": "next_hour_price" in data and data["next_hour_price"] is not None,
@@ -140,14 +148,22 @@ class BasePriceParser(ABC):
         Returns:
             True if data is valid, False otherwise
         """
-        # Check if hourly prices exist
-        if "hourly_prices" not in data or not isinstance(data["hourly_prices"], dict):
-            _LOGGER.warning(f"{self.source}: Missing or invalid hourly_prices")
-            return False
-
-        # Check if there are any prices
-        if not data["hourly_prices"]:
+        # First check for today_hourly_prices (preferred format)
+        if "today_hourly_prices" in data and isinstance(data["today_hourly_prices"], dict):
+            if data["today_hourly_prices"]:
+                return True
+            else:
+                # Empty today_hourly_prices is fine if we have tomorrow data
+                if "tomorrow_hourly_prices" in data and isinstance(data["tomorrow_hourly_prices"], dict) and data["tomorrow_hourly_prices"]:
+                    return True
+                _LOGGER.warning(f"{self.source}: Empty today_hourly_prices and no tomorrow data")
+                
+        # For backward compatibility, check hourly_prices
+        if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
+            if data["hourly_prices"]:
+                return True
             _LOGGER.warning(f"{self.source}: No hourly prices found")
             return False
-
-        return True
+            
+        _LOGGER.warning(f"{self.source}: Missing or invalid hourly price data")
+        return False

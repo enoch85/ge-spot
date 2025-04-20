@@ -60,18 +60,39 @@ class DataQualityScore:
             "next_hour_price",
             "day_average_price"
         ]
+        
+        # Optional but valuable fields
+        valuable_fields = [
+            "tomorrow_hourly_prices"
+        ]
 
         # Count present fields
         present = sum(1 for field in required_fields if field in data and data[field] is not None)
+        valuable_present = sum(1 for field in valuable_fields if field in data and data[field] is not None)
 
         # Check hourly prices
         hourly_completeness = 0.0
         if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
             # Expect 24 hours
             hourly_completeness = len(data["hourly_prices"]) / 24
+            
+        # Check tomorrow hourly prices
+        tomorrow_completeness = 0.0
+        if "tomorrow_hourly_prices" in data and isinstance(data["tomorrow_hourly_prices"], dict):
+            # Expect 24 hours
+            tomorrow_completeness = len(data["tomorrow_hourly_prices"]) / 24
 
-        # Combine scores
-        return 0.7 * (present / len(required_fields)) + 0.3 * hourly_completeness
+        # Combine scores - weight required fields, hourly completeness, and tomorrow data
+        # 50% for required fields, 25% for today hours, 25% for tomorrow hours
+        required_score = 0.5 * (present / max(1, len(required_fields)))
+        today_score = 0.25 * hourly_completeness
+        tomorrow_score = 0.25 * tomorrow_completeness
+        
+        # Add bonus for having valuable fields
+        valuable_bonus = 0.1 * (valuable_present / max(1, len(valuable_fields)))
+        
+        # Cap total score at 1.0
+        return min(1.0, required_score + today_score + tomorrow_score + valuable_bonus)
 
     def _score_consistency(self, data: Dict[str, Any]) -> float:
         """Score data consistency.

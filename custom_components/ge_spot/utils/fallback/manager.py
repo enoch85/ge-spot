@@ -280,15 +280,22 @@ class FallbackManager:
                 # Don't count this as a failure
                 self.update_source_health(skipped_source, None)
             else:
-                # Check if the data has valid hourly prices
+                # Check if the data has valid hourly prices or tomorrow hourly prices
                 has_hourly_prices = (
                     isinstance(data, dict) and
                     "hourly_prices" in data and
                     isinstance(data["hourly_prices"], dict) and
                     len(data["hourly_prices"]) > 0
                 )
+                
+                has_tomorrow_prices = (
+                    isinstance(data, dict) and
+                    "tomorrow_hourly_prices" in data and
+                    isinstance(data["tomorrow_hourly_prices"], dict) and
+                    len(data["tomorrow_hourly_prices"]) > 0
+                )
 
-                if has_hourly_prices:
+                if has_hourly_prices or has_tomorrow_prices:
                     # Update source health for successful fetch
                     self.update_source_health(source, True, response_time)
 
@@ -297,7 +304,7 @@ class FallbackManager:
 
                     return source, data
                 else:
-                    _LOGGER.warning(f"Source {source} returned data but no valid hourly prices for area {area}, trying next source")
+                    _LOGGER.warning(f"Source {source} returned data but no valid hourly prices or tomorrow hourly prices for area {area}, trying next source")
                     # Mark as a failure to try the next source
                     self.update_source_health(source, False, error_type="no_hourly_prices")
 
@@ -389,15 +396,22 @@ class FallbackManager:
                     continue
 
                 if data:
-                    # Check if the data has valid hourly prices
+                    # Check if the data has valid hourly prices or tomorrow hourly prices
                     has_hourly_prices = (
                         isinstance(data, dict) and
                         "hourly_prices" in data and
                         isinstance(data["hourly_prices"], dict) and
                         len(data["hourly_prices"]) > 0
                     )
+                    
+                    has_tomorrow_prices = (
+                        isinstance(data, dict) and
+                        "tomorrow_hourly_prices" in data and
+                        isinstance(data["tomorrow_hourly_prices"], dict) and
+                        len(data["tomorrow_hourly_prices"]) > 0
+                    )
 
-                    if has_hourly_prices:
+                    if has_hourly_prices or has_tomorrow_prices:
                         # Update source health for successful fetch
                         self.update_source_health(source, True)
 
@@ -433,7 +447,7 @@ class FallbackManager:
 
                         return result
                     else:
-                        _LOGGER.warning(f"Source {source} returned data but no valid hourly prices for area {self.area}, trying next source")
+                        _LOGGER.warning(f"Source {source} returned data but no valid hourly prices or tomorrow hourly prices for area {self.area}, trying next source")
                         # Mark as a failure to try the next source
                         self.update_source_health(source, False, error_type="no_hourly_prices")
             except Exception as e:
