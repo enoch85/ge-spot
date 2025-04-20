@@ -60,7 +60,7 @@ class DataQualityScore:
             "next_hour_price",
             "day_average_price"
         ]
-        
+
         # Optional but valuable fields
         valuable_fields = [
             "tomorrow_hourly_prices"
@@ -75,7 +75,7 @@ class DataQualityScore:
         if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
             # Expect 24 hours
             hourly_completeness = len(data["hourly_prices"]) / 24
-            
+
         # Check tomorrow hourly prices
         tomorrow_completeness = 0.0
         if "tomorrow_hourly_prices" in data and isinstance(data["tomorrow_hourly_prices"], dict):
@@ -87,10 +87,10 @@ class DataQualityScore:
         required_score = 0.5 * (present / max(1, len(required_fields)))
         today_score = 0.25 * hourly_completeness
         tomorrow_score = 0.25 * tomorrow_completeness
-        
+
         # Add bonus for having valuable fields
         valuable_bonus = 0.1 * (valuable_present / max(1, len(valuable_fields)))
-        
+
         # Cap total score at 1.0
         return min(1.0, required_score + today_score + tomorrow_score + valuable_bonus)
 

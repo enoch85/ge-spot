@@ -47,10 +47,10 @@ class ApiValidator:
         # Check number of hours available
         today_hour_count = len(data.get("today_hourly_prices", {}))
         tomorrow_hour_count = len(data.get("tomorrow_hourly_prices", {}))
-        
+
         # Use today hours for validation
         hour_count = today_hour_count
-        
+
         # Log if we have tomorrow data
         if tomorrow_hour_count > 0:
             _LOGGER.debug(f"Found {tomorrow_hour_count} hours of tomorrow's data for {source_name}")

@@ -195,13 +195,13 @@ def normalize_hour_value(hour: int, base_date: datetime.date) -> tuple[int, date
 
 def format_hour_key(hour_time: datetime) -> str:
     """Format a datetime as an ISO format hour key.
-    
+
     This function ensures consistent formatting of hour keys across all parsers.
     The ISO format allows the adapter to identify which day the hour belongs to.
-    
+
     Args:
         hour_time: Datetime object representing the hour
-        
+
     Returns:
         ISO format string (YYYY-MM-DDTHH:00:00)
     """

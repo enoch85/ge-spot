@@ -287,7 +287,7 @@ class FallbackManager:
                     isinstance(data["hourly_prices"], dict) and
                     len(data["hourly_prices"]) > 0
                 )
-                
+
                 has_tomorrow_prices = (
                     isinstance(data, dict) and
                     "tomorrow_hourly_prices" in data and
@@ -403,7 +403,7 @@ class FallbackManager:
                         isinstance(data["hourly_prices"], dict) and
                         len(data["hourly_prices"]) > 0
                     )
-                    
+
                     has_tomorrow_prices = (
                         isinstance(data, dict) and
                         "tomorrow_hourly_prices" in data and

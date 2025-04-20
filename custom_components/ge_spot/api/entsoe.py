@@ -208,11 +208,11 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
 
             # Parse hourly prices - may return a dict with both hourly_prices and tomorrow_hourly_prices
             parser_result = parser.parse_hourly_prices(data, area)
-            
+
             # Check if the parser returned a dict with both today_hourly_prices and tomorrow_hourly_prices
             raw_today_hourly_prices = {}
             raw_tomorrow_hourly_prices = {}
-            
+
             if isinstance(parser_result, dict) and "today_hourly_prices" in parser_result and "tomorrow_hourly_prices" in parser_result:
                 # New format with separated hourly prices
                 raw_today_hourly_prices = parser_result["today_hourly_prices"]
@@ -282,11 +282,11 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
 
                 # Store converted price
                 result["today_hourly_prices"][hour_str] = converted_price
-                
+
             # Process tomorrow hourly prices if available
             if raw_tomorrow_hourly_prices:
                 _LOGGER.debug(f"Raw tomorrow hourly prices with ISO timestamps: {list(raw_tomorrow_hourly_prices.items())[:5]} ({len(raw_tomorrow_hourly_prices)} total)")
-                
+
                 # Add raw prices for tomorrow as well
                 for hour_str, price in raw_tomorrow_hourly_prices.items():
                     # Check if hour_str is in ISO format (contains 'T')
@@ -297,7 +297,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                             # Make it timezone-aware using HA timezone - explicitly pass source_timezone
                             hour_time = tz_service.converter.convert(hour_time, source_tz=source_timezone)
                             end_time = hour_time + timedelta(hours=1)
-                            
+
                             # Store raw price
                             result["raw_prices"].append({
                                 "start": hour_time.isoformat(),
@@ -307,15 +307,15 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                             })
                         except (ValueError, TypeError) as e:
                             _LOGGER.warning(f"Failed to parse ISO date in tomorrow data: {hour_str} - {e}")
-                
+
                 # Initialize tomorrow_hourly_prices in result if not there
                 if "tomorrow_hourly_prices" not in result:
                     result["tomorrow_hourly_prices"] = {}
-                    
+
                 # Convert tomorrow hourly prices to area-specific timezone
                 converted_tomorrow_hourly_prices = tz_service.normalize_hourly_prices(
                     raw_tomorrow_hourly_prices, source_timezone)
-                    
+
                 # Apply price conversions for tomorrow prices
                 for hour_str, price in converted_tomorrow_hourly_prices.items():
                     converted_price = await async_convert_energy_price(
@@ -416,7 +416,7 @@ async def validate_api_key(api_key, area, session=None):
             if result and isinstance(result, str) and "<Publication_MarketDocument" in result:
                 return True
             elif isinstance(result, dict) and result.get("today_hourly_prices") is not None:
-                # Valid response with data 
+                # Valid response with data
                 return True
             elif isinstance(result, str) and "Not authorized" in result:
                 return False

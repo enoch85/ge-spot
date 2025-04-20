@@ -97,10 +97,10 @@ class NordpoolPriceParser(BasePriceParser):
         """
         # Use the standard timestamp parser from BasePriceParser
         dt = super().parse_timestamp(timestamp_str)
-        
+
         if dt is not None:
             return dt
-            
+
         # If standard parser failed, try Nordpool specific format
         try:
             # Try Nordpool specific format with milliseconds
@@ -149,12 +149,12 @@ class NordpoolPriceParser(BasePriceParser):
         # First try exact ISO format key match
         if current_hour_key in hourly_prices:
             return hourly_prices[current_hour_key]
-        
+
         # Try alternative format (HH:00)
         simple_key = f"{current_hour.hour:02d}:00"
         if simple_key in hourly_prices:
             return hourly_prices[simple_key]
-            
+
         # If neither found, look for any matching hour regardless of date
         for key, price in hourly_prices.items():
             if "T" in key:  # Check for ISO format key, matching ENTSO-E approach
@@ -164,7 +164,7 @@ class NordpoolPriceParser(BasePriceParser):
                         return price
                 except (ValueError, TypeError):
                     continue
-                    
+
         return None
 
     def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
@@ -186,12 +186,12 @@ class NordpoolPriceParser(BasePriceParser):
         # First try exact ISO format key match
         if next_hour_key in hourly_prices:
             return hourly_prices[next_hour_key]
-        
+
         # Try alternative format (HH:00)
         simple_key = f"{next_hour.hour:02d}:00"
         if simple_key in hourly_prices:
             return hourly_prices[simple_key]
-            
+
         # If neither found, look for any matching hour regardless of date
         for key, price in hourly_prices.items():
             if "T" in key:  # Check for ISO format key, matching ENTSO-E approach
@@ -201,7 +201,7 @@ class NordpoolPriceParser(BasePriceParser):
                         return price
                 except (ValueError, TypeError):
                     continue
-                    
+
         return None
 
     def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
@@ -249,17 +249,17 @@ class NordpoolPriceParser(BasePriceParser):
         """
         today_hourly_prices = {}
         tomorrow_hourly_prices = {}
-        
+
         # Similar approach to ENTSOE - handle the data directly
         if "data" in data and isinstance(data["data"], dict):
             # Process the data using the provided structure
             api_data = data["data"]
-            
+
             # Check if we have multiAreaEntries in the response
             if "multiAreaEntries" in api_data:
                 entries = api_data.get("multiAreaEntries", [])
                 _LOGGER.debug(f"Processing {len(entries)} entries from multiAreaEntries")
-                
+
                 # Process each entry to extract prices
                 for entry in entries:
                     if not isinstance(entry, dict) or "entryPerArea" not in entry:
@@ -279,22 +279,22 @@ class NordpoolPriceParser(BasePriceParser):
                             # Always format as ISO format with full date and time
                             hour_key = super().format_timestamp_to_iso(dt)
                             price_val = float(raw_price)
-                            
+
                             # Check if this timestamp belongs to tomorrow
                             tomorrow_date = self.tomorrow
-                            
+
                             # First determine if it's tomorrow by date comparison
                             is_tomorrow = dt.date() == tomorrow_date
-                            
+
                             # Fallback: try to identify by start_time string pattern
                             if not is_tomorrow and start_time:
                                 tomorrow_str = tomorrow_date.strftime("%Y-%m-%d")
                                 next_day_str = (datetime.now().date() + timedelta(days=1)).strftime("%Y-%m-%d")
-                                
+
                                 if tomorrow_str in start_time or next_day_str in start_time:
                                     is_tomorrow = True
                                     _LOGGER.debug(f"Identified as tomorrow based on string pattern: {start_time}")
-                            
+
                             # Assign to the appropriate dictionary
                             if is_tomorrow:
                                 tomorrow_hourly_prices[hour_key] = price_val
@@ -302,7 +302,7 @@ class NordpoolPriceParser(BasePriceParser):
                             else:
                                 today_hourly_prices[hour_key] = price_val
                                 _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {raw_price}")
-        
+
         # Alternative: Handle raw multiAreaEntries at top level
         elif "multiAreaEntries" in data:
             entries = data.get("multiAreaEntries", [])
@@ -327,27 +327,27 @@ class NordpoolPriceParser(BasePriceParser):
                         # Always format as ISO format
                         hour_key = super().format_timestamp_to_iso(dt)
                         price_val = float(raw_price)
-                        
+
                         # Check if this timestamp belongs to tomorrow
                         tomorrow_date = self.tomorrow
                         is_tomorrow = dt.date() == tomorrow_date
-                        
+
                         # Fallback check using string pattern
                         if not is_tomorrow and start_time:
                             tomorrow_str = tomorrow_date.strftime("%Y-%m-%d")
                             next_day_str = (datetime.now().date() + timedelta(days=1)).strftime("%Y-%m-%d")
-                            
+
                             if tomorrow_str in start_time or next_day_str in start_time:
                                 is_tomorrow = True
                                 _LOGGER.debug(f"Identified as tomorrow based on string pattern: {start_time}")
-                        
+
                         if is_tomorrow:
                             tomorrow_hourly_prices[hour_key] = price_val
                             _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {raw_price}")
                         else:
                             today_hourly_prices[hour_key] = price_val
                             _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {raw_price}")
-                
+
             # If we found tomorrow's prices, add them to the result
             if tomorrow_hourly_prices:
                 result = {
@@ -356,9 +356,9 @@ class NordpoolPriceParser(BasePriceParser):
                 }
                 _LOGGER.info(f"Extracted {len(tomorrow_hourly_prices)} tomorrow prices from unified data format")
                 return result
-                
+
             return today_hourly_prices
-            
+
         # Handle "today" data in the old format structure for backward compatibility
         if "today" in data and data["today"]:
             today_data = data["today"]
@@ -382,7 +382,7 @@ class NordpoolPriceParser(BasePriceParser):
                             # ALWAYS format as ISO format with full date and time using standardized method
                             hour_key = super().format_timestamp_to_iso(dt)
                             price_val = float(raw_price)
-                            
+
                             # Check if this timestamp belongs to tomorrow
                             if super().is_tomorrow_timestamp(dt):
                                 tomorrow_hourly_prices[hour_key] = price_val
@@ -399,28 +399,28 @@ class NordpoolPriceParser(BasePriceParser):
             }
             _LOGGER.info(f"Extracted {len(tomorrow_hourly_prices)} tomorrow prices from today data format")
             return result
-            
+
         return today_hourly_prices
 
     def _extract_prices_from_data(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
         """Extract price data from Nordpool response.
-        
+
         This helper extracts prices from either today or tomorrow data.
-        
+
         Args:
             data: Raw API data segment (today or tomorrow section)
             area: Area code
-            
+
         Returns:
             Dictionary of hourly prices with ISO timestamps as keys
         """
         hourly_prices = {}
-        
+
         if not isinstance(data, dict) or "multiAreaEntries" not in data:
             return hourly_prices
-            
+
         entries = data.get("multiAreaEntries", [])
-        
+
         for entry in entries:
             if not isinstance(entry, dict) or "entryPerArea" not in entry:
                 continue
@@ -441,5 +441,5 @@ class NordpoolPriceParser(BasePriceParser):
                     price_val = float(raw_price)
                     hourly_prices[hour_key] = price_val
                     _LOGGER.debug(f"Extracted price: {hour_key} = {price_val}")
-                    
+
         return hourly_prices

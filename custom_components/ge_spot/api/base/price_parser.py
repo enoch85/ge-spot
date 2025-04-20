@@ -32,13 +32,13 @@ class BasePriceParser(ABC):
             Parsed data with today_hourly_prices and tomorrow_hourly_prices
         """
         pass
-        
+
     def parse_timestamp(self, timestamp_str: str) -> Optional[datetime]:
         """Parse timestamp string into a datetime object with timezone.
-        
+
         Args:
             timestamp_str: Timestamp string in various possible formats
-            
+
         Returns:
             Timezone-aware datetime object or None if parsing fails
         """
@@ -47,19 +47,19 @@ class BasePriceParser(ABC):
             if 'Z' in timestamp_str:
                 dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                 return dt
-                
+
             # Try ISO format with timezone
             if '+' in timestamp_str or '-' in timestamp_str and 'T' in timestamp_str:
                 dt = datetime.fromisoformat(timestamp_str)
                 return dt
-                
+
             # Try ISO format without timezone
             if 'T' in timestamp_str:
                 dt = datetime.fromisoformat(timestamp_str)
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
                 return dt
-                
+
             # Try simple HH:00 format
             if ':' in timestamp_str and len(timestamp_str) <= 5:
                 hour = int(timestamp_str.split(':')[0])
@@ -68,7 +68,7 @@ class BasePriceParser(ABC):
                     dt = datetime.combine(self.today, datetime.min.time().replace(hour=hour))
                     dt = dt.replace(tzinfo=timezone.utc)
                     return dt
-                    
+
             # Try tomorrow_HH:00 format
             if timestamp_str.startswith("tomorrow_") and ":" in timestamp_str:
                 hour_str = timestamp_str[9:]  # Remove "tomorrow_" prefix
@@ -78,32 +78,32 @@ class BasePriceParser(ABC):
                     dt = datetime.combine(self.tomorrow, datetime.min.time().replace(hour=hour))
                     dt = dt.replace(tzinfo=timezone.utc)
                     return dt
-                    
+
             _LOGGER.debug(f"Could not parse timestamp with standard formats: {timestamp_str}")
             return None
         except (ValueError, TypeError) as e:
             _LOGGER.debug(f"Error parsing timestamp {timestamp_str}: {e}")
             return None
-            
+
     def format_timestamp_to_iso(self, dt: datetime) -> str:
         """Format a datetime object to ISO 8601 format string.
-        
+
         Args:
             dt: Datetime object
-            
+
         Returns:
             ISO 8601 format string
         """
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.strftime("%Y-%m-%dT%H:00:00")
-        
+
     def is_tomorrow_timestamp(self, dt: datetime) -> bool:
         """Check if a datetime belongs to tomorrow.
-        
+
         Args:
             dt: Datetime object to check
-            
+
         Returns:
             True if the date matches tomorrow's date
         """
@@ -122,7 +122,7 @@ class BasePriceParser(ABC):
         """
         today_count = len(data.get("today_hourly_prices", {}))
         tomorrow_count = len(data.get("tomorrow_hourly_prices", {}))
-        
+
         metadata = {
             "source": self.source,
             "today_price_count": today_count,
@@ -148,15 +148,15 @@ class BasePriceParser(ABC):
         has_today_data = False
         if "today_hourly_prices" in data and isinstance(data["today_hourly_prices"], dict):
             has_today_data = bool(data["today_hourly_prices"])
-                
+
         # Check for tomorrow_hourly_prices
         has_tomorrow_data = False
         if "tomorrow_hourly_prices" in data and isinstance(data["tomorrow_hourly_prices"], dict):
             has_tomorrow_data = bool(data["tomorrow_hourly_prices"])
-        
+
         # Valid if we have either today or tomorrow data
         if has_today_data or has_tomorrow_data:
             return True
-            
+
         _LOGGER.warning(f"{self.source}: Missing or invalid hourly price data")
         return False

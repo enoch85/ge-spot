@@ -61,31 +61,31 @@ async def _fetch_data(client, config, area, reference_time):
 
         # Generate date ranges to try - just like ENTSO-E
         date_ranges = generate_date_ranges(reference_time, Source.NORDPOOL)
-        
+
         # Try both today and tomorrow in the same request if possible, or use separate requests
         # First, attempt with tomorrow's date to maximize chances of getting tomorrow data
         for start_date, end_date in date_ranges:
             # Use the date range parameters
             start_date_str = start_date.strftime(TimeFormat.DATE_ONLY)
             end_date_str = end_date.strftime(TimeFormat.DATE_ONLY)
-            
+
             params = {
                 "currency": Currency.EUR,
                 "date": end_date_str,  # Always use end date which is more likely to have data
                 "market": "DayAhead",
                 "deliveryArea": delivery_area
             }
-            
+
             _LOGGER.debug(f"Trying Nordpool fallback with date: {params['date']}")
             response = await client.fetch(BASE_URL, params=params)
-            
+
             if response and isinstance(response, dict) and "multiAreaEntries" in response:
                 # Check if we got data
                 entries = response.get("multiAreaEntries", [])
                 if entries and any(area in entry.get("entryPerArea", {}) for entry in entries):
                     _LOGGER.info(f"Successfully fetched Nordpool data via fallback for area {area} ({len(entries)} entries)")
                     return response
-        
+
         # If we've tried all date ranges and still don't have data
         _LOGGER.warning(f"No data found for Nordpool area {area} after trying multiple date ranges")
         return None
@@ -111,11 +111,11 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
         else:
             _LOGGER.error("No valid data found in combined format")
             return None
-            
+
         if not data_to_process or "multiAreaEntries" not in data_to_process:
             _LOGGER.error("Missing or invalid multiAreaEntries in structured Nordpool data")
             return None
-            
+
         # Update data reference to the part we're going to process
         data = data_to_process
     elif not data or "multiAreaEntries" not in data:
@@ -169,11 +169,11 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
 
         # Parse hourly prices with ISO timestamps - use a consistent approach
         parser_result = parser.parse_hourly_prices({"data": data}, area)
-        
+
         # Check if the parser returned a dict with both today_hourly_prices and tomorrow_hourly_prices
         raw_today_hourly_prices = {}
         raw_tomorrow_hourly_prices = {}
-        
+
         if isinstance(parser_result, dict) and "today_hourly_prices" in parser_result and "tomorrow_hourly_prices" in parser_result:
             # New format with separated hourly prices
             raw_today_hourly_prices = parser_result["today_hourly_prices"]
@@ -183,11 +183,11 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             # Old format with just hourly prices (or already migrated to today_hourly_prices)
             raw_today_hourly_prices = parser_result
             _LOGGER.debug(f"Using legacy format hourly prices format")
-        
+
         # Log the raw hourly prices with ISO timestamps to help with debugging
         if raw_today_hourly_prices:
             _LOGGER.debug(f"Raw today hourly prices with ISO timestamps: {list(raw_today_hourly_prices.items())[:5]} ({len(raw_today_hourly_prices)} total)")
-            
+
             # Convert hourly prices to area-specific timezone (or HA timezone) in a single step
             converted_hourly_prices = tz_service.normalize_hourly_prices(
                 raw_today_hourly_prices, source_timezone)
@@ -206,19 +206,19 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 )
 
                 result["today_hourly_prices"][hour_str] = converted_price
-                
+
         # Process tomorrow hourly prices if available
         if raw_tomorrow_hourly_prices:
             _LOGGER.debug(f"Raw tomorrow hourly prices with ISO timestamps: {list(raw_tomorrow_hourly_prices.items())[:5]} ({len(raw_tomorrow_hourly_prices)} total)")
-            
+
             # Initialize tomorrow_hourly_prices in result if not there
             if "tomorrow_hourly_prices" not in result:
                 result["tomorrow_hourly_prices"] = {}
-                
+
             # Convert tomorrow hourly prices to area-specific timezone
             converted_tomorrow_hourly_prices = tz_service.normalize_hourly_prices(
                 raw_tomorrow_hourly_prices, source_timezone)
-                
+
             # Apply price conversions for tomorrow prices
             for hour_str, price in converted_tomorrow_hourly_prices.items():
                 converted_price = await async_convert_energy_price(
@@ -238,13 +238,13 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
         current_hour_key = tz_service.get_current_hour_key()
         if current_hour_key in result["today_hourly_prices"]:
             result["current_price"] = result["today_hourly_prices"][current_hour_key]
-            
+
             # Create raw value entry - match ENTSO-E approach for handling timestamps
             original_hour = int(current_hour_key.split(":")[0])
             current_dt = datetime.now().replace(hour=original_hour)
             current_dt = tz_service.converter.convert(current_dt, source_tz=source_timezone)
             original_hour_key = f"{current_dt.hour:02d}:00"
-            
+
             result["raw_values"]["current_price"] = {
                 "raw": raw_today_hourly_prices.get(original_hour_key),
                 "unit": f"{Currency.EUR}/MWh",
@@ -288,7 +288,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 "value": result["off_peak_price"],
                 "calculation": "minimum of all hourly prices"
             }
-                
+
         return result
     except Exception as e:
         _LOGGER.error(f"Error processing Nordpool data: {e}", exc_info=True)

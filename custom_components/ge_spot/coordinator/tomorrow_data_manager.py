@@ -181,38 +181,38 @@ class TomorrowDataManager:
                         # Check various possible formats for tomorrow data
                         found_tomorrow_data = False
                         tomorrow_hours_count = 0
-                        
+
                         # Check for tomorrow_hourly_prices format
                         if "tomorrow_hourly_prices" in data:
                             tomorrow_hours_count = len(data["tomorrow_hourly_prices"])
                             found_tomorrow_data = True
                             _LOGGER.info(f"Found tomorrow_hourly_prices in today's cache for source {source}: {tomorrow_hours_count} hours")
-                        
+
                         # Check for tomorrow_prefixed_prices format
                         elif "tomorrow_prefixed_prices" in data:
                             tomorrow_hours_count = len(data["tomorrow_prefixed_prices"])
                             found_tomorrow_data = True
                             _LOGGER.info(f"Found tomorrow_prefixed_prices in today's cache for source {source}: {tomorrow_hours_count} hours")
-                            
+
                         # Check for tomorrow data mixed into hourly_prices (using timestamps)
                         elif "hourly_prices" in data:
                             # Check if any of the hourly prices have tomorrow's date
                             # We need to import the BasePriceParser to use its functionality
                             from ..api.base.price_parser import BasePriceParser
                             base_parser = BasePriceParser(source="tomorrow_manager")
-                            
+
                             # Check each timestamp to see if it belongs to tomorrow
                             tomorrow_hours = 0
                             for hour_str in data["hourly_prices"].keys():
                                 dt = base_parser.parse_timestamp(hour_str)
                                 if dt and base_parser.is_tomorrow_timestamp(dt):
                                     tomorrow_hours += 1
-                                    
+
                             if tomorrow_hours > 0:
                                 found_tomorrow_data = True
                                 tomorrow_hours_count = tomorrow_hours
                                 _LOGGER.info(f"Found {tomorrow_hours} hours of tomorrow's data within hourly_prices in today's cache for source {source}")
-                                
+
                         if found_tomorrow_data:
                             # Update our tracking variables
                             self._has_tomorrow_data = True

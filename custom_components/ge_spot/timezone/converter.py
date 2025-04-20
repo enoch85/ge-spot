@@ -114,16 +114,16 @@ class TimezoneConverter:
                             # Parse ISO format date
                             source_dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
                             # Already has date information, no need to combine with today_date
-                            
+
                             # Use timezone_utils functions for conversion
                             source_dt = localize_datetime(source_dt, source_tz)
                             target_dt = convert_datetime(source_dt, target)
-                            
+
                             # CRITICAL: Preserve ISO format for dates to distinguish tomorrow's data
                             # Use format_hour_key utility function to ensure consistent formatting
                             from .timezone_utils import format_hour_key
                             target_hour_str = format_hour_key(target_dt)
-                            
+
                             # Add debug logging
                             _LOGGER.debug(f"Preserved ISO date in conversion: {hour_str} -> {target_hour_str}")
                         except (ValueError, TypeError) as e:
@@ -134,11 +134,11 @@ class TimezoneConverter:
                         # Original code for "HH:00" format
                         hour = int(hour_str.split(":")[0])
                         source_dt = datetime.combine(today_date, time(hour=hour))
-                        
+
                         # Use timezone_utils functions for conversion
                         source_dt = localize_datetime(source_dt, source_tz)
                         target_dt = convert_datetime(source_dt, target)
-                        
+
                         # Create simple hour key in target timezone (no date information)
                         target_hour_str = f"{target_dt.hour:02d}:00"
 
