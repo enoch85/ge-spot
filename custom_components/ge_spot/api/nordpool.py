@@ -186,7 +186,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             raw_tomorrow_hourly_prices = parser_result["tomorrow_hourly_prices"]
             _LOGGER.info(f"Using separated today ({len(raw_today_hourly_prices)}) and tomorrow ({len(raw_tomorrow_hourly_prices)}) data")
         elif isinstance(parser_result, dict) and "hourly_prices" in parser_result and "tomorrow_hourly_prices" in parser_result:
-            # Transitional format - convert hourly_prices to today_hourly_prices 
+            # Transitional format - convert hourly_prices to today_hourly_prices
             raw_today_hourly_prices = parser_result["hourly_prices"]
             raw_tomorrow_hourly_prices = parser_result["tomorrow_hourly_prices"]
             _LOGGER.info(f"Using transitional format: hourly_prices -> today_hourly_prices ({len(raw_today_hourly_prices)}) and tomorrow ({len(raw_tomorrow_hourly_prices)}) data")
@@ -212,7 +212,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
         # This ensures proper timezone conversion regardless of what extract_source_timezone returns
         converted_today, converted_tomorrow = tz_service.normalize_hourly_prices_with_tomorrow(
             raw_today_hourly_prices, raw_tomorrow_hourly_prices, 'Etc/UTC')  # Use standard Etc/UTC format
-            
+
         _LOGGER.debug(f"After normalization: Today prices: {len(converted_today)}, Tomorrow prices: {len(converted_tomorrow)}")
 
         # Apply price conversions for today prices
