@@ -281,27 +281,40 @@ class NordpoolPriceParser(BasePriceParser):
                             price_val = float(raw_price)
 
                             # Check if this timestamp belongs to tomorrow
+                            # Enhanced date comparison for more accurate categorization
                             tomorrow_date = self.tomorrow
+                            today_date = datetime.now(dt.tzinfo).date()
 
-                            # First determine if it's tomorrow by date comparison
+                            # First determine if it's tomorrow by strict date comparison 
+                            # with the exact UTC date from the timestamp
                             is_tomorrow = dt.date() == tomorrow_date
+                            
+                            # Log the exact date comparison for debugging
+                            _LOGGER.debug(f"Date comparison: dt.date()={dt.date()}, today={today_date}, tomorrow={tomorrow_date}")
 
-                            # Fallback: try to identify by start_time string pattern
-                            if not is_tomorrow and start_time:
-                                tomorrow_str = tomorrow_date.strftime("%Y-%m-%d")
-                                next_day_str = (datetime.now().date() + timedelta(days=1)).strftime("%Y-%m-%d")
+                            # If no clear date match, use more extensive checks
+                            if not is_tomorrow:
+                                # Check if the date is actually today
+                                if dt.date() == today_date:
+                                    # Definitely today - override any other considerations
+                                    is_tomorrow = False
+                                    _LOGGER.debug(f"Timestamp {start_time} is TODAY based on exact date match")
+                                # Fallback: try to identify by start_time string pattern
+                                elif start_time:
+                                    tomorrow_str = tomorrow_date.strftime("%Y-%m-%d")
+                                    next_day_str = (datetime.now().date() + timedelta(days=1)).strftime("%Y-%m-%d")
 
-                                if tomorrow_str in start_time or next_day_str in start_time:
-                                    is_tomorrow = True
-                                    _LOGGER.debug(f"Identified as tomorrow based on string pattern: {start_time}")
+                                    if tomorrow_str in start_time or next_day_str in start_time:
+                                        is_tomorrow = True
+                                        _LOGGER.debug(f"Identified as TOMORROW based on string pattern: {start_time}")
 
-                            # Assign to the appropriate dictionary
+                            # Assign to the appropriate dictionary with detailed logging
                             if is_tomorrow:
                                 tomorrow_hourly_prices[hour_key] = price_val
-                                _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {raw_price}")
+                                _LOGGER.debug(f"Categorized as TOMORROW price: {hour_key} = {raw_price} (date: {dt.date()})")
                             else:
                                 today_hourly_prices[hour_key] = price_val
-                                _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {raw_price}")
+                                _LOGGER.debug(f"Categorized as TODAY price: {hour_key} = {raw_price} (date: {dt.date()})")
 
         # Alternative: Handle raw multiAreaEntries at top level
         elif "multiAreaEntries" in data:

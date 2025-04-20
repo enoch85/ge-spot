@@ -274,24 +274,47 @@ class TimezoneService:
                         _LOGGER.debug(f"Original key: {hour_key}, Date: {dt_date}, Today date: {today_date}")
                         _LOGGER.debug(f"UTC: {dt_utc}, Target: {dt_target}")
 
-                        # Compare exact dates - we need to check if the target date is tomorrow
+                        # Enhanced date comparison logic - this is crucial for Nordpool data
                         if dt_date == today_date:
                             new_today[target_hour] = price
-                            _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TODAY")
+                            _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TODAY (exact date match)")
                         elif dt_date == tomorrow_date:
                             new_tomorrow[target_hour] = price
-                            _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TOMORROW")
+                            _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TOMORROW (exact date match)")
                         else:
-                            # Check if the original hour is from today or tomorrow in UTC
-                            # This helps with edge cases when local time is late in the day
-                            original_date = dt_utc.date()
-                            if original_date == today_date:
+                            # Additional checks to ensure proper categorization
+                            # First check if this is really today's hour by looking at the actual current date
+                            actual_today = datetime.now(target_tz).date()
+                            
+                            if dt_date == actual_today:
+                                # If matches current actual date, it's definitely today
                                 new_today[target_hour] = price
-                                _LOGGER.debug(f"Hour {hour_key} -> {target_hour} reassigned to TODAY based on UTC date")
-                            else:
-                                # If it's further in the future, default to tomorrow
+                                _LOGGER.debug(f"Hour {hour_key} -> {target_hour} reassigned to TODAY based on actual date match")
+                            elif dt_date > actual_today:
+                                # If in the future compared to actual date, it's tomorrow
                                 new_tomorrow[target_hour] = price
-                                _LOGGER.debug(f"Hour {hour_key} assigned to TOMORROW (future date: {dt_date})")
+                                _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TOMORROW (future date)")
+                            else:
+                                # For Nordpool specifically, check the original UTC date
+                                original_date = dt_utc.date()
+                                actual_today_utc = datetime.now(timezone.utc).date()
+                                
+                                if original_date == actual_today_utc:
+                                    new_today[target_hour] = price
+                                    _LOGGER.debug(f"Hour {hour_key} -> {target_hour} reassigned to TODAY based on UTC date")
+                                else:
+                                    # Default assignment based on hour comparison with current hour
+                                    current_hour = datetime.now(target_tz).hour
+                                    hour_num = int(target_hour.split(':')[0])
+                                    
+                                    if hour_num >= current_hour:
+                                        # Current or future hour is today
+                                        new_today[target_hour] = price
+                                        _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TODAY based on hour comparison")
+                                    else:
+                                        # Past hour is likely tomorrow
+                                        new_tomorrow[target_hour] = price
+                                        _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TOMORROW based on hour comparison")
                     except (ValueError, TypeError) as e:
                         # If we can't parse, default to original bucket
                         _LOGGER.debug(f"Failed to parse ISO timestamp {hour_key}: {e}")

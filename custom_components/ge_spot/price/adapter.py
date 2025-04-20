@@ -244,12 +244,9 @@ class ElectricityPriceAdapter:
             _LOGGER.debug(f"Found current price for hour {hour_str}: {price}")
             return price
             
-        # If not found in today's data, check if it's in tomorrow's data
-        # This can happen when the source data categorizes late hours of today as "tomorrow"
-        if hour_str in self.tomorrow_prices:
-            price = self.tomorrow_prices[hour_str]
-            _LOGGER.debug(f"Found current price for hour {hour_str} in tomorrow's data: {price}")
-            return price
+        # Do NOT fall back to tomorrow's data for current hour price
+        # This would give incorrect prices and bypass the fallback manager
+        # If current hour is not found, log error and return None so fallback system can be used
 
         # If key not found, log error and return None
         _LOGGER.error(f"Current hour key '{hour_str}' not found in available hours: {sorted(list(self.today_hourly_prices.keys()))}")
@@ -276,18 +273,18 @@ class ElectricityPriceAdapter:
 
         if hour_str in self.today_hourly_prices:
             price = self.today_hourly_prices[hour_str]
-            _LOGGER.debug(f"Found next price for hour {hour_str}: {price}")
+            _LOGGER.debug(f"Found next price for hour {hour_str} in today's data")
             return price
             
         # If not found in today's data, check if it's in tomorrow's data
-        # This can happen when the source data categorizes late hours of today as "tomorrow"
+        # This is valid for next_hour since it might legitimately be in tomorrow if we're near midnight
         if hour_str in self.tomorrow_prices:
             price = self.tomorrow_prices[hour_str]
-            _LOGGER.debug(f"Found next price for hour {hour_str} in tomorrow's data: {price}")
+            _LOGGER.debug(f"Found next price for hour {hour_str} in tomorrow's data (likely near midnight)")
             return price
 
         # If key not found, log error and return None
-        _LOGGER.error(f"Next hour key '{hour_str}' not found in available hours: {sorted(list(self.today_hourly_prices.keys()))}")
+        _LOGGER.error(f"Next hour key '{hour_str}' not found in any available hours. Today: {sorted(list(self.today_hourly_prices.keys()))}, Tomorrow: {sorted(list(self.tomorrow_prices.keys()))}")
         return None
 
     def get_today_prices(self) -> List[float]:

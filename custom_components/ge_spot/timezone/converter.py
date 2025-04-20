@@ -119,10 +119,16 @@ class TimezoneConverter:
                             source_dt = localize_datetime(source_dt, source_tz)
                             target_dt = convert_datetime(source_dt, target)
 
-                            # CRITICAL: Preserve ISO format for dates to distinguish tomorrow's data
-                            # Use format_hour_key utility function to ensure consistent formatting
+                            # CRITICAL: Always preserve full ISO format for dates with timestamps
+                            # This ensures we have complete date information for today/tomorrow categorization
                             from .timezone_utils import format_hour_key
-                            target_hour_str = format_hour_key(target_dt)
+                            
+                            # Create ISO timestamp with full date to enable accurate date-based categorization
+                            target_hour_iso = target_dt.strftime("%Y-%m-%dT%H:00:00")
+                            
+                            # Use ISO format whenever possible to preserve date information
+                            target_hour_str = target_hour_iso
+                            _LOGGER.debug(f"Preserved ISO date in conversion: {hour_str} -> {target_hour_iso}")
                         except (ValueError, TypeError) as e:
                             _LOGGER.error(f"Failed to parse ISO date: {hour_str} - {e}")
                             converted[hour_str] = price  # Keep original in case of error
@@ -146,22 +152,38 @@ class TimezoneConverter:
                     # Log the conversion happening - for any timezone, not just Europe
                     _LOGGER.info(f"Timezone conversion: {source_hour}:00 in {source_tz.key} → {target_hour}:00 in {target.key} with price {price}")
 
-                    # Check if this hour key has already been processed
-                    if target_hour_str in processed_hours:
+                    # For processed hour tracking, check both hour number and key format
+                    hour_num = target_dt.hour
+                    simple_hour_str = f"{hour_num:02d}:00"
+                    
+                    # For ISO timestamps, we need to track by hour number, not the full timestamp
+                    is_iso_format = "T" in target_hour_str
+                    
+                    if (not is_iso_format and simple_hour_str in processed_hours) or (is_iso_format and hour_num in processed_hours):
                         # Handle DST transition - log it only at debug level
                         if _LOGGER.isEnabledFor(logging.DEBUG):
-                            _LOGGER.debug(f"DST transition detected - hour {hour_str} ({source_timezone}) maps to already processed hour {target_hour_str}")
+                            _LOGGER.debug(f"DST transition detected - hour {hour_str} maps to already processed hour {hour_num}")
 
                         # Check if this is a new date (e.g., transition from 23:00 to 00:00)
                         if target_dt.date() != today_date:
                             # This is tomorrow's data, use a different key format to preserve it
-                            tomorrow_key = f"tomorrow_{target_hour_str}"
-                            converted[tomorrow_key] = price
+                            if is_iso_format:
+                                # Already has date information, use as is
+                                converted[target_hour_str] = price 
+                                _LOGGER.debug(f"Added ISO timestamp for tomorrow: {target_hour_str}")
+                            else:
+                                tomorrow_key = f"tomorrow_{simple_hour_str}"
+                                converted[tomorrow_key] = price
+                                _LOGGER.debug(f"Added tomorrow prefix for hour: {tomorrow_key}")
                             continue
                     else:
-                        processed_hours.add(target_hour_str)
+                        # Track this hour as processed - by hour number for ISO format, by string for simple format
+                        if is_iso_format:
+                            processed_hours.add(hour_num)
+                        else:
+                            processed_hours.add(simple_hour_str)
 
-                    # Store price with correct target hour - this is the critical assignment
+                    # Store price with target hour - this is the critical assignment
                     converted[target_hour_str] = price
                 except (ValueError, TypeError) as e:
                     _LOGGER.error(f"Error converting hour {hour_str}: {e}")
