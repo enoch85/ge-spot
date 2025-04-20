@@ -173,26 +173,26 @@ class TimezoneService:
         )
 
     def normalize_hourly_prices_with_tomorrow(
-        self, today_hourly_prices: Dict[str, float], 
-        tomorrow_hourly_prices: Dict[str, float], 
+        self, today_hourly_prices: Dict[str, float],
+        tomorrow_hourly_prices: Dict[str, float],
         source_timezone: str,
         today_date=None
     ) -> Tuple[Dict[str, float], Dict[str, float]]:
         """Convert both today and tomorrow hourly prices and reorganize based on local timezone.
-        
+
         Args:
             today_hourly_prices: Dict mapping hour strings to today's prices
             tomorrow_hourly_prices: Dict mapping hour strings to tomorrow's prices
             source_timezone: Source timezone string
             today_date: Optional date to use (defaults to today)
-            
+
         Returns:
             Tuple of (today_prices, tomorrow_prices) with hours properly organized for local timezone
         """
         # First convert both sets of prices to target timezone
         if not today_hourly_prices and not tomorrow_hourly_prices:
             return {}, {}
-            
+
         # Validate source_timezone
         if not source_timezone or source_timezone == TimezoneConstants.DEFAULT_FALLBACK:
             error_msg = f"Invalid source timezone provided: {source_timezone}"
@@ -221,9 +221,9 @@ class TimezoneService:
             today_date = datetime.now(target_tz).date()
         elif isinstance(today_date, datetime):
             today_date = today_date.date()
-            
+
         tomorrow_date = today_date + timedelta(days=1)
-            
+
         # Convert both sets of hourly prices
         converted_today = self.converter.convert_hourly_prices(
             today_hourly_prices,
@@ -231,18 +231,18 @@ class TimezoneService:
             target_tz,
             today_date
         )
-        
+
         converted_tomorrow = self.converter.convert_hourly_prices(
             tomorrow_hourly_prices,
             source_timezone,
             target_tz,
             tomorrow_date
         )
-        
+
         # Now reorganize based on local date
         new_today = {}
         new_tomorrow = {}
-        
+
         # Process all converted hours from both today and tomorrow
         for hour_dict in [converted_today, converted_tomorrow]:
             for hour_key, price in hour_dict.items():
@@ -250,31 +250,31 @@ class TimezoneService:
                 if hour_key.startswith("tomorrow_"):
                     new_tomorrow[hour_key[9:]] = price  # Remove "tomorrow_" prefix
                     continue
-                    
+
                 # For ISO format keys, determine correct bucket based on date
                 if "T" in hour_key:
                     try:
                         # Parse ISO format timestamp - directly use Python's datetime utilities
                         dt_str = hour_key.replace('Z', '+00:00')
                         dt_utc = datetime.fromisoformat(dt_str)
-                        
+
                         # Ensure it's in UTC first for a clean conversion
                         if dt_utc.tzinfo is None:
                             dt_utc = dt_utc.replace(tzinfo=timezone.utc)
-                            
+
                         # Now convert to the target timezone
                         dt_target = dt_utc.astimezone(target_tz)
-                        
+
                         # Simple hour key in target timezone
                         target_hour = f"{dt_target.hour:02d}:00"
-                        
+
                         # Get dates for comparison - using target_tz's understanding of today
                         dt_date = dt_target.date()
-                        
+
                         # Extra debug to understand what's happening
                         _LOGGER.debug(f"Original key: {hour_key}, Date: {dt_date}, Today date: {today_date}")
                         _LOGGER.debug(f"UTC: {dt_utc}, Target: {dt_target}")
-                        
+
                         # Compare exact dates - we need to check if the target date is tomorrow
                         if dt_date == today_date:
                             new_today[target_hour] = price
@@ -297,7 +297,7 @@ class TimezoneService:
                         new_tomorrow[hour_key] = price
                     else:
                         new_today[hour_key] = price
-                        
+
         _LOGGER.debug(f"Reorganized hours based on local timezone - Today: {len(new_today)}, Tomorrow: {len(new_tomorrow)}")
         return new_today, new_tomorrow
 
