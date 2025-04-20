@@ -266,27 +266,6 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             if raw_tomorrow_hourly_prices:
                 _LOGGER.debug(f"Raw tomorrow hourly prices with ISO timestamps: {list(raw_tomorrow_hourly_prices.items())[:5]} ({len(raw_tomorrow_hourly_prices)} total)")
 
-                # Add raw prices for tomorrow
-                for hour_str, price in raw_tomorrow_hourly_prices.items():
-                    # Check if hour_str is in ISO format (contains 'T')
-                    if "T" in hour_str:
-                        try:
-                            # Parse ISO format date
-                            hour_time = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
-                            # Make it timezone-aware using HA timezone - explicitly pass source_timezone
-                            hour_time = tz_service.converter.convert(hour_time, source_tz=source_timezone)
-                            end_time = hour_time + timedelta(hours=1)
-
-                            # Store raw price
-                            result["raw_prices"].append({
-                                "start": hour_time.isoformat(),
-                                "end": end_time.isoformat(),
-                                "price": price,
-                                "tomorrow": True
-                            })
-                        except (ValueError, TypeError) as e:
-                            _LOGGER.warning(f"Failed to parse ISO date in tomorrow data: {hour_str} - {e}")
-
             # Initialize tomorrow_hourly_prices in result if not there
             if "tomorrow_hourly_prices" not in result:
                 result["tomorrow_hourly_prices"] = {}

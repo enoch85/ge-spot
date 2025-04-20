@@ -167,6 +167,12 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
         # Use the NordpoolPriceParser to parse hourly prices
         parser = NordpoolPriceParser()
 
+        # Extract metadata - similar to ENTSOE pattern
+        # Extract currency from data if available or default to EUR
+        nordpool_currency = Currency.EUR
+        if isinstance(data, dict) and "currency" in data:
+            nordpool_currency = data.get("currency", Currency.EUR)
+
         # Parse hourly prices with ISO timestamps - use a consistent approach
         parser_result = parser.parse_hourly_prices({"data": data}, area)
 
@@ -179,6 +185,11 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             raw_today_hourly_prices = parser_result["today_hourly_prices"]
             raw_tomorrow_hourly_prices = parser_result["tomorrow_hourly_prices"]
             _LOGGER.info(f"Using separated today ({len(raw_today_hourly_prices)}) and tomorrow ({len(raw_tomorrow_hourly_prices)}) data")
+        elif isinstance(parser_result, dict) and "hourly_prices" in parser_result and "tomorrow_hourly_prices" in parser_result:
+            # Transitional format - convert hourly_prices to today_hourly_prices 
+            raw_today_hourly_prices = parser_result["hourly_prices"]
+            raw_tomorrow_hourly_prices = parser_result["tomorrow_hourly_prices"]
+            _LOGGER.info(f"Using transitional format: hourly_prices -> today_hourly_prices ({len(raw_today_hourly_prices)}) and tomorrow ({len(raw_tomorrow_hourly_prices)}) data")
         else:
             # Old format with just hourly prices (or already migrated to today_hourly_prices)
             raw_today_hourly_prices = parser_result
@@ -188,41 +199,47 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
         if raw_today_hourly_prices:
             _LOGGER.debug(f"Raw today hourly prices with ISO timestamps: {list(raw_today_hourly_prices.items())[:5]} ({len(raw_today_hourly_prices)} total)")
 
-            # Convert and reorganize today and tomorrow prices based on local timezone
-            converted_today, converted_tomorrow = tz_service.normalize_hourly_prices_with_tomorrow(
-                raw_today_hourly_prices, raw_tomorrow_hourly_prices, source_timezone)
+        # Process raw tomorrow data to add to raw_prices for reference
+        if raw_tomorrow_hourly_prices:
+            _LOGGER.debug(f"Raw tomorrow hourly prices with ISO timestamps: {list(raw_tomorrow_hourly_prices.items())[:5]} ({len(raw_tomorrow_hourly_prices)} total)")
 
-            # Initialize tomorrow_hourly_prices in result if not there
-            if "tomorrow_hourly_prices" not in result:
-                result["tomorrow_hourly_prices"] = {}
+        # Initialize tomorrow_hourly_prices in result if not there
+        if "tomorrow_hourly_prices" not in result:
+            result["tomorrow_hourly_prices"] = {}
 
-            # Apply price conversions for today prices
-            for hour_str, price in converted_today.items():
-                converted_price = await async_convert_energy_price(
-                    price=price,
-                    from_unit=EnergyUnit.MWH,
-                    to_unit="kWh",
-                    from_currency=Currency.EUR,
-                    to_currency=currency,
-                    vat=vat,
-                    to_subunit=use_subunit,
-                    session=session
-                )
-                result["today_hourly_prices"][hour_str] = converted_price
+        # Convert and reorganize today and tomorrow prices based on local timezone
+        converted_today, converted_tomorrow = tz_service.normalize_hourly_prices_with_tomorrow(
+            raw_today_hourly_prices, raw_tomorrow_hourly_prices, source_timezone)
+            
+        _LOGGER.debug(f"After normalization: Today prices: {len(converted_today)}, Tomorrow prices: {len(converted_tomorrow)}")
 
-            # Apply price conversions for tomorrow prices
-            for hour_str, price in converted_tomorrow.items():
-                converted_price = await async_convert_energy_price(
-                    price=price,
-                    from_unit=EnergyUnit.MWH,
-                    to_unit="kWh",
-                    from_currency=Currency.EUR,
-                    to_currency=currency,
-                    vat=vat,
-                    to_subunit=use_subunit,
-                    session=session
-                )
-                result["tomorrow_hourly_prices"][hour_str] = converted_price
+        # Apply price conversions for today prices
+        for hour_str, price in converted_today.items():
+            converted_price = await async_convert_energy_price(
+                price=price,
+                from_unit=EnergyUnit.MWH,
+                to_unit="kWh",
+                from_currency=nordpool_currency,
+                to_currency=currency,
+                vat=vat,
+                to_subunit=use_subunit,
+                session=session
+            )
+            result["today_hourly_prices"][hour_str] = converted_price
+
+        # Apply price conversions for tomorrow prices
+        for hour_str, price in converted_tomorrow.items():
+            converted_price = await async_convert_energy_price(
+                price=price,
+                from_unit=EnergyUnit.MWH,
+                to_unit="kWh",
+                from_currency=nordpool_currency,
+                to_currency=currency,
+                vat=vat,
+                to_subunit=use_subunit,
+                session=session
+            )
+            result["tomorrow_hourly_prices"][hour_str] = converted_price
 
         # Get current and next hour prices
         current_hour_key = tz_service.get_current_hour_key()
@@ -237,7 +254,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
 
             result["raw_values"]["current_price"] = {
                 "raw": raw_today_hourly_prices.get(original_hour_key),
-                "unit": f"{Currency.EUR}/MWh",
+                "unit": f"{nordpool_currency}/MWh",
                 "final": result["current_price"],
                 "currency": currency,
                 "vat_rate": vat
@@ -252,7 +269,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             result["next_hour_price"] = result["today_hourly_prices"][next_hour_key]
             result["raw_values"]["next_hour_price"] = {
                 "raw": raw_today_hourly_prices.get(next_hour_key),
-                "unit": f"{Currency.EUR}/MWh",
+                "unit": f"{nordpool_currency}/MWh",
                 "final": result["next_hour_price"],
                 "currency": currency,
                 "vat_rate": vat
