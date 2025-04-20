@@ -201,10 +201,24 @@ async def test_parsers_with_api(
             else:
                 # Process cached data
                 mock_hass = MockHass()
-                adapter = ElectricityPriceAdapter(mock_hass, [data], False)
                 
-                # Get the actual hour count for today's data
-                today_hours = len(adapter.today_hourly_prices) if hasattr(adapter, "today_hourly_prices") else 0
+                # Check if we need to extract raw_data from the cached data structure
+                adapter_data = data
+                if "raw_data" in data:
+                    logger.debug("Found raw_data key in cached data, using it for adapter")
+                    adapter_data = data["raw_data"]
+                
+                adapter = ElectricityPriceAdapter(mock_hass, [adapter_data], False)
+                
+                # Get the actual hour count for today's data 
+                # Check both possible attribute names
+                if hasattr(adapter, "today_hourly_prices"):
+                    today_hours = len(adapter.today_hourly_prices)
+                else:
+                    logger.debug("Adapter today_hourly_prices attribute not found, checking hourly_prices")
+                    today_hours = len(adapter.hourly_prices) if hasattr(adapter, "hourly_prices") else 0
+                    
+                logger.debug(f"Adapter hourly price keys: {list(adapter.today_hourly_prices.keys()) if hasattr(adapter, 'today_hourly_prices') else []}")
                 
                 # Consider data valid only if we have at least 12 hours
                 has_valid_data = data is not None and today_hours >= 12

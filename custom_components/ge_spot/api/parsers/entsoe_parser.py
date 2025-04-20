@@ -36,7 +36,7 @@ class EntsoeParser(BasePriceParser):
             "source": self.source
         }
 
-        # If hourly prices were already processed
+        # If hourly prices were already processed - convert to today_hourly_prices
         if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
             result["today_hourly_prices"] = data["hourly_prices"]
         # Support for new format if it exists
@@ -371,7 +371,7 @@ class EntsoeParser(BasePriceParser):
             Parsed data with hourly prices
         """
         result = {
-            "hourly_prices": {},
+            "today_hourly_prices": {},
             "currency": "EUR",
             "source": self.source
         }
@@ -493,6 +493,10 @@ class EntsoeParser(BasePriceParser):
             # Process the selected series
             result["today_hourly_prices"] = selected_series["prices"]
             result["currency"] = selected_series["metadata"]["currency"]
+            
+            # Remove the legacy format since we're using today_hourly_prices
+            if "hourly_prices" in result:
+                del result["hourly_prices"]
 
         except Exception as e:
             _LOGGER.error(f"Failed to parse ENTSO-E XML: {e}")
