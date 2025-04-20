@@ -31,7 +31,7 @@ class NordpoolPriceParser(BasePriceParser):
         data = validate_data(data, self.source)
 
         result = {
-            "hourly_prices": {},
+            "today_hourly_prices": {},
             "currency": data.get("currency", "EUR"),
             "source": self.source
         }
@@ -53,15 +53,18 @@ class NordpoolPriceParser(BasePriceParser):
                             if start_time and price is not None:
                                 # Format as ISO string for the hour
                                 hour_key = start_time.strftime("%Y-%m-%dT%H:00:00")
-                                result["hourly_prices"][hour_key] = price
+                                result["today_hourly_prices"][hour_key] = price
 
                     # Only process the first area with prices
-                    if result["hourly_prices"]:
+                    if result["today_hourly_prices"]:
                         break
 
         # If hourly prices were already processed
         if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
-            result["hourly_prices"] = data["hourly_prices"]
+            result["today_hourly_prices"] = data["hourly_prices"]
+        # Support for new format if it exists
+        elif "today_hourly_prices" in data and isinstance(data["today_hourly_prices"], dict):
+            result["today_hourly_prices"] = data["today_hourly_prices"]
 
         # Add current and next hour prices if available
         if "current_price" in data:
@@ -72,14 +75,14 @@ class NordpoolPriceParser(BasePriceParser):
 
         # Calculate current and next hour prices if not provided
         if "current_price" not in result:
-            result["current_price"] = self._get_current_price(result["hourly_prices"])
+            result["current_price"] = self._get_current_price(result["today_hourly_prices"])
 
         if "next_hour_price" not in result:
-            result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
+            result["next_hour_price"] = self._get_next_hour_price(result["today_hourly_prices"])
 
         # Calculate day average if enough prices
-        if len(result["hourly_prices"]) >= 12:
-            result["day_average_price"] = self._calculate_day_average(result["hourly_prices"])
+        if len(result["today_hourly_prices"]) >= 12:
+            result["day_average_price"] = self._calculate_day_average(result["today_hourly_prices"])
 
         return result
 
@@ -241,20 +244,23 @@ class NordpoolPriceParser(BasePriceParser):
             area: Area code
 
         Returns:
-            Dictionary of hourly prices with ISO format timestamp keys
+            Dictionary of hourly prices with ISO format timestamp keys or
+            a dictionary with both 'today_hourly_prices' and 'tomorrow_hourly_prices'
         """
-        hourly_prices = {}
+        today_hourly_prices = {}
         tomorrow_hourly_prices = {}
         
-        # Handle the new unified data format (direct API response)
+        # Similar approach to ENTSOE - handle the data directly
         if "data" in data and isinstance(data["data"], dict):
+            # Process the data using the provided structure
             api_data = data["data"]
             
-            # Check if we have multiAreaEntries directly in the response
+            # Check if we have multiAreaEntries in the response
             if "multiAreaEntries" in api_data:
                 entries = api_data.get("multiAreaEntries", [])
                 _LOGGER.debug(f"Processing {len(entries)} entries from multiAreaEntries")
                 
+                # Process each entry to extract prices
                 for entry in entries:
                     if not isinstance(entry, dict) or "entryPerArea" not in entry:
                         continue
@@ -270,28 +276,88 @@ class NordpoolPriceParser(BasePriceParser):
                         # Parse timestamp
                         dt = self._parse_timestamp(start_time)
                         if dt:
-                            # Always format as ISO format with full date and time using standardized method
+                            # Always format as ISO format with full date and time
                             hour_key = super().format_timestamp_to_iso(dt)
                             price_val = float(raw_price)
                             
                             # Check if this timestamp belongs to tomorrow
-                            if super().is_tomorrow_timestamp(dt):
+                            tomorrow_date = self.tomorrow
+                            
+                            # First determine if it's tomorrow by date comparison
+                            is_tomorrow = dt.date() == tomorrow_date
+                            
+                            # Fallback: try to identify by start_time string pattern
+                            if not is_tomorrow and start_time:
+                                tomorrow_str = tomorrow_date.strftime("%Y-%m-%d")
+                                next_day_str = (datetime.now().date() + timedelta(days=1)).strftime("%Y-%m-%d")
+                                
+                                if tomorrow_str in start_time or next_day_str in start_time:
+                                    is_tomorrow = True
+                                    _LOGGER.debug(f"Identified as tomorrow based on string pattern: {start_time}")
+                            
+                            # Assign to the appropriate dictionary
+                            if is_tomorrow:
                                 tomorrow_hourly_prices[hour_key] = price_val
                                 _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {raw_price}")
                             else:
-                                hourly_prices[hour_key] = price_val
+                                today_hourly_prices[hour_key] = price_val
                                 _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {raw_price}")
+        
+        # Alternative: Handle raw multiAreaEntries at top level
+        elif "multiAreaEntries" in data:
+            entries = data.get("multiAreaEntries", [])
+            _LOGGER.debug(f"Processing {len(entries)} entries from top-level multiAreaEntries")
+
+            # Same logic as above, but with top-level entries
+            for entry in entries:
+                if not isinstance(entry, dict) or "entryPerArea" not in entry:
+                    continue
+
+                if area not in entry["entryPerArea"]:
+                    continue
+
+                # Extract values
+                start_time = entry.get("deliveryStart")
+                raw_price = entry["entryPerArea"][area]
+
+                if start_time and raw_price is not None:
+                    # Parse timestamp
+                    dt = self._parse_timestamp(start_time)
+                    if dt:
+                        # Always format as ISO format
+                        hour_key = super().format_timestamp_to_iso(dt)
+                        price_val = float(raw_price)
+                        
+                        # Check if this timestamp belongs to tomorrow
+                        tomorrow_date = self.tomorrow
+                        is_tomorrow = dt.date() == tomorrow_date
+                        
+                        # Fallback check using string pattern
+                        if not is_tomorrow and start_time:
+                            tomorrow_str = tomorrow_date.strftime("%Y-%m-%d")
+                            next_day_str = (datetime.now().date() + timedelta(days=1)).strftime("%Y-%m-%d")
+                            
+                            if tomorrow_str in start_time or next_day_str in start_time:
+                                is_tomorrow = True
+                                _LOGGER.debug(f"Identified as tomorrow based on string pattern: {start_time}")
+                        
+                        if is_tomorrow:
+                            tomorrow_hourly_prices[hour_key] = price_val
+                            _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {raw_price}")
+                        else:
+                            today_hourly_prices[hour_key] = price_val
+                            _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {raw_price}")
                 
             # If we found tomorrow's prices, add them to the result
             if tomorrow_hourly_prices:
                 result = {
-                    "hourly_prices": hourly_prices,
+                    "today_hourly_prices": today_hourly_prices,
                     "tomorrow_hourly_prices": tomorrow_hourly_prices
                 }
                 _LOGGER.info(f"Extracted {len(tomorrow_hourly_prices)} tomorrow prices from unified data format")
                 return result
                 
-            return hourly_prices
+            return today_hourly_prices
             
         # Handle "today" data in the old format structure for backward compatibility
         if "today" in data and data["today"]:
@@ -322,80 +388,58 @@ class NordpoolPriceParser(BasePriceParser):
                                 tomorrow_hourly_prices[hour_key] = price_val
                                 _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {raw_price}")
                             else:
-                                hourly_prices[hour_key] = price_val
+                                today_hourly_prices[hour_key] = price_val
                                 _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {raw_price}")
 
         # If we found tomorrow's prices, add them to the result
         if tomorrow_hourly_prices:
             result = {
-                "hourly_prices": hourly_prices,
+                "today_hourly_prices": today_hourly_prices,
                 "tomorrow_hourly_prices": tomorrow_hourly_prices
             }
             _LOGGER.info(f"Extracted {len(tomorrow_hourly_prices)} tomorrow prices from today data format")
             return result
             
-        return hourly_prices
+        return today_hourly_prices
 
-    def parse_tomorrow_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
-        """Parse tomorrow's hourly prices from Nordpool data.
+    def _extract_prices_from_data(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
+        """Extract price data from Nordpool response.
         
-        This method now ensures all timestamps are consistently formatted using ISO format.
-
+        This helper extracts prices from either today or tomorrow data.
+        
         Args:
-            data: Raw API response data
+            data: Raw API data segment (today or tomorrow section)
             area: Area code
-
+            
         Returns:
-            Dictionary of hourly prices with ISO format timestamp keys
+            Dictionary of hourly prices with ISO timestamps as keys
         """
         hourly_prices = {}
-        tomorrow_prices_found = 0
-
-        # Process tomorrow's data
-        if "tomorrow" in data and data["tomorrow"] is not None:
-            tomorrow_data = data["tomorrow"]
+        
+        if not isinstance(data, dict) or "multiAreaEntries" not in data:
+            return hourly_prices
             
-            # Add debug logging
-            _LOGGER.debug(f"Tomorrow data type: {type(tomorrow_data)}")
-            if isinstance(tomorrow_data, dict):
-                _LOGGER.debug(f"Tomorrow data keys: {tomorrow_data.keys()}")
-            
-            # Ensure tomorrow_data is a dictionary with the expected structure
-            if isinstance(tomorrow_data, dict) and "multiAreaEntries" in tomorrow_data:
-                _LOGGER.debug(f"Tomorrow multiAreaEntries found: {len(tomorrow_data['multiAreaEntries'])}")
-                
-                for entry in tomorrow_data["multiAreaEntries"]:
-                    if not isinstance(entry, dict) or "entryPerArea" not in entry:
-                        continue
+        entries = data.get("multiAreaEntries", [])
+        
+        for entry in entries:
+            if not isinstance(entry, dict) or "entryPerArea" not in entry:
+                continue
 
-                    if area not in entry["entryPerArea"]:
-                        continue
+            if area not in entry["entryPerArea"]:
+                continue
 
-                    # Extract values
-                    start_time = entry.get("deliveryStart")
-                    raw_price = entry["entryPerArea"][area]
+            # Extract values
+            start_time = entry.get("deliveryStart")
+            raw_price = entry["entryPerArea"][area]
 
-                    if start_time and raw_price is not None:
-                        # Parse timestamp
-                        dt = self._parse_timestamp(start_time)
-                        if dt:
-                            # ALWAYS format as ISO format with full date and time using standardized method
-                            hour_key = super().format_timestamp_to_iso(dt)
-                            hourly_prices[hour_key] = float(raw_price)
-                            tomorrow_prices_found += 1
-                            
-                            # Always verify this is actually tomorrow's data
-                            if super().is_tomorrow_timestamp(dt):
-                                _LOGGER.debug(f"Added confirmed tomorrow price: {hour_key} = {raw_price}")
-                            else:
-                                # If it's not tomorrow, add a prefix to make it clear
-                                prefixed_key = f"tomorrow_{hour_key.split('T')[1]}"  # e.g., "tomorrow_12:00"
-                                hourly_prices[prefixed_key] = float(raw_price)
-                                _LOGGER.debug(f"Added tomorrow price with prefixed key: {prefixed_key} = {raw_price}")
-
-        if tomorrow_prices_found > 0:
-            _LOGGER.info(f"Successfully extracted {tomorrow_prices_found} hours of tomorrow's prices")
-        else:
-            _LOGGER.debug("No tomorrow prices found in dedicated tomorrow data section")
-
+            if start_time and raw_price is not None:
+                # Parse timestamp
+                dt = self._parse_timestamp(start_time)
+                if dt:
+                    # Always format as ISO format with full date and time using standardized method
+                    hour_key = super().format_timestamp_to_iso(dt)
+                    price_val = float(raw_price)
+                    hourly_prices[hour_key] = price_val
+                    _LOGGER.debug(f"Extracted price: {hour_key} = {price_val}")
+                    
         return hourly_prices

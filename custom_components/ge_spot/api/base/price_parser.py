@@ -29,7 +29,7 @@ class BasePriceParser(ABC):
             data: Raw API response data
 
         Returns:
-            Parsed data with hourly prices
+            Parsed data with today_hourly_prices and tomorrow_hourly_prices
         """
         pass
         

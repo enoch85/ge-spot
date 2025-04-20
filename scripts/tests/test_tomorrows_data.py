@@ -40,12 +40,10 @@ try:
     from custom_components.ge_spot.api import fetch_day_ahead_prices
     from custom_components.ge_spot.coordinator.tomorrow_data_manager import TomorrowDataManager
     from scripts.tests.api.tomorrow_api_testing import test_tomorrow_api_data
-    from scripts.tests.core.adapter_testing import ImprovedElectricityPriceAdapter
+    # Note: ImprovedElectricityPriceAdapter has been merged into the standard ElectricityPriceAdapter
     from scripts.tests.mocks.hass import MockHass
     from scripts.tests.utils.general import build_api_key_config
     import aiohttp
-    
-    logger.info("Using ImprovedElectricityPriceAdapter for tomorrow data management")
     IMPORTS_SUCCESSFUL = True
 except ImportError as e:
     logger.error(f"Failed to import required components: {e}")
@@ -306,27 +304,10 @@ async def test_api_direct(api_name: str, area: str) -> Dict[str, Any]:
         results["adapter_success"] = is_tomorrow_valid
         results["adapter_tomorrow_hours"] = len(tomorrow_prices) if tomorrow_prices else 0
         
-        # Test with improved adapter
-        improved_adapter = ImprovedElectricityPriceAdapter(mock_hass, [data], False)
-        
-        # Log details about improved adapter data
-        logger.info(f"Improved adapter hourly price keys: {list(improved_adapter.hourly_prices.keys())[:5]}")
-        
-        # Check if improved adapter has tomorrow prices
-        improved_tomorrow_prices = improved_adapter.tomorrow_prices
-        if improved_tomorrow_prices:
-            logger.info(f"Improved adapter tomorrow price keys: {list(improved_tomorrow_prices.keys())[:5]}")
-            logger.info(f"Improved adapter tomorrow hours: {len(improved_tomorrow_prices)}")
-        else:
-            logger.info("Improved adapter tomorrow price keys: None")
-        
-        # Check if tomorrow's data is correctly identified by the improved adapter
-        improved_is_tomorrow_valid = improved_adapter.is_tomorrow_valid()
-        logger.info(f"Improved adapter tomorrow data validation: {improved_is_tomorrow_valid}")
-        
-        # Store the result
-        results["improved_adapter_success"] = improved_is_tomorrow_valid
-        results["improved_adapter_tomorrow_hours"] = len(improved_tomorrow_prices) if improved_tomorrow_prices else 0
+        # Note: The improved adapter has been merged into the standard adapter
+        # Just copy the standard adapter results for backward compatibility with tests
+        results["improved_adapter_success"] = is_tomorrow_valid
+        results["improved_adapter_tomorrow_hours"] = len(tomorrow_prices) if tomorrow_prices else 0
         
         # Additional direct API test for Nordpool
         if api_name == "nordpool":
@@ -469,15 +450,11 @@ async def test_tdm_with_real_api(
             results["tomorrow_hours"] = len(tomorrow_prices) if tomorrow_prices else 0
             results["has_tomorrow_data"] = is_tomorrow_valid and results["tomorrow_hours"] > 0
             
-            # If standard adapter fails and improved adapter requested, try that
-            if not is_tomorrow_valid and use_improved_adapter:
-                improved_adapter = ImprovedElectricityPriceAdapter(mock_hass, [data], False)
-                improved_is_tomorrow_valid = improved_adapter.is_tomorrow_valid()
-                improved_tomorrow_prices = improved_adapter.tomorrow_prices
-                
-                results["improved_tomorrow_valid"] = improved_is_tomorrow_valid
-                results["improved_tomorrow_hours"] = len(improved_tomorrow_prices) if improved_tomorrow_prices else 0
-                results["has_tomorrow_data"] = improved_is_tomorrow_valid and results["improved_tomorrow_hours"] > 0
+            # Note: The improved adapter has been merged into the standard adapter
+            # Just maintain backward compatibility with test results by mirroring standard adapter results
+            results["improved_tomorrow_valid"] = is_tomorrow_valid
+            results["improved_tomorrow_hours"] = len(tomorrow_prices) if tomorrow_prices else 0
+            results["has_tomorrow_data"] = is_tomorrow_valid and results["tomorrow_hours"] > 0
         
     except Exception as e:
         logger.error(f"Error testing TomorrowDataManager with {api_name}: {e}")
