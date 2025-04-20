@@ -123,8 +123,10 @@ class EntsoeParser(BasePriceParser):
 
         Returns:
             Dictionary of hourly prices with hour string keys (HH:00)
+            or a dictionary with both 'hourly_prices' and 'tomorrow_hourly_prices'
         """
         hourly_prices = {}
+        tomorrow_hourly_prices = {}
 
         # If data is a string (XML), try to parse it
         if isinstance(data, str):
@@ -188,7 +190,16 @@ class EntsoeParser(BasePriceParser):
                                         normalized_time = normalized_time.replace(tzinfo=hour_time.tzinfo)
                                         
                                         # Format as ISO string for consistent date handling
-                                        hour_key = format_hour_key(normalized_time)
+                                        hour_key = super().format_timestamp_to_iso(normalized_time)
+                                        
+                                        # Check if this timestamp belongs to tomorrow
+                                        if super().is_tomorrow_timestamp(normalized_time):
+                                            tomorrow_hourly_prices[hour_key] = price_val
+                                            _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {price_val}")
+                                        else:
+                                            hourly_prices[hour_key] = price_val
+                                            _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {price_val}")
+                                            
                                     except ValueError as e:
                                         # Skip invalid hours
                                         _LOGGER.warning(f"Skipping invalid hour value in ENTSOE data: {hour_time.hour}:00 - {e}")
@@ -197,9 +208,15 @@ class EntsoeParser(BasePriceParser):
                                         _LOGGER.warning(f"Import error for timezone utils: {e}, using original hour")
                                         # Format as ISO string for consistent date handling
                                         hour_key = hour_time.strftime("%Y-%m-%dT%H:00:00")
-                                    
-                                    # Add to hourly prices with ISO format date as the key
-                                    hourly_prices[hour_key] = price_val
+                                        
+                                        # Check if this timestamp belongs to tomorrow
+                                        if hour_time.date() == self.tomorrow:
+                                            tomorrow_hourly_prices[hour_key] = price_val
+                                            _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {price_val}")
+                                        else:
+                                            hourly_prices[hour_key] = price_val
+                                            _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {price_val}")
+                                            
                                 except (ValueError, TypeError) as e:
                                     _LOGGER.warning(f"Failed to parse point: {e}")
 
@@ -209,6 +226,15 @@ class EntsoeParser(BasePriceParser):
             except Exception as e:
                 _LOGGER.error(f"Failed to parse hourly prices from ENTSO-E XML: {e}")
 
+        # If we found tomorrow's prices, return both sets
+        if tomorrow_hourly_prices:
+            result = {
+                "hourly_prices": hourly_prices,
+                "tomorrow_hourly_prices": tomorrow_hourly_prices
+            }
+            _LOGGER.info(f"Extracted {len(tomorrow_hourly_prices)} tomorrow prices from ENTSOE data")
+            return result
+        
         return hourly_prices
 
     def _select_best_time_series(self, all_series):

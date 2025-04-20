@@ -206,11 +206,25 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             metadata = parser.extract_metadata(data)
             entsoe_currency = metadata.get("currency", Currency.EUR)
 
-            # Parse hourly prices
-            hourly_prices = parser.parse_hourly_prices(data, area)
+            # Parse hourly prices - may return a dict with both hourly_prices and tomorrow_hourly_prices
+            parser_result = parser.parse_hourly_prices(data, area)
+            
+            # Check if the parser returned a dict with both hourly_prices and tomorrow_hourly_prices
+            raw_hourly_prices = {}
+            raw_tomorrow_hourly_prices = {}
+            
+            if isinstance(parser_result, dict) and "hourly_prices" in parser_result and "tomorrow_hourly_prices" in parser_result:
+                # New format with separated hourly prices
+                raw_hourly_prices = parser_result["hourly_prices"]
+                raw_tomorrow_hourly_prices = parser_result["tomorrow_hourly_prices"]
+                _LOGGER.info(f"Using separated today ({len(raw_hourly_prices)}) and tomorrow ({len(raw_tomorrow_hourly_prices)}) data")
+            else:
+                # Old format with just hourly prices
+                raw_hourly_prices = parser_result
+                _LOGGER.debug(f"Using legacy format hourly prices format")
 
-            # Create raw prices array for reference
-            for hour_str, price in hourly_prices.items():
+            # Create raw prices array for reference from today's data
+            for hour_str, price in raw_hourly_prices.items():
                 # Check if hour_str is in ISO format (contains 'T')
                 if "T" in hour_str:
                     try:
@@ -245,7 +259,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
 
             # Convert hourly prices to area-specific timezone (or HA timezone) in a single step
             converted_prices = tz_service.normalize_hourly_prices(
-                hourly_prices, source_timezone)
+                raw_hourly_prices, source_timezone)
 
             # Process each hour with price conversion
             for hour_str, price in converted_prices.items():
@@ -263,6 +277,54 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
 
                 # Store converted price
                 result["hourly_prices"][hour_str] = converted_price
+                
+            # Process tomorrow hourly prices if available
+            if raw_tomorrow_hourly_prices:
+                _LOGGER.debug(f"Raw tomorrow hourly prices with ISO timestamps: {list(raw_tomorrow_hourly_prices.items())[:5]} ({len(raw_tomorrow_hourly_prices)} total)")
+                
+                # Add raw prices for tomorrow as well
+                for hour_str, price in raw_tomorrow_hourly_prices.items():
+                    # Check if hour_str is in ISO format (contains 'T')
+                    if "T" in hour_str:
+                        try:
+                            # Parse ISO format date
+                            hour_time = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
+                            # Make it timezone-aware using HA timezone - explicitly pass source_timezone
+                            hour_time = tz_service.converter.convert(hour_time, source_tz=source_timezone)
+                            end_time = hour_time + timedelta(hours=1)
+                            
+                            # Store raw price
+                            result["raw_prices"].append({
+                                "start": hour_time.isoformat(),
+                                "end": end_time.isoformat(),
+                                "price": price,
+                                "tomorrow": True
+                            })
+                        except (ValueError, TypeError) as e:
+                            _LOGGER.warning(f"Failed to parse ISO date in tomorrow data: {hour_str} - {e}")
+                
+                # Initialize tomorrow_hourly_prices in result if not there
+                if "tomorrow_hourly_prices" not in result:
+                    result["tomorrow_hourly_prices"] = {}
+                    
+                # Convert tomorrow hourly prices to area-specific timezone
+                converted_tomorrow_hourly_prices = tz_service.normalize_hourly_prices(
+                    raw_tomorrow_hourly_prices, source_timezone)
+                    
+                # Apply price conversions for tomorrow prices
+                for hour_str, price in converted_tomorrow_hourly_prices.items():
+                    converted_price = await async_convert_energy_price(
+                        price=price,
+                        from_unit=EnergyUnit.MWH,
+                        to_unit="kWh",
+                        from_currency=entsoe_currency,
+                        to_currency=currency,
+                        vat=vat,
+                        to_subunit=use_subunit,
+                        session=session
+                    )
+
+                    result["tomorrow_hourly_prices"][hour_str] = converted_price
 
             # Get current and next hour prices
             current_hour_key = tz_service.get_current_hour_key()
@@ -275,7 +337,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 original_hour_key = f"{current_dt.hour:02d}:00"
 
                 result["raw_values"]["current_price"] = {
-                    "raw": hourly_prices.get(original_hour_key),
+                    "raw": raw_hourly_prices.get(original_hour_key),
                     "unit": f"{entsoe_currency}/MWh",
                     "final": result["current_price"],
                     "currency": currency,
@@ -290,7 +352,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             if next_hour_key in result["hourly_prices"]:
                 result["next_hour_price"] = result["hourly_prices"][next_hour_key]
                 result["raw_values"]["next_hour_price"] = {
-                    "raw": hourly_prices.get(next_hour_key),
+                    "raw": raw_hourly_prices.get(next_hour_key),
                     "unit": f"{entsoe_currency}/MWh",
                     "final": result["next_hour_price"],
                     "currency": currency,

@@ -244,6 +244,7 @@ class NordpoolPriceParser(BasePriceParser):
             Dictionary of hourly prices with ISO format timestamp keys
         """
         hourly_prices = {}
+        tomorrow_hourly_prices = {}
         
         # Handle the new unified data format (direct API response)
         if "data" in data and isinstance(data["data"], dict):
@@ -271,13 +272,24 @@ class NordpoolPriceParser(BasePriceParser):
                         if dt:
                             # Always format as ISO format with full date and time using standardized method
                             hour_key = super().format_timestamp_to_iso(dt)
-                            hourly_prices[hour_key] = float(raw_price)
+                            price_val = float(raw_price)
                             
-                            # Add debug info about tomorrow's data
+                            # Check if this timestamp belongs to tomorrow
                             if super().is_tomorrow_timestamp(dt):
+                                tomorrow_hourly_prices[hour_key] = price_val
                                 _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {raw_price}")
                             else:
-                                _LOGGER.debug(f"Added hourly price with ISO timestamp: {hour_key} = {raw_price}")
+                                hourly_prices[hour_key] = price_val
+                                _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {raw_price}")
+                
+            # If we found tomorrow's prices, add them to the result
+            if tomorrow_hourly_prices:
+                result = {
+                    "hourly_prices": hourly_prices,
+                    "tomorrow_hourly_prices": tomorrow_hourly_prices
+                }
+                _LOGGER.info(f"Extracted {len(tomorrow_hourly_prices)} tomorrow prices from unified data format")
+                return result
                 
             return hourly_prices
             
@@ -303,14 +315,25 @@ class NordpoolPriceParser(BasePriceParser):
                         if dt:
                             # ALWAYS format as ISO format with full date and time using standardized method
                             hour_key = super().format_timestamp_to_iso(dt)
-                            hourly_prices[hour_key] = float(raw_price)
+                            price_val = float(raw_price)
                             
-                            # Add debug info about tomorrow's data
+                            # Check if this timestamp belongs to tomorrow
                             if super().is_tomorrow_timestamp(dt):
+                                tomorrow_hourly_prices[hour_key] = price_val
                                 _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {raw_price}")
                             else:
-                                _LOGGER.debug(f"Added hourly price with ISO timestamp: {hour_key} = {raw_price}")
+                                hourly_prices[hour_key] = price_val
+                                _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {raw_price}")
 
+        # If we found tomorrow's prices, add them to the result
+        if tomorrow_hourly_prices:
+            result = {
+                "hourly_prices": hourly_prices,
+                "tomorrow_hourly_prices": tomorrow_hourly_prices
+            }
+            _LOGGER.info(f"Extracted {len(tomorrow_hourly_prices)} tomorrow prices from today data format")
+            return result
+            
         return hourly_prices
 
     def parse_tomorrow_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:

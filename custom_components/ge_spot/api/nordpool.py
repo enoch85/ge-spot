@@ -164,7 +164,21 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
         parser = NordpoolPriceParser()
 
         # Parse hourly prices with ISO timestamps
-        raw_hourly_prices = parser.parse_hourly_prices({"data": data}, area)
+        parser_result = parser.parse_hourly_prices({"data": data}, area)
+        
+        # Check if the parser returned a dict with both hourly_prices and tomorrow_hourly_prices
+        raw_hourly_prices = {}
+        raw_tomorrow_hourly_prices = {}
+        
+        if isinstance(parser_result, dict) and "hourly_prices" in parser_result and "tomorrow_hourly_prices" in parser_result:
+            # New format with separated hourly prices
+            raw_hourly_prices = parser_result["hourly_prices"]
+            raw_tomorrow_hourly_prices = parser_result["tomorrow_hourly_prices"]
+            _LOGGER.info(f"Using separated today ({len(raw_hourly_prices)}) and tomorrow ({len(raw_tomorrow_hourly_prices)}) data")
+        else:
+            # Old format with just hourly prices
+            raw_hourly_prices = parser_result
+            _LOGGER.debug(f"Using legacy format hourly prices format")
         
         # Log the raw hourly prices with ISO timestamps to help with debugging
         if raw_hourly_prices:
@@ -188,61 +202,88 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 )
 
                 result["hourly_prices"][hour_str] = converted_price
-
-            # Get current and next hour prices
-            current_hour_key = tz_service.get_current_hour_key()
-            if current_hour_key in result["hourly_prices"]:
-                result["current_price"] = result["hourly_prices"][current_hour_key]
                 
-                # Create raw value entry - match ENTSO-E approach for handling timestamps
-                original_hour = int(current_hour_key.split(":")[0])
-                current_dt = datetime.now().replace(hour=original_hour)
-                current_dt = tz_service.converter.convert(current_dt, source_tz=source_timezone)
-                original_hour_key = f"{current_dt.hour:02d}:00"
+        # Process tomorrow hourly prices if available
+        if raw_tomorrow_hourly_prices:
+            _LOGGER.debug(f"Raw tomorrow hourly prices with ISO timestamps: {list(raw_tomorrow_hourly_prices.items())[:5]} ({len(raw_tomorrow_hourly_prices)} total)")
+            
+            # Initialize tomorrow_hourly_prices in result if not there
+            if "tomorrow_hourly_prices" not in result:
+                result["tomorrow_hourly_prices"] = {}
                 
-                result["raw_values"]["current_price"] = {
-                    "raw": raw_hourly_prices.get(original_hour_key),
-                    "unit": f"{Currency.EUR}/MWh",
-                    "final": result["current_price"],
-                    "currency": currency,
-                    "vat_rate": vat
-                }
+            # Convert tomorrow hourly prices to area-specific timezone
+            converted_tomorrow_hourly_prices = tz_service.normalize_hourly_prices(
+                raw_tomorrow_hourly_prices, source_timezone)
+                
+            # Apply price conversions for tomorrow prices
+            for hour_str, price in converted_tomorrow_hourly_prices.items():
+                converted_price = await async_convert_energy_price(
+                    price=price,
+                    from_unit=EnergyUnit.MWH,
+                    to_unit="kWh",
+                    from_currency=Currency.EUR,
+                    to_currency=currency,
+                    vat=vat,
+                    to_subunit=use_subunit,
+                    session=session
+                )
 
-            # Calculate next hour
-            current_hour = int(current_hour_key.split(":")[0])
-            next_hour = (current_hour + 1) % 24
-            next_hour_key = f"{next_hour:02d}:00"
+                result["tomorrow_hourly_prices"][hour_str] = converted_price
 
-            if next_hour_key in result["hourly_prices"]:
-                result["next_hour_price"] = result["hourly_prices"][next_hour_key]
-                result["raw_values"]["next_hour_price"] = {
-                    "raw": raw_hourly_prices.get(next_hour_key),
-                    "unit": f"{Currency.EUR}/MWh",
-                    "final": result["next_hour_price"],
-                    "currency": currency,
-                    "vat_rate": vat
-                }
+        # Get current and next hour prices
+        current_hour_key = tz_service.get_current_hour_key()
+        if current_hour_key in result["hourly_prices"]:
+            result["current_price"] = result["hourly_prices"][current_hour_key]
+            
+            # Create raw value entry - match ENTSO-E approach for handling timestamps
+            original_hour = int(current_hour_key.split(":")[0])
+            current_dt = datetime.now().replace(hour=original_hour)
+            current_dt = tz_service.converter.convert(current_dt, source_tz=source_timezone)
+            original_hour_key = f"{current_dt.hour:02d}:00"
+            
+            result["raw_values"]["current_price"] = {
+                "raw": raw_hourly_prices.get(original_hour_key),
+                "unit": f"{Currency.EUR}/MWh",
+                "final": result["current_price"],
+                "currency": currency,
+                "vat_rate": vat
+            }
 
-            # Calculate statistics
-            prices = list(result["hourly_prices"].values())
-            if prices:
-                result["day_average_price"] = sum(prices) / len(prices)
-                result["peak_price"] = max(prices)
-                result["off_peak_price"] = min(prices)
+        # Calculate next hour
+        current_hour = int(current_hour_key.split(":")[0])
+        next_hour = (current_hour + 1) % 24
+        next_hour_key = f"{next_hour:02d}:00"
 
-                # Add raw values for stats
-                result["raw_values"]["day_average_price"] = {
-                    "value": result["day_average_price"],
-                    "calculation": "average of all hourly prices"
-                }
-                result["raw_values"]["peak_price"] = {
-                    "value": result["peak_price"],
-                    "calculation": "maximum of all hourly prices"
-                }
-                result["raw_values"]["off_peak_price"] = {
-                    "value": result["off_peak_price"],
-                    "calculation": "minimum of all hourly prices"
-                }
+        if next_hour_key in result["hourly_prices"]:
+            result["next_hour_price"] = result["hourly_prices"][next_hour_key]
+            result["raw_values"]["next_hour_price"] = {
+                "raw": raw_hourly_prices.get(next_hour_key),
+                "unit": f"{Currency.EUR}/MWh",
+                "final": result["next_hour_price"],
+                "currency": currency,
+                "vat_rate": vat
+            }
+
+        # Calculate statistics
+        prices = list(result["hourly_prices"].values())
+        if prices:
+            result["day_average_price"] = sum(prices) / len(prices)
+            result["peak_price"] = max(prices)
+            result["off_peak_price"] = min(prices)
+
+            # Add raw values for stats
+            result["raw_values"]["day_average_price"] = {
+                "value": result["day_average_price"],
+                "calculation": "average of all hourly prices"
+            }
+            result["raw_values"]["peak_price"] = {
+                "value": result["peak_price"],
+                "calculation": "maximum of all hourly prices"
+            }
+            result["raw_values"]["off_peak_price"] = {
+                "value": result["off_peak_price"],
+                "calculation": "minimum of all hourly prices"
+            }
                 
         return result
     except Exception as e:
