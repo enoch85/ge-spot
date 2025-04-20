@@ -283,9 +283,16 @@ class TimezoneService:
                             new_tomorrow[target_hour] = price
                             _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TOMORROW")
                         else:
-                            # If it's further in the future, default to tomorrow
-                            new_tomorrow[target_hour] = price
-                            _LOGGER.debug(f"Hour {hour_key} assigned to TOMORROW (future date: {dt_date})")
+                            # Check if the original hour is from today or tomorrow in UTC
+                            # This helps with edge cases when local time is late in the day
+                            original_date = dt_utc.date()
+                            if original_date == today_date:
+                                new_today[target_hour] = price
+                                _LOGGER.debug(f"Hour {hour_key} -> {target_hour} reassigned to TODAY based on UTC date")
+                            else:
+                                # If it's further in the future, default to tomorrow
+                                new_tomorrow[target_hour] = price
+                                _LOGGER.debug(f"Hour {hour_key} assigned to TOMORROW (future date: {dt_date})")
                     except (ValueError, TypeError) as e:
                         # If we can't parse, default to original bucket
                         _LOGGER.debug(f"Failed to parse ISO timestamp {hour_key}: {e}")

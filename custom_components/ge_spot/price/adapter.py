@@ -243,6 +243,13 @@ class ElectricityPriceAdapter:
             price = self.today_hourly_prices[hour_str]
             _LOGGER.debug(f"Found current price for hour {hour_str}: {price}")
             return price
+            
+        # If not found in today's data, check if it's in tomorrow's data
+        # This can happen when the source data categorizes late hours of today as "tomorrow"
+        if hour_str in self.tomorrow_prices:
+            price = self.tomorrow_prices[hour_str]
+            _LOGGER.debug(f"Found current price for hour {hour_str} in tomorrow's data: {price}")
+            return price
 
         # If key not found, log error and return None
         _LOGGER.error(f"Current hour key '{hour_str}' not found in available hours: {sorted(list(self.today_hourly_prices.keys()))}")
@@ -270,6 +277,13 @@ class ElectricityPriceAdapter:
         if hour_str in self.today_hourly_prices:
             price = self.today_hourly_prices[hour_str]
             _LOGGER.debug(f"Found next price for hour {hour_str}: {price}")
+            return price
+            
+        # If not found in today's data, check if it's in tomorrow's data
+        # This can happen when the source data categorizes late hours of today as "tomorrow"
+        if hour_str in self.tomorrow_prices:
+            price = self.tomorrow_prices[hour_str]
+            _LOGGER.debug(f"Found next price for hour {hour_str} in tomorrow's data: {price}")
             return price
 
         # If key not found, log error and return None
