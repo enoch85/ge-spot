@@ -184,16 +184,22 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 has_current_hour_price=has_current_hour_price
             )
 
-            # Additional rate limiter check for today's data
-            if need_api_fetch and has_current_hour_price:
+            # Additional rate limiter check for today's data - ALWAYS do this when we have current hour data
+            if has_current_hour_price:
                 from ..utils.rate_limiter import RateLimiter
+                # Make sure to use the correct interval for the active source
+                source_priority = self.config.get(Config.SOURCE_PRIORITY, Source.DEFAULT_PRIORITY)
+                primary_source = source_priority[0] if source_priority else Source.DEFAULT_PRIORITY[0]
+                
+                _LOGGER.debug(f"Applying rate limiter check with primary source: {primary_source}, interval: {self._api_fetch_interval}")
+                
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
                     last_fetched=self._last_api_fetch,
                     current_time=now,
                     consecutive_failures=self._consecutive_failures,
                     last_failure_time=self._last_failure_time,
                     min_interval=self._api_fetch_interval,
-                    source=self._active_source,
+                    source=self._active_source or primary_source,
                     area=self.area
                 )
 
@@ -201,6 +207,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug(f"Rate limiter suggests skipping today's data fetch: {skip_reason}")
                     need_api_fetch = False
                     api_fetch_reason = skip_reason
+                else:
+                    _LOGGER.debug(f"Rate limiter allows fetch despite having current hour data. Reason: {api_fetch_reason}")
 
             # Get current hour key for later use
             current_hour_key = self._tz_service.get_current_hour_key()

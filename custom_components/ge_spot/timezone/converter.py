@@ -135,12 +135,20 @@ class TimezoneConverter:
                         hour = int(hour_str.split(":")[0])
                         source_dt = datetime.combine(today_date, time(hour=hour))
 
-                        # Use timezone_utils functions for conversion
-                        source_dt = localize_datetime(source_dt, source_tz)
-                        target_dt = convert_datetime(source_dt, target)
+                    # Use timezone_utils functions for conversion
+                    source_dt = localize_datetime(source_dt, source_tz)
+                    target_dt = convert_datetime(source_dt, target)
 
-                        # Create simple hour key in target timezone (no date information)
-                        target_hour_str = f"{target_dt.hour:02d}:00"
+                    # Create simple hour key in target timezone (no date information)
+                    target_hour_str = f"{target_dt.hour:02d}:00"
+                    
+                    # Debug log to track the hour mapping
+                    source_hour = getattr(source_dt, 'hour', hour if 'hour' in locals() else 0)
+                    target_hour = target_dt.hour
+                    
+                    # Log the conversion happening - for any timezone, not just Europe
+                    if source_hour != target_hour:
+                        _LOGGER.info(f"Timezone conversion: {source_hour}:00 in {source_tz.key} → {target_hour}:00 in {target.key} with price {price}")
 
                     # Check if this hour key has already been processed
                     if target_hour_str in processed_hours:
@@ -157,7 +165,7 @@ class TimezoneConverter:
                     else:
                         processed_hours.add(target_hour_str)
 
-                    # Store with correct target hour
+                    # Store price with correct target hour - this is the critical assignment
                     converted[target_hour_str] = price
                     _LOGGER.debug(f"Converted hour {hour_str} ({source_timezone}) to {target_hour_str} ({target})")
                 except (ValueError, TypeError) as e:

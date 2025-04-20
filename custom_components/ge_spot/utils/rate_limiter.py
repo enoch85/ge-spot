@@ -50,13 +50,21 @@ class RateLimiter:
             if source:
                 from ..const.intervals import SourceIntervals
                 min_interval = SourceIntervals.get_interval(source)
+                _LOGGER.debug(f"Using source-specific interval for {source}: {min_interval} minutes")
             else:
                 min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+                _LOGGER.debug(f"Using default interval: {min_interval} minutes")
 
         # If less than minimum fetch interval, skip
         if time_diff < min_interval:
-            reason = f"Last fetch was only {time_diff:.1f} minutes ago (minimum: {min_interval})"
+            reason = f"Last fetch was only {time_diff:.1f} minutes ago (minimum: {min_interval} for source {source or 'unknown'})"
             log_rate_limiting(area or "unknown", True, reason, source)
+            # Add more debug info to understand why the rate limiter isn't working
+            _LOGGER.debug(
+                f"Rate limiter enforcing skip: Source={source}, Area={area}, "
+                f"Interval={min_interval}min, Last fetch: {last_fetched}, "
+                f"Now: {current_time}, Diff: {time_diff}min"
+            )
             return True, reason
 
         # Apply exponential backoff for failures
