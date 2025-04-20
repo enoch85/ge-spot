@@ -184,8 +184,8 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 has_current_hour_price=has_current_hour_price
             )
 
-            # Additional rate limiter check for today's data - ALWAYS do this when we have current hour data
-            if has_current_hour_price:
+            # ALWAYS apply rate limiter check for today's data, regardless of cache state
+            if self._last_api_fetch is not None:
                 from ..utils.rate_limiter import RateLimiter
                 # Make sure to use the correct interval for the active source
                 source_priority = self.config.get(Config.SOURCE_PRIORITY, Source.DEFAULT_PRIORITY)
@@ -393,6 +393,10 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 # Update tracker variables for timestamps
                 self._last_api_fetch = dt_util.now()
                 self._next_scheduled_api_fetch = self._last_api_fetch + timedelta(minutes=self._api_fetch_interval)
+                
+                # Update global registry to share API fetch time with all components
+                from ..utils.rate_limiter import RateLimiter
+                RateLimiter._update_registry(area=self.area, fetch_time=self._last_api_fetch, failure=False)
 
                 # Create adapters for primary and fallback sources
                 primary_adapter, fallback_adapters = self._today_data_manager.get_adapters(data)
@@ -424,6 +428,15 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         except Exception as err:
             self._consecutive_failures += 1
             self._last_failure_time = dt_util.now()
+            
+            # Update global registry with failure information
+            from ..utils.rate_limiter import RateLimiter
+            RateLimiter._update_registry(
+                area=self.area,
+                failure=True,
+                failure_time=self._last_failure_time
+            )
+            
             _LOGGER.error(f"Error fetching electricity price data: {err}")
 
             # Schedule a more frequent retry

@@ -57,8 +57,9 @@ class FetchDecisionMaker:
                     _LOGGER.debug(reason)
                     return False, reason
 
-        # Apply rate limiter if we have valid data for the current hour
-        if has_current_hour_price:
+        # Always apply rate limiter, regardless of cache state
+        # Exception: if we don't have current hour price and no previous fetch, we must fetch
+        if last_fetch is not None:
             from ..utils.rate_limiter import RateLimiter
             should_skip, skip_reason = RateLimiter.should_skip_fetch(
                 last_fetched=last_fetch,
@@ -67,11 +68,16 @@ class FetchDecisionMaker:
             )
 
             if should_skip:
-                reason = f"Rate limiter suggests skipping fetch: {skip_reason}"
-                _LOGGER.debug(reason)
-                return False, reason
-            
-            _LOGGER.debug(f"Rate limiter allows fetch despite having current hour price. Interval: {fetch_interval}min, Source: {last_fetch}")
+                # Only respect rate limiter if we have the current hour price
+                # This ensures we'll always fetch if needed, but rate limit otherwise
+                if has_current_hour_price:
+                    reason = f"Rate limiter suggests skipping fetch: {skip_reason}"
+                    _LOGGER.debug(reason)
+                    return False, reason
+                else:
+                    _LOGGER.debug(f"Rate limiter would suggest skipping, but we need data for current hour: {skip_reason}")
+            else:
+                _LOGGER.debug(f"Rate limiter allows fetch. Interval: {fetch_interval}min, Last fetch: {last_fetch}")
 
         # Check if API fetch interval has passed
         if not need_api_fetch and last_fetch:
