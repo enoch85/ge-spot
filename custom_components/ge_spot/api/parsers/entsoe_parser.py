@@ -13,9 +13,10 @@ _LOGGER = logging.getLogger(__name__)
 class EntsoeParser(BasePriceParser):
     """Parser for ENTSO-E API responses."""
 
-    def __init__(self):
+    def __init__(self, timezone_service=None):
         """Initialize the parser."""
-        super().__init__(Source.ENTSOE)
+        super().__init__(Source.ENTSOE, timezone_service)
+        _LOGGER.debug("Initialized ENTSO-E parser with standardized timestamp handling")
 
     def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse ENTSO-E API response.
@@ -413,11 +414,15 @@ class EntsoeParser(BasePriceParser):
                                     normalized_time = datetime.combine(adjusted_date, time(hour=normalized_hour))
                                     normalized_time = normalized_time.replace(tzinfo=hour_time.tzinfo)
 
-                                    # Format as ISO string
-                                    hour_key = format_hour_key(normalized_time)
+                                    # Format as ISO string using standardized method
+                                    hour_key = super().format_timestamp_to_iso(normalized_time)
 
                                     # Add to hourly prices
                                     raw_hourly_prices[hour_key] = price_val
+                                    
+                                    # Add debug info about tomorrow's data
+                                    if super().is_tomorrow_timestamp(normalized_time):
+                                        _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {price_val}")
                                 except ValueError as e:
                                     # Skip invalid hours
                                     _LOGGER.warning(f"Skipping invalid hour value in ENTSOE data: {hour_time.hour}:00 - {e}")
@@ -478,14 +483,30 @@ class EntsoeParser(BasePriceParser):
         now = datetime.now(timezone.utc)
         current_hour = now.replace(minute=0, second=0, microsecond=0)
         
-        # Use the utility function for consistent formatting
+        # Use the standardized method for timestamp formatting
+        current_hour_key = super().format_timestamp_to_iso(current_hour)
+        
+        if current_hour_key in hourly_prices:
+            return hourly_prices.get(current_hour_key)
+            
+        # Try alternative formats as fallback
+        # This helps with backward compatibility but maintains standardized approach
         try:
             from ...timezone.timezone_utils import format_hour_key
-            current_hour_key = format_hour_key(current_hour)
+            alt_hour_key = format_hour_key(current_hour)
+            if alt_hour_key != current_hour_key and alt_hour_key in hourly_prices:
+                _LOGGER.debug(f"Found current hour price using alternative key format: {alt_hour_key}")
+                return hourly_prices.get(alt_hour_key)
         except ImportError:
-            current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
+            pass
+            
+        # Simple format as last resort
+        simple_key = f"{current_hour.hour:02d}:00"
+        if simple_key in hourly_prices:
+            _LOGGER.debug(f"Found current hour price using simple key format: {simple_key}")
+            return hourly_prices.get(simple_key)
 
-        return hourly_prices.get(current_hour_key)
+        return None
 
     def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
         """Get next hour price.
@@ -503,14 +524,30 @@ class EntsoeParser(BasePriceParser):
         next_hour = (now.replace(minute=0, second=0, microsecond=0) +
                     timedelta(hours=1))
         
-        # Use the utility function for consistent formatting
+        # Use the standardized method for timestamp formatting
+        next_hour_key = super().format_timestamp_to_iso(next_hour)
+        
+        if next_hour_key in hourly_prices:
+            return hourly_prices.get(next_hour_key)
+            
+        # Try alternative formats as fallback
+        # This helps with backward compatibility but maintains standardized approach
         try:
             from ...timezone.timezone_utils import format_hour_key
-            next_hour_key = format_hour_key(next_hour)
+            alt_hour_key = format_hour_key(next_hour)
+            if alt_hour_key != next_hour_key and alt_hour_key in hourly_prices:
+                _LOGGER.debug(f"Found next hour price using alternative key format: {alt_hour_key}")
+                return hourly_prices.get(alt_hour_key)
         except ImportError:
-            next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
+            pass
+            
+        # Simple format as last resort
+        simple_key = f"{next_hour.hour:02d}:00"
+        if simple_key in hourly_prices:
+            _LOGGER.debug(f"Found next hour price using simple key format: {simple_key}")
+            return hourly_prices.get(simple_key)
 
-        return hourly_prices.get(next_hour_key)
+        return None
 
     def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
         """Calculate day average price.

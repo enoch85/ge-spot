@@ -154,11 +154,13 @@ class TomorrowDataManager:
 
             # Check if we have data for tomorrow in the cache
             if hasattr(self._price_cache, "_cache") and self.area in self._price_cache._cache:
+                # First check tomorrow's data in its own date entry
                 if tomorrow_str in self._price_cache._cache[self.area]:
                     # We have data for tomorrow in the cache
                     for source, data in self._price_cache._cache[self.area][tomorrow_str].items():
-                        if "hourly_prices" in data and len(data["hourly_prices"]) >= 20:
-                            _LOGGER.info(f"Found tomorrow's data in cache for source {source}")
+                        if "hourly_prices" in data:
+                            # Log detailed info about how many hours we found
+                            _LOGGER.info(f"Found tomorrow's data in cache for source {source}: {len(data['hourly_prices'])} hours")
 
                             # Update our tracking variables
                             self._has_tomorrow_data = True
@@ -168,25 +170,64 @@ class TomorrowDataManager:
                             if adapter.is_tomorrow_valid():
                                 _LOGGER.info("Tomorrow's data in cache is valid")
                                 return True
+                            else:
+                                _LOGGER.info(f"Tomorrow's data in cache contains {len(data['hourly_prices'])} hours but validation failed - needs at least 12 hours")
 
                 # Check if we have tomorrow's data in today's cache
                 today_str = dt_util.now().date().strftime("%Y-%m-%d")
                 if today_str in self._price_cache._cache[self.area]:
                     # We have data for today in the cache
                     for source, data in self._price_cache._cache[self.area][today_str].items():
-                        if "tomorrow_hourly_prices" in data and len(data["tomorrow_hourly_prices"]) >= 20:
-                            _LOGGER.info(f"Found tomorrow's data in today's cache for source {source}")
-
+                        # Check various possible formats for tomorrow data
+                        found_tomorrow_data = False
+                        tomorrow_hours_count = 0
+                        
+                        # Check for tomorrow_hourly_prices format
+                        if "tomorrow_hourly_prices" in data:
+                            tomorrow_hours_count = len(data["tomorrow_hourly_prices"])
+                            found_tomorrow_data = True
+                            _LOGGER.info(f"Found tomorrow_hourly_prices in today's cache for source {source}: {tomorrow_hours_count} hours")
+                        
+                        # Check for tomorrow_prefixed_prices format
+                        elif "tomorrow_prefixed_prices" in data:
+                            tomorrow_hours_count = len(data["tomorrow_prefixed_prices"])
+                            found_tomorrow_data = True
+                            _LOGGER.info(f"Found tomorrow_prefixed_prices in today's cache for source {source}: {tomorrow_hours_count} hours")
+                            
+                        # Check for tomorrow data mixed into hourly_prices (using timestamps)
+                        elif "hourly_prices" in data:
+                            # Check if any of the hourly prices have tomorrow's date
+                            # We need to import the BasePriceParser to use its functionality
+                            from ..api.base.price_parser import BasePriceParser
+                            base_parser = BasePriceParser(source="tomorrow_manager")
+                            
+                            # Check each timestamp to see if it belongs to tomorrow
+                            tomorrow_hours = 0
+                            for hour_str in data["hourly_prices"].keys():
+                                dt = base_parser.parse_timestamp(hour_str)
+                                if dt and base_parser.is_tomorrow_timestamp(dt):
+                                    tomorrow_hours += 1
+                                    
+                            if tomorrow_hours > 0:
+                                found_tomorrow_data = True
+                                tomorrow_hours_count = tomorrow_hours
+                                _LOGGER.info(f"Found {tomorrow_hours} hours of tomorrow's data within hourly_prices in today's cache for source {source}")
+                                
+                        if found_tomorrow_data:
                             # Update our tracking variables
                             self._has_tomorrow_data = True
 
                             # Create adapter to validate the data
                             adapter = ElectricityPriceAdapter(self.hass, [data], self._use_subunit)
                             if adapter.is_tomorrow_valid():
-                                _LOGGER.info("Tomorrow's data in today's cache is valid")
+                                _LOGGER.info(f"Tomorrow's data in today's cache is valid with {tomorrow_hours_count} hours")
                                 return True
+                            else:
+                                _LOGGER.info(f"Tomorrow's data in today's cache contains {tomorrow_hours_count} hours but validation failed - needs at least 12 hours")
         except Exception as e:
             _LOGGER.error(f"Error checking cache for tomorrow's data: {e}")
+            import traceback
+            _LOGGER.debug(f"Traceback: {traceback.format_exc()}")
 
         return False
 

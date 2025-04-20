@@ -16,6 +16,7 @@ class NordpoolPriceParser(BasePriceParser):
     def __init__(self, timezone_service=None):
         """Initialize the parser."""
         super().__init__(Source.NORDPOOL, timezone_service)
+        _LOGGER.debug("Initialized Nordpool parser with standardized timestamp handling")
 
     def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse Nordpool API response.
@@ -91,24 +92,24 @@ class NordpoolPriceParser(BasePriceParser):
         Returns:
             Parsed datetime or None if parsing fails
         """
+        # Use the standard timestamp parser from BasePriceParser
+        dt = super().parse_timestamp(timestamp_str)
+        
+        if dt is not None:
+            return dt
+            
+        # If standard parser failed, try Nordpool specific format
         try:
-            # Try ISO format
-            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            # Try Nordpool specific format with milliseconds
+            dt = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
             # Ensure it's timezone-aware
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
+            _LOGGER.debug(f"Parsed Nordpool specific timestamp format: {timestamp_str} -> {dt}")
             return dt
         except (ValueError, AttributeError):
-            try:
-                # Try Nordpool specific format
-                dt = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
-                # Ensure it's timezone-aware
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                return dt
-            except (ValueError, AttributeError):
-                _LOGGER.warning(f"Failed to parse timestamp: {timestamp_str}")
-                return None
+            _LOGGER.debug(f"Failed to parse Nordpool timestamp with all methods: {timestamp_str}")
+            return None
 
     def _parse_price(self, price_value: Any) -> Optional[float]:
         """Parse price value.
@@ -268,10 +269,15 @@ class NordpoolPriceParser(BasePriceParser):
                         # Parse timestamp
                         dt = self._parse_timestamp(start_time)
                         if dt:
-                            # Always format as ISO format with full date and time
-                            hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
+                            # Always format as ISO format with full date and time using standardized method
+                            hour_key = super().format_timestamp_to_iso(dt)
                             hourly_prices[hour_key] = float(raw_price)
-                            _LOGGER.debug(f"Added hourly price with ISO timestamp: {hour_key} = {raw_price}")
+                            
+                            # Add debug info about tomorrow's data
+                            if super().is_tomorrow_timestamp(dt):
+                                _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {raw_price}")
+                            else:
+                                _LOGGER.debug(f"Added hourly price with ISO timestamp: {hour_key} = {raw_price}")
                 
             return hourly_prices
             
@@ -295,18 +301,22 @@ class NordpoolPriceParser(BasePriceParser):
                         # Parse timestamp
                         dt = self._parse_timestamp(start_time)
                         if dt:
-                            # ALWAYS format as ISO format with full date and time
-                            hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
+                            # ALWAYS format as ISO format with full date and time using standardized method
+                            hour_key = super().format_timestamp_to_iso(dt)
                             hourly_prices[hour_key] = float(raw_price)
-                            _LOGGER.debug(f"Added hourly price with ISO timestamp: {hour_key} = {raw_price}")
+                            
+                            # Add debug info about tomorrow's data
+                            if super().is_tomorrow_timestamp(dt):
+                                _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {raw_price}")
+                            else:
+                                _LOGGER.debug(f"Added hourly price with ISO timestamp: {hour_key} = {raw_price}")
 
         return hourly_prices
 
     def parse_tomorrow_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
         """Parse tomorrow's hourly prices from Nordpool data.
         
-        Note: This method is kept for backward compatibility but should no longer be needed
-        with the improved adapter, which extracts tomorrow data from hourly_prices based on dates.
+        This method now ensures all timestamps are consistently formatted using ISO format.
 
         Args:
             data: Raw API response data
@@ -316,6 +326,7 @@ class NordpoolPriceParser(BasePriceParser):
             Dictionary of hourly prices with ISO format timestamp keys
         """
         hourly_prices = {}
+        tomorrow_prices_found = 0
 
         # Process tomorrow's data
         if "tomorrow" in data and data["tomorrow"] is not None:
@@ -345,10 +356,23 @@ class NordpoolPriceParser(BasePriceParser):
                         # Parse timestamp
                         dt = self._parse_timestamp(start_time)
                         if dt:
-                            # ALWAYS format as ISO format with full date and time
-                            # This is crucial for the adapter to recognize tomorrow's data
-                            hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
+                            # ALWAYS format as ISO format with full date and time using standardized method
+                            hour_key = super().format_timestamp_to_iso(dt)
                             hourly_prices[hour_key] = float(raw_price)
-                            _LOGGER.debug(f"Added tomorrow price with ISO timestamp: {hour_key} = {raw_price}")
+                            tomorrow_prices_found += 1
+                            
+                            # Always verify this is actually tomorrow's data
+                            if super().is_tomorrow_timestamp(dt):
+                                _LOGGER.debug(f"Added confirmed tomorrow price: {hour_key} = {raw_price}")
+                            else:
+                                # If it's not tomorrow, add a prefix to make it clear
+                                prefixed_key = f"tomorrow_{hour_key.split('T')[1]}"  # e.g., "tomorrow_12:00"
+                                hourly_prices[prefixed_key] = float(raw_price)
+                                _LOGGER.debug(f"Added tomorrow price with prefixed key: {prefixed_key} = {raw_price}")
+
+        if tomorrow_prices_found > 0:
+            _LOGGER.info(f"Successfully extracted {tomorrow_prices_found} hours of tomorrow's prices")
+        else:
+            _LOGGER.debug("No tomorrow prices found in dedicated tomorrow data section")
 
         return hourly_prices

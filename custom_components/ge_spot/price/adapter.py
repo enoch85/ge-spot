@@ -43,42 +43,42 @@ class ElectricityPriceAdapter:
             Tuple of (hour, datetime) where hour is an integer 0-23 and datetime is the full datetime
             if available, or None if not available
         """
-        # Check if this is a tomorrow hour from timezone conversion
-        if hour_str.startswith("tomorrow_"):
-            # Extract the hour key without the prefix
-            hour_key = hour_str[9:]  # Remove "tomorrow_" prefix
+        try:
+            # Check if this is a tomorrow hour from timezone conversion
+            if hour_str.startswith("tomorrow_"):
+                # Extract the hour key without the prefix
+                hour_key = hour_str[9:]  # Remove "tomorrow_" prefix
+                try:
+                    hour = int(hour_key.split(":")[0])
+                    if 0 <= hour < 24:  # Only accept valid hours
+                        # Create a datetime for tomorrow with this hour
+                        dt = datetime.combine(self.tomorrow, datetime.min.time().replace(hour=hour), timezone.utc)
+                        return hour, dt
+                except (ValueError, IndexError):
+                    pass
+            
+            # Try simple "HH:00" format
             try:
-                hour = int(hour_key.split(":")[0])
-                if 0 <= hour < 24:  # Only accept valid hours
-                    # Create a datetime for tomorrow with this hour
-                    dt = datetime.combine(self.tomorrow, datetime.min.time().replace(hour=hour), timezone.utc)
-                    return hour, dt
+                hour = int(hour_str.split(":")[0])
+                if 0 <= hour < 24:
+                    return hour, None
             except (ValueError, IndexError):
                 pass
-        
-        # Try simple "HH:00" format first
-        try:
-            hour = int(hour_str.split(":")[0])
-            if 0 <= hour < 24:
-                return hour, None
-        except (ValueError, IndexError):
-            pass
-            
-        # Try ISO format
-        if "T" in hour_str:
-            try:
+                
+            # Try ISO format
+            if "T" in hour_str:
                 # Handle ISO format with timezone
                 dt = datetime.fromisoformat(hour_str.replace('Z', '+00:00'))
                 return dt.hour, dt
-            except (ValueError, TypeError):
-                pass
-                
+        except Exception as e:
+            _LOGGER.debug(f"Error parsing hour string '{hour_str}': {e}")
+        
         # If we get here, we couldn't parse the hour
-        _LOGGER.warning(f"Could not parse hour from: {hour_str}")
+        _LOGGER.debug(f"Could not parse hour from: {hour_str}")
         return None, None
 
     def _extract_hourly_prices(self) -> Tuple[Dict[str, float], Dict[str, datetime]]:
-        """Extract hourly prices from raw data.
+        """Extract hourly prices from raw data and separate tomorrow's data.
         
         Returns:
             Tuple of (hourly_prices, dates_by_hour) where hourly_prices is a dict of hour_key -> price
@@ -86,6 +86,7 @@ class ElectricityPriceAdapter:
         """
         hourly_prices = {}
         dates_by_hour = {}
+        tomorrow_in_hourly = {}  # Temporary dict to collect tomorrow's data found in hourly_prices
 
         for item in self.raw_data:
             if not isinstance(item, dict):
@@ -94,15 +95,32 @@ class ElectricityPriceAdapter:
             if "hourly_prices" in item and isinstance(item["hourly_prices"], dict):
                 # Store formatted hour -> price mapping
                 _LOGGER.debug(f"Found hourly_prices in raw data: {len(item['hourly_prices'])} entries")
+                
+                # First pass: Extract all timestamps and check for tomorrow's data
                 for hour_str, price in item["hourly_prices"].items():
                     hour, dt = self._parse_hour_from_string(hour_str)
+                    
                     if hour is not None:
                         hour_key = f"{hour:02d}:00"
-                        hourly_prices[hour_key] = price
-                        if dt is not None:
-                            dates_by_hour[hour_key] = dt
+                        
+                        # Check if this timestamp belongs to tomorrow
+                        if dt is not None and dt.date() == self.tomorrow:
+                            # This is tomorrow's data, store it separately
+                            _LOGGER.debug(f"Found tomorrow's data in hourly_prices: {hour_str} -> {hour_key}")
+                            tomorrow_in_hourly[hour_key] = price
+                        else:
+                            # Add to regular hourly prices
+                            hourly_prices[hour_key] = price
+                            if dt is not None:
+                                dates_by_hour[hour_key] = dt
 
         _LOGGER.debug(f"Extracted {len(hourly_prices)} hourly prices: {sorted(hourly_prices.keys())}")
+        
+        # If we found tomorrow's data, store it for later extraction
+        if tomorrow_in_hourly:
+            _LOGGER.info(f"Found {len(tomorrow_in_hourly)} hours of tomorrow's data in hourly_prices")
+            self._tomorrow_in_hourly = tomorrow_in_hourly
+            
         return hourly_prices, dates_by_hour
 
     def _extract_tomorrow_prices(self) -> Tuple[Dict[str, float], Dict[str, datetime]]:
@@ -158,7 +176,26 @@ class ElectricityPriceAdapter:
 
     def _extract_tomorrow_from_hourly(self) -> None:
         """Extract tomorrow's data from hourly_prices if dates are available."""
+        # First check if we already detected tomorrow's data during hourly prices extraction
+        if hasattr(self, '_tomorrow_in_hourly') and self._tomorrow_in_hourly:
+            # Move tomorrow data to tomorrow_prices directly
+            for hour_key, price in self._tomorrow_in_hourly.items():
+                self.tomorrow_prices[hour_key] = price
+                
+                # Create a datetime for tomorrow with this hour
+                try:
+                    hour = int(hour_key.split(":")[0])
+                    dt = datetime.combine(self.tomorrow, datetime.min.time().replace(hour=hour), timezone.utc)
+                    self.tomorrow_dates_by_hour[hour_key] = dt
+                except (ValueError, IndexError):
+                    pass
+                    
+            _LOGGER.info(f"Used {len(self._tomorrow_in_hourly)} hours of tomorrow's data found during extraction")
+            return
+            
+        # Traditional extraction based on dates if no pre-detected tomorrow data
         if not self.dates_by_hour:
+            _LOGGER.debug("No dates available for extracting tomorrow's data")
             return
             
         # Look for hours with tomorrow's date
@@ -325,7 +362,20 @@ class ElectricityPriceAdapter:
 
     def is_tomorrow_valid(self) -> bool:
         """Check if tomorrow's data is available."""
-        # Consider valid if we have at least 20 hours of data
-        is_valid = len(self.tomorrow_list) >= 20
+        # Check if we have any tomorrow data at all
+        if not self.tomorrow_list:
+            _LOGGER.debug("No tomorrow data available")
+            return False
+            
+        # Consider valid if we have at least 12 hours of data (half a day)
+        # This is more flexible than the previous 20 hour requirement
+        is_valid = len(self.tomorrow_list) >= 12
+        
+        # Log detailed validation information
         _LOGGER.debug(f"Tomorrow data validation: {len(self.tomorrow_list)}/24 hours available, valid: {is_valid}")
+        
+        # For hours between 12 and 20, log with higher visibility as this is a "partial" valid state
+        if 12 <= len(self.tomorrow_list) < 20:
+            _LOGGER.info(f"Partial tomorrow data available: {len(self.tomorrow_list)}/24 hours - treating as valid")
+            
         return is_valid
