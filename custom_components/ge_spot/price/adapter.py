@@ -22,7 +22,7 @@ class ElectricityPriceAdapter:
         self.tomorrow = self.today + timedelta(days=1)
 
         # Extract core data once for reuse
-        self.hourly_prices, self.dates_by_hour = self._extract_hourly_prices()
+        self.today_hourly_prices, self.dates_by_hour = self._extract_hourly_prices()
         self.tomorrow_prices, self.tomorrow_dates_by_hour = self._extract_tomorrow_prices()
 
         # If we don't have tomorrow prices but have dates in hourly prices,
@@ -30,7 +30,7 @@ class ElectricityPriceAdapter:
         if not self.tomorrow_prices and self.dates_by_hour:
             self._extract_tomorrow_from_hourly()
             
-        self.price_list = self._convert_to_price_list(self.hourly_prices)
+        self.price_list = self._convert_to_price_list(self.today_hourly_prices)
         self.tomorrow_list = self._convert_to_price_list(self.tomorrow_prices)
 
     def _parse_hour_from_string(self, hour_str: str) -> Tuple[Optional[int], Optional[datetime]]:
@@ -203,20 +203,20 @@ class ElectricityPriceAdapter:
         for hour_key, dt in self.dates_by_hour.items():
             if dt.date() == self.tomorrow:
                 # This is tomorrow's data, move it to tomorrow_prices
-                self.tomorrow_prices[hour_key] = self.hourly_prices[hour_key]
+                self.tomorrow_prices[hour_key] = self.today_hourly_prices[hour_key]
                 self.tomorrow_dates_by_hour[hour_key] = dt
                 tomorrow_hour_keys.append(hour_key)
                 
-        # Remove tomorrow's data from hourly_prices if we found any
+        # Remove tomorrow's data from today_hourly_prices if we found any
         if self.tomorrow_prices:
-            _LOGGER.info(f"Extracted {len(self.tomorrow_prices)} hours of tomorrow's data from hourly_prices")
+            _LOGGER.info(f"Extracted {len(self.tomorrow_prices)} hours of tomorrow's data from today_hourly_prices")
             
-            # Remove tomorrow's hours from hourly_prices
+            # Remove tomorrow's hours from today_hourly_prices
             for hour_key in tomorrow_hour_keys:
-                if hour_key in self.hourly_prices:
-                    del self.hourly_prices[hour_key]
+                if hour_key in self.today_hourly_prices:
+                    del self.today_hourly_prices[hour_key]
                     
-            _LOGGER.info(f"Kept {len(self.hourly_prices)} hours of today's data in hourly_prices")
+            _LOGGER.info(f"Kept {len(self.today_hourly_prices)} hours of today's data in today_hourly_prices")
 
     def _convert_to_price_list(self, price_dict: Dict[str, float]) -> List[float]:
         """Convert price dictionary to ordered list."""
@@ -245,15 +245,15 @@ class ElectricityPriceAdapter:
             hour_str = f"{now.hour:02d}:00"
             _LOGGER.debug(f"No TimezoneService available, using system time for current hour: {hour_str}")
 
-        _LOGGER.debug(f"Looking for current price at hour {hour_str}, available hours: {sorted(list(self.hourly_prices.keys()))}")
+        _LOGGER.debug(f"Looking for current price at hour {hour_str}, available hours: {sorted(list(self.today_hourly_prices.keys()))}")
 
-        if hour_str in self.hourly_prices:
-            price = self.hourly_prices[hour_str]
+        if hour_str in self.today_hourly_prices:
+            price = self.today_hourly_prices[hour_str]
             _LOGGER.debug(f"Found current price for hour {hour_str}: {price}")
             return price
 
         # If key not found, log error and return None
-        _LOGGER.error(f"Current hour key '{hour_str}' not found in available hours: {sorted(list(self.hourly_prices.keys()))}")
+        _LOGGER.error(f"Current hour key '{hour_str}' not found in available hours: {sorted(list(self.today_hourly_prices.keys()))}")
         return None
 
     def find_next_price(self, area=None, config=None) -> Optional[float]:
@@ -273,15 +273,15 @@ class ElectricityPriceAdapter:
             _LOGGER.debug(f"No TimezoneService available, using system time for next hour: {next_hour:02d}:00")
 
         hour_str = f"{next_hour:02d}:00"
-        _LOGGER.debug(f"Looking for next price at hour {hour_str}, available hours: {sorted(list(self.hourly_prices.keys()))}")
+        _LOGGER.debug(f"Looking for next price at hour {hour_str}, available hours: {sorted(list(self.today_hourly_prices.keys()))}")
 
-        if hour_str in self.hourly_prices:
-            price = self.hourly_prices[hour_str]
+        if hour_str in self.today_hourly_prices:
+            price = self.today_hourly_prices[hour_str]
             _LOGGER.debug(f"Found next price for hour {hour_str}: {price}")
             return price
 
         # If key not found, log error and return None
-        _LOGGER.error(f"Next hour key '{hour_str}' not found in available hours: {sorted(list(self.hourly_prices.keys()))}")
+        _LOGGER.error(f"Next hour key '{hour_str}' not found in available hours: {sorted(list(self.today_hourly_prices.keys()))}")
         return None
 
     def get_today_prices(self) -> List[float]:
@@ -295,7 +295,7 @@ class ElectricityPriceAdapter:
     def get_prices_with_timestamps(self, day_offset: int = 0) -> Dict[str, float]:
         """Get dictionary of ISO timestamp -> price."""
         # Get appropriate price dictionary
-        prices = self.tomorrow_prices if day_offset == 1 else self.hourly_prices
+        prices = self.tomorrow_prices if day_offset == 1 else self.today_hourly_prices
 
         # Get base date
         base_date = dt_util.now().date()

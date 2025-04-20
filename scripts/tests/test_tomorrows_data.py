@@ -286,7 +286,7 @@ async def test_api_direct(api_name: str, area: str) -> Dict[str, Any]:
         adapter = ElectricityPriceAdapter(mock_hass, [data], False)
         
         # Log details about adapter data
-        logger.info(f"Adapter hourly price keys: {list(adapter.hourly_prices.keys())[:5]}")
+        logger.info(f"Adapter hourly price keys: {list(adapter.today_hourly_prices.keys())[:5]}")
         
         # Check if adapter has tomorrow prices
         tomorrow_prices = adapter.tomorrow_prices
