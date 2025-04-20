@@ -262,32 +262,11 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                     "price": price
                 })
 
-            # Convert hourly prices to area-specific timezone (or HA timezone) in a single step
-            converted_prices = tz_service.normalize_hourly_prices(
-                raw_today_hourly_prices, source_timezone)
-
-            # Process each hour with price conversion
-            for hour_str, price in converted_prices.items():
-                # Apply price conversion
-                converted_price = await async_convert_energy_price(
-                    price=price,
-                    from_unit=EnergyUnit.MWH,
-                    to_unit="kWh",
-                    from_currency=entsoe_currency,
-                    to_currency=currency,
-                    vat=vat,
-                    to_subunit=use_subunit,
-                    session=session
-                )
-
-                # Store converted price
-                result["today_hourly_prices"][hour_str] = converted_price
-
-            # Process tomorrow hourly prices if available
+            # Process raw tomorrow data to add to raw_prices for reference
             if raw_tomorrow_hourly_prices:
                 _LOGGER.debug(f"Raw tomorrow hourly prices with ISO timestamps: {list(raw_tomorrow_hourly_prices.items())[:5]} ({len(raw_tomorrow_hourly_prices)} total)")
 
-                # Add raw prices for tomorrow as well
+                # Add raw prices for tomorrow
                 for hour_str, price in raw_tomorrow_hourly_prices.items():
                     # Check if hour_str is in ISO format (contains 'T')
                     if "T" in hour_str:
@@ -308,28 +287,43 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                         except (ValueError, TypeError) as e:
                             _LOGGER.warning(f"Failed to parse ISO date in tomorrow data: {hour_str} - {e}")
 
-                # Initialize tomorrow_hourly_prices in result if not there
-                if "tomorrow_hourly_prices" not in result:
-                    result["tomorrow_hourly_prices"] = {}
+            # Initialize tomorrow_hourly_prices in result if not there
+            if "tomorrow_hourly_prices" not in result:
+                result["tomorrow_hourly_prices"] = {}
 
-                # Convert tomorrow hourly prices to area-specific timezone
-                converted_tomorrow_hourly_prices = tz_service.normalize_hourly_prices(
-                    raw_tomorrow_hourly_prices, source_timezone)
+            # Convert and reorganize today and tomorrow prices based on local timezone
+            converted_today, converted_tomorrow = tz_service.normalize_hourly_prices_with_tomorrow(
+                raw_today_hourly_prices, raw_tomorrow_hourly_prices, source_timezone)
 
-                # Apply price conversions for tomorrow prices
-                for hour_str, price in converted_tomorrow_hourly_prices.items():
-                    converted_price = await async_convert_energy_price(
-                        price=price,
-                        from_unit=EnergyUnit.MWH,
-                        to_unit="kWh",
-                        from_currency=entsoe_currency,
-                        to_currency=currency,
-                        vat=vat,
-                        to_subunit=use_subunit,
-                        session=session
-                    )
+            _LOGGER.debug(f"After normalization: Today prices: {len(converted_today)}, Tomorrow prices: {len(converted_tomorrow)}")
 
-                    result["tomorrow_hourly_prices"][hour_str] = converted_price
+            # Apply price conversions for today prices
+            for hour_str, price in converted_today.items():
+                converted_price = await async_convert_energy_price(
+                    price=price,
+                    from_unit=EnergyUnit.MWH,
+                    to_unit="kWh",
+                    from_currency=entsoe_currency,
+                    to_currency=currency,
+                    vat=vat,
+                    to_subunit=use_subunit,
+                    session=session
+                )
+                result["today_hourly_prices"][hour_str] = converted_price
+
+            # Apply price conversions for tomorrow prices
+            for hour_str, price in converted_tomorrow.items():
+                converted_price = await async_convert_energy_price(
+                    price=price,
+                    from_unit=EnergyUnit.MWH,
+                    to_unit="kWh",
+                    from_currency=entsoe_currency,
+                    to_currency=currency,
+                    vat=vat,
+                    to_subunit=use_subunit,
+                    session=session
+                )
+                result["tomorrow_hourly_prices"][hour_str] = converted_price
 
             # Get current and next hour prices
             current_hour_key = tz_service.get_current_hour_key()
