@@ -123,9 +123,6 @@ class TimezoneConverter:
                             # Use format_hour_key utility function to ensure consistent formatting
                             from .timezone_utils import format_hour_key
                             target_hour_str = format_hour_key(target_dt)
-
-                            # Add debug logging
-                            _LOGGER.debug(f"Preserved ISO date in conversion: {hour_str} -> {target_hour_str}")
                         except (ValueError, TypeError) as e:
                             _LOGGER.error(f"Failed to parse ISO date: {hour_str} - {e}")
                             converted[hour_str] = price  # Keep original in case of error
@@ -147,19 +144,18 @@ class TimezoneConverter:
                     target_hour = target_dt.hour
                     
                     # Log the conversion happening - for any timezone, not just Europe
-                    if source_hour != target_hour:
-                        _LOGGER.info(f"Timezone conversion: {source_hour}:00 in {source_tz.key} → {target_hour}:00 in {target.key} with price {price}")
+                    _LOGGER.info(f"Timezone conversion: {source_hour}:00 in {source_tz.key} → {target_hour}:00 in {target.key} with price {price}")
 
                     # Check if this hour key has already been processed
                     if target_hour_str in processed_hours:
-                        # Handle DST transition - log it for debugging
-                        _LOGGER.debug(f"DST transition detected - hour {hour_str} ({source_timezone}) maps to already processed hour {target_hour_str}")
+                        # Handle DST transition - log it only at debug level
+                        if _LOGGER.isEnabledFor(logging.DEBUG):
+                            _LOGGER.debug(f"DST transition detected - hour {hour_str} ({source_timezone}) maps to already processed hour {target_hour_str}")
 
                         # Check if this is a new date (e.g., transition from 23:00 to 00:00)
                         if target_dt.date() != today_date:
                             # This is tomorrow's data, use a different key format to preserve it
                             tomorrow_key = f"tomorrow_{target_hour_str}"
-                            _LOGGER.debug(f"Preserving hour from next day as {tomorrow_key}: {target_dt}")
                             converted[tomorrow_key] = price
                             continue
                     else:
@@ -167,7 +163,6 @@ class TimezoneConverter:
 
                     # Store price with correct target hour - this is the critical assignment
                     converted[target_hour_str] = price
-                    _LOGGER.debug(f"Converted hour {hour_str} ({source_timezone}) to {target_hour_str} ({target})")
                 except (ValueError, TypeError) as e:
                     _LOGGER.error(f"Error converting hour {hour_str}: {e}")
                     converted[hour_str] = price  # Keep original in case of error

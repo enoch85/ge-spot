@@ -164,7 +164,6 @@ class TimezoneService:
 
         # For both timezone reference modes, we convert API data to HA timezone
         # The difference in behavior is handled in get_current_hour_key(), not here
-        _LOGGER.debug(f"Converting hourly prices from {source_timezone} to HA timezone {self.ha_timezone}")
         return self.converter.convert_hourly_prices(
             hourly_prices,
             source_timezone,
