@@ -8,7 +8,7 @@ from ..utils.debug_utils import sanitize_sensitive_data
 from ..const.sources import Source
 from ..const.currencies import Currency
 from ..const.areas import AreaMapping
-from ..const.time import TimeFormat
+from ..const.time import TimeFormat, TimezoneName
 from ..const.network import Network, ContentType
 from ..utils.date_range import generate_date_ranges
 
@@ -39,10 +39,10 @@ async def fetch_day_ahead_prices(source_type, config, area, currency, reference_
         # Add basic metadata
         result = {
             "raw_data": raw_data,
-            "data_source": "Nordpool",
+            "data_source": Source.NORDPOOL,
             "last_updated": datetime.now(timezone.utc).isoformat(),
             "currency": Currency.EUR,  # Nordpool API returns prices in EUR
-            "api_timezone": "Etc/UTC"  # Nordpool API uses UTC timezone
+            "api_timezone": TimezoneName.UTC  # Nordpool API uses UTC timezone
         }
 
         return result
@@ -159,7 +159,7 @@ async def _fetch_data(client, area, reference_time):
         _LOGGER.warning(f"Nordpool: No data found for area {area} after trying multiple date ranges and market types")
         return {
             "error": "No matching data found after trying multiple date ranges and market types",
-            "data_source": "Nordpool"
+            "data_source": Source.NORDPOOL
         }
     except Exception as e:
         _LOGGER.error(f"Error in _fetch_data for Nordpool: {str(e)}", exc_info=True)

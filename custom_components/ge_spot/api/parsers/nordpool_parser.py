@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 from ...const.sources import Source
+from ...const.currencies import Currency
 from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
 
@@ -39,7 +40,7 @@ class NordpoolPriceParser(BasePriceParser):
         # Create a result dictionary with basic metadata
         result = {
             "source": self.source,
-            "currency": "EUR",  # Nordpool API returns prices in EUR
+            "currency": Currency.EUR,  # Nordpool API returns prices in EUR
             "market_type": data.get("market_type", "DayAhead"),
             "raw_data": raw_data
         }
@@ -64,7 +65,7 @@ class NordpoolPriceParser(BasePriceParser):
             Metadata dictionary
         """
         metadata = {
-            "currency": "EUR",  # Default currency for Nordpool
+            "currency": Currency.EUR,  # Default currency for Nordpool
             "market_type": data.get("market_type", "DayAhead")
         }
 

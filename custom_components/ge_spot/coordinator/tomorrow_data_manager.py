@@ -422,8 +422,9 @@ class TomorrowDataManager:
                 today_entries = raw_data["multiAreaEntries"]
                 self._extract_hourly_prices(today_entries, result["today_hourly_prices"], is_tomorrow=False)
         
-        # Add API timezone
-        result["api_timezone"] = data.get("api_timezone", "Etc/UTC")
+        # Add API timezone if available
+        if "api_timezone" in data:
+            result["api_timezone"] = data["api_timezone"]
         
         # Copy any other metadata from the original data
         for key, value in data.items():
