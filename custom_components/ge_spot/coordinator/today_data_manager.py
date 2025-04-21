@@ -59,14 +59,14 @@ class TodayDataManager:
         self._consecutive_failures = 0
         self._last_failure_time = None
 
-    async def fetch_data(self, reason: str) -> Optional[Dict[str, Any]]:
+    async def fetch_data(self, reason: str) -> Dict[str, Any]:
         """Fetch today's price data from APIs.
 
         Args:
             reason: Reason for fetching data
 
         Returns:
-            Dictionary with fetched data and metadata, or None if all sources failed
+            Dictionary with fetched data and metadata, or empty dict with error info if all sources failed
         """
         _LOGGER.info(f"Fetching new data from API for {self.area} - Reason: {reason}")
 
@@ -86,32 +86,53 @@ class TodayDataManager:
 
         # Try to fetch data from all sources
         result = await fallback_mgr.fetch_with_fallbacks()
-
+        
+        # Initialize a default response dictionary with empty values
+        response = {
+            "data": None,
+            "source": None,
+            "attempted": [],
+            "skipped_sources": [],
+            "fallback_sources": []
+        }
+        
         # If all sources failed or were skipped
-        if not result["data"]:
+        if not result or not result.get("data"):
             # Check if we have skipped sources
-            skipped_sources = result.get("skipped_sources", [])
+            skipped_sources = result.get("skipped_sources", []) if result else []
             if skipped_sources:
                 _LOGGER.info(f"Some sources were skipped for area {self.area}: {skipped_sources}")
                 _LOGGER.info(f"This is usually due to missing API keys for those sources.")
+                response["skipped_sources"] = skipped_sources
 
             # Count as a failure
             self._consecutive_failures += 1
             self._last_failure_time = dt_util.now()
             _LOGGER.error(f"Failed to fetch data from any source for area {self.area}")
 
-            return None
+            return response
 
         # Use the successful data
         data = result["data"]
         self._active_source = result["source"]
-        self._attempted_sources = result["attempted"]
+        self._attempted_sources = result.get("attempted", [])
         self._consecutive_failures = 0
+
+        # Update response with result data
+        response.update({
+            "data": data,
+            "source": self._active_source,
+            "attempted": self._attempted_sources,
+            "skipped_sources": result.get("skipped_sources", []),
+            "fallback_sources": result.get("fallback_sources", [])
+        })
 
         # Store fallback data if available
         for fb_source in result.get("fallback_sources", []):
             if fb_source != result["source"] and f"fallback_data_{fb_source}" in result:
                 self._fallback_data[fb_source] = result[f"fallback_data_{fb_source}"]
+                # Add fallback data to response
+                response[f"fallback_data_{fb_source}"] = result[f"fallback_data_{fb_source}"]
 
         # Store in cache
         self._price_cache.store(data, self.area, result["source"], dt_util.now())
@@ -119,12 +140,7 @@ class TodayDataManager:
         # Update tracker variables for timestamps
         self._last_api_fetch = dt_util.now()
 
-        # Add metadata to result
-        result["active_source"] = self._active_source
-        result["attempted_sources"] = self._attempted_sources
-        result["fallback_data"] = self._fallback_data
-
-        return result
+        return response
 
     def get_adapters(self, data: Dict[str, Any]) -> Tuple[ElectricityPriceAdapter, Dict[str, ElectricityPriceAdapter]]:
         """Create adapters for primary and fallback sources.
