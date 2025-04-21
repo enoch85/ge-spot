@@ -295,16 +295,20 @@ async def test_today_api_data(
             result["message"] = "No valid data returned"
             return result
         
-        # Check for today's data
-        has_today_data = "hourly_prices" in data and data["hourly_prices"]
+        # Check for today's data - support both hourly_prices and today_hourly_prices
+        has_hourly_prices = "hourly_prices" in data and data["hourly_prices"]
+        has_today_hourly_prices = "today_hourly_prices" in data and data["today_hourly_prices"]
+        has_today_data = has_hourly_prices or has_today_hourly_prices
         result["has_today_data"] = has_today_data
         
         if has_today_data:
-            result["today_hours"] = len(data["hourly_prices"])
+            # Use the appropriate data source
+            hourly_prices = data["today_hourly_prices"] if has_today_hourly_prices else data["hourly_prices"]
+            result["today_hours"] = len(hourly_prices)
             logger.info(f"Source {api_name} for area {area} has today's data: {result['today_hours']} hours")
             
             # Log the actual hours available for today
-            hours = sorted(data["hourly_prices"].keys())
+            hours = sorted(hourly_prices.keys())
             logger.debug(f"Today hours available: {hours}")
             result["debug_info"]["today_hours"] = hours
             

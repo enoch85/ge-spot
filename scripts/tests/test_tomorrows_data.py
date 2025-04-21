@@ -132,14 +132,17 @@ async def test_parsers_with_api(
             os.makedirs(cache_dir, exist_ok=True)
             cache_file = os.path.join(cache_dir, f"{api_name}_{area}.json")
             
-            # Try cache first
+            # Determine whether to use cache or always fetch fresh data
             use_cache = False
-            if os.path.exists(cache_file):
+            if not debug and os.path.exists(cache_file):
                 file_time = os.path.getmtime(cache_file)
                 file_age = datetime.now().timestamp() - file_time
                 if file_age < 24 * 60 * 60:  # 24 hours in seconds
                     use_cache = True
-                    
+            
+            if debug:
+                logger.info(f"Debug mode enabled, always using real API data for {api_name} ({area})")
+                
             data = None
             if use_cache:
                 logger.info(f"Using cached data for {api_name} ({area})")
@@ -150,7 +153,7 @@ async def test_parsers_with_api(
                     logger.warning(f"Failed to load cache for {api_name} ({area}): {e}")
                     use_cache = False
             
-            # Fall back to API if cache missing or failed
+            # Fetch from API if cache is disabled, missing, or failed
             if not use_cache or not data:
                 logger.info(f"Fetching live data from {api_name} API for {area}")
                 try:

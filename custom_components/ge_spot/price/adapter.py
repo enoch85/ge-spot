@@ -388,24 +388,22 @@ class ElectricityPriceAdapter:
         if 12 <= len(self.tomorrow_list) < 20:
             _LOGGER.info(f"Partial tomorrow data available: {len(self.tomorrow_list)}/24 hours - treating as valid")
 
-        # Additional validation: Check if tomorrow's data is different from today's
-        if is_valid and len(self.price_list) >= 12:
-            # Compare a few hours to see if they're identical
-            identical_count = 0
-            comparison_hours = min(len(self.tomorrow_list), len(self.price_list))
+        # Check if we have date information for tomorrow's data
+        if is_valid and self.tomorrow_dates_by_hour:
+            # We have date information, so we can verify that the data is actually for tomorrow
+            tomorrow_date = datetime.now(timezone.utc).date() + timedelta(days=1)
             
-            for i in range(comparison_hours):
-                if self.tomorrow_list[i] == self.price_list[i]:
-                    identical_count += 1
+            # Check if at least one date matches tomorrow
+            has_tomorrow_date = False
+            for hour_key, dt in self.tomorrow_dates_by_hour.items():
+                if dt.date() == tomorrow_date:
+                    has_tomorrow_date = True
+                    break
             
-            # Calculate the percentage of identical hours
-            identical_percentage = (identical_count / comparison_hours) * 100
-            
-            # If more than 90% of hours are identical, it's likely duplicated data
-            if identical_percentage > 90:
-                _LOGGER.warning(f"Tomorrow's data appears to be duplicated from today ({identical_count}/{comparison_hours} identical hours, {identical_percentage:.1f}%)")
+            if not has_tomorrow_date:
+                _LOGGER.warning(f"Tomorrow's data does not contain any entries for tomorrow's date ({tomorrow_date})")
                 is_valid = False
             else:
-                _LOGGER.debug(f"Tomorrow's data differs from today's data ({identical_count}/{comparison_hours} identical hours, {identical_percentage:.1f}%)")
+                _LOGGER.debug(f"Tomorrow's data contains entries for tomorrow's date ({tomorrow_date})")
 
         return is_valid

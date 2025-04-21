@@ -152,22 +152,31 @@ async def _fetch_data(client, config, area, reference_time):
                             # Verify that the entries are actually for tomorrow
                             tomorrow_date = (reference_time + timedelta(days=1)).date()
                             has_tomorrow_data = False
+                            tomorrow_entries_count = 0
                             
                             for entry in tomorrow_entries:
                                 if "deliveryStart" in entry:
                                     try:
                                         start_time = entry["deliveryStart"]
                                         dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-                                        if dt.date() == tomorrow_date:
+                                        entry_date = dt.date()
+                                        
+                                        if entry_date == tomorrow_date:
+                                            tomorrow_entries_count += 1
                                             has_tomorrow_data = True
-                                            break
-                                    except (ValueError, TypeError):
+                                            _LOGGER.debug(f"Found valid tomorrow entry: {dt.isoformat()} (date: {entry_date}, tomorrow: {tomorrow_date})")
+                                        else:
+                                            _LOGGER.debug(f"Entry date {entry_date} does not match tomorrow date {tomorrow_date}")
+                                    except (ValueError, TypeError) as e:
+                                        _LOGGER.debug(f"Failed to parse timestamp: {start_time} - {e}")
                                         continue
                             
                             if not has_tomorrow_data:
-                                _LOGGER.warning(f"Tomorrow's data for Nordpool area {area} does not contain entries for tomorrow")
+                                _LOGGER.warning(f"Tomorrow's data for Nordpool area {area} does not contain entries for tomorrow date {tomorrow_date}")
                                 # Don't use data that doesn't actually contain tomorrow's entries
                                 tomorrow_response = None
+                            else:
+                                _LOGGER.info(f"Found {tomorrow_entries_count} entries for tomorrow date {tomorrow_date}")
                         else:
                             _LOGGER.warning(f"Failed to fetch valid tomorrow's data for Nordpool area {area}")
                             tomorrow_response = None

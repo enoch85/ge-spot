@@ -549,22 +549,23 @@ class NordpoolPriceParser(BasePriceParser):
                         dt = self._parse_timestamp(start_time)
                         if dt:
                             # Only add entries that are actually for tomorrow's date
-                            if dt.date() == tomorrow:
+                            entry_date = dt.date()
+                            if entry_date == tomorrow:
                                 # Format as ISO format with full date and time
                                 hour_key = super().format_timestamp_to_iso(dt)
                                 price_val = float(raw_price)
                                 
                                 # Store the price with the ISO timestamp
                                 tomorrow_hourly_prices[hour_key] = price_val
-                                _LOGGER.debug(f"Extracted price from tomorrow data: {hour_key} = {price_val}")
+                                _LOGGER.debug(f"Extracted price from tomorrow data: {hour_key} = {price_val} (date: {entry_date}, tomorrow: {tomorrow})")
                                 
                                 # Also store in simple HH:00 format for direct use
                                 simple_key = f"{dt.hour:02d}:00"
                                 tomorrow_hourly_prices[simple_key] = price_val
                                 
-                                _LOGGER.debug(f"Adding tomorrow price: {simple_key} = {price_val}")
+                                _LOGGER.debug(f"Adding tomorrow price: {simple_key} = {price_val} for date {entry_date}")
                             else:
-                                _LOGGER.debug(f"Skipping entry with date {dt.date()} - not tomorrow ({tomorrow})")
+                                _LOGGER.warning(f"Skipping entry with date {entry_date} - not matching tomorrow date {tomorrow}")
         
         # Also check for tomorrow's data in the combined response
         # This is needed for the direct API test which fetches tomorrow's data separately
