@@ -127,7 +127,7 @@ def test_adapter_with_dates(hass, test_data_with_dates):
         Dictionary with test results
     """
     # Create adapter with data that has dates
-    adapter = ElectricityPriceAdapter(hass, [test_data_with_dates], False)
+    adapter = ElectricityPriceAdapter(hass, [test_data_with_dates], Source.NORDPOOL, False)
     
     # Check if adapter preserves dates
     hourly_prices = adapter.hourly_prices
@@ -156,7 +156,7 @@ def test_adapter_with_mixed_data(hass, test_data_mixed):
         Dictionary with test results
     """
     # Create adapter with mixed data
-    adapter = ElectricityPriceAdapter(hass, [test_data_mixed], False)
+    adapter = ElectricityPriceAdapter(hass, [test_data_mixed], Source.NORDPOOL, False)
     
     # Check if adapter has all hours
     hourly_prices = adapter.hourly_prices
@@ -189,7 +189,7 @@ def test_improved_adapter_with_mixed_data(hass, test_data_mixed):
         Dictionary with test results
     """
     # Create improved adapter with mixed data
-    adapter = ImprovedElectricityPriceAdapter(hass, [test_data_mixed], False)
+    adapter = ImprovedElectricityPriceAdapter(hass, [test_data_mixed], Source.NORDPOOL, False)
     
     # Check if adapter has separated today's and tomorrow's data
     hourly_prices = adapter.hourly_prices

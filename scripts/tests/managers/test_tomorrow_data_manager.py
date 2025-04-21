@@ -249,7 +249,7 @@ class TestAdapterDateHandling(unittest.TestCase):
     def test_adapter_with_dates(self):
         """Test ElectricityPriceAdapter with dates in hourly_prices."""
         # Create adapter with data that has dates
-        adapter = ElectricityPriceAdapter(self.hass, [self.test_data_with_dates], False)
+        adapter = ElectricityPriceAdapter(self.hass, [self.test_data_with_dates], Source.NORDPOOL, False)
         
         # Check if adapter preserves dates
         hourly_prices = adapter.hourly_prices
@@ -275,7 +275,7 @@ class TestAdapterDateHandling(unittest.TestCase):
     def test_adapter_without_dates(self):
         """Test ElectricityPriceAdapter without dates in hourly_prices."""
         # Create adapter with data that doesn't have dates
-        adapter = ElectricityPriceAdapter(self.hass, [self.test_data_without_dates], False)
+        adapter = ElectricityPriceAdapter(self.hass, [self.test_data_without_dates], Source.NORDPOOL, False)
         
         # Check if adapter has all hours
         hourly_prices = adapter.hourly_prices
@@ -289,7 +289,7 @@ class TestAdapterDateHandling(unittest.TestCase):
     def test_adapter_with_mixed_data(self):
         """Test ElectricityPriceAdapter with mixed today's and tomorrow's data."""
         # Create adapter with mixed data
-        adapter = ElectricityPriceAdapter(self.hass, [self.test_data_mixed], False)
+        adapter = ElectricityPriceAdapter(self.hass, [self.test_data_mixed], Source.NORDPOOL, False)
         
         # Check if adapter has all hours
         hourly_prices = adapter.hourly_prices
@@ -322,7 +322,7 @@ class TestAdapterDateHandling(unittest.TestCase):
         data["tomorrow_hourly_prices"] = tomorrow_hourly_prices
         
         # Create adapter
-        adapter = ElectricityPriceAdapter(self.hass, [data], False)
+        adapter = ElectricityPriceAdapter(self.hass, [data], Source.NORDPOOL, False)
         
         # Check if adapter correctly identifies tomorrow's data
         self.assertEqual(len(adapter.tomorrow_prices), 24, "Adapter should have 24 hours for tomorrow")
@@ -343,7 +343,7 @@ class TestAdapterDateHandling(unittest.TestCase):
         data["tomorrow_hourly_prices"] = tomorrow_hourly_prices
         
         # Create adapter
-        adapter = ElectricityPriceAdapter(self.hass, [data], False)
+        adapter = ElectricityPriceAdapter(self.hass, [data], Source.NORDPOOL, False)
         
         # Check if adapter correctly processes tomorrow_hourly_prices with ISO format dates
         tomorrow_prices = adapter.tomorrow_prices
@@ -424,7 +424,7 @@ class TestAdapterWithRealData(unittest.TestCase):
         
         # Test with original adapter
         logger.info("\n--- Testing with original adapter ---\n")
-        adapter = ElectricityPriceAdapter(self.hass, [raw_data], False)
+        adapter = ElectricityPriceAdapter(self.hass, [raw_data], Source.ENTSOE, False)
         
         # Check if adapter correctly extracts tomorrow's data
         tomorrow_prices = adapter.tomorrow_prices
@@ -442,7 +442,7 @@ class TestAdapterWithRealData(unittest.TestCase):
         
         # Test with improved adapter
         logger.info("\n--- Testing with improved adapter ---\n")
-        improved_adapter = ImprovedElectricityPriceAdapter(self.hass, [raw_data], False)
+        improved_adapter = ImprovedElectricityPriceAdapter(self.hass, [raw_data], Source.ENTSOE, False)
         
         # Check if improved adapter correctly extracts tomorrow's data
         improved_tomorrow_prices = improved_adapter.tomorrow_prices
@@ -501,7 +501,7 @@ class TestAdapterWithRealData(unittest.TestCase):
             
             # Test with original adapter
             logger.info("\n--- Testing with original adapter ---\n")
-            adapter = ElectricityPriceAdapter(self.hass, [raw_data], False)
+            adapter = ElectricityPriceAdapter(self.hass, [raw_data], Source.ENTSOE, False)
             
             # Check if adapter correctly extracts tomorrow's data
             tomorrow_prices = adapter.tomorrow_prices
@@ -513,7 +513,7 @@ class TestAdapterWithRealData(unittest.TestCase):
             
             # Test with improved adapter
             logger.info("\n--- Testing with improved adapter ---\n")
-            improved_adapter = ImprovedElectricityPriceAdapter(self.hass, [raw_data], False)
+            improved_adapter = ImprovedElectricityPriceAdapter(self.hass, [raw_data], Source.ENTSOE, False)
             
             # Check if improved adapter correctly extracts tomorrow's data
             improved_tomorrow_prices = improved_adapter.tomorrow_prices
@@ -625,7 +625,7 @@ async def test_tomorrow_data_manager_with_real_api(api_key: str, area: str = "SE
         logger.info(f"Sample tomorrow hourly prices: {sample_entries}")
     
     # Create adapter to test tomorrow data extraction
-    adapter = ElectricityPriceAdapter(hass, [data], False)
+    adapter = ElectricityPriceAdapter(hass, [data], "entsoe", False)
     
     # Check if adapter correctly extracts tomorrow's data
     tomorrow_prices = adapter.tomorrow_prices
@@ -642,7 +642,7 @@ async def test_tomorrow_data_manager_with_real_api(api_key: str, area: str = "SE
     logger.info(f"Today hours: {len(adapter.hourly_prices)}, Tomorrow hours: {len(tomorrow_prices)}")
     
     # Create improved adapter to test tomorrow data extraction
-    improved_adapter = ImprovedElectricityPriceAdapter(hass, [data], False)
+    improved_adapter = ImprovedElectricityPriceAdapter(hass, [data], "entsoe", False)
     
     # Check if improved adapter correctly extracts tomorrow's data
     improved_tomorrow_prices = improved_adapter.tomorrow_prices

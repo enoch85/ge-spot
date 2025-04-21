@@ -154,14 +154,14 @@ class TodayDataManager:
         """
         # Create adapter for primary source
         primary_adapter = ElectricityPriceAdapter(
-            self.hass, [data], self._use_subunit
+            self.hass, [data], self._active_source, self._use_subunit
         )
 
         # Create adapters for fallback sources
         fallback_adapters = {}
         for src, fb_data in self._fallback_data.items():
             fallback_adapters[src] = ElectricityPriceAdapter(
-                self.hass, [fb_data], self._use_subunit
+                self.hass, [fb_data], src, self._use_subunit
             )
 
         return primary_adapter, fallback_adapters

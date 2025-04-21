@@ -307,9 +307,9 @@ async def test_tomorrow_api_data(
         
         # Create adapter to validate tomorrow's data
         if use_improved_adapter:
-            adapter = ImprovedElectricityPriceAdapter(mock_hass, [data], False)
+            adapter = ImprovedElectricityPriceAdapter(mock_hass, [data], api_name, False)
         else:
-            adapter = ElectricityPriceAdapter(mock_hass, [data], False)
+            adapter = ElectricityPriceAdapter(mock_hass, [data], api_name, False)
             
         is_tomorrow_valid = adapter.is_tomorrow_valid()
         result["tomorrow_valid"] = is_tomorrow_valid
@@ -475,7 +475,7 @@ async def test_tomorrow_api_data(
                 
                 # Check if the improved adapter can extract tomorrow's data
                 if use_improved_adapter:
-                    improved_adapter = ImprovedElectricityPriceAdapter(mock_hass, [data], False)
+                    improved_adapter = ImprovedElectricityPriceAdapter(mock_hass, [data], api_name, False)
                     improved_tomorrow_valid = improved_adapter.is_tomorrow_valid()
                     result["improved_tomorrow_valid"] = improved_tomorrow_valid
                     result["improved_tomorrow_hours"] = len(improved_adapter.tomorrow_prices)

@@ -166,7 +166,7 @@ class TomorrowDataManager:
                             self._has_tomorrow_data = True
 
                             # Create adapter to validate the data
-                            adapter = ElectricityPriceAdapter(self.hass, [data], self._use_subunit)
+                            adapter = ElectricityPriceAdapter(self.hass, [data], source, self._use_subunit)
                             if adapter.is_tomorrow_valid():
                                 _LOGGER.info("Tomorrow's data in cache is valid")
                                 return True
@@ -218,7 +218,7 @@ class TomorrowDataManager:
                             self._has_tomorrow_data = True
 
                             # Create adapter to validate the data
-                            adapter = ElectricityPriceAdapter(self.hass, [data], self._use_subunit)
+                            adapter = ElectricityPriceAdapter(self.hass, [data], source, self._use_subunit)
                             if adapter.is_tomorrow_valid():
                                 _LOGGER.info(f"Tomorrow's data in today's cache is valid with {tomorrow_hours_count} hours")
                                 return True
@@ -321,7 +321,7 @@ class TomorrowDataManager:
             data = result["data"]
 
             # Check if tomorrow data is valid
-            adapter = ElectricityPriceAdapter(self.hass, [data], self._use_subunit)
+            adapter = ElectricityPriceAdapter(self.hass, [data], result["source"], self._use_subunit)
             has_tomorrow_data = adapter.is_tomorrow_valid()
             if has_tomorrow_data:
                 _LOGGER.info(f"Found valid tomorrow data from {result['source']}")
@@ -347,7 +347,7 @@ class TomorrowDataManager:
                 for fb_source in result.get("fallback_sources", []):
                     if fb_source != result["source"] and f"fallback_data_{fb_source}" in result:
                         fb_data = result[f"fallback_data_{fb_source}"]
-                        fb_adapter = ElectricityPriceAdapter(self.hass, [fb_data], self._use_subunit)
+                        fb_adapter = ElectricityPriceAdapter(self.hass, [fb_data], fb_source, self._use_subunit)
 
                         if fb_adapter.is_tomorrow_valid():
                             _LOGGER.info(f"Found tomorrow's data in fallback source {fb_source}")

@@ -202,7 +202,7 @@ async def test_parsers_with_api(
                     logger.debug("Found raw_data key in cached data, using it for adapter")
                     adapter_data = data["raw_data"]
                 
-                adapter = ElectricityPriceAdapter(mock_hass, [adapter_data], False)
+                adapter = ElectricityPriceAdapter(mock_hass, [adapter_data], source_type, False)
                 
                 # Get the hour counts for both today and tomorrow data
                 # Check both possible attribute names
@@ -317,7 +317,7 @@ async def test_tdm(
         
         if has_data and data:
             # Create adapter to test data
-            adapter = ElectricityPriceAdapter(mock_hass, [data], False)
+            adapter = ElectricityPriceAdapter(mock_hass, [data], source_type, False)
             
             # Get today hours count
             today_hours = len(adapter.today_hourly_prices) if hasattr(adapter, "today_hourly_prices") else 0

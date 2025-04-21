@@ -103,7 +103,7 @@ async def test_nordpool_api(area: str = "SE3"):
             logger.warning("No tomorrow_hourly_prices found in data")
         
         # Create adapter to test tomorrow data extraction
-        adapter = ElectricityPriceAdapter(hass, [data], False)
+        adapter = ElectricityPriceAdapter(hass, [data], Source.NORDPOOL, False)
         
         # Check if adapter correctly extracts tomorrow's data
         tomorrow_prices = adapter.tomorrow_prices
@@ -120,7 +120,7 @@ async def test_nordpool_api(area: str = "SE3"):
         logger.info(f"Today hours: {len(adapter.hourly_prices)}, Tomorrow hours: {len(tomorrow_prices)}")
         
         # Create improved adapter to test tomorrow data extraction
-        improved_adapter = ImprovedElectricityPriceAdapter(hass, [data], False)
+        improved_adapter = ImprovedElectricityPriceAdapter(hass, [data], Source.NORDPOOL, False)
         
         # Check if improved adapter correctly extracts tomorrow's data
         improved_tomorrow_prices = improved_adapter.tomorrow_prices

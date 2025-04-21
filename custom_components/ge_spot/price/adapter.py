@@ -6,12 +6,15 @@ from typing import Any, Dict, List, Optional, Tuple
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from ..const.sources import Source
+from ..timezone.timezone_utils import get_source_timezone
+
 _LOGGER = logging.getLogger(__name__)
 
 class ElectricityPriceAdapter:
     """Adapter for electricity price data with simplified API."""
 
-    def __init__(self, hass: HomeAssistant, raw_data: List[Dict], use_subunit: bool = False) -> None:
+    def __init__(self, hass: HomeAssistant, raw_data: List[Dict], source_type: str, use_subunit: bool = False) -> None:
         """Initialize the price adapter."""
         self.hass = hass
         self.raw_data = raw_data or []
@@ -21,21 +24,23 @@ class ElectricityPriceAdapter:
         self.today = datetime.now(timezone.utc).date()
         self.tomorrow = self.today + timedelta(days=1)
 
+        # Store source type
+        self.source_type = source_type
+        
         # Extract all hourly prices with their ISO timestamps
         self.all_hourly_prices = self._extract_all_hourly_prices()
+        
+        # Get source timezone from source type using the constants
+        source_timezone = get_source_timezone(self.source_type)
         
         # Use the timezone service to sort prices into today and tomorrow
         # based on actual dates
         from ..timezone import TimezoneService
         tz_service = TimezoneService(self.hass)
         self.today_hourly_prices, self.tomorrow_prices = tz_service.sort_today_tomorrow(
-            self.all_hourly_prices, 
-            source_timezone="Etc/UTC"  # Default source timezone
+            self.all_hourly_prices,
+            source_timezone=source_timezone
         )
-        
-        # For backward compatibility
-        self.dates_by_hour = {}
-        self.tomorrow_dates_by_hour = {}
         
         # Convert to price lists
         self.price_list = self._convert_to_price_list(self.today_hourly_prices)

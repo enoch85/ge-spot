@@ -279,7 +279,7 @@ async def test_api_direct(api_name: str, area: str) -> Dict[str, Any]:
             logger.warning(f"No tomorrow_hourly_prices found in {api_name} data")
         
         # Test with standard adapter
-        adapter = ElectricityPriceAdapter(mock_hass, [data], False)
+        adapter = ElectricityPriceAdapter(mock_hass, [data], source_type, False)
         
         # Log details about adapter data
         logger.info(f"Adapter hourly price keys: {list(adapter.today_hourly_prices.keys())[:5]}")
@@ -496,7 +496,7 @@ async def test_tdm_with_real_api(
         
         if has_data and data:
             # Try with standard adapter first
-            adapter = ElectricityPriceAdapter(mock_hass, [data], False)
+            adapter = ElectricityPriceAdapter(mock_hass, [data], source_type, False)
             is_tomorrow_valid = adapter.is_tomorrow_valid()
             tomorrow_prices = adapter.tomorrow_prices
             
