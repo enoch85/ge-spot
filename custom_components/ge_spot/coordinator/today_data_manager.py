@@ -135,13 +135,110 @@ class TodayDataManager:
                 # Add fallback data to response
                 response[f"fallback_data_{fb_source}"] = result[f"fallback_data_{fb_source}"]
 
+        # Process the raw data to extract today's and tomorrow's prices
+        processed_data = self._process_raw_data(data, self._active_source)
+        
         # Store in cache
-        self._price_cache.store(data, self.area, result["source"], dt_util.now())
+        self._price_cache.store(processed_data, self.area, result["source"], dt_util.now())
 
         # Update tracker variables for timestamps
         self._last_api_fetch = dt_util.now()
 
+        # Update the response with the processed data
+        response["data"] = processed_data
+
         return response
+        
+    def _process_raw_data(self, data: Dict[str, Any], source: str) -> Dict[str, Any]:
+        """Process raw data from API to extract today's and tomorrow's prices.
+        
+        Args:
+            data: Raw data from API
+            source: Source of the data
+            
+        Returns:
+            Processed data with today's and tomorrow's prices
+        """
+        # Initialize result with basic metadata
+        result = {
+            "data_source": source,
+            "currency": self.currency,
+            "today_hourly_prices": {},
+            "tomorrow_hourly_prices": {}
+        }
+        
+        # Extract raw data
+        raw_data = data.get("raw_data", data)
+        
+        # Check if we have today and tomorrow data in the combined format
+        if isinstance(raw_data, dict) and "today" in raw_data and "tomorrow" in raw_data:
+            today_data = raw_data["today"]
+            tomorrow_data = raw_data["tomorrow"]
+            
+            # Process today's data
+            if isinstance(today_data, dict) and "multiAreaEntries" in today_data:
+                today_entries = today_data["multiAreaEntries"]
+                self._extract_hourly_prices(today_entries, result["today_hourly_prices"], is_tomorrow=False)
+            
+            # Process tomorrow's data
+            if isinstance(tomorrow_data, dict) and "multiAreaEntries" in tomorrow_data:
+                tomorrow_entries = tomorrow_data["multiAreaEntries"]
+                self._extract_hourly_prices(tomorrow_entries, result["tomorrow_hourly_prices"], is_tomorrow=True)
+        else:
+            # If not in combined format, process as today's data
+            if isinstance(raw_data, dict) and "multiAreaEntries" in raw_data:
+                today_entries = raw_data["multiAreaEntries"]
+                self._extract_hourly_prices(today_entries, result["today_hourly_prices"], is_tomorrow=False)
+        
+        # Add API timezone
+        result["api_timezone"] = data.get("api_timezone", "Etc/UTC")
+        
+        # Copy any other metadata from the original data
+        for key, value in data.items():
+            if key not in ["raw_data", "today_hourly_prices", "tomorrow_hourly_prices"]:
+                result[key] = value
+        
+        return result
+    
+    def _extract_hourly_prices(self, entries: List[Dict[str, Any]], target_dict: Dict[str, float], is_tomorrow: bool = False):
+        """Extract hourly prices from entries and add them to the target dictionary.
+        
+        Args:
+            entries: List of entries from API
+            target_dict: Dictionary to add prices to
+            is_tomorrow: Whether these entries are for tomorrow
+        """
+        from datetime import datetime, timezone, timedelta
+        
+        # Get today's and tomorrow's dates
+        today = datetime.now(timezone.utc).date()
+        tomorrow = today + timedelta(days=1)
+        
+        # Process each entry
+        for entry in entries:
+            if not isinstance(entry, dict) or "entryPerArea" not in entry:
+                continue
+                
+            if self.area not in entry["entryPerArea"]:
+                continue
+                
+            # Extract values
+            start_time = entry.get("deliveryStart")
+            raw_price = entry["entryPerArea"][self.area]
+            
+            if start_time and raw_price is not None:
+                try:
+                    # Parse timestamp
+                    dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                    
+                    # Check if this entry is for today or tomorrow
+                    entry_date = dt.date()
+                    if (is_tomorrow and entry_date == tomorrow) or (not is_tomorrow and entry_date == today):
+                        # Format as simple hour key
+                        hour_key = f"{dt.hour:02d}:00"
+                        target_dict[hour_key] = float(raw_price)
+                except (ValueError, TypeError) as e:
+                    _LOGGER.warning(f"Failed to parse timestamp: {start_time} - {e}")
 
     def get_adapters(self, data: Dict[str, Any]) -> Tuple[ElectricityPriceAdapter, Dict[str, ElectricityPriceAdapter]]:
         """Create adapters for primary and fallback sources.
