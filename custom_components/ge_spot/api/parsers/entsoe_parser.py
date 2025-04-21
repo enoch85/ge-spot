@@ -128,8 +128,7 @@ class EntsoeParser(BasePriceParser):
             Dictionary of hourly prices with hour string keys (HH:00)
             or a dictionary with both 'today_hourly_prices' and 'tomorrow_hourly_prices'
         """
-        today_hourly_prices = {}
-        tomorrow_hourly_prices = {}
+        hourly_prices = {}
 
         # If data is a string (XML), try to parse it
         if isinstance(data, str):
@@ -195,24 +194,10 @@ class EntsoeParser(BasePriceParser):
                                         # Format as ISO string for consistent date handling
                                         hour_key = super().format_timestamp_to_iso(normalized_time)
 
-                                        # Check if this timestamp belongs to tomorrow using date comparison
-                                        # to ensure DST changes don't affect our classification
-                                        dt_date = normalized_time.date()
-                                        tomorrow_date = self.tomorrow
-                                        is_tomorrow = dt_date == tomorrow_date
-
-                                        # For ENTSOE, we could also look at position - higher positions are likely tomorrow
-                                        if not is_tomorrow and pos > 20:
-                                            # If position is high, it's likely tomorrow data
-                                            _LOGGER.debug(f"High position ({pos}) suggests tomorrow data")
-                                            is_tomorrow = True
-
-                                        if is_tomorrow:
-                                            tomorrow_hourly_prices[hour_key] = price_val
-                                            _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {price_val} (pos: {pos})")
-                                        else:
-                                            today_hourly_prices[hour_key] = price_val
-                                            _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {price_val} (pos: {pos})")
+                                        # Store the price with the ISO timestamp without categorization
+                                        # The core will handle categorization based on the timestamp
+                                        hourly_prices[hour_key] = price_val
+                                        _LOGGER.debug(f"Extracted price with ISO timestamp: {hour_key} = {price_val} (pos: {pos})")
 
                                     except ValueError as e:
                                         # Skip invalid hours
@@ -222,14 +207,10 @@ class EntsoeParser(BasePriceParser):
                                         _LOGGER.warning(f"Import error for timezone utils: {e}, using original hour")
                                         # Format as ISO string for consistent date handling
                                         hour_key = hour_time.strftime("%Y-%m-%dT%H:00:00")
-
-                                        # Check if this timestamp belongs to tomorrow
-                                        if hour_time.date() == self.tomorrow:
-                                            tomorrow_hourly_prices[hour_key] = price_val
-                                            _LOGGER.debug(f"Added TOMORROW price with ISO timestamp: {hour_key} = {price_val}")
-                                        else:
-                                            today_hourly_prices[hour_key] = price_val
-                                            _LOGGER.debug(f"Added TODAY price with ISO timestamp: {hour_key} = {price_val}")
+                                        
+                                        # Store the price with the ISO timestamp without categorization
+                                        hourly_prices[hour_key] = price_val
+                                        _LOGGER.debug(f"Extracted price with ISO timestamp: {hour_key} = {price_val}")
 
                                 except (ValueError, TypeError) as e:
                                     _LOGGER.warning(f"Failed to parse point: {e}")
@@ -240,16 +221,9 @@ class EntsoeParser(BasePriceParser):
             except Exception as e:
                 _LOGGER.error(f"Failed to parse hourly prices from ENTSO-E XML: {e}")
 
-        # If we found tomorrow's prices, return both sets
-        if tomorrow_hourly_prices:
-            result = {
-                "today_hourly_prices": today_hourly_prices,
-                "tomorrow_hourly_prices": tomorrow_hourly_prices
-            }
-            _LOGGER.info(f"Extracted {len(tomorrow_hourly_prices)} tomorrow prices from ENTSOE data")
-            return result
-
-        return today_hourly_prices
+        # Return the hourly prices without categorization
+        # The core will handle categorization based on the timestamps
+        return hourly_prices
 
     def _select_best_time_series(self, all_series):
         """Select the best TimeSeries to use for price data.

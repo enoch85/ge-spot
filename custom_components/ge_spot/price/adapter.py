@@ -231,25 +231,25 @@ class ElectricityPriceAdapter:
             tz_service = TimezoneService(self.hass, area, config)
             hour_str = tz_service.get_current_hour_key()
             _LOGGER.debug(f"Using TimezoneService for area {area} to get current hour: {hour_str}")
-            _LOGGER.debug(f"TimezoneService details - HA timezone: {tz_service.ha_timezone}, Area timezone: {tz_service.area_timezone}, Reference: {tz_service.timezone_reference}")
         else:
             now = dt_util.now()
             hour_str = f"{now.hour:02d}:00"
             _LOGGER.debug(f"No TimezoneService available, using system time for current hour: {hour_str}")
 
-        _LOGGER.debug(f"Looking for current price at hour {hour_str}, available hours: {sorted(list(self.today_hourly_prices.keys()))}")
+        # Check if we have any data at all
+        if not self.today_hourly_prices:
+            _LOGGER.warning(f"No today hourly prices available for current hour {hour_str}")
+            return None
 
+        # Look for the current hour in today's data
         if hour_str in self.today_hourly_prices:
             price = self.today_hourly_prices[hour_str]
             _LOGGER.debug(f"Found current price for hour {hour_str}: {price}")
             return price
             
-        # Do NOT fall back to tomorrow's data for current hour price
-        # This would give incorrect prices and bypass the fallback manager
-        # If current hour is not found, log error and return None so fallback system can be used
-
-        # If key not found, log error and return None
-        _LOGGER.error(f"Current hour key '{hour_str}' not found in available hours: {sorted(list(self.today_hourly_prices.keys()))}")
+        # If key not found, log error with available hours for debugging
+        available_hours = sorted(list(self.today_hourly_prices.keys()))
+        _LOGGER.error(f"Current hour key '{hour_str}' not found in available hours: {available_hours}")
         return None
 
     def find_next_price(self, area=None, config=None) -> Optional[float]:
@@ -269,22 +269,29 @@ class ElectricityPriceAdapter:
             _LOGGER.debug(f"No TimezoneService available, using system time for next hour: {next_hour:02d}:00")
 
         hour_str = f"{next_hour:02d}:00"
-        _LOGGER.debug(f"Looking for next price at hour {hour_str}, available hours: {sorted(list(self.today_hourly_prices.keys()))}")
-
+        
+        # Check if we have any data at all
+        if not self.today_hourly_prices and not self.tomorrow_prices:
+            _LOGGER.warning(f"No hourly prices available for next hour {hour_str}")
+            return None
+            
+        # First check today's data
         if hour_str in self.today_hourly_prices:
             price = self.today_hourly_prices[hour_str]
             _LOGGER.debug(f"Found next price for hour {hour_str} in today's data")
             return price
             
-        # If not found in today's data, check if it's in tomorrow's data
+        # If not found in today's data, check tomorrow's data
         # This is valid for next_hour since it might legitimately be in tomorrow if we're near midnight
         if hour_str in self.tomorrow_prices:
             price = self.tomorrow_prices[hour_str]
             _LOGGER.debug(f"Found next price for hour {hour_str} in tomorrow's data (likely near midnight)")
             return price
 
-        # If key not found, log error and return None
-        _LOGGER.error(f"Next hour key '{hour_str}' not found in any available hours. Today: {sorted(list(self.today_hourly_prices.keys()))}, Tomorrow: {sorted(list(self.tomorrow_prices.keys()))}")
+        # If key not found, log error with available hours for debugging
+        today_hours = sorted(list(self.today_hourly_prices.keys())) if self.today_hourly_prices else []
+        tomorrow_hours = sorted(list(self.tomorrow_prices.keys())) if self.tomorrow_prices else []
+        _LOGGER.error(f"Next hour key '{hour_str}' not found in any available hours. Today: {today_hours}, Tomorrow: {tomorrow_hours}")
         return None
 
     def get_today_prices(self) -> List[float]:
