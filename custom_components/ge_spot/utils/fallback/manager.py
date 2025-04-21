@@ -288,6 +288,13 @@ class FallbackManager:
                     len(data["hourly_prices"]) > 0
                 )
 
+                has_today_hourly_prices = (
+                    isinstance(data, dict) and
+                    "today_hourly_prices" in data and
+                    isinstance(data["today_hourly_prices"], dict) and
+                    len(data["today_hourly_prices"]) > 0
+                )
+
                 has_tomorrow_prices = (
                     isinstance(data, dict) and
                     "tomorrow_hourly_prices" in data and
@@ -295,7 +302,7 @@ class FallbackManager:
                     len(data["tomorrow_hourly_prices"]) > 0
                 )
 
-                if has_hourly_prices or has_tomorrow_prices:
+                if has_hourly_prices or has_today_hourly_prices or has_tomorrow_prices:
                     # Update source health for successful fetch
                     self.update_source_health(source, True, response_time)
 
@@ -404,6 +411,13 @@ class FallbackManager:
                         len(data["hourly_prices"]) > 0
                     )
 
+                    has_today_hourly_prices = (
+                        isinstance(data, dict) and
+                        "today_hourly_prices" in data and
+                        isinstance(data["today_hourly_prices"], dict) and
+                        len(data["today_hourly_prices"]) > 0
+                    )
+
                     has_tomorrow_prices = (
                         isinstance(data, dict) and
                         "tomorrow_hourly_prices" in data and
@@ -411,7 +425,7 @@ class FallbackManager:
                         len(data["tomorrow_hourly_prices"]) > 0
                     )
 
-                    if has_hourly_prices or has_tomorrow_prices:
+                    if has_hourly_prices or has_today_hourly_prices or has_tomorrow_prices:
                         # Update source health for successful fetch
                         self.update_source_health(source, True)
 
