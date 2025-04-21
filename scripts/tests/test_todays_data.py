@@ -39,6 +39,9 @@ try:
     from custom_components.ge_spot.const.sources import Source
     from custom_components.ge_spot.api import fetch_day_ahead_prices
     from custom_components.ge_spot.coordinator.today_data_manager import TodayDataManager
+    from custom_components.ge_spot.price.cache import PriceCache
+    from custom_components.ge_spot.timezone import TimezoneService
+    from scripts.tests.api.today_api_testing import test_today_api_data
     from scripts.tests.mocks.hass import MockHass
     from scripts.tests.utils.general import build_api_key_config
     import aiohttp
@@ -148,52 +151,34 @@ async def test_parsers_with_api(
             if not use_cache or not data:
                 logger.info(f"Fetching live data from {api_name} API for {area}")
                 try:
-                    # Create mock HASS instance
-                    mock_hass = MockHass()
+                    # Test with today_api_testing
+                    api_result = await test_today_api_data(
+                        api_name=api_name,
+                        area=area,
+                        timeout=timeout
+                    )
                     
-                    # Build config
-                    config = build_api_key_config(api_name, area)
-                    config["request_timeout"] = timeout
+                    # Cache the result for future use
+                    with open(cache_file, "w") as f:
+                        json.dump(api_result, f, cls=DateTimeEncoder)
                     
-                    # Fetch data
-                    session = aiohttp.ClientSession()
-                    try:
-                        data = await fetch_day_ahead_prices(
-                            source_type=api_name,
-                            config=config,
-                            area=area,
-                            currency=Currency.EUR,
-                            hass=mock_hass,
-                            session=session
-                        )
-                        
-                        # Cache the result for future use
-                        with open(cache_file, "w") as f:
-                            json.dump(data, f, cls=DateTimeEncoder)
-                    finally:
-                        if session and not session.closed:
-                            await session.close()
-                    
-                    # Create adapter to test data
-                    adapter = ElectricityPriceAdapter(mock_hass, [data], False)
-                    
-                    # Get the hour counts for both today and tomorrow data
-                    today_hours = len(adapter.today_hourly_prices) if hasattr(adapter, "today_hourly_prices") else 0
-                    tomorrow_hours = len(adapter.tomorrow_prices) if hasattr(adapter, "tomorrow_prices") else 0
-                    
-                    # For Nordpool, many hours get categorized as "tomorrow" due to timezone differences
-                    # Consider data valid if either today has enough hours OR tomorrow has enough hours
-                    has_valid_data = data is not None and (today_hours >= 12 or (api_name == "nordpool" and tomorrow_hours >= 12))
+                    # Extract data from api_result
+                    data = api_result.get("raw_data")
                     
                     # Store the result
                     results[api_name] = {
                         "area": area,
-                        "has_data": has_valid_data,
-                        "today_hours": today_hours,
-                        "tomorrow_hours": tomorrow_hours,  # Add tomorrow_hours to results
-                        "status": "success" if data else "failure",
-                        "data_source": "api"
+                        "has_data": api_result.get("has_today_data", False),
+                        "today_hours": api_result.get("today_hours", 0),
+                        "tomorrow_hours": 0,  # Will be populated if available
+                        "status": api_result.get("status", "unknown"),
+                        "data_source": "api",
+                        "cache_test": api_result.get("cache_test", {}),
+                        "timezone_info": api_result.get("timezone_info", {})
                     }
+                    
+            # We're focusing exclusively on today's data, so we don't need to check for tomorrow data
+            # This helps ensure the test is focused on its specific purpose
                 except Exception as e:
                     logger.error(f"Error fetching data from {api_name} API: {e}")
                     results[api_name] = {
@@ -266,7 +251,7 @@ async def test_tdm(
     area: str,
     api_key: str = None
 ) -> Dict[str, Any]:
-    """Test TodayDataManager with real API data.
+    """Test TodayDataManager with real API data and cache testing.
     
     Args:
         api_name: Name of the API to test
@@ -285,6 +270,7 @@ async def test_tdm(
         "has_data": False,
         "today_hours": 0,
         "expected_hours": 24,
+        "cache_test": {},
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
@@ -299,18 +285,22 @@ async def test_tdm(
         if api_key and api_name == "entsoe":
             config["api_key"] = api_key
         
+        # Create cache and timezone service
+        price_cache = PriceCache(mock_hass, config)
+        tz_service = TimezoneService(mock_hass, area, config)
+        
         # Create TodayDataManager
         tdm = TodayDataManager(
             hass=mock_hass,
             area=area,
             currency=Currency.EUR,
             config=config,
-            price_cache=None,
-            tz_service=None,
+            price_cache=price_cache,
+            tz_service=tz_service,
             session=None
         )
         
-        # Fetch data
+        # Fetch data (this should store in cache)
         has_data = await tdm.fetch_data("test reason")
         
         # Get data
@@ -335,8 +325,49 @@ async def test_tdm(
             results["attempted_sources"] = tdm._attempted_sources
             results["consecutive_failures"] = tdm._consecutive_failures
             
+            # Test cache functionality
+            has_current_hour = tdm.has_current_hour_price()
+            current_hour_price = tdm.get_current_hour_price()
+            
+            # Add cache results to output
+            results["cache_test"] = {
+                "has_current_hour": has_current_hour,
+                "current_hour_price": current_hour_price is not None
+            }
+            
             # Check if we have current hour price
-            results["has_current_hour_price"] = tdm.has_current_hour_price()
+            results["has_current_hour_price"] = has_current_hour
+            
+            # Inspect cache structure
+            cache_structure = {}
+            if hasattr(price_cache, "_cache"):
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                if area in price_cache._cache and today_str in price_cache._cache[area]:
+                    sources = list(price_cache._cache[area][today_str].keys())
+                    cache_structure["sources"] = sources
+                    
+                    # Log hourly prices in cache
+                    if sources:
+                        source = sources[0]  # Use the first source
+                        source_data = price_cache._cache[area][today_str][source]
+                        if "hourly_prices" in source_data:
+                            hour_keys = list(source_data["hourly_prices"].keys())
+                            cache_structure["hourly_price_keys"] = hour_keys
+                            
+                            # Get current hour key
+                            current_hour_key = tz_service.get_current_hour_key()
+                            cache_structure["current_hour_key"] = current_hour_key
+                            
+                            # Check if current hour key is in hourly_prices
+                            cache_structure["current_hour_in_hourly_prices"] = current_hour_key in source_data["hourly_prices"]
+                            
+                            # Get timezone info from cache
+                            cache_structure["api_timezone"] = source_data.get("api_timezone")
+                            cache_structure["ha_timezone"] = source_data.get("ha_timezone")
+                            cache_structure["area_timezone"] = source_data.get("area_timezone")
+                            cache_structure["stored_in_timezone"] = source_data.get("stored_in_timezone")
+            
+            results["cache_test"]["cache_structure"] = cache_structure
         
     except Exception as e:
         logger.error(f"Error testing TodayDataManager with {api_name}: {e}")
@@ -403,6 +434,15 @@ def print_summary(
                 has_data = api_result.get("has_data", False)
                 data_source = api_result.get("data_source", "unknown")
                 print(f"{api_name} ({api_result.get('area')}): Has data: {has_data}, Today hours: {today_hours}, Source: {data_source}")
+                
+                # Print cache test results if available
+                cache_test = api_result.get("cache_test", {})
+                if cache_test:
+                    has_current_hour = cache_test.get("has_current_hour", False)
+                    current_hour_key = cache_test.get("current_hour_key", "unknown")
+                    retrieved_hour_price = cache_test.get("retrieved_hour_price", False)
+                    print(f"  Cache test: Has current hour: {has_current_hour}, Current hour key: {current_hour_key}, Retrieved hour price: {retrieved_hour_price}")
+                
                 if api_name == "nordpool" and api_result.get("has_data", False) and api_result.get("today_hours", 0) < 12:
                     tomorrow_hours = api_result.get("tomorrow_hours", 0)
                     print(f"  Note: Nordpool has {tomorrow_hours} hours in tomorrow's data")
@@ -421,6 +461,31 @@ def print_summary(
         if "active_source" in tdm_results:
             print(f"Active source: {tdm_results.get('active_source')}")
             print(f"Attempted sources: {tdm_results.get('attempted_sources', [])}")
+        
+        # Print cache test results if available
+        cache_test = tdm_results.get("cache_test", {})
+        if cache_test:
+            has_current_hour = cache_test.get("has_current_hour", False)
+            current_hour_price = cache_test.get("current_hour_price", False)
+            print(f"  Cache test: Has current hour: {has_current_hour}, Retrieved hour price: {current_hour_price}")
+            
+            # Print cache structure if available
+            cache_structure = cache_test.get("cache_structure", {})
+            if cache_structure:
+                sources = cache_structure.get("sources", [])
+                print(f"  Cache structure: Sources: {sources}")
+                
+                if "current_hour_key" in cache_structure:
+                    current_hour_key = cache_structure.get("current_hour_key")
+                    current_hour_in_hourly_prices = cache_structure.get("current_hour_in_hourly_prices", False)
+                    print(f"  Current hour key: {current_hour_key}, In hourly prices: {current_hour_in_hourly_prices}")
+                
+                if "api_timezone" in cache_structure:
+                    api_timezone = cache_structure.get("api_timezone")
+                    ha_timezone = cache_structure.get("ha_timezone")
+                    area_timezone = cache_structure.get("area_timezone")
+                    stored_in_timezone = cache_structure.get("stored_in_timezone")
+                    print(f"  Timezones: API: {api_timezone}, HA: {ha_timezone}, Area: {area_timezone}, Stored in: {stored_in_timezone}")
         
         if "has_current_hour_price" in tdm_results:
             print(f"Has current hour price: {tdm_results.get('has_current_hour_price')}")

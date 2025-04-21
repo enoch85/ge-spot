@@ -9,6 +9,8 @@ from typing import Dict, Any, List, Optional
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.api import fetch_day_ahead_prices
 from custom_components.ge_spot.price.adapter import ElectricityPriceAdapter
+from custom_components.ge_spot.price.cache import PriceCache
+from custom_components.ge_spot.timezone import TimezoneService
 
 from ..mocks.hass import MockHass
 from ..utils.general import build_api_key_config
@@ -22,7 +24,7 @@ async def test_tomorrow_api_data(
     timeout: int,
     use_improved_adapter: bool = False
 ) -> Dict[str, Any]:
-    """Test a specific API for tomorrow's data.
+    """Test a specific API for tomorrow's data with cache testing.
     
     Args:
         api_name: Name of the API to test
@@ -35,8 +37,10 @@ async def test_tomorrow_api_data(
     """
     logger.info(f"Testing API: {api_name} for Area: {area}")
     
-    # Create mock HASS instance
+    # Create mock HASS instance and cache
     mock_hass = MockHass()
+    price_cache = PriceCache(mock_hass, {})
+    tz_service = TimezoneService(mock_hass, area, {})
     
     result = {
         "api": api_name,
@@ -48,6 +52,8 @@ async def test_tomorrow_api_data(
         "tomorrow_valid": False,
         "today_hours": 0,
         "tomorrow_hours": 0,
+        "cache_test": {},
+        "timezone_info": {},
         "debug_info": {}
     }
     
@@ -133,6 +139,66 @@ async def test_tomorrow_api_data(
                 logger.info(f"Date examples: {date_examples}")
                 result["debug_info"]["tomorrow_date_examples"] = date_examples
             
+            # Test cache functionality
+            logger.info("Testing cache functionality for tomorrow data")
+            
+            # Store data in cache
+            logger.info("Storing data in cache")
+            now = datetime.now(timezone.utc)
+            price_cache.store(data, area, api_name, now)
+            
+            # Inspect cache structure
+            cache_structure = {}
+            if hasattr(price_cache, "_cache"):
+                today_str = now.strftime("%Y-%m-%d")
+                tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+                
+                # Check for today's cache entry
+                if area in price_cache._cache and today_str in price_cache._cache[area]:
+                    cache_structure["today_in_cache"] = True
+                    
+                    if api_name in price_cache._cache[area][today_str]:
+                        source_data = price_cache._cache[area][today_str][api_name]
+                        cache_structure["source_data_keys"] = list(source_data.keys())
+                        
+                        # Check for tomorrow data in today's cache
+                        if "tomorrow_hourly_prices" in source_data:
+                            tomorrow_keys = list(source_data["tomorrow_hourly_prices"].keys())
+                            cache_structure["tomorrow_in_today_cache"] = True
+                            cache_structure["tomorrow_hour_keys"] = tomorrow_keys
+                            
+                            # Check if tomorrow_hourly_prices contains ISO format dates
+                            has_dates = any("T" in hour for hour in tomorrow_keys)
+                            cache_structure["tomorrow_has_dates"] = has_dates
+                            if has_dates:
+                                date_examples = [hour for hour in tomorrow_keys if "T" in hour][:3]
+                                cache_structure["tomorrow_date_examples"] = date_examples
+                
+                # Check for tomorrow's cache entry
+                if area in price_cache._cache and tomorrow_str in price_cache._cache[area]:
+                    cache_structure["tomorrow_cache_entry"] = True
+                    
+                    if api_name in price_cache._cache[area][tomorrow_str]:
+                        tomorrow_data = price_cache._cache[area][tomorrow_str][api_name]
+                        cache_structure["tomorrow_data_keys"] = list(tomorrow_data.keys())
+                        
+                        if "hourly_prices" in tomorrow_data:
+                            hour_keys = list(tomorrow_data["hourly_prices"].keys())
+                            cache_structure["tomorrow_hourly_keys"] = hour_keys
+            
+            # Add cache results to the output
+            result["cache_test"] = {
+                "cache_structure": cache_structure,
+                "tomorrow_valid_from_cache": is_tomorrow_valid
+            }
+            
+            # Add timezone information
+            result["timezone_info"] = {
+                "area_timezone": str(tz_service.area_timezone) if tz_service.area_timezone else None,
+                "ha_timezone": str(mock_hass.config.time_zone) if hasattr(mock_hass, "config") and hasattr(mock_hass.config, "time_zone") else None,
+                "is_dst_transition": tz_service.is_dst_transition_day(now)
+            }
+            
             # Set status based on validation
             if is_tomorrow_valid:
                 result["status"] = "success"
@@ -165,12 +231,62 @@ async def test_tomorrow_api_data(
                 logger.info(f"Source {api_name} for area {area} has tomorrow's data in hourly_prices: {tomorrow_hours} hours")
                 result["debug_info"]["tomorrow_in_hourly"] = tomorrow_hour_keys
                 
+                # Test cache functionality for tomorrow data in hourly_prices
+                logger.info("Testing cache functionality for tomorrow data in hourly_prices")
+                
+                # Store data in cache
+                logger.info("Storing data in cache")
+                now = datetime.now(timezone.utc)
+                price_cache.store(data, area, api_name, now)
+                
+                # Inspect cache structure
+                cache_structure = {}
+                if hasattr(price_cache, "_cache"):
+                    today_str = now.strftime("%Y-%m-%d")
+                    tomorrow_str = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+                    
+                    # Check for today's cache entry
+                    if area in price_cache._cache and today_str in price_cache._cache[area]:
+                        cache_structure["today_in_cache"] = True
+                        
+                        if api_name in price_cache._cache[area][today_str]:
+                            source_data = price_cache._cache[area][today_str][api_name]
+                            cache_structure["source_data_keys"] = list(source_data.keys())
+                            
+                            # Check for hourly_prices with tomorrow dates
+                            if "hourly_prices" in source_data:
+                                hour_keys = list(source_data["hourly_prices"].keys())
+                                cache_structure["hourly_price_keys"] = hour_keys
+                                
+                                # Check if any hourly_prices keys contain ISO format dates for tomorrow
+                                tomorrow_in_hourly = []
+                                for hour_key in hour_keys:
+                                    if "T" in hour_key:
+                                        try:
+                                            hour_dt = datetime.fromisoformat(hour_key.replace('Z', '+00:00'))
+                                            if hour_dt.date() == tomorrow:
+                                                tomorrow_in_hourly.append(hour_key)
+                                        except (ValueError, TypeError):
+                                            pass
+                                
+                                if tomorrow_in_hourly:
+                                    cache_structure["tomorrow_in_hourly_prices"] = True
+                                    cache_structure["tomorrow_in_hourly_keys"] = tomorrow_in_hourly
+                
+                # Add cache results to the output
+                result["cache_test"] = {
+                    "cache_structure": cache_structure
+                }
+                
                 # Check if the improved adapter can extract tomorrow's data
                 if use_improved_adapter:
                     improved_adapter = ImprovedElectricityPriceAdapter(mock_hass, [data], False)
                     improved_tomorrow_valid = improved_adapter.is_tomorrow_valid()
                     result["improved_tomorrow_valid"] = improved_tomorrow_valid
                     result["improved_tomorrow_hours"] = len(improved_adapter.tomorrow_prices)
+                    
+                    # Test adapter with cached data
+                    result["cache_test"]["improved_adapter_tomorrow_valid"] = improved_tomorrow_valid
                     
                     if improved_tomorrow_valid:
                         logger.info(f"Improved adapter successfully extracted tomorrow's data: {result['improved_tomorrow_hours']} hours")

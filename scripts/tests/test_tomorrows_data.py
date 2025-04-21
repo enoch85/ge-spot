@@ -39,6 +39,8 @@ try:
     from custom_components.ge_spot.const.sources import Source
     from custom_components.ge_spot.api import fetch_day_ahead_prices
     from custom_components.ge_spot.coordinator.tomorrow_data_manager import TomorrowDataManager
+    from custom_components.ge_spot.price.cache import PriceCache
+    from custom_components.ge_spot.timezone import TimezoneService
     from scripts.tests.api.tomorrow_api_testing import test_tomorrow_api_data
     # Note: ImprovedElectricityPriceAdapter has been merged into the standard ElectricityPriceAdapter
     from scripts.tests.mocks.hass import MockHass
@@ -86,14 +88,12 @@ def save_results(results: Dict[str, Any], filename: str, results_dir: str = "tes
 
 async def test_parsers_with_api(
     parsers: List[Dict[str, str]] = None,
-    use_improved_adapter: bool = True,
     timeout: int = 30
 ) -> Dict[str, Any]:
     """Test parsers with API access for tomorrow's data.
     
     Args:
         parsers: List of parsers to test, each a dict with 'name' and 'area' keys
-        use_improved_adapter: Whether to use the improved adapter
         timeout: API request timeout in seconds
         
     Returns:
@@ -156,8 +156,7 @@ async def test_parsers_with_api(
                     api_result = await test_tomorrow_api_data(
                         api_name=api_name,
                         area=area,
-                        timeout=timeout,
-                        use_improved_adapter=use_improved_adapter
+                        timeout=timeout
                     )
                     
                     # Cache the result for future use
@@ -171,7 +170,9 @@ async def test_parsers_with_api(
                         "tomorrow_valid": api_result.get("tomorrow_valid", False),
                         "tomorrow_hours": api_result.get("tomorrow_hours", 0),
                         "status": api_result.get("status", "unknown"),
-                        "data_source": "api"
+                        "data_source": "api",
+                        "cache_test": api_result.get("cache_test", {}),
+                        "timezone_info": api_result.get("timezone_info", {})
                     }
                 except Exception as e:
                     logger.error(f"Error fetching data from {api_name} API: {e}")
@@ -207,8 +208,7 @@ async def test_parsers_with_api(
     results["summary"] = {
         "valid_count": valid_count,
         "total_count": len(parsers),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "use_improved_adapter": use_improved_adapter
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
     return results
@@ -381,16 +381,14 @@ async def test_direct_nordpool_api(results: Dict[str, Any]) -> None:
 async def test_tdm_with_real_api(
     api_name: str, 
     area: str, 
-    api_key: str = None,
-    use_improved_adapter: bool = False
+    api_key: str = None
 ) -> Dict[str, Any]:
-    """Test the TomorrowDataManager with a real API.
+    """Test the TomorrowDataManager with a real API and cache testing.
     
     Args:
         api_name: Name of the API to test
         area: Area code to test
         api_key: API key to use
-        use_improved_adapter: Whether to use the improved adapter
         
     Returns:
         Dictionary with test results
@@ -400,11 +398,11 @@ async def test_tdm_with_real_api(
     results = {
         "api": api_name,
         "area": area,
-        "use_improved_adapter": use_improved_adapter,
         "tdm_success": False,
         "has_tomorrow_data": False,
         "tomorrow_hours": 0,
         "expected_hours": 24,
+        "cache_test": {},
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
@@ -419,6 +417,10 @@ async def test_tdm_with_real_api(
         if api_key and api_name == "entsoe":
             config["api_key"] = api_key
         
+        # Create cache and timezone service
+        price_cache = PriceCache(mock_hass, config)
+        tz_service = TimezoneService(mock_hass, area, config)
+        
         # Create TomorrowDataManager
         tdm = TomorrowDataManager(
             hass=mock_hass,
@@ -428,7 +430,9 @@ async def test_tdm_with_real_api(
             currency=Currency.EUR,
             should_search_tomorrow=True,
             has_data_now=False,
-            config=config
+            config=config,
+            price_cache=price_cache,
+            tz_service=tz_service
         )
         
         # Fetch tomorrow data
@@ -455,6 +459,57 @@ async def test_tdm_with_real_api(
             results["improved_tomorrow_valid"] = is_tomorrow_valid
             results["improved_tomorrow_hours"] = len(tomorrow_prices) if tomorrow_prices else 0
             results["has_tomorrow_data"] = is_tomorrow_valid and results["tomorrow_hours"] > 0
+            
+            # Inspect cache structure
+            cache_structure = {}
+            if hasattr(price_cache, "_cache"):
+                today_str = datetime.now().strftime("%Y-%m-%d")
+                tomorrow_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+                
+                # Check for today's cache entry
+                if area in price_cache._cache and today_str in price_cache._cache[area]:
+                    cache_structure["today_in_cache"] = True
+                    
+                    # Check for sources in today's cache
+                    sources = list(price_cache._cache[area][today_str].keys())
+                    cache_structure["sources_in_today"] = sources
+                    
+                    # Check for tomorrow data in today's cache
+                    for source in sources:
+                        source_data = price_cache._cache[area][today_str][source]
+                        if "tomorrow_hourly_prices" in source_data:
+                            cache_structure["tomorrow_in_today_cache"] = True
+                            cache_structure["tomorrow_hour_keys"] = list(source_data["tomorrow_hourly_prices"].keys())
+                            break
+                
+                # Check for tomorrow's cache entry
+                if area in price_cache._cache and tomorrow_str in price_cache._cache[area]:
+                    cache_structure["tomorrow_cache_entry"] = True
+                    
+                    # Check for sources in tomorrow's cache
+                    sources = list(price_cache._cache[area][tomorrow_str].keys())
+                    cache_structure["sources_in_tomorrow"] = sources
+                    
+                    # Check for hourly prices in tomorrow's cache
+                    for source in sources:
+                        source_data = price_cache._cache[area][tomorrow_str][source]
+                        if "hourly_prices" in source_data:
+                            cache_structure["hourly_prices_in_tomorrow"] = True
+                            cache_structure["hourly_price_keys_in_tomorrow"] = list(source_data["hourly_prices"].keys())
+                            break
+            
+            # Add cache results to output
+            results["cache_test"] = {
+                "cache_structure": cache_structure,
+                "tomorrow_valid_from_cache": is_tomorrow_valid
+            }
+            
+            # Add timezone information
+            results["timezone_info"] = {
+                "area_timezone": str(tz_service.area_timezone) if tz_service.area_timezone else None,
+                "ha_timezone": str(mock_hass.config.time_zone) if hasattr(mock_hass, "config") and hasattr(mock_hass.config, "time_zone") else None,
+                "is_dst_transition": tz_service.is_dst_transition_day(datetime.now())
+            }
         
     except Exception as e:
         logger.error(f"Error testing TomorrowDataManager with {api_name}: {e}")
@@ -483,7 +538,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--area", help="Specific area to test (e.g., SE4, SE3)")
     
     # Other options
-    parser.add_argument("--use-improved-adapter", action="store_true", help="Use improved adapter for testing")
     parser.add_argument("--results-dir", default="./test_results", help="Directory to store test results")
     parser.add_argument("--timeout", type=int, default=30, help="API request timeout in seconds")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
@@ -525,6 +579,14 @@ def print_summary(
                 tomorrow_hours = api_result.get("tomorrow_hours", 0)
                 data_source = api_result.get("data_source", "unknown")
                 print(f"{api_name} ({api_result.get('area')}): Tomorrow valid: {tomorrow_valid}, Tomorrow hours: {tomorrow_hours}, Source: {data_source}")
+                
+                # Print cache test results if available
+                cache_test = api_result.get("cache_test", {})
+                if cache_test:
+                    cache_structure = cache_test.get("cache_structure", {})
+                    tomorrow_in_today_cache = cache_structure.get("tomorrow_in_today_cache", False)
+                    tomorrow_cache_entry = cache_structure.get("tomorrow_cache_entry", False)
+                    print(f"  Cache test: Tomorrow in today's cache: {tomorrow_in_today_cache}, Tomorrow cache entry: {tomorrow_cache_entry}")
         
         valid_count = all_results.get("summary", {}).get("valid_count", 0)
         total_count = all_results.get("summary", {}).get("total_count", 0)
@@ -539,6 +601,14 @@ def print_summary(
             print(f"Improved adapter success: {results.get('improved_adapter_success', False)} ({results.get('improved_adapter_tomorrow_hours', 0)} hours)")
             print(f"Today hours: {results.get('today_hours', 0)}, Tomorrow hours: {results.get('tomorrow_hours', 0)}")
             
+            # Print cache test results if available
+            cache_test = results.get("cache_test", {})
+            if cache_test:
+                cache_structure = cache_test.get("cache_structure", {})
+                tomorrow_in_today_cache = cache_structure.get("tomorrow_in_today_cache", False)
+                tomorrow_cache_entry = cache_structure.get("tomorrow_cache_entry", False)
+                print(f"  Cache test: Tomorrow in today's cache: {tomorrow_in_today_cache}, Tomorrow cache entry: {tomorrow_cache_entry}")
+            
             if "direct_api_tomorrow_entries" in results:
                 print(f"Direct tomorrow API entries: {results.get('direct_api_tomorrow_entries', 0)}")
     
@@ -552,6 +622,31 @@ def print_summary(
         if "improved_tomorrow_valid" in tdm_results:
             print(f"Improved adapter tomorrow valid: {tdm_results.get('improved_tomorrow_valid', False)}")
             print(f"Improved adapter tomorrow hours: {tdm_results.get('improved_tomorrow_hours', 0)}")
+        
+        # Print cache test results if available
+        cache_test = tdm_results.get("cache_test", {})
+        if cache_test:
+            cache_structure = cache_test.get("cache_structure", {})
+            if cache_structure:
+                tomorrow_in_today_cache = cache_structure.get("tomorrow_in_today_cache", False)
+                tomorrow_cache_entry = cache_structure.get("tomorrow_cache_entry", False)
+                print(f"  Cache test: Tomorrow in today's cache: {tomorrow_in_today_cache}, Tomorrow cache entry: {tomorrow_cache_entry}")
+                
+                if "sources_in_today" in cache_structure:
+                    sources_in_today = cache_structure.get("sources_in_today", [])
+                    print(f"  Sources in today's cache: {sources_in_today}")
+                
+                if "sources_in_tomorrow" in cache_structure:
+                    sources_in_tomorrow = cache_structure.get("sources_in_tomorrow", [])
+                    print(f"  Sources in tomorrow's cache: {sources_in_tomorrow}")
+                
+                if "tomorrow_hour_keys" in cache_structure:
+                    tomorrow_hour_keys = cache_structure.get("tomorrow_hour_keys", [])
+                    print(f"  Tomorrow hour keys in today's cache: {tomorrow_hour_keys[:5]}...")
+                
+                if "hourly_price_keys_in_tomorrow" in cache_structure:
+                    hourly_price_keys = cache_structure.get("hourly_price_keys_in_tomorrow", [])
+                    print(f"  Hourly price keys in tomorrow's cache: {hourly_price_keys[:5]}...")
     
     print("\nFor detailed results, check the files in the test_results directory.")
 
@@ -608,7 +703,6 @@ async def main() -> int:
     
     all_results = await test_parsers_with_api(
         parsers=parsers,
-        use_improved_adapter=args.use_improved_adapter,
         timeout=args.timeout
     )
     save_results(all_results, f"tomorrow_parsers_{timestamp}.json", args.results_dir)
@@ -640,8 +734,7 @@ async def main() -> int:
         tdm_results = await test_tdm_with_real_api(
             api_name=api_name,
             area=area,
-            api_key=api_key,
-            use_improved_adapter=args.use_improved_adapter
+            api_key=api_key
         )
         save_results(tdm_results, f"tomorrow_tdm_{api_name}_{timestamp}.json", args.results_dir)
     

@@ -54,25 +54,169 @@ class PriceCache:
             'dst_transition': transition_type if is_transition else "none"
         }
 
+        # IMPORTANT: We only look for the current hour's price in today's data, never in tomorrow's data
+        # This ensures we don't mix today's and tomorrow's data
         if area in self._cache and today_str in self._cache[area]:
+            _LOGGER.debug(f"Found cache entry for {area} on {today_str}")
+            
+            # Log all available sources in cache for this area/day
+            sources = list(self._cache[area][today_str].keys())
+            _LOGGER.debug(f"Available sources in cache for {area}/{today_str}: {sources}")
+            
+            # First try primary sources
             for source, data in self._cache[area][today_str].items():
-                if "hourly_prices" in data and hour_key in data["hourly_prices"]:
-                    price = data["hourly_prices"][hour_key]
-                    result.update({
-                        'has_price': True,
-                        'source': source,
-                        'price': price,
-                        'price_source': 'CACHE',
-                        'api_timezone': data.get("api_timezone"),
-                        'tz_source': 'API_DATA' if data.get("api_timezone") else 'CONSTANTS',
-                        'currency': data.get("currency", "EUR"),
-                        'currency_source': 'API_DATA' if data.get("currency") else 'CONSTANTS',
-                        'ha_timezone': data.get("ha_timezone"),
-                        'full_data': dict(data)
-                    })
-                    result['full_data']["current_price"] = price
-                    result['full_data']["current_hour"] = hour_key
-                    break
+                _LOGGER.debug(f"Checking source {source} for hour key {hour_key}")
+                
+                # Check all possible price fields
+                price_found = False
+                
+                # Check hourly_prices (standard format)
+                if "hourly_prices" in data:
+                    hourly_keys = list(data["hourly_prices"].keys())
+                    _LOGGER.debug(f"Source {source} has hourly_prices with keys: {hourly_keys[:5]}...")
+                    
+                    # First try exact match
+                    if hour_key in data["hourly_prices"]:
+                        price = data["hourly_prices"][hour_key]
+                        _LOGGER.debug(f"Found price {price} for hour {hour_key} in source {source} hourly_prices")
+                        result.update({
+                            'has_price': True,
+                            'source': source,
+                            'price': price,
+                            'price_source': 'CACHE_HOURLY',
+                            'api_timezone': data.get("api_timezone"),
+                            'tz_source': 'API_DATA' if data.get("api_timezone") else 'CONSTANTS',
+                            'currency': data.get("currency", "EUR"),
+                            'currency_source': 'API_DATA' if data.get("currency") else 'CONSTANTS',
+                            'ha_timezone': data.get("ha_timezone"),
+                            'full_data': dict(data)
+                        })
+                        result['full_data']["current_price"] = price
+                        result['full_data']["current_hour"] = hour_key
+                        price_found = True
+                        break
+                    else:
+                        # Try to find a key that matches the current hour
+                        current_hour = int(hour_key.split(":")[0])
+                        for key in hourly_keys:
+                            if ":" in key:
+                                try:
+                                    key_hour = int(key.split(":")[0])
+                                    if key_hour == current_hour:
+                                        price = data["hourly_prices"][key]
+                                        _LOGGER.debug(f"Found matching hour in hourly_prices with key {key}: {price}")
+                                        result.update({
+                                            'has_price': True,
+                                            'source': source,
+                                            'price': price,
+                                            'price_source': 'CACHE_HOURLY_ALT',
+                                            'api_timezone': data.get("api_timezone"),
+                                            'tz_source': 'API_DATA' if data.get("api_timezone") else 'CONSTANTS',
+                                            'currency': data.get("currency", "EUR"),
+                                            'currency_source': 'API_DATA' if data.get("currency") else 'CONSTANTS',
+                                            'ha_timezone': data.get("ha_timezone"),
+                                            'full_data': dict(data)
+                                        })
+                                        result['full_data']["current_price"] = price
+                                        result['full_data']["current_hour"] = hour_key
+                                        price_found = True
+                                        break
+                                except (ValueError, IndexError):
+                                    continue
+                            
+                        if not price_found:
+                            _LOGGER.debug(f"Hour key {hour_key} not found in source {source} hourly_prices")
+                
+                # Check today_hourly_prices if hourly_prices didn't have it
+                if not price_found and "today_hourly_prices" in data:
+                    today_keys = list(data["today_hourly_prices"].keys())
+                    _LOGGER.debug(f"Source {source} has today_hourly_prices with keys: {today_keys[:5]}...")
+                    
+                    # First try exact match
+                    if hour_key in data["today_hourly_prices"]:
+                        price = data["today_hourly_prices"][hour_key]
+                        _LOGGER.debug(f"Found price {price} for hour {hour_key} in source {source} today_hourly_prices")
+                        result.update({
+                            'has_price': True,
+                            'source': source,
+                            'price': price,
+                            'price_source': 'CACHE_TODAY',
+                            'api_timezone': data.get("api_timezone"),
+                            'tz_source': 'API_DATA' if data.get("api_timezone") else 'CONSTANTS',
+                            'currency': data.get("currency", "EUR"),
+                            'currency_source': 'API_DATA' if data.get("currency") else 'CONSTANTS',
+                            'ha_timezone': data.get("ha_timezone"),
+                            'full_data': dict(data)
+                        })
+                        result['full_data']["current_price"] = price
+                        result['full_data']["current_hour"] = hour_key
+                        price_found = True
+                        break
+                    else:
+                        # Try to find a key that matches the current hour
+                        current_hour = int(hour_key.split(":")[0])
+                        for key in today_keys:
+                            if ":" in key:
+                                try:
+                                    key_hour = int(key.split(":")[0])
+                                    if key_hour == current_hour:
+                                        price = data["today_hourly_prices"][key]
+                                        _LOGGER.debug(f"Found matching hour in today_hourly_prices with key {key}: {price}")
+                                        result.update({
+                                            'has_price': True,
+                                            'source': source,
+                                            'price': price,
+                                            'price_source': 'CACHE_TODAY_ALT',
+                                            'api_timezone': data.get("api_timezone"),
+                                            'tz_source': 'API_DATA' if data.get("api_timezone") else 'CONSTANTS',
+                                            'currency': data.get("currency", "EUR"),
+                                            'currency_source': 'API_DATA' if data.get("currency") else 'CONSTANTS',
+                                            'ha_timezone': data.get("ha_timezone"),
+                                            'full_data': dict(data)
+                                        })
+                                        result['full_data']["current_price"] = price
+                                        result['full_data']["current_hour"] = hour_key
+                                        price_found = True
+                                        break
+                                except (ValueError, IndexError):
+                                    continue
+                            
+                        if not price_found:
+                            _LOGGER.debug(f"Hour key {hour_key} not found in source {source} today_hourly_prices")
+                
+                # If no price fields found at all
+                if not "hourly_prices" in data and not "today_hourly_prices" in data:
+                    _LOGGER.debug(f"Source {source} does not have hourly_prices or today_hourly_prices")
+                    # Log all available keys to help diagnose the issue
+                    _LOGGER.debug(f"Available keys in source {source}: {list(data.keys())}")
+            
+            # If no price found in primary sources, check if we have fallback data
+            if not result.get('has_price', False):
+                _LOGGER.debug("No price found in primary sources, checking fallback data")
+                for source, data in self._cache[area][today_str].items():
+                    if "fallback_data" in data:
+                        _LOGGER.debug(f"Found fallback data in source {source}")
+                        for fb_source, fb_data in data["fallback_data"].items():
+                            _LOGGER.debug(f"Checking fallback source {fb_source} for hour key {hour_key}")
+                            if "hourly_prices" in fb_data and hour_key in fb_data["hourly_prices"]:
+                                price = fb_data["hourly_prices"][hour_key]
+                                _LOGGER.debug(f"Found price {price} for hour {hour_key} in fallback source {fb_source}")
+                                result.update({
+                                    'has_price': True,
+                                    'source': fb_source,
+                                    'primary_source': source,
+                                    'price': price,
+                                    'price_source': 'CACHE_FALLBACK',
+                                    'api_timezone': fb_data.get("api_timezone", data.get("api_timezone")),
+                                    'tz_source': 'API_DATA' if fb_data.get("api_timezone") else 'CONSTANTS',
+                                    'currency': fb_data.get("currency", data.get("currency", "EUR")),
+                                    'currency_source': 'API_DATA' if fb_data.get("currency") else 'CONSTANTS',
+                                    'ha_timezone': data.get("ha_timezone"),
+                                    'full_data': dict(fb_data)
+                                })
+                                result['full_data']["current_price"] = price
+                                result['full_data']["current_hour"] = hour_key
+                                break
 
         self._cache_info = result
         return result
@@ -132,10 +276,98 @@ class PriceCache:
             "last_api_fetch": last_api_fetch.isoformat() if last_api_fetch else now.isoformat()
         }
 
+        # Log the hourly prices keys before storing
+        if "hourly_prices" in cached_data:
+            hourly_keys = list(cached_data["hourly_prices"].keys())
+            _LOGGER.debug(f"Storing hourly_prices with keys: {hourly_keys[:5]}... ({len(hourly_keys)} total)")
+        
+        if "today_hourly_prices" in cached_data:
+            today_keys = list(cached_data["today_hourly_prices"].keys())
+            _LOGGER.debug(f"Storing today_hourly_prices with keys: {today_keys[:5]}... ({len(today_keys)} total)")
+        
+        # Get current hour key for comparison
+        tz_service = TimezoneService(self.hass, area, self.config)
+        current_hour_key = tz_service.get_current_hour_key()
+        _LOGGER.debug(f"Current hour key at storage time: {current_hour_key}")
+        
+        # Check if the current hour key exists in the data
+        current_hour_price = None
+        
+        # First check in hourly_prices
+        if "hourly_prices" in cached_data and current_hour_key in cached_data["hourly_prices"]:
+            current_hour_price = cached_data["hourly_prices"][current_hour_key]
+            _LOGGER.debug(f"Current hour key {current_hour_key} found in hourly_prices with value: {current_hour_price}")
+        
+        # Then check in today_hourly_prices
+        elif "today_hourly_prices" in cached_data and current_hour_key in cached_data["today_hourly_prices"]:
+            current_hour_price = cached_data["today_hourly_prices"][current_hour_key]
+            _LOGGER.debug(f"Current hour key {current_hour_key} found in today_hourly_prices with value: {current_hour_price}")
+        
+        # If not found in either, try to find it with a different format
+        else:
+            _LOGGER.warning(f"Current hour key {current_hour_key} not found in any hourly prices data")
+            
+            # Log all available keys to help diagnose the issue
+            if "hourly_prices" in cached_data:
+                hourly_keys = list(cached_data["hourly_prices"].keys())
+                _LOGGER.debug(f"Available hourly_prices keys: {hourly_keys}")
+                
+                # Try to find a key that might match the current hour
+                current_hour = int(current_hour_key.split(":")[0])
+                for key in hourly_keys:
+                    if ":" in key:
+                        try:
+                            key_hour = int(key.split(":")[0])
+                            if key_hour == current_hour:
+                                current_hour_price = cached_data["hourly_prices"][key]
+                                _LOGGER.debug(f"Found matching hour in hourly_prices with key {key}: {current_hour_price}")
+                                # Store it with the standard format key as well
+                                cached_data["hourly_prices"][current_hour_key] = current_hour_price
+                                break
+                        except (ValueError, IndexError):
+                            continue
+            
+            if current_hour_price is None and "today_hourly_prices" in cached_data:
+                today_keys = list(cached_data["today_hourly_prices"].keys())
+                _LOGGER.debug(f"Available today_hourly_prices keys: {today_keys}")
+                
+                # Try to find a key that might match the current hour
+                current_hour = int(current_hour_key.split(":")[0])
+                for key in today_keys:
+                    if ":" in key:
+                        try:
+                            key_hour = int(key.split(":")[0])
+                            if key_hour == current_hour:
+                                current_hour_price = cached_data["today_hourly_prices"][key]
+                                _LOGGER.debug(f"Found matching hour in today_hourly_prices with key {key}: {current_hour_price}")
+                                # Store it with the standard format key as well
+                                cached_data["today_hourly_prices"][current_hour_key] = current_hour_price
+                                break
+                        except (ValueError, IndexError):
+                            continue
+        
+        # Ensure the current hour price is stored in both hourly_prices and today_hourly_prices
+        # IMPORTANT: We only do this for the current hour to ensure we don't mix today's and tomorrow's data
+        if current_hour_price is not None:
+            # Initialize if needed
+            if "hourly_prices" not in cached_data:
+                cached_data["hourly_prices"] = {}
+            if "today_hourly_prices" not in cached_data:
+                cached_data["today_hourly_prices"] = {}
+            
+            # Store in both places to ensure it can be found
+            # This is safe because we're only storing the current hour's price, which is definitely today's data
+            cached_data["hourly_prices"][current_hour_key] = current_hour_price
+            cached_data["today_hourly_prices"][current_hour_key] = current_hour_price
+            _LOGGER.debug(f"Ensured current hour price {current_hour_price} is stored with key {current_hour_key} in both hourly_prices and today_hourly_prices")
+        else:
+            _LOGGER.warning(f"Could not find current hour price for {current_hour_key} in any format")
+
         self._cache[area][today_str][source] = cached_data
         _LOGGER.debug(f"Stored price data for {area}/{source} with timezones - API: {api_timezone}, HA: {ha_timezone}")
 
         # Store tomorrow's data if available
+        # IMPORTANT: Tomorrow's data is stored separately from today's data to ensure they don't get mixed
         if "tomorrow_hourly_prices" in data and data["tomorrow_hourly_prices"]:
             # We no longer move data between today and tomorrow
             # Each dataset should be correctly categorized by the data managers
