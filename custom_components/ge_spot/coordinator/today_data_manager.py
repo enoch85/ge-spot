@@ -91,7 +91,7 @@ class TodayDataManager:
         response = {
             "data": None,
             "source": None,
-            "attempted": [],
+            "attempted_sources": [],
             "skipped_sources": [],
             "fallback_sources": []
         }
@@ -115,7 +115,7 @@ class TodayDataManager:
         # Use the successful data
         data = result["data"]
         self._active_source = result["source"]
-        self._attempted_sources = result.get("attempted", [])
+        self._attempted_sources = result.get("attempted_sources", [])
         self._consecutive_failures = 0
 
         # Update response with result data
@@ -123,7 +123,7 @@ class TodayDataManager:
             "data": data,
             "source": self._active_source,
             "active_source": self._active_source,
-            "attempted": self._attempted_sources,
+            "attempted_sources": self._attempted_sources,
             "skipped_sources": result.get("skipped_sources", []),
             "fallback_sources": result.get("fallback_sources", [])
         })

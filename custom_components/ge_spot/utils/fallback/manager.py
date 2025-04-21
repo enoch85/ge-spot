@@ -341,13 +341,13 @@ class FallbackManager:
 
         if not self.area:
             _LOGGER.error("No area configured for FallbackManager")
-            return {"data": None, "source": None, "attempted": []}
+            return {"data": None, "source": None, "attempted_sources": []}
 
         # Get supported sources for this area
         supported_sources = get_sources_for_region(self.area)
         if not supported_sources:
             _LOGGER.error(f"No supported sources for area {self.area}")
-            return {"data": None, "source": None, "attempted": []}
+            return {"data": None, "source": None, "attempted_sources": []}
 
         # Create fetch functions for each source
         fetch_functions = {}
@@ -432,7 +432,7 @@ class FallbackManager:
                         result = {
                             "data": data,
                             "source": source,
-                            "attempted": self.get_priority_order(self.area),
+                            "attempted_sources": self.get_priority_order(self.area),
                             "skipped_sources": skipped_sources,
                             "fallback_sources": [],
                             "primary_source": primary_source,
@@ -471,7 +471,7 @@ class FallbackManager:
             return {
                 "data": cached_data,
                 "source": cached_source,
-                "attempted": self.get_priority_order(self.area),
+                "attempted_sources": self.get_priority_order(self.area),
                 "skipped_sources": skipped_sources,
                 "fallback_sources": [],
                 "primary_source": primary_source,
@@ -482,7 +482,7 @@ class FallbackManager:
         return {
             "data": None,
             "source": None,
-            "attempted": self.get_priority_order(self.area),
+            "attempted_sources": self.get_priority_order(self.area),
             "skipped_sources": skipped_sources,
             "fallback_sources": []
         }

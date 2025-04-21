@@ -382,7 +382,7 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 # Use the successful data
                 data = result["data"]
                 self._active_source = result["source"]
-                self._attempted_sources = result["attempted"]
+                self._attempted_sources = result["attempted_sources"]
                 self._consecutive_failures = 0
 
                 # Update the update interval based on the active source
