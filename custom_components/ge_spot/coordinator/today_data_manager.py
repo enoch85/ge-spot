@@ -122,6 +122,7 @@ class TodayDataManager:
         response.update({
             "data": data,
             "source": self._active_source,
+            "active_source": self._active_source,
             "attempted": self._attempted_sources,
             "skipped_sources": result.get("skipped_sources", []),
             "fallback_sources": result.get("fallback_sources", [])
