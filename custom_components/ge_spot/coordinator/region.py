@@ -184,22 +184,16 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 has_current_hour_price=has_current_hour_price
             )
 
-            # ALWAYS apply rate limiter check for today's data, regardless of cache state
-            if self._last_api_fetch is not None:
+            # Additional rate limiter check for today's data
+            if need_api_fetch and has_current_hour_price:
                 from ..utils.rate_limiter import RateLimiter
-                # Make sure to use the correct interval for the active source
-                source_priority = self.config.get(Config.SOURCE_PRIORITY, Source.DEFAULT_PRIORITY)
-                primary_source = source_priority[0] if source_priority else Source.DEFAULT_PRIORITY[0]
-                
-                _LOGGER.debug(f"Applying rate limiter check with primary source: {primary_source}, interval: {self._api_fetch_interval}")
-                
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
                     last_fetched=self._last_api_fetch,
                     current_time=now,
                     consecutive_failures=self._consecutive_failures,
                     last_failure_time=self._last_failure_time,
                     min_interval=self._api_fetch_interval,
-                    source=self._active_source or primary_source,
+                    source=self._active_source,
                     area=self.area
                 )
 
@@ -207,8 +201,6 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug(f"Rate limiter suggests skipping today's data fetch: {skip_reason}")
                     need_api_fetch = False
                     api_fetch_reason = skip_reason
-                else:
-                    _LOGGER.debug(f"Rate limiter allows fetch despite having current hour data. Reason: {api_fetch_reason}")
 
             # Get current hour key for later use
             current_hour_key = self._tz_service.get_current_hour_key()
@@ -342,7 +334,27 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                 result = await self._today_data_manager.fetch_data(api_fetch_reason)
 
                 # If all sources failed or were skipped
-                if not result["data"]:
+                if not result:
+                    # Handle case where fetch_data returns None (fix for the error!)
+                    _LOGGER.warning(f"No data returned from today_data_manager.fetch_data for area {self.area}")
+                    self._consecutive_failures += 1
+                    self._last_failure_time = dt_util.now()
+                    
+                    # Schedule a more frequent retry
+                    retry_interval = min(120, 15 * (2 ** min(self._consecutive_failures - 1, 3)))
+                    self.update_interval = timedelta(minutes=retry_interval)
+                    _LOGGER.info(f"Scheduling retry in {retry_interval} minutes after failure")
+                    
+                    # Try to use cached data as fallback
+                    cache_data = self._cache_manager.get_data(self.area)
+                    if cache_data:
+                        _LOGGER.info(f"Using cached data for {self.area} after API failure")
+                        return self._process_cached_data(cache_data)
+                    
+                    return None
+                
+                # Fix for the error: Check if data key exists in result dictionary
+                if not result.get("data"):
                     # Check if we have skipped sources
                     skipped_sources = result.get("skipped_sources", [])
                     if skipped_sources:
@@ -387,17 +399,12 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
                     if fb_source != result["source"] and f"fallback_data_{fb_source}" in result:
                         self._fallback_data[fb_source] = result[f"fallback_data_{fb_source}"]
 
-                # Store in cache with current time
-                current_time = dt_util.now()
-                self._cache_manager.store(data, self.area, result["source"], current_time)
+                # Store in cache with last API fetch time
+                self._cache_manager.store(data, self.area, result["source"], self._last_api_fetch)
 
                 # Update tracker variables for timestamps
-                self._last_api_fetch = current_time
+                self._last_api_fetch = dt_util.now()
                 self._next_scheduled_api_fetch = self._last_api_fetch + timedelta(minutes=self._api_fetch_interval)
-                
-                # Update global registry to share API fetch time with all components
-                from ..utils.rate_limiter import RateLimiter
-                RateLimiter._update_registry(area=self.area, fetch_time=self._last_api_fetch, failure=False)
 
                 # Create adapters for primary and fallback sources
                 primary_adapter, fallback_adapters = self._today_data_manager.get_adapters(data)
@@ -429,15 +436,6 @@ class RegionPriceCoordinator(DataUpdateCoordinator):
         except Exception as err:
             self._consecutive_failures += 1
             self._last_failure_time = dt_util.now()
-            
-            # Update global registry with failure information
-            from ..utils.rate_limiter import RateLimiter
-            RateLimiter._update_registry(
-                area=self.area,
-                failure=True,
-                failure_time=self._last_failure_time
-            )
-            
             _LOGGER.error(f"Error fetching electricity price data: {err}")
 
             # Schedule a more frequent retry
