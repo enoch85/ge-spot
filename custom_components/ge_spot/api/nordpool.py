@@ -422,19 +422,23 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 # We'll still process these through the timezone service for consistency
                 raw_tomorrow_hourly_prices = data["tomorrow_hourly_prices"]
 
-            # Convert and reorganize today and tomorrow prices based on local timezone
+            # Combine all hourly prices into a single dictionary
+            all_hourly_prices = {}
+            all_hourly_prices.update(raw_today_hourly_prices)
+            all_hourly_prices.update(raw_tomorrow_hourly_prices)
+            
             # Debug raw data to better understand the structure
             if raw_today_hourly_prices:
-                _LOGGER.debug(f"Raw today keys before normalization: {list(raw_today_hourly_prices.keys())[:5]}")
+                _LOGGER.debug(f"Raw today keys before sorting: {list(raw_today_hourly_prices.keys())[:5]}")
             if raw_tomorrow_hourly_prices:
-                _LOGGER.debug(f"Raw tomorrow keys before normalization: {list(raw_tomorrow_hourly_prices.keys())[:5]}")
+                _LOGGER.debug(f"Raw tomorrow keys before sorting: {list(raw_tomorrow_hourly_prices.keys())[:5]}")
                 
             # Force source_timezone to 'Etc/UTC' for Nordpool as timestamps are UTC with 'Z' suffix
             # This ensures proper timezone conversion regardless of what extract_source_timezone returns
-            converted_today, converted_tomorrow = tz_service.normalize_hourly_prices_with_tomorrow(
-                raw_today_hourly_prices, raw_tomorrow_hourly_prices, 'Etc/UTC')  # Use standard Etc/UTC format
+            converted_today, converted_tomorrow = tz_service.sort_today_tomorrow(
+                all_hourly_prices, 'Etc/UTC')  # Use standard Etc/UTC format
 
-            _LOGGER.debug(f"After normalization: Today prices: {len(converted_today)}, Tomorrow prices: {len(converted_tomorrow)}")
+            _LOGGER.debug(f"After sorting: Today prices: {len(converted_today)}, Tomorrow prices: {len(converted_tomorrow)}")
 
             # Apply price conversions for today prices
             for hour_str, price in converted_today.items():

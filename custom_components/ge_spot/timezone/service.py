@@ -171,47 +171,41 @@ class TimezoneService:
             today_date
         )
 
-    def normalize_hourly_prices_with_tomorrow(
-        self, today_hourly_prices: Dict[str, float],
-        tomorrow_hourly_prices: Dict[str, float],
+    def sort_today_tomorrow(
+        self, hourly_prices: Dict[str, float],
         source_timezone: str,
+        target_timezone=None,
         today_date=None
     ) -> Tuple[Dict[str, float], Dict[str, float]]:
-        """Convert both today and tomorrow hourly prices and reorganize based on local timezone.
-
+        """Sort hourly prices into today and tomorrow buckets based on actual dates.
+        
         Args:
-            today_hourly_prices: Dict mapping hour strings to today's prices
-            tomorrow_hourly_prices: Dict mapping hour strings to tomorrow's prices
+            hourly_prices: Dict mapping hour strings to prices (can be ISO format or simple "HH:00")
             source_timezone: Source timezone string
+            target_timezone: Target timezone (defaults to HA timezone)
             today_date: Optional date to use (defaults to today)
-
+            
         Returns:
-            Tuple of (today_prices, tomorrow_prices) with hours properly organized for local timezone
+            Tuple of (today_prices, tomorrow_prices) with hours properly sorted by actual date
         """
-        # First convert both sets of prices to target timezone
-        if not today_hourly_prices and not tomorrow_hourly_prices:
+        # If no prices, return empty dictionaries
+        if not hourly_prices:
             return {}, {}
-
-        # Validate source_timezone
-        if not source_timezone or source_timezone == TimezoneConstants.DEFAULT_FALLBACK:
-            error_msg = f"Invalid source timezone provided: {source_timezone}"
-            _LOGGER.error(error_msg)
-            raise ValueError(error_msg)
-
+            
         # Get timezone objects
         source_tz = get_timezone_object(source_timezone)
         if not source_tz:
             # Try to get timezone from source type
             source_tz_str = get_source_timezone(source_timezone)
             source_tz = get_timezone_object(source_tz_str)
-
+            
             if not source_tz:
                 error_msg = f"Cannot find valid timezone object for: {source_timezone}"
                 _LOGGER.error(error_msg)
                 raise ValueError(error_msg)
 
-        # Determine target timezone based on timezone reference setting
-        target_tz = self.ha_timezone
+        # Determine target timezone
+        target_tz = target_timezone or self.ha_timezone
         if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
             target_tz = self.area_timezone
 
@@ -222,95 +216,65 @@ class TimezoneService:
             today_date = today_date.date()
 
         tomorrow_date = today_date + timedelta(days=1)
-
-        # Convert both sets of hourly prices
-        converted_today = self.converter.convert_hourly_prices(
-            today_hourly_prices,
-            source_timezone,
-            target_tz,
-            today_date
-        )
-
-        converted_tomorrow = self.converter.convert_hourly_prices(
-            tomorrow_hourly_prices,
-            source_timezone,
-            target_tz,
-            tomorrow_date
-        )
-
-        # Now reorganize based on local date
-        new_today = {}
-        new_tomorrow = {}
-
-        # Process all converted hours from both today and tomorrow
-        for hour_dict in [converted_today, converted_tomorrow]:
-            for hour_key, price in hour_dict.items():
-                # Skip prefixed hours as they're already correctly categorized
-                if hour_key.startswith("tomorrow_"):
-                    new_tomorrow[hour_key[9:]] = price  # Remove "tomorrow_" prefix
-                    continue
-
-                # For ISO format keys, determine correct bucket based on date
-                if "T" in hour_key:
-                    try:
-                        # Parse ISO format timestamp - directly use Python's datetime utilities
-                        dt_str = hour_key.replace('Z', '+00:00')
-                        dt_utc = datetime.fromisoformat(dt_str)
-
-                        # Ensure it's in UTC first for a clean conversion
-                        if dt_utc.tzinfo is None:
-                            dt_utc = dt_utc.replace(tzinfo=timezone.utc)
-
-                        # Now convert to the target timezone
-                        dt_target = dt_utc.astimezone(target_tz)
-
-                        # Simple hour key in target timezone
-                        target_hour = f"{dt_target.hour:02d}:00"
-
-                        # Get dates for comparison - using target_tz's understanding of today
-                        dt_date = dt_target.date()
-
-                        # Extra debug to understand what's happening
-                        _LOGGER.debug(f"Original key: {hour_key}, Date: {dt_date}, Today date: {today_date}")
-                        _LOGGER.debug(f"UTC: {dt_utc}, Target: {dt_target}")
-
-                        # FIXED: Use the provided today_date and tomorrow_date instead of actual_today and actual_tomorrow
-                        # First check if the date in target timezone matches today or tomorrow
-                        if dt_date == today_date:
-                            new_today[target_hour] = price
-                            _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TODAY (actual date match)")
-                        elif dt_date == tomorrow_date:
-                            new_tomorrow[target_hour] = price
-                            _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TOMORROW (actual date match)")
-                        else:
-                            # If we're here, the date doesn't match today or tomorrow in target timezone
-                            # This could happen with timezone differences or near day boundaries
-                            
-                            # FIXED: Compare with the date from the timestamp, not the current time
-                            hour_num = int(target_hour.split(':')[0])
-                            
-                            # If the date is closer to today_date than tomorrow_date, assign to today
-                            if abs((dt_date - today_date).days) <= abs((dt_date - tomorrow_date).days):
-                                new_today[target_hour] = price
-                                _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TODAY (closer to today)")
-                            else:
-                                # If it's closer to tomorrow_date, assign to tomorrow
-                                new_tomorrow[target_hour] = price
-                                _LOGGER.debug(f"Hour {hour_key} -> {target_hour} assigned to TOMORROW (closer to tomorrow)")
-                    except (ValueError, TypeError) as e:
-                        # If we can't parse, default to original bucket
-                        _LOGGER.debug(f"Failed to parse ISO timestamp {hour_key}: {e}")
-                        new_today[hour_key] = price
-                else:
-                    # For simple "HH:00" format, we need to use the source dict to determine
-                    is_from_tomorrow = hour_dict is converted_tomorrow
-                    if is_from_tomorrow:
-                        new_tomorrow[hour_key] = price
+        
+        # Initialize result dictionaries
+        today_prices = {}
+        tomorrow_prices = {}
+        
+        # Process each hour key
+        for hour_key, price in hourly_prices.items():
+            # Extract date information if available
+            dt = None
+            
+            # Handle ISO format timestamps (contains 'T')
+            if "T" in hour_key:
+                try:
+                    # Parse ISO format date
+                    dt_str = hour_key.replace('Z', '+00:00')
+                    dt = datetime.fromisoformat(dt_str)
+                    
+                    # Ensure it's in the source timezone
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=source_tz)
                     else:
-                        new_today[hour_key] = price
-
-        _LOGGER.debug(f"Reorganized hours based on local timezone - Today: {len(new_today)}, Tomorrow: {len(new_tomorrow)}")
-        return new_today, new_tomorrow
+                        dt = dt.astimezone(source_tz)
+                    
+                    # Convert to target timezone
+                    dt = dt.astimezone(target_tz)
+                    
+                    # Simple hour key for storage
+                    simple_hour_key = f"{dt.hour:02d}:00"
+                    
+                    # Sort based on actual date
+                    if dt.date() == today_date:
+                        today_prices[simple_hour_key] = price
+                    elif dt.date() == tomorrow_date:
+                        tomorrow_prices[simple_hour_key] = price
+                except Exception as e:
+                    _LOGGER.debug(f"Error parsing ISO timestamp {hour_key}: {e}")
+                    # Fall back to simple hour handling
+                    dt = None
+            
+            # Handle simple "HH:00" format or tomorrow_HH:00 format
+            if dt is None:
+                # Check for tomorrow_ prefix
+                if hour_key.startswith("tomorrow_"):
+                    # Extract the hour key without the prefix
+                    simple_hour_key = hour_key[9:]  # Remove "tomorrow_" prefix
+                    tomorrow_prices[simple_hour_key] = price
+                else:
+                    try:
+                        # Try to parse as simple hour format
+                        hour = int(hour_key.split(":")[0])
+                        if 0 <= hour < 24:
+                            # Without date information, assign to today by default
+                            today_prices[hour_key] = price
+                    except (ValueError, IndexError):
+                        # If we can't parse it, just keep it in today's prices
+                        today_prices[hour_key] = price
+        
+        _LOGGER.debug(f"Sorted hours - Today: {len(today_prices)}, Tomorrow: {len(tomorrow_prices)}")
+        return today_prices, tomorrow_prices
 
     def get_current_hour_key(self):
         """Get the current hour key in the appropriate timezone based on the timezone reference setting."""

@@ -270,11 +270,16 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             if "tomorrow_hourly_prices" not in result:
                 result["tomorrow_hourly_prices"] = {}
 
-            # Convert and reorganize today and tomorrow prices based on local timezone
-            converted_today, converted_tomorrow = tz_service.normalize_hourly_prices_with_tomorrow(
-                raw_today_hourly_prices, raw_tomorrow_hourly_prices, source_timezone)
+            # Combine all hourly prices into a single dictionary
+            all_hourly_prices = {}
+            all_hourly_prices.update(raw_today_hourly_prices)
+            all_hourly_prices.update(raw_tomorrow_hourly_prices)
+            
+            # Sort prices into today and tomorrow buckets based on actual dates
+            converted_today, converted_tomorrow = tz_service.sort_today_tomorrow(
+                all_hourly_prices, source_timezone)
 
-            _LOGGER.debug(f"After normalization: Today prices: {len(converted_today)}, Tomorrow prices: {len(converted_tomorrow)}")
+            _LOGGER.debug(f"After sorting: Today prices: {len(converted_today)}, Tomorrow prices: {len(converted_tomorrow)}")
 
             # Apply price conversions for today prices
             for hour_str, price in converted_today.items():

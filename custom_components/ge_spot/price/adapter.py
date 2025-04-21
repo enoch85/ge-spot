@@ -17,19 +17,27 @@ class ElectricityPriceAdapter:
         self.raw_data = raw_data or []
         self.use_subunit = use_subunit
 
-        # Get today's and tomorrow's dates for comparison
+        # Get today's and tomorrow's dates for reference only
         self.today = datetime.now(timezone.utc).date()
         self.tomorrow = self.today + timedelta(days=1)
 
-        # Extract core data once for reuse
-        self.today_hourly_prices, self.dates_by_hour = self._extract_hourly_prices()
-        self.tomorrow_prices, self.tomorrow_dates_by_hour = self._extract_tomorrow_prices()
-
-        # If we don't have tomorrow prices but have dates in today_hourly_prices,
-        # try to extract tomorrow data with dates
-        if not self.tomorrow_prices and self.dates_by_hour:
-            self._extract_tomorrow_from_today()
-
+        # Extract all hourly prices with their ISO timestamps
+        self.all_hourly_prices = self._extract_all_hourly_prices()
+        
+        # Use the timezone service to sort prices into today and tomorrow
+        # based on actual dates
+        from ..timezone import TimezoneService
+        tz_service = TimezoneService(self.hass)
+        self.today_hourly_prices, self.tomorrow_prices = tz_service.sort_today_tomorrow(
+            self.all_hourly_prices, 
+            source_timezone="Etc/UTC"  # Default source timezone
+        )
+        
+        # For backward compatibility
+        self.dates_by_hour = {}
+        self.tomorrow_dates_by_hour = {}
+        
+        # Convert to price lists
         self.price_list = self._convert_to_price_list(self.today_hourly_prices)
         self.tomorrow_list = self._convert_to_price_list(self.tomorrow_prices)
 
@@ -77,8 +85,41 @@ class ElectricityPriceAdapter:
         _LOGGER.debug(f"Could not parse hour from: {hour_str}")
         return None, None
 
+    def _extract_all_hourly_prices(self) -> Dict[str, float]:
+        """Extract all hourly prices from raw data without categorizing them.
+
+        Returns:
+            Dict of hour_key -> price with all hourly prices from all sources
+        """
+        all_hourly_prices = {}
+
+        for item in self.raw_data:
+            if not isinstance(item, dict):
+                continue
+
+            # Extract from today_hourly_prices
+            if "today_hourly_prices" in item and isinstance(item["today_hourly_prices"], dict):
+                _LOGGER.debug(f"Found today_hourly_prices in raw data: {len(item['today_hourly_prices'])} entries")
+                for hour_str, price in item["today_hourly_prices"].items():
+                    all_hourly_prices[hour_str] = price
+
+            # Extract from tomorrow_hourly_prices
+            if "tomorrow_hourly_prices" in item and isinstance(item["tomorrow_hourly_prices"], dict):
+                _LOGGER.debug(f"Found tomorrow_hourly_prices in raw data: {len(item['tomorrow_hourly_prices'])} entries")
+                for hour_str, price in item["tomorrow_hourly_prices"].items():
+                    all_hourly_prices[hour_str] = price
+
+            # Extract from prefixed tomorrow prices
+            if "tomorrow_prefixed_prices" in item and isinstance(item["tomorrow_prefixed_prices"], dict):
+                _LOGGER.debug(f"Found tomorrow_prefixed_prices in raw data: {len(item['tomorrow_prefixed_prices'])} entries")
+                for hour_str, price in item["tomorrow_prefixed_prices"].items():
+                    all_hourly_prices[hour_str] = price
+
+        _LOGGER.debug(f"Extracted {len(all_hourly_prices)} total hourly prices")
+        return all_hourly_prices
+        
     def _extract_hourly_prices(self) -> Tuple[Dict[str, float], Dict[str, datetime]]:
-        """Extract hourly prices from raw data and separate tomorrow's data.
+        """Extract hourly prices from raw data.
 
         Returns:
             Tuple of (hourly_prices, dates_by_hour) where hourly_prices is a dict of hour_key -> price
@@ -86,7 +127,6 @@ class ElectricityPriceAdapter:
         """
         hourly_prices = {}
         dates_by_hour = {}
-        tomorrow_in_today = {}  # Temporary dict to collect tomorrow's data found in today_hourly_prices
 
         for item in self.raw_data:
             if not isinstance(item, dict):
@@ -107,12 +147,6 @@ class ElectricityPriceAdapter:
                             dates_by_hour[hour_key] = dt
 
         _LOGGER.debug(f"Extracted {len(hourly_prices)} hourly prices: {sorted(hourly_prices.keys())}")
-
-        # If we found tomorrow's data, store it for later extraction
-        if tomorrow_in_today:
-            _LOGGER.info(f"Found {len(tomorrow_in_today)} hours of tomorrow's data in today_hourly_prices")
-            self._tomorrow_in_today = tomorrow_in_today
-
         return hourly_prices, dates_by_hour
 
     def _extract_tomorrow_prices(self) -> Tuple[Dict[str, float], Dict[str, datetime]]:
@@ -165,50 +199,6 @@ class ElectricityPriceAdapter:
 
         _LOGGER.debug(f"Extracted {len(tomorrow_prices)} tomorrow prices: {sorted(tomorrow_prices.keys())}")
         return tomorrow_prices, tomorrow_dates_by_hour
-
-    def _extract_tomorrow_from_today(self) -> None:
-        """Extract tomorrow's data from today_hourly_prices if dates are available."""
-        # First check if we already detected tomorrow's data during today prices extraction
-        if hasattr(self, '_tomorrow_in_today') and self._tomorrow_in_today:
-            # Move tomorrow data to tomorrow_prices directly
-            for hour_key, price in self._tomorrow_in_today.items():
-                self.tomorrow_prices[hour_key] = price
-
-                # Create a datetime for tomorrow with this hour
-                try:
-                    hour = int(hour_key.split(":")[0])
-                    dt = datetime.combine(self.tomorrow, datetime.min.time().replace(hour=hour), timezone.utc)
-                    self.tomorrow_dates_by_hour[hour_key] = dt
-                except (ValueError, IndexError):
-                    pass
-
-            _LOGGER.info(f"Used {len(self._tomorrow_in_today)} hours of tomorrow's data found during extraction")
-            return
-
-        # Traditional extraction based on dates if no pre-detected tomorrow data
-        if not self.dates_by_hour:
-            _LOGGER.debug("No dates available for extracting tomorrow's data")
-            return
-
-        # Look for hours with tomorrow's date
-        tomorrow_hour_keys = []
-        for hour_key, dt in self.dates_by_hour.items():
-            if dt.date() == self.tomorrow:
-                # This is tomorrow's data, move it to tomorrow_prices
-                self.tomorrow_prices[hour_key] = self.today_hourly_prices[hour_key]
-                self.tomorrow_dates_by_hour[hour_key] = dt
-                tomorrow_hour_keys.append(hour_key)
-
-        # Remove tomorrow's data from today_hourly_prices if we found any
-        if self.tomorrow_prices:
-            _LOGGER.info(f"Extracted {len(self.tomorrow_prices)} hours of tomorrow's data from today_hourly_prices")
-
-            # Remove tomorrow's hours from today_hourly_prices
-            for hour_key in tomorrow_hour_keys:
-                if hour_key in self.today_hourly_prices:
-                    del self.today_hourly_prices[hour_key]
-
-            _LOGGER.info(f"Kept {len(self.today_hourly_prices)} hours of today's data in today_hourly_prices")
 
     def _convert_to_price_list(self, price_dict: Dict[str, float]) -> List[float]:
         """Convert price dictionary to ordered list."""

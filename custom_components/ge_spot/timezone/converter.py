@@ -142,15 +142,21 @@ class TimezoneConverter:
                     source_dt = localize_datetime(source_dt, source_tz)
                     target_dt = convert_datetime(source_dt, target)
 
-                    # Create simple hour key in target timezone (no date information)
-                    target_hour_str = f"{target_dt.hour:02d}:00"
+                    # If the original hour_str was in ISO format, preserve the ISO format in the target
+                    if "T" in hour_str:
+                        # Use ISO format to preserve date information
+                        target_hour_str = target_dt.strftime("%Y-%m-%dT%H:00:00")
+                    else:
+                        # Create simple hour key in target timezone (no date information)
+                        target_hour_str = f"{target_dt.hour:02d}:00"
                     
                     # Debug log to track the hour mapping
                     source_hour = getattr(source_dt, 'hour', hour if 'hour' in locals() else 0)
                     target_hour = target_dt.hour
                     
                     # Log the conversion happening - for any timezone, not just Europe
-                    _LOGGER.info(f"Timezone conversion: {source_hour}:00 in {source_tz.key} → {target_hour}:00 in {target.key} with price {price}")
+                    # Always use string representation for timezone objects
+                    _LOGGER.info(f"Timezone conversion: {source_hour}:00 in {str(source_tz)} → {target_hour}:00 in {str(target)} with price {price}")
 
                     # For processed hour tracking, check both hour number and key format
                     hour_num = target_dt.hour
