@@ -391,6 +391,9 @@ class TomorrowDataManager:
         Returns:
             Processed data with today's and tomorrow's prices
         """
+        from ..utils.price_extractor import extract_hourly_prices
+        import json
+        
         # Initialize result with basic metadata
         result = {
             "data_source": source,
@@ -402,25 +405,88 @@ class TomorrowDataManager:
         # Extract raw data
         raw_data = data.get("raw_data", data)
         
+        # Add debug logging
+        _LOGGER.debug(f"Processing raw data from source {source}")
+        _LOGGER.debug(f"Raw data keys: {raw_data.keys() if isinstance(raw_data, dict) else 'Not a dict'}")
+        
         # Check if we have today and tomorrow data in the combined format
         if isinstance(raw_data, dict) and "today" in raw_data and "tomorrow" in raw_data:
             today_data = raw_data["today"]
             tomorrow_data = raw_data["tomorrow"]
             
+            _LOGGER.debug(f"Found combined format with today and tomorrow data")
+            _LOGGER.debug(f"Today data keys: {today_data.keys() if isinstance(today_data, dict) else 'Not a dict'}")
+            _LOGGER.debug(f"Tomorrow data keys: {tomorrow_data.keys() if isinstance(tomorrow_data, dict) else 'Not a dict'}")
+            
             # Process today's data
             if isinstance(today_data, dict) and "multiAreaEntries" in today_data:
                 today_entries = today_data["multiAreaEntries"]
-                self._extract_hourly_prices(today_entries, result["today_hourly_prices"], is_tomorrow=False)
+                _LOGGER.debug(f"Found {len(today_entries)} entries in today's multiAreaEntries")
+                
+                # Check if the area exists in the entries
+                area_exists = False
+                for entry in today_entries[:5]:  # Check first 5 entries
+                    if isinstance(entry, dict) and "entryPerArea" in entry and self.area in entry["entryPerArea"]:
+                        area_exists = True
+                        _LOGGER.debug(f"Found area {self.area} in today's entries")
+                        break
+                
+                if not area_exists:
+                    _LOGGER.warning(f"Area {self.area} not found in today's entries")
+                
+                result["today_hourly_prices"] = extract_hourly_prices(
+                    entries=today_entries,
+                    area=self.area,
+                    is_tomorrow=False,
+                    tz_service=self._tz_service
+                )
+                
+                _LOGGER.debug(f"Extracted {len(result['today_hourly_prices'])} today hourly prices")
+                if result["today_hourly_prices"]:
+                    _LOGGER.debug(f"Sample today hourly prices: {list(result['today_hourly_prices'].items())[:5]}")
             
             # Process tomorrow's data
             if isinstance(tomorrow_data, dict) and "multiAreaEntries" in tomorrow_data:
                 tomorrow_entries = tomorrow_data["multiAreaEntries"]
-                self._extract_hourly_prices(tomorrow_entries, result["tomorrow_hourly_prices"], is_tomorrow=True)
+                _LOGGER.debug(f"Found {len(tomorrow_entries)} entries in tomorrow's multiAreaEntries")
+                
+                # Check if the area exists in the entries
+                area_exists = False
+                for entry in tomorrow_entries[:5]:  # Check first 5 entries
+                    if isinstance(entry, dict) and "entryPerArea" in entry and self.area in entry["entryPerArea"]:
+                        area_exists = True
+                        _LOGGER.debug(f"Found area {self.area} in tomorrow's entries")
+                        break
+                
+                if not area_exists:
+                    _LOGGER.warning(f"Area {self.area} not found in tomorrow's entries")
+                
+                result["tomorrow_hourly_prices"] = extract_hourly_prices(
+                    entries=tomorrow_entries,
+                    area=self.area,
+                    is_tomorrow=True,
+                    tz_service=self._tz_service
+                )
+                
+                _LOGGER.debug(f"Extracted {len(result['tomorrow_hourly_prices'])} tomorrow hourly prices")
+                if result["tomorrow_hourly_prices"]:
+                    _LOGGER.debug(f"Sample tomorrow hourly prices: {list(result['tomorrow_hourly_prices'].items())[:5]}")
         else:
             # If not in combined format, process as today's data
             if isinstance(raw_data, dict) and "multiAreaEntries" in raw_data:
                 today_entries = raw_data["multiAreaEntries"]
-                self._extract_hourly_prices(today_entries, result["today_hourly_prices"], is_tomorrow=False)
+                _LOGGER.debug(f"Found {len(today_entries)} entries in multiAreaEntries (non-combined format)")
+                
+                result["today_hourly_prices"] = extract_hourly_prices(
+                    entries=today_entries,
+                    area=self.area,
+                    is_tomorrow=False,
+                    tz_service=self._tz_service
+                )
+                
+                _LOGGER.debug(f"Extracted {len(result['today_hourly_prices'])} today hourly prices (non-combined format)")
+                if result["today_hourly_prices"]:
+                    _LOGGER.debug(f"Sample today hourly prices: {list(result['today_hourly_prices'].items())[:5]}")
         
         # Add API timezone if available
         if "api_timezone" in data:
@@ -432,46 +498,6 @@ class TomorrowDataManager:
                 result[key] = value
         
         return result
-    
-    def _extract_hourly_prices(self, entries: List[Dict[str, Any]], target_dict: Dict[str, float], is_tomorrow: bool = False):
-        """Extract hourly prices from entries and add them to the target dictionary.
-        
-        Args:
-            entries: List of entries from API
-            target_dict: Dictionary to add prices to
-            is_tomorrow: Whether these entries are for tomorrow
-        """
-        from datetime import datetime, timezone, timedelta
-        
-        # Get today's and tomorrow's dates
-        today = datetime.now(timezone.utc).date()
-        tomorrow = today + timedelta(days=1)
-        
-        # Process each entry
-        for entry in entries:
-            if not isinstance(entry, dict) or "entryPerArea" not in entry:
-                continue
-                
-            if self.area not in entry["entryPerArea"]:
-                continue
-                
-            # Extract values
-            start_time = entry.get("deliveryStart")
-            raw_price = entry["entryPerArea"][self.area]
-            
-            if start_time and raw_price is not None:
-                try:
-                    # Parse timestamp
-                    dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-                    
-                    # Check if this entry is for today or tomorrow
-                    entry_date = dt.date()
-                    if (is_tomorrow and entry_date == tomorrow) or (not is_tomorrow and entry_date == today):
-                        # Format as simple hour key
-                        hour_key = f"{dt.hour:02d}:00"
-                        target_dict[hour_key] = float(raw_price)
-                except (ValueError, TypeError) as e:
-                    _LOGGER.warning(f"Failed to parse timestamp: {start_time} - {e}")
 
     async def _request_refresh_callback(self):
         """Callback to request a refresh from the coordinator."""

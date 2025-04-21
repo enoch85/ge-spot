@@ -29,9 +29,10 @@ try:
     from custom_components.ge_spot.api.parsers.nordpool_parser import NordpoolPriceParser
     from custom_components.ge_spot.const.config import Config
     from custom_components.ge_spot.const.currencies import Currency
+    from custom_components.ge_spot.const.sources import Source
     from custom_components.ge_spot.api.nordpool import fetch_day_ahead_prices
+    from custom_components.ge_spot.utils.price_extractor import extract_all_hourly_prices
     from scripts.tests.mocks.hass import MockHass
-    from scripts.tests.core.adapter_testing import ImprovedElectricityPriceAdapter
     import aiohttp
     IMPORTS_SUCCESSFUL = True
 except ImportError as e:
@@ -102,14 +103,44 @@ async def test_nordpool_api(area: str = "SE3"):
         else:
             logger.warning("No tomorrow_hourly_prices found in data")
         
+        # Use our data managers to process the data
+        from custom_components.ge_spot.coordinator.today_data_manager import TodayDataManager
+        from custom_components.ge_spot.coordinator.tomorrow_data_manager import TomorrowDataManager
+        from custom_components.ge_spot.timezone import TimezoneService
+        from custom_components.ge_spot.price.cache import PriceCache
+        
+        # Create timezone service
+        tz_service = TimezoneService(hass)
+        
+        # Create price cache
+        price_cache = PriceCache(hass)
+        
+        # Create today data manager
+        today_mgr = TodayDataManager(
+            hass=hass,
+            area=area,
+            currency=Currency.EUR,
+            config=config,
+            price_cache=price_cache,
+            tz_service=tz_service
+        )
+        
+        # Process the data
+        processed_data = today_mgr._process_raw_data(data, Source.NORDPOOL)
+        
+        # Log the processed data
+        logger.info(f"Processed data keys: {processed_data.keys()}")
+        logger.info(f"Today hourly prices: {len(processed_data.get('today_hourly_prices', {}))} entries")
+        logger.info(f"Tomorrow hourly prices: {len(processed_data.get('tomorrow_hourly_prices', {}))} entries")
+        
         # Create adapter to test tomorrow data extraction
-        adapter = ElectricityPriceAdapter(hass, [data], Source.NORDPOOL, False)
+        adapter = ElectricityPriceAdapter(hass, [processed_data], Source.NORDPOOL, False)
         
         # Check if adapter correctly extracts tomorrow's data
         tomorrow_prices = adapter.tomorrow_prices
         
         # Log the keys to see what format they are in
-        logger.info(f"Adapter hourly price keys: {list(adapter.hourly_prices.keys())[:5]}")
+        logger.info(f"Adapter hourly price keys: {list(adapter.all_hourly_prices.keys())[:5]}")
         logger.info(f"Adapter tomorrow price keys: {list(tomorrow_prices.keys())[:5] if tomorrow_prices else 'None'}")
         
         # Check if tomorrow's data is correctly identified
@@ -117,24 +148,10 @@ async def test_nordpool_api(area: str = "SE3"):
         
         # Log the results
         logger.info(f"Tomorrow data validation: {is_tomorrow_valid}")
-        logger.info(f"Today hours: {len(adapter.hourly_prices)}, Tomorrow hours: {len(tomorrow_prices)}")
+        logger.info(f"Today hours: {len(adapter.today_hourly_prices)}, Tomorrow hours: {len(tomorrow_prices)}")
         
-        # Create improved adapter to test tomorrow data extraction
-        improved_adapter = ImprovedElectricityPriceAdapter(hass, [data], Source.NORDPOOL, False)
-        
-        # Check if improved adapter correctly extracts tomorrow's data
-        improved_tomorrow_prices = improved_adapter.tomorrow_prices
-        
-        # Log the keys to see what format they are in
-        logger.info(f"Improved adapter hourly price keys: {list(improved_adapter.hourly_prices.keys())[:5]}")
-        logger.info(f"Improved adapter tomorrow price keys: {list(improved_tomorrow_prices.keys())[:5] if improved_tomorrow_prices else 'None'}")
-        
-        # Check if tomorrow's data is correctly identified
-        improved_is_tomorrow_valid = improved_adapter.is_tomorrow_valid()
-        
-        # Log the results
-        logger.info(f"Improved adapter tomorrow data validation: {improved_is_tomorrow_valid}")
-        logger.info(f"Improved adapter today hours: {len(improved_adapter.hourly_prices)}, Tomorrow hours: {len(improved_tomorrow_prices)}")
+        # Note: The improved adapter has been merged into the standard adapter
+        # so we no longer need to test it separately
         
         # Try to directly access the Nordpool API to see if tomorrow's data is available
         logger.info("Trying direct API access to check for tomorrow's data")
@@ -177,8 +194,6 @@ async def test_nordpool_api(area: str = "SE3"):
         return {
             "adapter_tomorrow_valid": is_tomorrow_valid,
             "adapter_tomorrow_hours": len(tomorrow_prices),
-            "improved_adapter_tomorrow_valid": improved_is_tomorrow_valid,
-            "improved_adapter_tomorrow_hours": len(improved_tomorrow_prices),
             "direct_api_today_success": today_data is not None,
             "direct_api_tomorrow_success": tomorrow_data is not None
         }
