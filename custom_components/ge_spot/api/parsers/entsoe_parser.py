@@ -221,7 +221,7 @@ class EntsoeParser(BasePriceParser):
             except Exception as e:
                 _LOGGER.error(f"Failed to parse hourly prices from ENTSO-E XML: {e}")
 
-        # Return the hourly prices without categorization
+        # Return all hourly prices without categorization
         # The core will handle categorization based on the timestamps
         return hourly_prices
 
