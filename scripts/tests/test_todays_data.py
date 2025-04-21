@@ -87,13 +87,15 @@ def save_results(results: Dict[str, Any], filename: str, results_dir: str = "tes
 
 async def test_parsers_with_api(
     parsers: List[Dict[str, str]] = None,
-    timeout: int = 30
+    timeout: int = 30,
+    debug: bool = False
 ) -> Dict[str, Any]:
     """Test parsers with API access for today's data.
     
     Args:
         parsers: List of parsers to test, each a dict with 'name' and 'area' keys
         timeout: API request timeout in seconds
+        debug: Whether to enable debug mode (always use real API data)
         
     Returns:
         Dictionary with test results
@@ -105,12 +107,12 @@ async def test_parsers_with_api(
         parsers = [
             {"name": "entsoe", "area": "SE4"},
             {"name": "nordpool", "area": "SE3"},
-            {"name": "epex", "area": "DE"},
+            {"name": "epex", "area": "FR"},
             {"name": "omie", "area": "ES"},
             {"name": "energi_data_service", "area": "DK1"},
             {"name": "aemo", "area": "NSW1"},
             {"name": "comed", "area": "US"},
-            {"name": "stromligning", "area": "NO1"}
+            {"name": "stromligning", "area": "DK2"}
         ]
     
     # Run tests for each parser
@@ -129,14 +131,17 @@ async def test_parsers_with_api(
             os.makedirs(cache_dir, exist_ok=True)
             cache_file = os.path.join(cache_dir, f"{api_name}_{area}.json")
             
-            # Try cache first
+            # Determine whether to use cache or always fetch fresh data
             use_cache = False
-            if os.path.exists(cache_file):
+            if not debug and os.path.exists(cache_file):
                 file_time = os.path.getmtime(cache_file)
                 file_age = datetime.now().timestamp() - file_time
                 if file_age < 24 * 60 * 60:  # 24 hours in seconds
                     use_cache = True
-                    
+            
+            if debug:
+                logger.info(f"Debug mode enabled, always using real API data for {api_name} ({area})")
+                
             data = None
             if use_cache:
                 logger.info(f"Using cached data for {api_name} ({area})")
@@ -147,7 +152,7 @@ async def test_parsers_with_api(
                     logger.warning(f"Failed to load cache for {api_name} ({area}): {e}")
                     use_cache = False
             
-            # Fall back to API if cache missing or failed
+            # Fetch from API if cache is disabled, missing, or failed
             if not use_cache or not data:
                 logger.info(f"Fetching live data from {api_name} API for {area}")
                 try:
@@ -155,10 +160,11 @@ async def test_parsers_with_api(
                     api_result = await test_today_api_data(
                         api_name=api_name,
                         area=area,
-                        timeout=timeout
+                        timeout=timeout,
+                        debug=debug
                     )
                     
-                    # Cache the result for future use
+                    # Cache the result for future use (even in debug mode)
                     with open(cache_file, "w") as f:
                         json.dump(api_result, f, cls=DateTimeEncoder)
                     
@@ -532,7 +538,8 @@ async def main() -> int:
     logger.info("=== Testing parsers for today's data ===")
     all_results = await test_parsers_with_api(
         parsers=parsers,
-        timeout=args.timeout
+        timeout=args.timeout,
+        debug=args.debug
     )
     save_results(all_results, f"today_parsers_{timestamp}.json", args.results_dir)
     

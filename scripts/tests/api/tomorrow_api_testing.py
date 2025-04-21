@@ -16,13 +16,226 @@ from ..mocks.hass import MockHass
 from ..utils.general import build_api_key_config
 from ..core.adapter_testing import ImprovedElectricityPriceAdapter
 
+import subprocess
+
 logger = logging.getLogger(__name__)
+
+async def test_direct_api_call(api_name: str, area: str) -> Dict[str, Any]:
+    """Make a direct API call using curl and display the results.
+    
+    Args:
+        api_name: Name of the API to test
+        area: Area code to test
+        
+    Returns:
+        Dictionary with test results
+    """
+    logger.info(f"Making direct API call for {api_name} (area: {area})")
+    
+    result = {
+        "api": api_name,
+        "area": area,
+        "status": "unknown",
+        "direct_api_success": False
+    }
+    
+    try:
+        if api_name == "nordpool":
+            # Get tomorrow's date
+            tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+            
+            # Construct the curl command
+            curl_cmd = f'curl "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices?currency=EUR&date={tomorrow}&market=DayAhead&deliveryArea={area}"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response contains {len(response_data.get('multiAreaEntries', []))} entries")
+                    
+                    # Log a sample of the data
+                    if response_data.get('multiAreaEntries'):
+                        sample = response_data['multiAreaEntries'][0]
+                        logger.info(f"Sample data: {json.dumps(sample, indent=2)[:500]}...")
+                    
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "entsoe":
+            logger.info("Direct API call for ENTSOE requires an API key")
+            logger.info("Example curl command: curl -X GET 'https://transparency.entsoe.eu/api?securityToken=YOUR_API_KEY&documentType=A44&in_Domain=10Y1001A1001A47J&out_Domain=10Y1001A1001A47J&periodStart=YYYYMMDDHHMM&periodEnd=YYYYMMDDHHMM'")
+            result["status"] = "not_implemented"
+        
+        elif api_name == "epex":
+            logger.info("Direct API call for EPEX not implemented")
+            result["status"] = "not_implemented"
+        
+        elif api_name == "omie":
+            # Get tomorrow's date
+            tomorrow = (datetime.now() + timedelta(days=1)).strftime("%d_%m_%Y")
+            
+            # Construct the curl command
+            curl_cmd = f'curl "https://www.omie.es/en/file-download?parents%5B0%5D=&filename=marginalpdbc_{tomorrow}.1"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                logger.info(f"Raw response (first 500 chars): {process.stdout[:500]}...")
+                result["direct_api_success"] = True
+                result["status"] = "success"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "energi_data_service":
+            # Get tomorrow's and day after tomorrow's dates
+            tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+            day_after_tomorrow = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+            
+            # Construct the curl command
+            curl_cmd = f'curl "https://api.energidataservice.dk/dataset/Elspotprices?start={tomorrow}&end={day_after_tomorrow}&filter=%7B%22PriceArea%22:%22{area}%22%7D"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response contains {len(response_data.get('records', []))} records")
+                    
+                    # Log a sample of the data
+                    if response_data.get('records'):
+                        sample = response_data['records'][0]
+                        logger.info(f"Sample data: {json.dumps(sample, indent=2)}")
+                    
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "aemo":
+            # Construct the curl command for tomorrow's data
+            curl_cmd = f'curl "https://visualisations.aemo.com.au/aemo/apps/api/report/PREDISPATCH/PRICE/{area}"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response data: {json.dumps(response_data, indent=2)[:500]}...")
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "comed":
+            # Construct the curl command
+            curl_cmd = f'curl "https://hourlypricing.comed.com/api?type=5minutefeed"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response contains {len(response_data)} entries")
+                    
+                    # Log a sample of the data
+                    if response_data:
+                        sample = response_data[0]
+                        logger.info(f"Sample data: {json.dumps(sample, indent=2)}")
+                    
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "stromligning":
+            # Construct the curl command
+            curl_cmd = f'curl "https://stromligning.no/api/v1/prices?zone={area}"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response data: {json.dumps(response_data, indent=2)[:500]}...")
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        else:
+            logger.warning(f"Direct API call not implemented for {api_name}")
+            result["status"] = "not_implemented"
+    
+    except Exception as e:
+        logger.error(f"Error making direct API call for {api_name}: {e}")
+        result["status"] = "error"
+        result["error"] = str(e)
+    
+    return result
 
 async def test_tomorrow_api_data(
     api_name: str,
     area: str,
     timeout: int,
-    use_improved_adapter: bool = False
+    use_improved_adapter: bool = False,
+    debug: bool = False
 ) -> Dict[str, Any]:
     """Test a specific API for tomorrow's data with cache testing.
     
@@ -31,11 +244,16 @@ async def test_tomorrow_api_data(
         area: Area code to test
         timeout: Request timeout in seconds
         use_improved_adapter: Whether to use the improved adapter
+        debug: Whether to enable debug mode (show direct API calls)
         
     Returns:
         Dictionary with test results
     """
     logger.info(f"Testing API: {api_name} for Area: {area}")
+    
+    # If debug mode is enabled, make a direct API call first to show the raw data
+    if debug:
+        await test_direct_api_call(api_name, area)
     
     # Create mock HASS instance and cache
     mock_hass = MockHass()
@@ -82,29 +300,6 @@ async def test_tomorrow_api_data(
             result["status"] = "failure"
             result["message"] = "No valid data returned"
             return result
-        
-        # Check for today's data
-        has_today_data = "hourly_prices" in data and data["hourly_prices"]
-        result["has_today_data"] = has_today_data
-        
-        if has_today_data:
-            result["today_hours"] = len(data["hourly_prices"])
-            logger.info(f"Source {api_name} for area {area} has today's data: {result['today_hours']} hours")
-            
-            # Log the actual hours available for today
-            hours = sorted(data["hourly_prices"].keys())
-            logger.debug(f"Today hours available: {hours}")
-            result["debug_info"]["today_hours"] = hours
-            
-            # Check if hourly_prices contains ISO format dates
-            has_dates = any("T" in hour for hour in hours)
-            result["debug_info"]["hourly_prices_has_dates"] = has_dates
-            if has_dates:
-                logger.info(f"Hourly prices contain ISO format dates")
-                # Log some examples
-                date_examples = [hour for hour in hours if "T" in hour][:3]
-                logger.info(f"Date examples: {date_examples}")
-                result["debug_info"]["date_examples"] = date_examples
         
         # Check for tomorrow's data
         has_tomorrow_data = "tomorrow_hourly_prices" in data and data["tomorrow_hourly_prices"]
@@ -356,48 +551,7 @@ async def test_raw_api_data(api_name: str, area: str, api_key: Optional[str] = N
             # Delivery area is the same as region for SE1 and SE4
             delivery_area = area
             
-            # Fetch today's data
-            today_url = f"{base_url}?currency=EUR&date={today}&market=DayAhead&deliveryArea={delivery_area}"
-            logger.info(f"Fetching today's data for {area} from Nordpool API...")
-            logger.info(f"URL: {today_url}")
-            
-            today_result = subprocess.run(
-                ["curl", "-s", today_url],
-                capture_output=True,
-                text=True
-            )
-            
-            # Check if we got a valid response
-            if today_result.returncode != 0:
-                logger.error(f"Error fetching today's data: {today_result.stderr}")
-                result["status"] = "error"
-                result["message"] = f"Error fetching today's data: {today_result.stderr}"
-                return result
-            
-            # Try to parse the response as JSON
-            try:
-                today_data = json.loads(today_result.stdout)
-                logger.info(f"Successfully fetched today's data for {area} from Nordpool API")
-                result["has_today_data"] = True
-                result["debug_info"]["today_data"] = today_data
-                
-                # Check if we have multiAreaEntries
-                if "multiAreaEntries" in today_data:
-                    logger.info(f"Found {len(today_data['multiAreaEntries'])} entries in today's data")
-                    
-                    # Check if we have data for the specified region
-                    for entry in today_data["multiAreaEntries"]:
-                        if "entryPerArea" in entry and area in entry["entryPerArea"]:
-                            logger.info(f"Found data for {area} in today's data")
-                            logger.info(f"Example price: {entry['entryPerArea'][area]}")
-                            result["debug_info"]["today_example_price"] = entry["entryPerArea"][area]
-                            break
-                else:
-                    logger.warning("No multiAreaEntries found in today's data")
-            except json.JSONDecodeError:
-                logger.warning("Failed to parse today's data as JSON")
-                logger.warning(f"Response: {today_result.stdout[:200]}...")
-                result["debug_info"]["today_raw_response"] = today_result.stdout[:1000]
+            # We're only focusing on tomorrow's data in this test
             
             # Fetch tomorrow's data
             tomorrow_url = f"{base_url}?currency=EUR&date={tomorrow}&market=DayAhead&deliveryArea={delivery_area}"
@@ -413,8 +567,8 @@ async def test_raw_api_data(api_name: str, area: str, api_key: Optional[str] = N
             # Check if we got a valid response
             if tomorrow_result.returncode != 0:
                 logger.error(f"Error fetching tomorrow's data: {tomorrow_result.stderr}")
-                result["status"] = "partial"
-                result["message"] = f"Successfully fetched today's data but error fetching tomorrow's data: {tomorrow_result.stderr}"
+                result["status"] = "error"
+                result["message"] = f"Error fetching tomorrow's data: {tomorrow_result.stderr}"
                 return result
             
             # Try to parse the response as JSON
@@ -439,27 +593,20 @@ async def test_raw_api_data(api_name: str, area: str, api_key: Optional[str] = N
                     logger.warning("No multiAreaEntries found in tomorrow's data")
                 
                 # Set status based on results
-                if result["has_today_data"] and result["has_tomorrow_data"]:
+                if result["has_tomorrow_data"]:
                     result["status"] = "success"
-                    result["message"] = "Successfully fetched both today's and tomorrow's data"
-                elif result["has_today_data"]:
-                    result["status"] = "partial"
-                    result["message"] = "Successfully fetched today's data but no tomorrow's data"
+                    result["message"] = "Successfully fetched tomorrow's data"
                 else:
                     result["status"] = "failure"
-                    result["message"] = "Failed to fetch both today's and tomorrow's data"
+                    result["message"] = "Failed to fetch tomorrow's data"
             except json.JSONDecodeError:
                 logger.warning("Failed to parse tomorrow's data as JSON")
                 logger.warning(f"Response: {tomorrow_result.stdout[:200]}...")
                 result["debug_info"]["tomorrow_raw_response"] = tomorrow_result.stdout[:1000]
                 
                 # Set status based on results
-                if result["has_today_data"]:
-                    result["status"] = "partial"
-                    result["message"] = "Successfully fetched today's data but failed to parse tomorrow's data"
-                else:
-                    result["status"] = "failure"
-                    result["message"] = "Failed to parse both today's and tomorrow's data"
+                result["status"] = "failure"
+                result["message"] = "Failed to parse tomorrow's data"
         
         except Exception as e:
             trace = traceback.format_exc()
@@ -508,65 +655,7 @@ async def test_raw_api_data(api_name: str, area: str, api_key: Optional[str] = N
             # Try different document types
             document_types = ["A44", "A62", "A65"]
             
-            # Fetch today's data
-            logger.info(f"Fetching today's data for {area} from ENTSOE API...")
-            
-            today_success = False
-            for doc_type in document_types:
-                today_url = (
-                    f"{base_url}?securityToken={api_key}&documentType={doc_type}"
-                    f"&in_Domain={entsoe_area}&out_Domain={entsoe_area}"
-                    f"&periodStart={today_start_str}&periodEnd={today_end_str}"
-                )
-                logger.info(f"Trying document type {doc_type}...")
-                logger.info(f"URL: {today_url.replace(api_key, 'API_KEY_HIDDEN')}")
-                
-                today_result = subprocess.run(
-                    ["curl", "-s", "-H", "User-Agent: Mozilla/5.0", 
-                     "-H", "Accept: application/xml", 
-                     "-H", "Content-Type: application/xml", 
-                     today_url],
-                    capture_output=True,
-                    text=True
-                )
-                
-                # Check if we got a valid response
-                if today_result.returncode != 0:
-                    logger.error(f"Error fetching today's data with document type {doc_type}: {today_result.stderr}")
-                    continue
-                
-                # Check if we got a valid XML response
-                if "<Publication_MarketDocument" in today_result.stdout:
-                    logger.info(f"Successfully fetched today's data for {area} from ENTSOE API with document type {doc_type}")
-                    
-                    # Check if we have TimeSeries
-                    if "<TimeSeries>" in today_result.stdout:
-                        logger.info("Found TimeSeries in today's data")
-                        
-                        # Check if we have price points
-                        if "<Point>" in today_result.stdout:
-                            logger.info("Found price points in today's data")
-                            
-                            # Count the number of price points
-                            point_count = today_result.stdout.count("<Point>")
-                            logger.info(f"Found {point_count} price points in today's data")
-                            
-                            result["has_today_data"] = True
-                            result["debug_info"]["today_point_count"] = point_count
-                            result["debug_info"]["today_document_type"] = doc_type
-                            result["debug_info"]["today_raw_response"] = today_result.stdout[:1000]
-                            
-                            today_success = True
-                            break
-                        else:
-                            logger.warning("No price points found in today's data")
-                    else:
-                        logger.warning("No TimeSeries found in today's data")
-                elif "No matching data found" in today_result.stdout:
-                    logger.warning(f"No matching data found for today with document type {doc_type}")
-                else:
-                    logger.warning(f"Unexpected response for today's data with document type {doc_type}")
-                    logger.warning(f"Response: {today_result.stdout[:200]}...")
+            # We're only focusing on tomorrow's data in this test
             
             # Fetch tomorrow's data
             logger.info(f"Fetching tomorrow's data for {area} from ENTSOE API...")
@@ -629,18 +718,12 @@ async def test_raw_api_data(api_name: str, area: str, api_key: Optional[str] = N
                     logger.warning(f"Response: {tomorrow_result.stdout[:200]}...")
             
             # Set status based on results
-            if today_success and tomorrow_success:
+            if tomorrow_success:
                 result["status"] = "success"
-                result["message"] = "Successfully fetched both today's and tomorrow's data"
-            elif today_success:
-                result["status"] = "partial"
-                result["message"] = "Successfully fetched today's data but not tomorrow's data"
-            elif tomorrow_success:
-                result["status"] = "partial"
-                result["message"] = "Successfully fetched tomorrow's data but not today's data"
+                result["message"] = "Successfully fetched tomorrow's data"
             else:
                 result["status"] = "failure"
-                result["message"] = "Failed to fetch both today's and tomorrow's data"
+                result["message"] = "Failed to fetch tomorrow's data"
         
         except Exception as e:
             trace = traceback.format_exc()

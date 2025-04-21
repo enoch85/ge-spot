@@ -88,13 +88,15 @@ def save_results(results: Dict[str, Any], filename: str, results_dir: str = "tes
 
 async def test_parsers_with_api(
     parsers: List[Dict[str, str]] = None,
-    timeout: int = 30
+    timeout: int = 30,
+    debug: bool = False
 ) -> Dict[str, Any]:
     """Test parsers with API access for tomorrow's data.
     
     Args:
         parsers: List of parsers to test, each a dict with 'name' and 'area' keys
         timeout: API request timeout in seconds
+        debug: Whether to enable debug mode (always use real API data)
         
     Returns:
         Dictionary with test results
@@ -105,13 +107,13 @@ async def test_parsers_with_api(
     if not parsers:
         parsers = [
             {"name": "entsoe", "area": "SE4"},
-            {"name": "nordpool", "area": "SE3"},
-            {"name": "epex", "area": "DE"},
+            {"name": "nordpool", "area": "SE4"},
+            {"name": "epex", "area": "FR"},
             {"name": "omie", "area": "ES"},
             {"name": "energi_data_service", "area": "DK1"},
             {"name": "aemo", "area": "NSW1"},
             {"name": "comed", "area": "US"},
-            {"name": "stromligning", "area": "NO1"}
+            {"name": "stromligning", "area": "DK2"}
         ]
     
     # Run tests for each parser
@@ -156,7 +158,8 @@ async def test_parsers_with_api(
                     api_result = await test_tomorrow_api_data(
                         api_name=api_name,
                         area=area,
-                        timeout=timeout
+                        timeout=timeout,
+                        debug=debug
                     )
                     
                     # Cache the result for future use
@@ -230,8 +233,6 @@ async def test_api_direct(api_name: str, area: str) -> Dict[str, Any]:
         "api": api_name,
         "direct_api_success": False,
         "adapter_success": False,
-        "improved_adapter_success": False,
-        "today_hours": 0,
         "tomorrow_hours": 0,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
@@ -257,15 +258,7 @@ async def test_api_direct(api_name: str, area: str) -> Dict[str, Any]:
         # Log the raw data structure
         logger.info(f"Raw data keys: {data.keys()}")
         
-        # Check if we have today_hourly_prices
-        if "today_hourly_prices" in data:
-            today_hourly_prices = data["today_hourly_prices"]
-            results["today_hours"] = len(today_hourly_prices)
-            logger.info(f"Hourly prices: {len(today_hourly_prices)} entries")
-            
-            # Log sample entries
-            sample_entries = list(today_hourly_prices.items())[:5]
-            logger.info(f"Sample hourly prices: {sample_entries}")
+            # We're only focusing on tomorrow's data in this test
         
         # Check if we have tomorrow_hourly_prices
         if "tomorrow_hourly_prices" in data:
@@ -305,13 +298,9 @@ async def test_api_direct(api_name: str, area: str) -> Dict[str, Any]:
         results["adapter_tomorrow_hours"] = len(tomorrow_prices) if tomorrow_prices else 0
         
         # Note: The improved adapter has been merged into the standard adapter
-        # Just copy the standard adapter results for backward compatibility with tests
-        results["improved_adapter_success"] = is_tomorrow_valid
-        results["improved_adapter_tomorrow_hours"] = len(tomorrow_prices) if tomorrow_prices else 0
         
-        # Additional direct API test for Nordpool
-        if api_name == "nordpool":
-            await test_direct_nordpool_api(results)
+        # Make direct API calls for all APIs to get tomorrow's data
+        await test_direct_api_call(api_name, area, results)
             
     except Exception as e:
         logger.error(f"Error during {api_name} direct test: {e}")
@@ -327,56 +316,114 @@ async def test_nordpool_direct_api() -> Dict[str, Any]:
     """
     return await test_api_direct("nordpool", "SE3")
 
+async def test_direct_api_call(api_name: str, area: str, results: Dict[str, Any]) -> None:
+    """Test any API directly using low-level calls to get tomorrow's data.
+    
+    Args:
+        api_name: Name of the API to test
+        area: Area code to test
+        results: Dictionary to update with test results
+    """
+    try:
+        # Create a new session for direct API access
+        async with aiohttp.ClientSession() as session:
+            # Get tomorrow's date
+            tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+            
+            if api_name == "nordpool":
+                # Base URL for Nordpool API
+                base_url = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
+                
+                # Fetch tomorrow's data
+                tomorrow_url = f"{base_url}?currency=EUR&date={tomorrow}&market=DayAhead&deliveryArea={area}"
+                logger.info(f"Fetching tomorrow's data from: {tomorrow_url}")
+                
+                async with session.get(tomorrow_url) as response:
+                    if response.status == 200:
+                        tomorrow_data = await response.json()
+                        tomorrow_entries = len(tomorrow_data.get('multiAreaEntries', []))
+                        logger.info(f"Successfully fetched tomorrow's data: {tomorrow_entries} entries")
+                        results["direct_api_tomorrow_entries"] = tomorrow_entries
+                        results["direct_api_tomorrow_success"] = True
+                    else:
+                        logger.error(f"Failed to fetch tomorrow's data: {response.status}")
+                        results["direct_api_tomorrow_error"] = f"HTTP {response.status}"
+            
+            elif api_name == "entsoe":
+                # For ENTSOE, we need an API key which we don't have in this function
+                # Just log that we can't make a direct API call without an API key
+                logger.info("ENTSOE API requires an API key for direct calls")
+                results["direct_api_tomorrow_entries"] = 0
+                results["direct_api_tomorrow_success"] = False
+            
+            elif api_name == "epex":
+                # EPEX doesn't have a public API for direct calls
+                logger.info("EPEX doesn't have a public API for direct calls")
+                results["direct_api_tomorrow_entries"] = 0
+                results["direct_api_tomorrow_success"] = False
+            
+            elif api_name == "omie":
+                # Get tomorrow's date in the format required by OMIE
+                tomorrow_omie = (datetime.now() + timedelta(days=1)).strftime("%d_%m_%Y")
+                
+                # Construct the URL for OMIE
+                tomorrow_url = f"https://www.omie.es/en/file-download?parents%5B0%5D=&filename=marginalpdbc_{tomorrow_omie}.1"
+                logger.info(f"Fetching tomorrow's data from: {tomorrow_url}")
+                
+                async with session.get(tomorrow_url) as response:
+                    if response.status == 200:
+                        # OMIE returns a CSV file, not JSON
+                        tomorrow_data = await response.text()
+                        # Count the number of lines as a rough estimate of entries
+                        tomorrow_entries = len(tomorrow_data.splitlines())
+                        logger.info(f"Successfully fetched tomorrow's data: {tomorrow_entries} lines")
+                        results["direct_api_tomorrow_entries"] = tomorrow_entries
+                        results["direct_api_tomorrow_success"] = True
+                    else:
+                        logger.error(f"Failed to fetch tomorrow's data: {response.status}")
+                        results["direct_api_tomorrow_error"] = f"HTTP {response.status}"
+            
+            elif api_name == "energi_data_service":
+                # Get tomorrow's and day after tomorrow's dates
+                tomorrow_eds = tomorrow
+                day_after_tomorrow = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+                
+                # Construct the URL for Energi Data Service
+                tomorrow_url = f"https://api.energidataservice.dk/dataset/Elspotprices?start={tomorrow_eds}&end={day_after_tomorrow}&filter=%7B%22PriceArea%22:%22{area}%22%7D"
+                logger.info(f"Fetching tomorrow's data from: {tomorrow_url}")
+                
+                async with session.get(tomorrow_url) as response:
+                    if response.status == 200:
+                        tomorrow_data = await response.json()
+                        tomorrow_entries = len(tomorrow_data.get('records', []))
+                        logger.info(f"Successfully fetched tomorrow's data: {tomorrow_entries} entries")
+                        results["direct_api_tomorrow_entries"] = tomorrow_entries
+                        results["direct_api_tomorrow_success"] = True
+                    else:
+                        logger.error(f"Failed to fetch tomorrow's data: {response.status}")
+                        results["direct_api_tomorrow_error"] = f"HTTP {response.status}"
+            
+            else:
+                # For other APIs, we don't have direct API call implementations yet
+                logger.info(f"Direct API call not implemented for {api_name}")
+                results["direct_api_tomorrow_entries"] = 0
+                results["direct_api_tomorrow_success"] = False
+    
+    except Exception as e:
+        logger.error(f"Error in direct API test for {api_name}: {e}")
+        results["direct_api_error"] = str(e)
+        results["direct_api_tomorrow_entries"] = 0
+        results["direct_api_tomorrow_success"] = False
+
 async def test_direct_nordpool_api(results: Dict[str, Any]) -> None:
     """Test Nordpool API directly using low-level aiohttp calls.
     
     Args:
         results: Dictionary to update with test results
     """
-    area = results["area"]
-    
-    try:
-        # Create a new session for direct API access
-        async with aiohttp.ClientSession() as session:
-            # Get today's and tomorrow's dates
-            today = datetime.now().strftime("%Y-%m-%d")
-            tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-            
-            # Base URL for Nordpool API
-            base_url = "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices"
-            
-            # Fetch today's data
-            today_url = f"{base_url}?currency=EUR&date={today}&market=DayAhead&deliveryArea={area}"
-            logger.info(f"Fetching today's data from: {today_url}")
-            
-            async with session.get(today_url) as response:
-                if response.status == 200:
-                    today_data = await response.json()
-                    today_entries = len(today_data.get('multiAreaEntries', []))
-                    logger.info(f"Successfully fetched today's data: {today_entries} entries")
-                    results["direct_api_today_entries"] = today_entries
-                else:
-                    logger.error(f"Failed to fetch today's data: {response.status}")
-                    results["direct_api_today_error"] = f"HTTP {response.status}"
-            
-            # Fetch tomorrow's data
-            tomorrow_url = f"{base_url}?currency=EUR&date={tomorrow}&market=DayAhead&deliveryArea={area}"
-            logger.info(f"Fetching tomorrow's data from: {tomorrow_url}")
-            
-            async with session.get(tomorrow_url) as response:
-                if response.status == 200:
-                    tomorrow_data = await response.json()
-                    tomorrow_entries = len(tomorrow_data.get('multiAreaEntries', []))
-                    logger.info(f"Successfully fetched tomorrow's data: {tomorrow_entries} entries")
-                    results["direct_api_tomorrow_entries"] = tomorrow_entries
-                    results["direct_api_tomorrow_success"] = True
-                else:
-                    logger.error(f"Failed to fetch tomorrow's data: {response.status}")
-                    results["direct_api_tomorrow_error"] = f"HTTP {response.status}"
-    
-    except Exception as e:
-        logger.error(f"Error in direct Nordpool API test: {e}")
-        results["direct_api_error"] = str(e)
+    # This function is kept for backward compatibility
+    # Now we use the more general test_direct_api_call function
+    await test_direct_api_call("nordpool", results["area"], results)
 
 async def test_tdm_with_real_api(
     api_name: str, 
@@ -455,9 +502,6 @@ async def test_tdm_with_real_api(
             results["has_tomorrow_data"] = is_tomorrow_valid and results["tomorrow_hours"] > 0
             
             # Note: The improved adapter has been merged into the standard adapter
-            # Just maintain backward compatibility with test results by mirroring standard adapter results
-            results["improved_tomorrow_valid"] = is_tomorrow_valid
-            results["improved_tomorrow_hours"] = len(tomorrow_prices) if tomorrow_prices else 0
             results["has_tomorrow_data"] = is_tomorrow_valid and results["tomorrow_hours"] > 0
             
             # Inspect cache structure
@@ -597,9 +641,8 @@ def print_summary(
             print(f"\n=== {api_name.capitalize()} Direct API Summary ===")
             print(f"Area: {results.get('area', 'unknown')}")
             print(f"Direct API success: {results.get('direct_api_success', False)}")
-            print(f"Standard adapter success: {results.get('adapter_success', False)} ({results.get('adapter_tomorrow_hours', 0)} hours)")
-            print(f"Improved adapter success: {results.get('improved_adapter_success', False)} ({results.get('improved_adapter_tomorrow_hours', 0)} hours)")
-            print(f"Today hours: {results.get('today_hours', 0)}, Tomorrow hours: {results.get('tomorrow_hours', 0)}")
+            print(f"Adapter success: {results.get('adapter_success', False)} ({results.get('adapter_tomorrow_hours', 0)} hours)")
+            print(f"Tomorrow hours: {results.get('tomorrow_hours', 0)}")
             
             # Print cache test results if available
             cache_test = results.get("cache_test", {})
@@ -609,8 +652,8 @@ def print_summary(
                 tomorrow_cache_entry = cache_structure.get("tomorrow_cache_entry", False)
                 print(f"  Cache test: Tomorrow in today's cache: {tomorrow_in_today_cache}, Tomorrow cache entry: {tomorrow_cache_entry}")
             
-            if "direct_api_tomorrow_entries" in results:
-                print(f"Direct tomorrow API entries: {results.get('direct_api_tomorrow_entries', 0)}")
+            # Always show direct API entries (0 if not available)
+            print(f"Direct tomorrow API entries: {results.get('direct_api_tomorrow_entries', 0)}")
     
     if tdm_results:
         print("\n=== TomorrowDataManager Test Summary ===")
@@ -619,9 +662,7 @@ def print_summary(
         print(f"Tomorrow valid: {tdm_results.get('tomorrow_valid', False)}")
         print(f"Tomorrow hours: {tdm_results.get('tomorrow_hours', 0)}")
         
-        if "improved_tomorrow_valid" in tdm_results:
-            print(f"Improved adapter tomorrow valid: {tdm_results.get('improved_tomorrow_valid', False)}")
-            print(f"Improved adapter tomorrow hours: {tdm_results.get('improved_tomorrow_hours', 0)}")
+        # The improved adapter has been merged into the standard adapter
         
         # Print cache test results if available
         cache_test = tdm_results.get("cache_test", {})
@@ -703,7 +744,8 @@ async def main() -> int:
     
     all_results = await test_parsers_with_api(
         parsers=parsers,
-        timeout=args.timeout
+        timeout=args.timeout,
+        debug=args.debug
     )
     save_results(all_results, f"tomorrow_parsers_{timestamp}.json", args.results_dir)
     

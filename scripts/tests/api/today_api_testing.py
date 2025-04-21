@@ -15,12 +15,225 @@ from custom_components.ge_spot.timezone import TimezoneService
 from ..mocks.hass import MockHass
 from ..utils.general import build_api_key_config
 
+import subprocess
+
 logger = logging.getLogger(__name__)
+
+async def test_direct_api_call(api_name: str, area: str) -> Dict[str, Any]:
+    """Make a direct API call using curl and display the results.
+    
+    Args:
+        api_name: Name of the API to test
+        area: Area code to test
+        
+    Returns:
+        Dictionary with test results
+    """
+    logger.info(f"Making direct API call for {api_name} (area: {area})")
+    
+    result = {
+        "api": api_name,
+        "area": area,
+        "status": "unknown",
+        "direct_api_success": False
+    }
+    
+    try:
+        if api_name == "nordpool":
+            # Get today's date
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            # Construct the curl command
+            curl_cmd = f'curl "https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices?currency=EUR&date={today}&market=DayAhead&deliveryArea={area}"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response contains {len(response_data.get('multiAreaEntries', []))} entries")
+                    
+                    # Log a sample of the data
+                    if response_data.get('multiAreaEntries'):
+                        sample = response_data['multiAreaEntries'][0]
+                        logger.info(f"Sample data: {json.dumps(sample, indent=2)[:500]}...")
+                    
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "entsoe":
+            logger.info("Direct API call for ENTSOE requires an API key")
+            logger.info("Example curl command: curl -X GET 'https://transparency.entsoe.eu/api?securityToken=YOUR_API_KEY&documentType=A44&in_Domain=10Y1001A1001A47J&out_Domain=10Y1001A1001A47J&periodStart=YYYYMMDDHHMM&periodEnd=YYYYMMDDHHMM'")
+            result["status"] = "not_implemented"
+        
+        elif api_name == "epex":
+            logger.info("Direct API call for EPEX not implemented")
+            result["status"] = "not_implemented"
+        
+        elif api_name == "omie":
+            # Get today's date
+            today = datetime.now().strftime("%d_%m_%Y")
+            
+            # Construct the curl command
+            curl_cmd = f'curl "https://www.omie.es/en/file-download?parents%5B0%5D=&filename=marginalpdbc_{today}.1"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                logger.info(f"Raw response (first 500 chars): {process.stdout[:500]}...")
+                result["direct_api_success"] = True
+                result["status"] = "success"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "energi_data_service":
+            # Get today's and tomorrow's dates
+            today = datetime.now().strftime("%Y-%m-%d")
+            tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+            
+            # Construct the curl command
+            curl_cmd = f'curl "https://api.energidataservice.dk/dataset/Elspotprices?start={today}&end={tomorrow}&filter=%7B%22PriceArea%22:%22{area}%22%7D"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response contains {len(response_data.get('records', []))} records")
+                    
+                    # Log a sample of the data
+                    if response_data.get('records'):
+                        sample = response_data['records'][0]
+                        logger.info(f"Sample data: {json.dumps(sample, indent=2)}")
+                    
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "aemo":
+            # Construct the curl command
+            curl_cmd = f'curl "https://visualisations.aemo.com.au/aemo/apps/api/report/5MIN/PRICE/{area}"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response data: {json.dumps(response_data, indent=2)[:500]}...")
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "comed":
+            # Construct the curl command
+            curl_cmd = f'curl "https://hourlypricing.comed.com/api?type=5minutefeed"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response contains {len(response_data)} entries")
+                    
+                    # Log a sample of the data
+                    if response_data:
+                        sample = response_data[0]
+                        logger.info(f"Sample data: {json.dumps(sample, indent=2)}")
+                    
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        elif api_name == "stromligning":
+            # Construct the curl command
+            curl_cmd = f'curl "https://stromligning.no/api/v1/prices?zone={area}"'
+            logger.info(f"Executing direct API call: {curl_cmd}")
+            
+            # Execute the curl command
+            process = subprocess.run(curl_cmd, shell=True, capture_output=True, text=True)
+            
+            if process.returncode == 0:
+                logger.info("Direct API call successful")
+                
+                # Try to parse the response as JSON
+                try:
+                    response_data = json.loads(process.stdout)
+                    logger.info(f"Response data: {json.dumps(response_data, indent=2)[:500]}...")
+                    result["direct_api_success"] = True
+                    result["status"] = "success"
+                except json.JSONDecodeError:
+                    logger.warning("Failed to parse response as JSON")
+                    logger.info(f"Raw response: {process.stdout[:500]}...")
+                    result["status"] = "error"
+            else:
+                logger.error(f"Direct API call failed: {process.stderr}")
+                result["status"] = "error"
+        
+        else:
+            logger.warning(f"Direct API call not implemented for {api_name}")
+            result["status"] = "not_implemented"
+    
+    except Exception as e:
+        logger.error(f"Error making direct API call for {api_name}: {e}")
+        result["status"] = "error"
+        result["error"] = str(e)
+    
+    return result
 
 async def test_today_api_data(
     api_name: str,
     area: str,
-    timeout: int
+    timeout: int,
+    debug: bool = False
 ) -> Dict[str, Any]:
     """Test a specific API for today's data with cache testing.
     
@@ -28,11 +241,16 @@ async def test_today_api_data(
         api_name: Name of the API to test
         area: Area code to test
         timeout: Request timeout in seconds
+        debug: Whether to enable debug mode (show direct API calls)
         
     Returns:
         Dictionary with test results
     """
     logger.info(f"Testing API: {api_name} for Area: {area}")
+    
+    # If debug mode is enabled, make a direct API call first to show the raw data
+    if debug:
+        await test_direct_api_call(api_name, area)
     
     # Create mock HASS instance and cache
     mock_hass = MockHass()

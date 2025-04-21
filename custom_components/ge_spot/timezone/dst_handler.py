@@ -70,7 +70,12 @@ class DSTHandler:
             return "unknown timezone"
 
         # Get DST offset in seconds
-        dst_seconds = dt.dst().total_seconds()
+        dst = dt.dst()
+        if dst is None:
+            _LOGGER.warning(f"DST information not available for datetime {dt} with tzinfo {dt.tzinfo}")
+            return "unknown DST info"
+            
+        dst_seconds = dst.total_seconds()
 
         # Convert to hours and format
         if dst_seconds == 0:
