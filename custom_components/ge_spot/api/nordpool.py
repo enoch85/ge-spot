@@ -166,7 +166,8 @@ async def _fetch_data(client, config, area, reference_time):
                             
                             if not has_tomorrow_data:
                                 _LOGGER.warning(f"Tomorrow's data for Nordpool area {area} does not contain entries for tomorrow")
-                                # Even if we don't detect tomorrow's data, keep the response as it might still be useful
+                                # Don't use data that doesn't actually contain tomorrow's entries
+                                tomorrow_response = None
                         else:
                             _LOGGER.warning(f"Failed to fetch valid tomorrow's data for Nordpool area {area}")
                             tomorrow_response = None

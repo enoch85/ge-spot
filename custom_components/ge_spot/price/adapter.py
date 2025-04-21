@@ -371,7 +371,7 @@ class ElectricityPriceAdapter:
         }
 
     def is_tomorrow_valid(self) -> bool:
-        """Check if tomorrow's data is available."""
+        """Check if tomorrow's data is available and valid."""
         # Check if we have any tomorrow data at all
         if not self.tomorrow_list:
             _LOGGER.debug("No tomorrow data available")
@@ -387,5 +387,25 @@ class ElectricityPriceAdapter:
         # For hours between 12 and 20, log with higher visibility as this is a "partial" valid state
         if 12 <= len(self.tomorrow_list) < 20:
             _LOGGER.info(f"Partial tomorrow data available: {len(self.tomorrow_list)}/24 hours - treating as valid")
+
+        # Additional validation: Check if tomorrow's data is different from today's
+        if is_valid and len(self.price_list) >= 12:
+            # Compare a few hours to see if they're identical
+            identical_count = 0
+            comparison_hours = min(len(self.tomorrow_list), len(self.price_list))
+            
+            for i in range(comparison_hours):
+                if self.tomorrow_list[i] == self.price_list[i]:
+                    identical_count += 1
+            
+            # Calculate the percentage of identical hours
+            identical_percentage = (identical_count / comparison_hours) * 100
+            
+            # If more than 90% of hours are identical, it's likely duplicated data
+            if identical_percentage > 90:
+                _LOGGER.warning(f"Tomorrow's data appears to be duplicated from today ({identical_count}/{comparison_hours} identical hours, {identical_percentage:.1f}%)")
+                is_valid = False
+            else:
+                _LOGGER.debug(f"Tomorrow's data differs from today's data ({identical_count}/{comparison_hours} identical hours, {identical_percentage:.1f}%)")
 
         return is_valid
