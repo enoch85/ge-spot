@@ -12,6 +12,7 @@ from ..const.sources import Source
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..utils.fallback import FallbackManager
+from ..utils.price_extractor import extract_prices
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -150,119 +151,41 @@ class TodayDataManager:
         return response
         
     def _process_raw_data(self, data: Dict[str, Any], source: str) -> Dict[str, Any]:
-        """Process raw data from API to extract today's and tomorrow's prices.
+        """Process raw data from API.
         
         Args:
             data: Raw data from API
             source: Source of the data
             
         Returns:
-            Processed data with today's and tomorrow's prices
+            Processed data with raw data and metadata
         """
-        from ..utils.price_extractor import extract_hourly_prices
-        import json
-        
         # Initialize result with basic metadata
         result = {
             "data_source": source,
-            "currency": self.currency,
-            "today_hourly_prices": {},
-            "tomorrow_hourly_prices": {}
+            "currency": data.get("currency", self.currency),  # Use API's currency if available
+            "api_timezone": data.get("api_timezone", "UTC"),  # Use API's timezone if available
+            "raw_data": data.get("raw_data", {})  # Keep the raw data for reference
         }
         
-        # Extract raw data
-        raw_data = data.get("raw_data", data)
-        
-        # Add debug logging
-        _LOGGER.debug(f"Processing raw data from source {source}")
-        _LOGGER.debug(f"Raw data keys: {raw_data.keys() if isinstance(raw_data, dict) else 'Not a dict'}")
-        
-        # Check if we have today and tomorrow data in the combined format
-        if isinstance(raw_data, dict) and "today" in raw_data and "tomorrow" in raw_data:
-            today_data = raw_data["today"]
-            tomorrow_data = raw_data["tomorrow"]
+        # Extract hourly prices using our generic extractor
+        hourly_prices = data.get("hourly_prices", {})
+        if not hourly_prices:
+            # If hourly_prices not already extracted, extract them now
+            hourly_prices = extract_prices(data, self.area)
             
-            _LOGGER.debug(f"Found combined format with today and tomorrow data")
-            _LOGGER.debug(f"Today data keys: {today_data.keys() if isinstance(today_data, dict) else 'Not a dict'}")
-            _LOGGER.debug(f"Tomorrow data keys: {tomorrow_data.keys() if isinstance(tomorrow_data, dict) else 'Not a dict'}")
+        # If we have hourly prices, add them to the result
+        if hourly_prices:
+            # Add the hourly prices for potential future use
+            result["hourly_prices"] = hourly_prices
             
-            # Process today's data
-            if isinstance(today_data, dict) and "multiAreaEntries" in today_data:
-                today_entries = today_data["multiAreaEntries"]
-                _LOGGER.debug(f"Found {len(today_entries)} entries in today's multiAreaEntries")
-                
-                # Check if the area exists in the entries
-                area_exists = False
-                for entry in today_entries[:5]:  # Check first 5 entries
-                    if isinstance(entry, dict) and "entryPerArea" in entry and self.area in entry["entryPerArea"]:
-                        area_exists = True
-                        _LOGGER.debug(f"Found area {self.area} in today's entries")
-                        break
-                
-                if not area_exists:
-                    _LOGGER.warning(f"Area {self.area} not found in today's entries")
-                
-                result["today_hourly_prices"] = extract_hourly_prices(
-                    entries=today_entries,
-                    area=self.area,
-                    is_tomorrow=False,
-                    tz_service=self._tz_service
-                )
-                
-                _LOGGER.debug(f"Extracted {len(result['today_hourly_prices'])} today hourly prices")
-                if result["today_hourly_prices"]:
-                    _LOGGER.debug(f"Sample today hourly prices: {list(result['today_hourly_prices'].items())[:5]}")
-            
-            # Process tomorrow's data
-            if isinstance(tomorrow_data, dict) and "multiAreaEntries" in tomorrow_data:
-                tomorrow_entries = tomorrow_data["multiAreaEntries"]
-                _LOGGER.debug(f"Found {len(tomorrow_entries)} entries in tomorrow's multiAreaEntries")
-                
-                # Check if the area exists in the entries
-                area_exists = False
-                for entry in tomorrow_entries[:5]:  # Check first 5 entries
-                    if isinstance(entry, dict) and "entryPerArea" in entry and self.area in entry["entryPerArea"]:
-                        area_exists = True
-                        _LOGGER.debug(f"Found area {self.area} in tomorrow's entries")
-                        break
-                
-                if not area_exists:
-                    _LOGGER.warning(f"Area {self.area} not found in tomorrow's entries")
-                
-                result["tomorrow_hourly_prices"] = extract_hourly_prices(
-                    entries=tomorrow_entries,
-                    area=self.area,
-                    is_tomorrow=True,
-                    tz_service=self._tz_service
-                )
-                
-                _LOGGER.debug(f"Extracted {len(result['tomorrow_hourly_prices'])} tomorrow hourly prices")
-                if result["tomorrow_hourly_prices"]:
-                    _LOGGER.debug(f"Sample tomorrow hourly prices: {list(result['tomorrow_hourly_prices'].items())[:5]}")
+            _LOGGER.debug(f"Extracted {len(hourly_prices)} hourly prices from {source} data for area {self.area}")
         else:
-            # If not in combined format, process as today's data
-            if isinstance(raw_data, dict) and "multiAreaEntries" in raw_data:
-                today_entries = raw_data["multiAreaEntries"]
-                _LOGGER.debug(f"Found {len(today_entries)} entries in multiAreaEntries (non-combined format)")
-                
-                result["today_hourly_prices"] = extract_hourly_prices(
-                    entries=today_entries,
-                    area=self.area,
-                    is_tomorrow=False,
-                    tz_service=self._tz_service
-                )
-                
-                _LOGGER.debug(f"Extracted {len(result['today_hourly_prices'])} today hourly prices (non-combined format)")
-                if result["today_hourly_prices"]:
-                    _LOGGER.debug(f"Sample today hourly prices: {list(result['today_hourly_prices'].items())[:5]}")
-        
-        # Add API timezone if available
-        if "api_timezone" in data:
-            result["api_timezone"] = data["api_timezone"]
+            _LOGGER.warning(f"No hourly prices extracted from {source} data for area {self.area}")
         
         # Copy any other metadata from the original data
         for key, value in data.items():
-            if key not in ["raw_data", "today_hourly_prices", "tomorrow_hourly_prices"]:
+            if key not in ["raw_data", "hourly_prices", "currency", "api_timezone"]:
                 result[key] = value
         
         return result

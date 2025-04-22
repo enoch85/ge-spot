@@ -56,16 +56,15 @@ async def fetch_day_ahead_prices(
     source_type, config, area, currency, reference_time=None, hass=None, session=None
 ):  # pylint: disable=too-many-arguments
     """Fetch electricity prices using AEMO APIs.
-
+    
+    This function only fetches raw data from the API without any processing.
+    Processing is handled by the data managers.
+    
     Note: AEMO provides real-time spot prices rather than day-ahead prices.
     All necessary data is now available through the consolidated ELEC_NEM_SUMMARY endpoint.
     """
     client = ApiClient(session=session)
     try:
-        # Settings
-        use_subunit = config.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS
-        vat = config.get(Config.VAT, 0)
-
         # Validate area
         if area not in Aemo.REGIONS:
             _LOGGER.error(f"Invalid AEMO region: {area}. Must be one of {Aemo.REGIONS}")
@@ -76,20 +75,19 @@ async def fetch_day_ahead_prices(
             reference_time = datetime.now(timezone.utc)
 
         # Fetch data from the consolidated ELEC_NEM_SUMMARY endpoint
-        aemo_data = await _fetch_summary_data(client, config, area, reference_time)
+        raw_data = await _fetch_summary_data(client, config, area, reference_time)
 
-        if not aemo_data:
+        if not raw_data:
             _LOGGER.error("Failed to fetch AEMO data")
             return None
 
-        # Process data
-        result = await _process_summary_data(aemo_data, area, currency, vat, use_subunit, reference_time, hass, session, config)
-
-        # Add metadata
-        if result:
-            result["data_source"] = "AEMO"
-            result["last_updated"] = datetime.now(timezone.utc).isoformat()
-            result["currency"] = currency
+        # Return simplified format with just raw data and metadata
+        # This follows the new simplified API response format
+        result = {
+            "raw_data": raw_data,
+            "api_timezone": "Australia/Sydney",  # AEMO API uses Australian Eastern Time
+            "currency": Currency.AUD  # AEMO API returns prices in AUD
+        }
 
         return result
     finally:

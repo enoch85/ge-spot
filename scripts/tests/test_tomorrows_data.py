@@ -263,26 +263,43 @@ async def test_api_direct(api_name: str, area: str) -> Dict[str, Any]:
         
             # We're only focusing on tomorrow's data in this test
         
-        # Check if we have tomorrow_hourly_prices
-        if "tomorrow_hourly_prices" in data:
-            tomorrow_hourly_prices = data["tomorrow_hourly_prices"]
-            results["tomorrow_hours"] = len(tomorrow_hourly_prices)
-            logger.info(f"Tomorrow hourly prices: {len(tomorrow_hourly_prices)} entries")
+        # In the simplified approach, we extract tomorrow prices from hourly_prices with ISO timestamps
+        # Get the user's timezone from the timezone service
+        tz_service = TimezoneService(mock_hass, area, config)
+        user_timezone = tz_service.ha_timezone
+        
+        # Extract tomorrow prices from hourly_prices
+        tomorrow_prices = {}
+        tomorrow = datetime.now(user_timezone).date() + timedelta(days=1)
+        
+        if "hourly_prices" in data:
+            hourly_prices = data["hourly_prices"]
+            
+            # Categorize hourly prices into tomorrow
+            from custom_components.ge_spot.utils.price_extractor import get_timestamp_date
+            for timestamp_str, price in hourly_prices.items():
+                dt = get_timestamp_date(timestamp_str, user_timezone)
+                if dt and dt.date() == tomorrow:
+                    hour_key = f"{dt.hour:02d}:00"
+                    tomorrow_prices[hour_key] = price
+            
+            results["tomorrow_hours"] = len(tomorrow_prices)
+            logger.info(f"Tomorrow hourly prices extracted from ISO timestamps: {len(tomorrow_prices)} entries")
             
             # Log sample entries
-            sample_entries = list(tomorrow_hourly_prices.items())[:5]
+            sample_entries = list(tomorrow_prices.items())[:5] if tomorrow_prices else []
             logger.info(f"Sample tomorrow hourly prices: {sample_entries}")
             
-            # Direct API has tomorrow data
-            results["direct_api_success"] = True
+            # Direct API has tomorrow data if we found tomorrow prices
+            results["direct_api_success"] = len(tomorrow_prices) > 0
         else:
-            logger.warning(f"No tomorrow_hourly_prices found in {api_name} data")
+            logger.warning(f"No hourly_prices found in {api_name} data")
         
         # Test with standard adapter
-        adapter = ElectricityPriceAdapter(mock_hass, [data], source_type, False)
+        adapter = ElectricityPriceAdapter(mock_hass, [data], api_name, False)
         
         # Log details about adapter data
-        logger.info(f"Adapter hourly price keys: {list(adapter.today_hourly_prices.keys())[:5]}")
+        logger.info(f"Adapter hourly price keys: {list(adapter.today_prices.keys())[:5]}")
         
         # Check if adapter has tomorrow prices
         tomorrow_prices = adapter.tomorrow_prices
@@ -496,7 +513,7 @@ async def test_tdm_with_real_api(
         
         if has_data and data:
             # Try with standard adapter first
-            adapter = ElectricityPriceAdapter(mock_hass, [data], source_type, False)
+            adapter = ElectricityPriceAdapter(mock_hass, [data], api_name, False)
             is_tomorrow_valid = adapter.is_tomorrow_valid()
             tomorrow_prices = adapter.tomorrow_prices
             

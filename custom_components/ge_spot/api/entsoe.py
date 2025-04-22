@@ -29,13 +29,13 @@ _LOGGER = logging.getLogger(__name__)
 BASE_URL = Network.URLs.ENTSOE
 
 async def fetch_day_ahead_prices(source_type, config, area, currency, reference_time=None, hass=None, session=None):
-    """Fetch day-ahead prices using ENTSO-E API."""
+    """Fetch day-ahead prices using ENTSO-E API.
+    
+    This function only fetches raw data from the API without any processing.
+    Processing is handled by the data managers.
+    """
     client = ApiClient(session=session)
     try:
-        # Settings
-        use_subunit = config.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS
-        vat = config.get(Config.VAT, 0)
-
         # Fetch raw data
         raw_data = await _fetch_data(client, config, area, reference_time)
         if not raw_data:
@@ -45,15 +45,14 @@ async def fetch_day_ahead_prices(source_type, config, area, currency, reference_
         if isinstance(raw_data, dict) and raw_data.get("skipped"):
             return raw_data
 
-        # Process data
-        result = await _process_data(raw_data, area, currency, vat, use_subunit, reference_time, hass, session, config)
-
-        # Add metadata
-        if result:
-            result["data_source"] = "ENTSO-E"
-            result["last_updated"] = datetime.now(timezone.utc).isoformat()
-            result["currency"] = currency
-            result["api_key_valid"] = True
+        # Return simplified format with just raw data and metadata
+        # This follows the new simplified API response format
+        result = {
+            "raw_data": raw_data,
+            "api_timezone": "Europe/Brussels",  # ENTSO-E API uses CET/CEST timezone
+            "currency": "EUR",  # ENTSO-E API returns prices in EUR
+            "api_key_valid": True
+        }
 
         return result
     finally:
@@ -159,7 +158,6 @@ async def _fetch_data(client, config, area, reference_time):
     # If we've tried all date ranges and still have no data, return a structured response
     _LOGGER.warning(f"ENTSO-E: No data found for area {area} after trying multiple date ranges")
     return {
-        "today_hourly_prices": {},
         "raw_data": "No matching data found after trying multiple date ranges",
         "data_source": "ENTSO-E",
         "message": "No matching data found"
@@ -192,9 +190,10 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             "day_average_price": None,
             "peak_price": None,
             "off_peak_price": None,
-            "today_hourly_prices": {},
+            "hourly_prices": {},
             "raw_values": {},
             "raw_prices": [],
+            "raw_data": data,
             "api_timezone": source_timezone  # Store API timezone for reference
         }
 
@@ -206,30 +205,11 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             metadata = parser.extract_metadata(data)
             entsoe_currency = metadata.get("currency", Currency.EUR)
 
-            # Parse hourly prices - may return a dict with both hourly_prices and tomorrow_hourly_prices
-            parser_result = parser.parse_hourly_prices(data, area)
+            # Parse hourly prices
+            hourly_prices = parser.parse_hourly_prices(data, area)
 
-            # Check if the parser returned a dict with both today_hourly_prices and tomorrow_hourly_prices
-            raw_today_hourly_prices = {}
-            raw_tomorrow_hourly_prices = {}
-
-            if isinstance(parser_result, dict) and "today_hourly_prices" in parser_result and "tomorrow_hourly_prices" in parser_result:
-                # New format with separated hourly prices
-                raw_today_hourly_prices = parser_result["today_hourly_prices"]
-                raw_tomorrow_hourly_prices = parser_result["tomorrow_hourly_prices"]
-                _LOGGER.info(f"Using separated today ({len(raw_today_hourly_prices)}) and tomorrow ({len(raw_tomorrow_hourly_prices)}) data")
-            elif isinstance(parser_result, dict) and "hourly_prices" in parser_result and "tomorrow_hourly_prices" in parser_result:
-                # Transition format - convert hourly_prices to today_hourly_prices
-                raw_today_hourly_prices = parser_result["hourly_prices"]
-                raw_tomorrow_hourly_prices = parser_result["tomorrow_hourly_prices"]
-                _LOGGER.info(f"Using transitional format: hourly_prices -> today_hourly_prices ({len(raw_today_hourly_prices)}) and tomorrow ({len(raw_tomorrow_hourly_prices)}) data")
-            else:
-                # Old format with just hourly prices
-                raw_today_hourly_prices = parser_result
-                _LOGGER.debug(f"Using legacy format hourly prices format")
-
-            # Create raw prices array for reference from today's data
-            for hour_str, price in raw_today_hourly_prices.items():
+            # Create raw prices array for reference
+            for hour_str, price in hourly_prices.items():
                 # Check if hour_str is in ISO format (contains 'T')
                 if "T" in hour_str:
                     try:
@@ -261,28 +241,15 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                     "end": end_time.isoformat(),
                     "price": price
                 })
-
-            # Process raw tomorrow data to add to raw_prices for reference
-            if raw_tomorrow_hourly_prices:
-                _LOGGER.debug(f"Raw tomorrow hourly prices with ISO timestamps: {list(raw_tomorrow_hourly_prices.items())[:5]} ({len(raw_tomorrow_hourly_prices)} total)")
-
-            # Initialize tomorrow_hourly_prices in result if not there
-            if "tomorrow_hourly_prices" not in result:
-                result["tomorrow_hourly_prices"] = {}
-
-            # Combine all hourly prices into a single dictionary
-            all_hourly_prices = {}
-            all_hourly_prices.update(raw_today_hourly_prices)
-            all_hourly_prices.update(raw_tomorrow_hourly_prices)
             
             # Sort prices into today and tomorrow buckets based on actual dates
             converted_today, converted_tomorrow = tz_service.sort_today_tomorrow(
-                all_hourly_prices, source_timezone)
+                hourly_prices, source_timezone)
 
             _LOGGER.debug(f"After sorting: Today prices: {len(converted_today)}, Tomorrow prices: {len(converted_tomorrow)}")
 
-            # Apply price conversions for today prices
-            for hour_str, price in converted_today.items():
+            # Apply price conversions for all prices
+            for hour_str, price in hourly_prices.items():
                 converted_price = await async_convert_energy_price(
                     price=price,
                     from_unit=EnergyUnit.MWH,
@@ -293,26 +260,12 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                     to_subunit=use_subunit,
                     session=session
                 )
-                result["today_hourly_prices"][hour_str] = converted_price
-
-            # Apply price conversions for tomorrow prices
-            for hour_str, price in converted_tomorrow.items():
-                converted_price = await async_convert_energy_price(
-                    price=price,
-                    from_unit=EnergyUnit.MWH,
-                    to_unit="kWh",
-                    from_currency=entsoe_currency,
-                    to_currency=currency,
-                    vat=vat,
-                    to_subunit=use_subunit,
-                    session=session
-                )
-                result["tomorrow_hourly_prices"][hour_str] = converted_price
+                result["hourly_prices"][hour_str] = converted_price
 
             # Get current and next hour prices
             current_hour_key = tz_service.get_current_hour_key()
-            if current_hour_key in result["today_hourly_prices"]:
-                result["current_price"] = result["today_hourly_prices"][current_hour_key]
+            if current_hour_key in result["hourly_prices"]:
+                result["current_price"] = result["hourly_prices"][current_hour_key]
                 # Get original hour key from before conversion
                 original_hour = int(current_hour_key.split(":")[0])
                 current_dt = datetime.now().replace(hour=original_hour)
@@ -320,7 +273,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 original_hour_key = f"{current_dt.hour:02d}:00"
 
                 result["raw_values"]["current_price"] = {
-                    "raw": raw_today_hourly_prices.get(original_hour_key),
+                    "raw": hourly_prices.get(original_hour_key),
                     "unit": f"{entsoe_currency}/MWh",
                     "final": result["current_price"],
                     "currency": currency,
@@ -332,10 +285,10 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
             next_hour = (current_hour + 1) % 24
             next_hour_key = f"{next_hour:02d}:00"
 
-            if next_hour_key in result["today_hourly_prices"]:
-                result["next_hour_price"] = result["today_hourly_prices"][next_hour_key]
+            if next_hour_key in result["hourly_prices"]:
+                result["next_hour_price"] = result["hourly_prices"][next_hour_key]
                 result["raw_values"]["next_hour_price"] = {
-                    "raw": raw_today_hourly_prices.get(next_hour_key),
+                    "raw": hourly_prices.get(next_hour_key),
                     "unit": f"{entsoe_currency}/MWh",
                     "final": result["next_hour_price"],
                     "currency": currency,
@@ -343,7 +296,7 @@ async def _process_data(data, area, currency, vat, use_subunit, reference_time, 
                 }
 
             # Calculate statistics
-            all_prices = list(result["today_hourly_prices"].values())
+            all_prices = list(converted_today.values())
             if all_prices:
                 result["day_average_price"] = sum(all_prices) / len(all_prices)
                 result["peak_price"] = max(all_prices)
@@ -393,7 +346,7 @@ async def validate_api_key(api_key, area, session=None):
             # Check if we got a valid response
             if result and isinstance(result, str) and "<Publication_MarketDocument" in result:
                 return True
-            elif isinstance(result, dict) and result.get("today_hourly_prices") is not None:
+            elif isinstance(result, dict) and result.get("hourly_prices") is not None:
                 # Valid response with data
                 return True
             elif isinstance(result, str) and "Not authorized" in result:

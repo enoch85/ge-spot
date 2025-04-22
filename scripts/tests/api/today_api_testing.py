@@ -295,15 +295,34 @@ async def test_today_api_data(
             result["message"] = "No valid data returned"
             return result
         
-        # Check for today's data - support both hourly_prices and today_hourly_prices
+        # Check for today's data - only using hourly_prices in the simplified structure
         has_hourly_prices = "hourly_prices" in data and data["hourly_prices"]
-        has_today_hourly_prices = "today_hourly_prices" in data and data["today_hourly_prices"]
-        has_today_data = has_hourly_prices or has_today_hourly_prices
+        
+        # If we have raw_data, try to extract hourly prices
+        if "raw_data" in data and not has_hourly_prices:
+            from custom_components.ge_spot.utils.price_extractor import extract_prices
+            
+            # Extract hourly prices from raw_data
+            # Make sure to pass the API timezone if available
+            # Add API timezone if not already present
+            if "api_timezone" not in data:
+                data["api_timezone"] = "Europe/Copenhagen"  # Energi Data Service API uses CET/CEST timezone
+            hourly_prices = extract_prices(data, area)
+            
+            if hourly_prices:
+                # Add hourly_prices to data
+                data["hourly_prices"] = hourly_prices
+                has_hourly_prices = True
+                
+                # We no longer categorize into today/tomorrow at this level
+                # The hourly_prices dictionary with ISO timestamps is sufficient
+                
+        has_today_data = has_hourly_prices
         result["has_today_data"] = has_today_data
         
         if has_today_data:
-            # Use the appropriate data source
-            hourly_prices = data["today_hourly_prices"] if has_today_hourly_prices else data["hourly_prices"]
+            # Use hourly_prices directly
+            hourly_prices = data["hourly_prices"]
             result["today_hours"] = len(hourly_prices)
             logger.info(f"Source {api_name} for area {area} has today's data: {result['today_hours']} hours")
             
@@ -334,6 +353,10 @@ async def test_today_api_data(
             current_hour_key = tz_service.get_current_hour_key()
             logger.info(f"Current hour key from TimezoneService: {current_hour_key}")
             
+            # Check if current hour exists in the data
+            hour_in_data = price_cache.has_hour_in_data(area, current_hour_key)
+            logger.info(f"Current hour {current_hour_key} exists in data: {hour_in_data}")
+            
             # Check if current hour is in cache
             has_current_hour = price_cache.has_current_hour_price(area)
             logger.info(f"Cache has current hour price: {has_current_hour}")
@@ -344,7 +367,11 @@ async def test_today_api_data(
                 logger.info(f"Current hour price from cache: {current_hour_price}")
                 logger.info(f"Cache hour key: {current_hour_price.get('hour_str')}")
             else:
-                logger.warning(f"Failed to retrieve current hour price from cache")
+                # Only log a warning if the hour should be in the data
+                if hour_in_data:
+                    logger.warning(f"Failed to retrieve current hour price from cache")
+                else:
+                    logger.info(f"Current hour {current_hour_key} not available in the data, so not expected in cache")
             
             # Inspect cache structure
             cache_structure = {}

@@ -13,11 +13,9 @@ from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..const.network import Network
 from ..utils.fallback import FallbackManager
+from ..utils.price_extractor import extract_prices, get_timestamp_date
 
 _LOGGER = logging.getLogger(__name__)
-
-# The ElectricityPriceAdapter now has all improvements incorporated
-_LOGGER.debug("Using enhanced ElectricityPriceAdapter for tomorrow data management")
 
 class TomorrowDataManager:
     """Manager for searching and retrieving tomorrow's price data."""
@@ -188,30 +186,30 @@ class TomorrowDataManager:
                             found_tomorrow_data = True
                             _LOGGER.info(f"Found tomorrow_hourly_prices in today's cache for source {source}: {tomorrow_hours_count} hours")
 
-                        # Check for tomorrow_prefixed_prices format
-                        elif "tomorrow_prefixed_prices" in data:
-                            tomorrow_hours_count = len(data["tomorrow_prefixed_prices"])
-                            found_tomorrow_data = True
-                            _LOGGER.info(f"Found tomorrow_prefixed_prices in today's cache for source {source}: {tomorrow_hours_count} hours")
-
-                        # Check for tomorrow data mixed into hourly_prices (using timestamps)
+                        # Check for hourly_prices with ISO timestamps
                         elif "hourly_prices" in data:
-                            # Check if any of the hourly prices have tomorrow's date
-                            # We need to import the BasePriceParser to use its functionality
-                            from ..api.base.price_parser import BasePriceParser
-                            base_parser = BasePriceParser(source="tomorrow_manager")
-
-                            # Check each timestamp to see if it belongs to tomorrow
-                            tomorrow_hours = 0
-                            for hour_str in data["hourly_prices"].keys():
-                                dt = base_parser.parse_timestamp(hour_str)
-                                if dt and base_parser.is_tomorrow_timestamp(dt):
-                                    tomorrow_hours += 1
-
-                            if tomorrow_hours > 0:
-                                found_tomorrow_data = True
-                                tomorrow_hours_count = tomorrow_hours
-                                _LOGGER.info(f"Found {tomorrow_hours} hours of tomorrow's data within hourly_prices in today's cache for source {source}")
+                            # Extract hourly prices and categorize them
+                            hourly_prices = data.get("hourly_prices", {})
+                            if hourly_prices:
+                                # Get the user's timezone from the timezone service
+                                user_timezone = self._tz_service.ha_timezone
+                                
+                                # Manually categorize hourly prices into tomorrow
+                                tomorrow_hours = {}
+                                tomorrow = dt_util.now().date() + timedelta(days=1)
+                                
+                                # Count tomorrow hours
+                                for timestamp_str, price in hourly_prices.items():
+                                    dt = get_timestamp_date(timestamp_str, user_timezone)
+                                    if dt and dt.date() == tomorrow:
+                                        hour_key = f"{dt.hour:02d}:00"
+                                        tomorrow_hours[hour_key] = price
+                                
+                                # Check if we have tomorrow prices
+                                if tomorrow_hours:
+                                    tomorrow_hours_count = len(tomorrow_hours)
+                                    found_tomorrow_data = True
+                                    _LOGGER.info(f"Found {tomorrow_hours_count} hours of tomorrow's data within hourly_prices in today's cache for source {source}")
 
                         if found_tomorrow_data:
                             # Update our tracking variables
@@ -294,7 +292,7 @@ class TomorrowDataManager:
             min_interval=Defaults.TOMORROW_DATA_INITIAL_RETRY_MINUTES
         )
 
-        if should_skip:  # No special window exception anymore, just use rate limiter consistently
+        if should_skip:
             _LOGGER.debug(f"Rate limiter suggests skipping tomorrow data fetch: {skip_reason}")
             return False
 
@@ -318,186 +316,116 @@ class TomorrowDataManager:
 
         # If we got data, process it to extract tomorrow's data
         if result["data"]:
-            # Process the raw data to extract today's and tomorrow's prices
-            processed_data = self._process_raw_data(result["data"], result["source"])
-            
-            # Check if we have tomorrow's data
-            has_tomorrow_data = (
-                isinstance(processed_data, dict) and
-                "tomorrow_hourly_prices" in processed_data and
-                isinstance(processed_data["tomorrow_hourly_prices"], dict) and
-                len(processed_data["tomorrow_hourly_prices"]) >= 12  # At least 12 hours for tomorrow
-            )
-            
-            if has_tomorrow_data:
-                _LOGGER.info(f"Found valid tomorrow data from {result['source']} with {len(processed_data['tomorrow_hourly_prices'])} hours")
+            # Extract hourly prices using our generic extractor
+            hourly_prices = result["data"].get("hourly_prices", {})
+            if not hourly_prices:
+                # If hourly_prices not already extracted, extract them now
+                hourly_prices = extract_prices(result["data"], self.area)
+                
+            # If we have hourly prices, categorize them into today and tomorrow
+            if hourly_prices:
+                # Get the user's timezone from the timezone service
+                user_timezone = self._tz_service.ha_timezone
+                
+                # Categorize hourly prices into today and tomorrow
+                tomorrow_hourly_prices = {}
+                tomorrow = dt_util.now().date() + timedelta(days=1)
+                
+                # Manually categorize hourly prices
+                for timestamp_str, price in hourly_prices.items():
+                    dt = get_timestamp_date(timestamp_str, user_timezone)
+                    if dt and dt.date() == tomorrow:
+                        hour_key = f"{dt.hour:02d}:00"
+                        tomorrow_hourly_prices[hour_key] = price
+                
+                # Check if we have tomorrow prices with at least 12 hours
+                if tomorrow_hourly_prices and len(tomorrow_hourly_prices) >= 12:
+                    _LOGGER.info(f"Found valid tomorrow data from {result['source']} with {len(tomorrow_hourly_prices)} hours")
+                    
+                    # Create processed data
+                    processed_data = {
+                        "data_source": result["source"],
+                        "currency": result["data"].get("currency", self.currency),  # Use API's currency if available
+                        "api_timezone": result["data"].get("api_timezone", "UTC"),  # Use API's timezone if available
+                        "hourly_prices": hourly_prices,
+                        "raw_data": result["data"].get("raw_data", {})  # Keep the raw data for reference
+                    }
+                    
+                    # Copy any other metadata from the original data
+                    for key, value in result["data"].items():
+                        if key not in ["raw_data", "hourly_prices", "currency", "api_timezone"]:
+                            processed_data[key] = value
 
-                # Store the data in cache
-                self._price_cache.store(processed_data, self.area, result["source"], dt_util.now())
+                    # Store the data in cache
+                    self._price_cache.store(processed_data, self.area, result["source"], dt_util.now())
 
-                # Update our tracking variables
-                self._search_active = False
-                self._has_tomorrow_data = True
+                    # Update our tracking variables
+                    self._search_active = False
+                    self._has_tomorrow_data = True
 
-                # Force a regular update to use the new data
-                await self._request_refresh_callback()
+                    # Force a regular update to use the new data
+                    await self._request_refresh_callback()
 
-                return True
-            else:
-                _LOGGER.info(f"Source {result['source']} returned data but no valid tomorrow data")
+                    return True
+                else:
+                    _LOGGER.info(f"Source {result['source']} returned data but no valid tomorrow data (found {len(tomorrow_hourly_prices)} hours, need at least 12)")
 
-                # Try fallback sources if available
-                for fb_source in result.get("fallback_sources", []):
-                    if fb_source != result["source"] and f"fallback_data_{fb_source}" in result:
-                        fb_data = result[f"fallback_data_{fb_source}"]
-                        
-                        # Process the fallback data
-                        processed_fb_data = self._process_raw_data(fb_data, fb_source)
-                        
-                        # Check if the fallback data has tomorrow's data
-                        has_fb_tomorrow_data = (
-                            isinstance(processed_fb_data, dict) and
-                            "tomorrow_hourly_prices" in processed_fb_data and
-                            isinstance(processed_fb_data["tomorrow_hourly_prices"], dict) and
-                            len(processed_fb_data["tomorrow_hourly_prices"]) >= 12  # At least 12 hours for tomorrow
-                        )
-                        
-                        if has_fb_tomorrow_data:
-                            _LOGGER.info(f"Found tomorrow's data in fallback source {fb_source} with {len(processed_fb_data['tomorrow_hourly_prices'])} hours")
+                    # Try fallback sources if available
+                    for fb_source in result.get("fallback_sources", []):
+                        if fb_source != result["source"] and f"fallback_data_{fb_source}" in result:
+                            fb_data = result[f"fallback_data_{fb_source}"]
+                            
+                            # Extract hourly prices from fallback data
+                            fb_hourly_prices = fb_data.get("hourly_prices", {})
+                            if not fb_hourly_prices:
+                                fb_hourly_prices = extract_prices(fb_data, self.area)
+                                
+                            # If we have hourly prices, categorize them
+                            if fb_hourly_prices:
+                                # Categorize hourly prices into today and tomorrow
+                                fb_tomorrow_hourly_prices = {}
+                                tomorrow = dt_util.now().date() + timedelta(days=1)
+                                
+                                # Manually categorize hourly prices
+                                for timestamp_str, price in fb_hourly_prices.items():
+                                    dt = get_timestamp_date(timestamp_str, user_timezone)
+                                    if dt and dt.date() == tomorrow:
+                                        hour_key = f"{dt.hour:02d}:00"
+                                        fb_tomorrow_hourly_prices[hour_key] = price
+                                
+                                # Check if we have tomorrow prices with at least 12 hours
+                                if fb_tomorrow_hourly_prices and len(fb_tomorrow_hourly_prices) >= 12:
+                                    _LOGGER.info(f"Found valid tomorrow data from fallback source {fb_source} with {len(fb_tomorrow_hourly_prices)} hours")
+                                    
+                                    # Create processed data
+                                    fb_processed_data = {
+                                        "data_source": fb_source,
+                                        "currency": fb_data.get("currency", self.currency),  # Use API's currency if available
+                                        "api_timezone": fb_data.get("api_timezone", "UTC"),  # Use API's timezone if available
+                                        "hourly_prices": fb_hourly_prices,
+                                        "raw_data": fb_data.get("raw_data", {})  # Keep the raw data for reference
+                                    }
+                                    
+                                    # Copy any other metadata from the original data
+                                    for key, value in fb_data.items():
+                                        if key not in ["raw_data", "hourly_prices", "currency", "api_timezone"]:
+                                            fb_processed_data[key] = value
 
-                            # Store the fallback data in cache
-                            self._price_cache.store(processed_fb_data, self.area, fb_source, dt_util.now())
+                                    # Store the fallback data in cache
+                                    self._price_cache.store(fb_processed_data, self.area, fb_source, dt_util.now())
 
-                            # Update our tracking variables
-                            self._search_active = False
-                            self._has_tomorrow_data = True
+                                    # Update our tracking variables
+                                    self._search_active = False
+                                    self._has_tomorrow_data = True
 
-                            # Force a regular update to use the new data
-                            await self._request_refresh_callback()
+                                    # Force a regular update to use the new data
+                                    await self._request_refresh_callback()
 
-                            return True
+                                    return True
 
         # If we reach here, we didn't find tomorrow's data
         _LOGGER.info(f"No tomorrow data found, will try again in {self.calculate_wait_time():.1f} minutes")
         return False
-        
-    def _process_raw_data(self, data: Dict[str, Any], source: str) -> Dict[str, Any]:
-        """Process raw data from API to extract today's and tomorrow's prices.
-        
-        Args:
-            data: Raw data from API
-            source: Source of the data
-            
-        Returns:
-            Processed data with today's and tomorrow's prices
-        """
-        from ..utils.price_extractor import extract_hourly_prices
-        import json
-        
-        # Initialize result with basic metadata
-        result = {
-            "data_source": source,
-            "currency": self.currency,
-            "today_hourly_prices": {},
-            "tomorrow_hourly_prices": {}
-        }
-        
-        # Extract raw data
-        raw_data = data.get("raw_data", data)
-        
-        # Add debug logging
-        _LOGGER.debug(f"Processing raw data from source {source}")
-        _LOGGER.debug(f"Raw data keys: {raw_data.keys() if isinstance(raw_data, dict) else 'Not a dict'}")
-        
-        # Check if we have today and tomorrow data in the combined format
-        if isinstance(raw_data, dict) and "today" in raw_data and "tomorrow" in raw_data:
-            today_data = raw_data["today"]
-            tomorrow_data = raw_data["tomorrow"]
-            
-            _LOGGER.debug(f"Found combined format with today and tomorrow data")
-            _LOGGER.debug(f"Today data keys: {today_data.keys() if isinstance(today_data, dict) else 'Not a dict'}")
-            _LOGGER.debug(f"Tomorrow data keys: {tomorrow_data.keys() if isinstance(tomorrow_data, dict) else 'Not a dict'}")
-            
-            # Process today's data
-            if isinstance(today_data, dict) and "multiAreaEntries" in today_data:
-                today_entries = today_data["multiAreaEntries"]
-                _LOGGER.debug(f"Found {len(today_entries)} entries in today's multiAreaEntries")
-                
-                # Check if the area exists in the entries
-                area_exists = False
-                for entry in today_entries[:5]:  # Check first 5 entries
-                    if isinstance(entry, dict) and "entryPerArea" in entry and self.area in entry["entryPerArea"]:
-                        area_exists = True
-                        _LOGGER.debug(f"Found area {self.area} in today's entries")
-                        break
-                
-                if not area_exists:
-                    _LOGGER.warning(f"Area {self.area} not found in today's entries")
-                
-                result["today_hourly_prices"] = extract_hourly_prices(
-                    entries=today_entries,
-                    area=self.area,
-                    is_tomorrow=False,
-                    tz_service=self._tz_service
-                )
-                
-                _LOGGER.debug(f"Extracted {len(result['today_hourly_prices'])} today hourly prices")
-                if result["today_hourly_prices"]:
-                    _LOGGER.debug(f"Sample today hourly prices: {list(result['today_hourly_prices'].items())[:5]}")
-            
-            # Process tomorrow's data
-            if isinstance(tomorrow_data, dict) and "multiAreaEntries" in tomorrow_data:
-                tomorrow_entries = tomorrow_data["multiAreaEntries"]
-                _LOGGER.debug(f"Found {len(tomorrow_entries)} entries in tomorrow's multiAreaEntries")
-                
-                # Check if the area exists in the entries
-                area_exists = False
-                for entry in tomorrow_entries[:5]:  # Check first 5 entries
-                    if isinstance(entry, dict) and "entryPerArea" in entry and self.area in entry["entryPerArea"]:
-                        area_exists = True
-                        _LOGGER.debug(f"Found area {self.area} in tomorrow's entries")
-                        break
-                
-                if not area_exists:
-                    _LOGGER.warning(f"Area {self.area} not found in tomorrow's entries")
-                
-                result["tomorrow_hourly_prices"] = extract_hourly_prices(
-                    entries=tomorrow_entries,
-                    area=self.area,
-                    is_tomorrow=True,
-                    tz_service=self._tz_service
-                )
-                
-                _LOGGER.debug(f"Extracted {len(result['tomorrow_hourly_prices'])} tomorrow hourly prices")
-                if result["tomorrow_hourly_prices"]:
-                    _LOGGER.debug(f"Sample tomorrow hourly prices: {list(result['tomorrow_hourly_prices'].items())[:5]}")
-        else:
-            # If not in combined format, process as today's data
-            if isinstance(raw_data, dict) and "multiAreaEntries" in raw_data:
-                today_entries = raw_data["multiAreaEntries"]
-                _LOGGER.debug(f"Found {len(today_entries)} entries in multiAreaEntries (non-combined format)")
-                
-                result["today_hourly_prices"] = extract_hourly_prices(
-                    entries=today_entries,
-                    area=self.area,
-                    is_tomorrow=False,
-                    tz_service=self._tz_service
-                )
-                
-                _LOGGER.debug(f"Extracted {len(result['today_hourly_prices'])} today hourly prices (non-combined format)")
-                if result["today_hourly_prices"]:
-                    _LOGGER.debug(f"Sample today hourly prices: {list(result['today_hourly_prices'].items())[:5]}")
-        
-        # Add API timezone if available
-        if "api_timezone" in data:
-            result["api_timezone"] = data["api_timezone"]
-        
-        # Copy any other metadata from the original data
-        for key, value in data.items():
-            if key not in ["raw_data", "today_hourly_prices", "tomorrow_hourly_prices"]:
-                result[key] = value
-        
-        return result
 
     async def _request_refresh_callback(self):
         """Callback to request a refresh from the coordinator."""

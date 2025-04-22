@@ -16,22 +16,22 @@ _SCHEMAS = {
         "properties": {
             "data": {"type": "object", "optional": True},
             "currency": {"type": "string", "optional": True},
-            "today_hourly_prices": {"type": "object", "optional": True},
-            "tomorrow_hourly_prices": {"type": "object", "optional": True},
+            "hourly_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_hour_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+            "raw_data": {"type": ["string", "array", "object"], "optional": True},
+            "api_timezone": {"type": "string", "optional": True}
         }
     }),
     Source.ENTSOE: Schema({
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "today_hourly_prices": {"type": "object", "optional": True},
-            "tomorrow_hourly_prices": {"type": "object", "optional": True},
+            "hourly_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_hour_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+            "raw_data": {"type": ["string", "array", "object"], "optional": True},
+            "api_timezone": {"type": "string", "optional": True}
         }
     }),
     Source.ENERGI_DATA_SERVICE: Schema({
@@ -39,44 +39,44 @@ _SCHEMAS = {
         "properties": {
             "records": {"type": "array", "optional": True},
             "currency": {"type": "string", "optional": True},
-            "today_hourly_prices": {"type": "object", "optional": True},
-            "tomorrow_hourly_prices": {"type": "object", "optional": True},
+            "hourly_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_hour_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+            "raw_data": {"type": ["string", "array", "object"], "optional": True},
+            "api_timezone": {"type": "string", "optional": True}
         }
     }),
     Source.AEMO: Schema({
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "today_hourly_prices": {"type": "object", "optional": True},
-            "tomorrow_hourly_prices": {"type": "object", "optional": True},
+            "hourly_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_hour_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+            "raw_data": {"type": ["string", "array", "object"], "optional": True},
+            "api_timezone": {"type": "string", "optional": True}
         }
     }),
     Source.EPEX: Schema({
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "today_hourly_prices": {"type": "object", "optional": True},
-            "tomorrow_hourly_prices": {"type": "object", "optional": True},
+            "hourly_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_hour_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+            "raw_data": {"type": ["string", "array", "object"], "optional": True},
+            "api_timezone": {"type": "string", "optional": True}
         }
     }),
     Source.OMIE: Schema({
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "today_hourly_prices": {"type": "object", "optional": True},
-            "tomorrow_hourly_prices": {"type": "object", "optional": True},
+            "hourly_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_hour_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+            "raw_data": {"type": ["string", "array", "object"], "optional": True},
+            "api_timezone": {"type": "string", "optional": True}
         }
     }),
     Source.STROMLIGNING: Schema({
@@ -84,11 +84,11 @@ _SCHEMAS = {
         "properties": {
             "prices": {"type": "array", "optional": True},
             "currency": {"type": "string", "optional": True},
-            "today_hourly_prices": {"type": "object", "optional": True},
-            "tomorrow_hourly_prices": {"type": "object", "optional": True},
+            "hourly_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_hour_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+            "raw_data": {"type": ["string", "array", "object"], "optional": True},
+            "api_timezone": {"type": "string", "optional": True}
         }
     })
 }
@@ -98,11 +98,11 @@ _DEFAULT_SCHEMA = Schema({
     "type": "object",
     "properties": {
         "currency": {"type": "string", "optional": True},
-        "today_hourly_prices": {"type": "object", "optional": True},
-        "tomorrow_hourly_prices": {"type": "object", "optional": True},
+        "hourly_prices": {"type": "object", "optional": True},
         "current_price": {"type": "number", "optional": True},
         "next_hour_price": {"type": "number", "optional": True},
-        "raw_data": {"type": "string", "optional": True}
+        "raw_data": {"type": ["string", "array", "object"], "optional": True},
+        "api_timezone": {"type": "string", "optional": True}
     }
 })
 

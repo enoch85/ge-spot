@@ -23,26 +23,25 @@ _LOGGER = logging.getLogger(__name__)
 BASE_URL_TEMPLATE = "https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{day}_{month}_{year}_{day}_{month}_{year}.TXT"
 
 async def fetch_day_ahead_prices(source_type, config, area, currency, reference_time=None, hass=None, session=None):
-    """Fetch day-ahead prices using OMIE API."""
+    """Fetch day-ahead prices using OMIE API.
+    
+    This function only fetches raw data from the API without any processing.
+    Processing is handled by the data managers.
+    """
     client = ApiClient(session=session)
     try:
-        # Settings
-        use_subunit = config.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS
-        vat = config.get(Config.VAT, 0)
-
         # Fetch raw data
         raw_data = await _fetch_data(client, config, area, reference_time)
         if not raw_data:
             return None
 
-        # Process data
-        result = await _process_data(raw_data, area, currency, vat, use_subunit, reference_time, hass, session, config)
-
-        # Add metadata
-        if result:
-            result["data_source"] = "OMIE"
-            result["last_updated"] = datetime.now(timezone.utc).isoformat()
-            result["currency"] = currency
+        # Return simplified format with just raw data and metadata
+        # This follows the new simplified API response format
+        result = {
+            "raw_data": raw_data,
+            "api_timezone": "Europe/Madrid",  # OMIE API uses CET/CEST timezone
+            "currency": Currency.EUR  # OMIE API returns prices in EUR
+        }
 
         return result
     finally:

@@ -221,25 +221,12 @@ class TimezoneService:
         today_prices = {}
         tomorrow_prices = {}
         
-        # Check if we already have today_hourly_prices and tomorrow_hourly_prices in the input
-        if "today_hourly_prices" in hourly_prices and isinstance(hourly_prices["today_hourly_prices"], dict):
-            _LOGGER.debug("Found today_hourly_prices in input data")
-            today_prices = hourly_prices["today_hourly_prices"]
-        
-        if "tomorrow_hourly_prices" in hourly_prices and isinstance(hourly_prices["tomorrow_hourly_prices"], dict):
-            _LOGGER.debug("Found tomorrow_hourly_prices in input data")
-            tomorrow_prices = hourly_prices["tomorrow_hourly_prices"]
-            
-        # If we already have both today and tomorrow prices, return them
-        if today_prices and tomorrow_prices:
-            _LOGGER.debug(f"Using existing today ({len(today_prices)}) and tomorrow ({len(tomorrow_prices)}) prices")
-            return today_prices, tomorrow_prices
+        # Note: We no longer use today_hourly_prices or tomorrow_hourly_prices
+        # We only work with raw data and extract prices directly
         
         # Process each hour key
         for hour_key, price in hourly_prices.items():
-            # Skip special keys like "today_hourly_prices" and "tomorrow_hourly_prices"
-            if hour_key in ["today_hourly_prices", "tomorrow_hourly_prices"]:
-                continue
+            # Process all hour keys
                 
             # Extract date information if available
             dt = None

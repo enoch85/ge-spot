@@ -31,18 +31,15 @@ class EntsoeParser(BasePriceParser):
         data = validate_data(data, self.source)
 
         result = {
-            "today_hourly_prices": {},
+            "hourly_prices": {},
             "currency": data.get("currency", "EUR"),
             "source": self.source
         }
 
-        # If hourly prices were already processed - convert to today_hourly_prices
+        # If hourly prices were already processed, use them
         if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
-            result["today_hourly_prices"] = data["hourly_prices"]
-        # Support for new format if it exists
-        elif "today_hourly_prices" in data and isinstance(data["today_hourly_prices"], dict):
-            result["today_hourly_prices"] = data["today_hourly_prices"]
-
+            result["hourly_prices"] = data["hourly_prices"]
+            
             # Add current and next hour prices if available
             if "current_price" in data:
                 result["current_price"] = data["current_price"]
@@ -52,14 +49,14 @@ class EntsoeParser(BasePriceParser):
 
             # Calculate current and next hour prices if not provided
             if "current_price" not in result:
-                result["current_price"] = self._get_current_price(result["today_hourly_prices"])
+                result["current_price"] = self._get_current_price(result["hourly_prices"])
 
             if "next_hour_price" not in result:
-                result["next_hour_price"] = self._get_next_hour_price(result["today_hourly_prices"])
+                result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
 
             # Calculate day average if enough prices
-            if len(result["today_hourly_prices"]) >= 12:
-                result["day_average_price"] = self._calculate_day_average(result["today_hourly_prices"])
+            if len(result["hourly_prices"]) >= 12:
+                result["day_average_price"] = self._calculate_day_average(result["hourly_prices"])
 
             return result
 
@@ -126,7 +123,6 @@ class EntsoeParser(BasePriceParser):
 
         Returns:
             Dictionary of hourly prices with hour string keys (HH:00)
-            or a dictionary with both 'today_hourly_prices' and 'tomorrow_hourly_prices'
         """
         hourly_prices = {}
 
@@ -345,7 +341,7 @@ class EntsoeParser(BasePriceParser):
             Parsed data with hourly prices
         """
         result = {
-            "today_hourly_prices": {},
+            "hourly_prices": {},
             "currency": "EUR",
             "source": self.source
         }
@@ -465,23 +461,19 @@ class EntsoeParser(BasePriceParser):
                 return result
 
             # Process the selected series
-            result["today_hourly_prices"] = selected_series["prices"]
+            result["hourly_prices"] = selected_series["prices"]
             result["currency"] = selected_series["metadata"]["currency"]
-
-            # Remove the legacy format since we're using today_hourly_prices
-            if "hourly_prices" in result:
-                del result["hourly_prices"]
 
         except Exception as e:
             _LOGGER.error(f"Failed to parse ENTSO-E XML: {e}")
 
         # Calculate current and next hour prices
-        result["current_price"] = self._get_current_price(result["today_hourly_prices"])
-        result["next_hour_price"] = self._get_next_hour_price(result["today_hourly_prices"])
+        result["current_price"] = self._get_current_price(result["hourly_prices"])
+        result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
 
         # Calculate day average if enough prices
-        if len(result["today_hourly_prices"]) >= 12:
-            result["day_average_price"] = self._calculate_day_average(result["today_hourly_prices"])
+        if len(result["hourly_prices"]) >= 12:
+            result["day_average_price"] = self._calculate_day_average(result["hourly_prices"])
 
         return result
 

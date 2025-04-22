@@ -92,16 +92,9 @@ async def test_nordpool_api(area: str = "SE3"):
             sample_entries = list(hourly_prices.items())[:5]
             logger.info(f"Sample hourly prices: {sample_entries}")
         
-        # Check if we have tomorrow_hourly_prices
-        if "tomorrow_hourly_prices" in data:
-            tomorrow_hourly_prices = data["tomorrow_hourly_prices"]
-            logger.info(f"Tomorrow hourly prices: {len(tomorrow_hourly_prices)} entries")
-            
-            # Log the first few entries
-            sample_entries = list(tomorrow_hourly_prices.items())[:5]
-            logger.info(f"Sample tomorrow hourly prices: {sample_entries}")
-        else:
-            logger.warning("No tomorrow_hourly_prices found in data")
+        # We no longer use tomorrow_hourly_prices in the simplified approach
+        # Instead, we extract all prices from hourly_prices and categorize them later
+        logger.info("Using simplified approach with hourly_prices containing ISO timestamps")
         
         # Use our data managers to process the data
         from custom_components.ge_spot.coordinator.today_data_manager import TodayDataManager
@@ -128,10 +121,9 @@ async def test_nordpool_api(area: str = "SE3"):
         # Process the data
         processed_data = today_mgr._process_raw_data(data, Source.NORDPOOL)
         
-        # Log the processed data
+        # Log the processed data - we now only have hourly_prices
         logger.info(f"Processed data keys: {processed_data.keys()}")
-        logger.info(f"Today hourly prices: {len(processed_data.get('today_hourly_prices', {}))} entries")
-        logger.info(f"Tomorrow hourly prices: {len(processed_data.get('tomorrow_hourly_prices', {}))} entries")
+        logger.info(f"Hourly prices: {len(processed_data.get('hourly_prices', {}))} entries")
         
         # Create adapter to test tomorrow data extraction
         adapter = ElectricityPriceAdapter(hass, [processed_data], Source.NORDPOOL, False)
@@ -148,7 +140,7 @@ async def test_nordpool_api(area: str = "SE3"):
         
         # Log the results
         logger.info(f"Tomorrow data validation: {is_tomorrow_valid}")
-        logger.info(f"Today hours: {len(adapter.today_hourly_prices)}, Tomorrow hours: {len(tomorrow_prices)}")
+        logger.info(f"Today hours: {len(adapter.today_prices)}, Tomorrow hours: {len(tomorrow_prices)}")
         
         # Note: The improved adapter has been merged into the standard adapter
         # so we no longer need to test it separately

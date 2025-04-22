@@ -36,13 +36,12 @@ async def fetch_day_ahead_prices(source_type, config, area, currency, reference_
         if isinstance(raw_data, dict) and raw_data.get("skipped"):
             return raw_data
 
-        # Add basic metadata
+        # Return simplified format with just raw data and metadata
+        # This follows the new simplified API response format
         result = {
             "raw_data": raw_data,
-            "data_source": Source.NORDPOOL,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-            "currency": Currency.EUR,  # Nordpool API returns prices in EUR
-            "api_timezone": TimezoneName.UTC  # Nordpool API uses UTC timezone
+            "api_timezone": TimezoneName.UTC,  # Nordpool API uses UTC timezone
+            "currency": Currency.EUR  # Nordpool API returns prices in EUR
         }
 
         return result

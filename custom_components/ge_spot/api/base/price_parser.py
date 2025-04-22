@@ -29,7 +29,7 @@ class BasePriceParser(ABC):
             data: Raw API response data
 
         Returns:
-            Parsed data with today_hourly_prices and tomorrow_hourly_prices
+            Parsed data with hourly_prices and raw_data
         """
         pass
 
@@ -120,14 +120,17 @@ class BasePriceParser(ABC):
         Returns:
             Metadata dictionary
         """
-        today_count = len(data.get("today_hourly_prices", {}))
-        tomorrow_count = len(data.get("tomorrow_hourly_prices", {}))
+        # Extract hourly prices count
+        hourly_count = len(data.get("hourly_prices", {}))
+        
+        # Extract raw data
+        has_raw_data = "raw_data" in data and data["raw_data"] is not None
 
         metadata = {
             "source": self.source,
-            "today_price_count": today_count,
-            "tomorrow_price_count": tomorrow_count,
+            "hourly_price_count": hourly_count,
             "currency": data.get("currency", "EUR"),
+            "has_raw_data": has_raw_data,
             "has_current_price": "current_price" in data and data["current_price"] is not None,
             "has_next_hour_price": "next_hour_price" in data and data["next_hour_price"] is not None,
             "has_day_average": "day_average_price" in data and data["day_average_price"] is not None
@@ -144,18 +147,18 @@ class BasePriceParser(ABC):
         Returns:
             True if data is valid, False otherwise
         """
-        # Check for today_hourly_prices
-        has_today_data = False
-        if "today_hourly_prices" in data and isinstance(data["today_hourly_prices"], dict):
-            has_today_data = bool(data["today_hourly_prices"])
+        # Check for hourly_prices
+        has_hourly_data = False
+        if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
+            has_hourly_data = bool(data["hourly_prices"])
 
-        # Check for tomorrow_hourly_prices
-        has_tomorrow_data = False
-        if "tomorrow_hourly_prices" in data and isinstance(data["tomorrow_hourly_prices"], dict):
-            has_tomorrow_data = bool(data["tomorrow_hourly_prices"])
+        # Check for raw_data
+        has_raw_data = False
+        if "raw_data" in data and data["raw_data"]:
+            has_raw_data = True
 
-        # Valid if we have either today or tomorrow data
-        if has_today_data or has_tomorrow_data:
+        # Valid if we have either hourly prices or raw data
+        if has_hourly_data or has_raw_data:
             return True
 
         _LOGGER.warning(f"{self.source}: Missing or invalid hourly price data")

@@ -22,29 +22,26 @@ from ..utils.date_range import generate_date_ranges
 _LOGGER = logging.getLogger(__name__)
 
 async def fetch_day_ahead_prices(source_type, config, area, currency, reference_time=None, hass=None, session=None):
-    """Fetch electricity prices using ComEd Hourly Pricing API."""
+    """Fetch electricity prices using ComEd Hourly Pricing API.
+    
+    This function only fetches raw data from the API without any processing.
+    Processing is handled by the data managers.
+    """
     client = ApiClient(session=session)
     try:
-        # Settings
-        use_subunit = config.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS
-        vat = config.get(Config.VAT, 0)
-
         # Fetch raw data
         raw_data = await _fetch_data(client, config, area, reference_time)
         if not raw_data:
             _LOGGER.warning(f"No data received from ComEd API for area {area}")
             return None
 
-        # Process data
-        result = await _process_data(raw_data, area, currency, vat, use_subunit, reference_time, hass, session, config)
-
-        # Add metadata
-        if result:
-            result["data_source"] = Source.DISPLAY_NAMES[Source.COMED]
-            result["last_updated"] = datetime.now(timezone.utc).isoformat()
-            result["currency"] = currency
-            result["area"] = area
-            result["source_type"] = source_type
+        # Return simplified format with just raw data and metadata
+        # This follows the new simplified API response format
+        result = {
+            "raw_data": raw_data,
+            "api_timezone": "America/Chicago",  # ComEd API uses Central Time
+            "currency": Currency.CENTS  # ComEd API returns prices in cents
+        }
 
         return result
     except Exception as e:

@@ -45,15 +45,31 @@ class ApiValidator:
         # Additional checks specific to this validator
 
         # Check number of hours available
-        today_hour_count = len(data.get("today_hourly_prices", {}))
-        tomorrow_hour_count = len(data.get("tomorrow_hourly_prices", {}))
-
-        # Use today hours for validation
-        hour_count = today_hour_count
-
+        hour_count = len(data.get("hourly_prices", {}))
+        
+        # Extract tomorrow data if needed
+        tomorrow_prices = {}
+        if "raw_data" in data:
+            # Use the timezone service to extract tomorrow prices
+            from ..timezone import TimezoneService
+            from ..timezone.timezone_utils import get_source_timezone
+            from ..utils.price_extractor import extract_all_hourly_prices
+            
+            tz_service = TimezoneService()
+            source_timezone = data.get("api_timezone") or get_source_timezone(source_name)
+            
+            # Extract all hourly prices from raw data
+            all_hourly_prices = extract_all_hourly_prices(data.get("raw_data", []))
+            
+            # Sort into today and tomorrow
+            _, tomorrow_prices = tz_service.sort_today_tomorrow(
+                all_hourly_prices,
+                source_timezone=source_timezone
+            )
+        
         # Log if we have tomorrow data
-        if tomorrow_hour_count > 0:
-            _LOGGER.debug(f"Found {tomorrow_hour_count} hours of tomorrow's data for {source_name}")
+        if tomorrow_prices:
+            _LOGGER.debug(f"Found {len(tomorrow_prices)} hours of tomorrow's data for {source_name}")
 
         # Special handling for sources with different data availability patterns
         if source_name.lower() == Source.AEMO.lower():
@@ -78,12 +94,39 @@ class ApiValidator:
                 tz_service = TimezoneService()
                 current_hour_key = tz_service.get_current_hour_key()
 
-                # Check for current hour in today_hourly_prices
-                if "today_hourly_prices" in data and current_hour_key in data["today_hourly_prices"]:
-                    current_price = data["today_hourly_prices"][current_hour_key]
+                # Check for current hour in hourly_prices
+                if "hourly_prices" in data and current_hour_key in data["hourly_prices"]:
+                    current_price = data["hourly_prices"][current_hour_key]
                 else:
-                    _LOGGER.warning(f"Current hour {current_hour_key} missing from {source_name}")
-                    return False
+                    # Try to find the current hour in ISO format timestamps
+                    found = False
+                    if "hourly_prices" in data:
+                        # Get current hour
+                        current_hour = int(current_hour_key.split(":")[0])
+                        
+                        # Look for ISO timestamps that match the current hour
+                        for key, price in data["hourly_prices"].items():
+                            if "T" in key:  # ISO format has a T separator
+                                try:
+                                    # Parse ISO timestamp
+                                    from datetime import datetime
+                                    dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
+                                    
+                                    # Convert to local time if needed
+                                    if dt.tzinfo is None:
+                                        dt = dt.replace(tzinfo=dt_util.UTC)
+                                    
+                                    # Check if hour matches
+                                    if dt.hour == current_hour:
+                                        current_price = price
+                                        found = True
+                                        break
+                                except (ValueError, TypeError):
+                                    continue
+                    
+                    if not found:
+                        _LOGGER.warning(f"Current hour {current_hour_key} missing from {source_name}")
+                        return False
                 if current_price is None or not isinstance(current_price, (int, float)):
                     _LOGGER.warning(f"Invalid current hour price from {source_name}: {current_price}")
                     return False
