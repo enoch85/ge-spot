@@ -10,12 +10,13 @@ from ..const.sources import Source
 
 _LOGGER = logging.getLogger(__name__)
 
-def ensure_iso_timestamp(timestamp_str: str, api_timezone: Optional[str] = None) -> str:
+def ensure_iso_timestamp(timestamp_str: str, api_timezone: Optional[str] = None, source_type: Optional[str] = None) -> str:
     """Ensure a timestamp string is in ISO format with timezone information.
     
     Args:
         timestamp_str: The timestamp string to process
         api_timezone: The timezone of the API, used if the timestamp has no timezone info
+        source_type: The source type, used to look up timezone if api_timezone is not provided
         
     Returns:
         ISO format timestamp string with timezone information
@@ -57,9 +58,44 @@ def ensure_iso_timestamp(timestamp_str: str, api_timezone: Optional[str] = None)
             except (ValueError, TypeError) as e:
                 # If parsing fails, raise an error
                 raise ValueError(f"Failed to parse timestamp {timestamp_str}: {e}")
+        elif source_type:
+            # Try to get timezone from source type using the constants
+            from ..const.api import SourceTimezone
+            api_tz = SourceTimezone.API_TIMEZONES.get(source_type)
+            if api_tz:
+                try:
+                    # Try to parse the timestamp
+                    dt = datetime.fromisoformat(timestamp_str)
+                    
+                    # Add timezone info
+                    from ..timezone.timezone_utils import get_timezone_object
+                    tz_obj = get_timezone_object(api_tz)
+                    if tz_obj:
+                        dt = dt.replace(tzinfo=tz_obj)
+                        return dt.isoformat()
+                    else:
+                        # If timezone object not found, use UTC as fallback
+                        dt = dt.replace(tzinfo=timezone.utc)
+                        return dt.isoformat()
+                except (ValueError, TypeError) as e:
+                    # If parsing fails, raise an error
+                    raise ValueError(f"Failed to parse timestamp {timestamp_str}: {e}")
+            else:
+                # No timezone found for source, use UTC as fallback
+                try:
+                    dt = datetime.fromisoformat(timestamp_str)
+                    dt = dt.replace(tzinfo=timezone.utc)
+                    return dt.isoformat()
+                except (ValueError, TypeError) as e:
+                    raise ValueError(f"Failed to parse timestamp {timestamp_str}: {e}")
         else:
-            # No API timezone provided, raise an error
-            raise ValueError(f"Timestamp {timestamp_str} has no timezone information and no API timezone provided")
+            # No API timezone or source type provided, use UTC as fallback
+            try:
+                dt = datetime.fromisoformat(timestamp_str)
+                dt = dt.replace(tzinfo=timezone.utc)
+                return dt.isoformat()
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Failed to parse timestamp {timestamp_str} and no timezone info available: {e}")
 
 def create_iso_timestamp(date, hour: int, tz_name: Optional[str] = None) -> str:
     """Create an ISO timestamp for a given date and hour.
@@ -169,34 +205,40 @@ def get_parser_for_source(source: str):
     Returns:
         Parser instance or None if not found
     """
-    # Map of source identifiers to parser module and class names
+    # Import all parsers at the module level instead of dynamically
+    from ..api.parsers import (
+        NordpoolPriceParser,
+        EntsoeParser,
+        EnergiDataParser,
+        AemoParser,
+        EpexParser,
+        OmieParser,
+        StromligningParser,
+        ComedParser
+    )
+    
+    # Map of source identifiers to parser classes
     parser_map = {
-        Source.AEMO: ("aemo_parser", "AemoParser"),
-        Source.COMED: ("comed_parser", "ComedParser"),
-        Source.ENERGI_DATA_SERVICE: ("energi_data_parser", "EnergiDataParser"),
-        Source.ENTSOE: ("entsoe_parser", "EntsoeParser"),
-        Source.EPEX: ("epex_parser", "EpexParser"),
-        Source.NORDPOOL: ("nordpool_parser", "NordpoolPriceParser"),
-        Source.OMIE: ("omie_parser", "OmieParser"),
-        Source.STROMLIGNING: ("stromligning_parser", "StromligningParser")
+        Source.AEMO: AemoParser,
+        Source.COMED: ComedParser,
+        Source.ENERGI_DATA_SERVICE: EnergiDataParser,
+        Source.ENTSOE: EntsoeParser,
+        Source.EPEX: EpexParser,
+        Source.NORDPOOL: NordpoolPriceParser,
+        Source.OMIE: OmieParser,
+        Source.STROMLIGNING: StromligningParser
     }
     
     if source not in parser_map:
+        _LOGGER.warning(f"No parser available for source {source}")
         return None
     
-    module_name, class_name = parser_map[source]
-    
     try:
-        # Dynamically import the parser module
-        module = importlib.import_module(f"..api.parsers.{module_name}", package="custom_components.ge_spot.utils")
-        
-        # Get the parser class
-        parser_class = getattr(module, class_name)
-        
-        # Create an instance of the parser
+        # Create an instance of the parser class
+        parser_class = parser_map[source]
         return parser_class()
-    except (ImportError, AttributeError) as e:
-        _LOGGER.warning(f"Failed to import parser for source {source}: {e}")
+    except Exception as e:
+        _LOGGER.warning(f"Failed to create parser for source {source}: {e}")
         return None
 
 def extract_prices(data: Union[Dict[str, Any], List[Dict[str, Any]]], area: Optional[str] = None) -> Dict[str, float]:
@@ -223,16 +265,18 @@ def extract_prices(data: Union[Dict[str, Any], List[Dict[str, Any]]], area: Opti
         return hourly_prices
     
     # Strategy 1: Direct hourly_prices mapping with ISO timestamps
+    # First detect the source for timezone information
+    source = detect_source(data)
+    
     if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
         for timestamp, price in data["hourly_prices"].items():
             if isinstance(price, (int, float)):
                 # Ensure timestamp is in ISO format
-                iso_timestamp = ensure_iso_timestamp(timestamp)
+                iso_timestamp = ensure_iso_timestamp(timestamp, source_type=source)
                 hourly_prices[iso_timestamp] = float(price)
         return hourly_prices
     
     # Strategy 2: Use specialized parsers based on source detection
-    source = detect_source(data)
     if source:
         parser = get_parser_for_source(source)
         if parser:
@@ -284,7 +328,7 @@ def extract_prices(data: Union[Dict[str, Any], List[Dict[str, Any]]], area: Opti
                         # Check if hour_key is already an ISO timestamp
                         if 'T' in hour_key and ('+' in hour_key or 'Z' in hour_key):
                             # Already in ISO format with timezone, just ensure it's properly formatted
-                            iso_timestamp = ensure_iso_timestamp(hour_key)
+                            iso_timestamp = ensure_iso_timestamp(hour_key, source_type=source)
                         elif 'T' in hour_key:
                             # Has date but no timezone, assume it's in the API's timezone
                             # Get API timezone from data if available
@@ -435,7 +479,11 @@ def _extract_from_nested_structure(data: Dict[str, Any], area: Optional[str] = N
             for hour_key, price in data[key].items():
                 try:
                     # Try to parse as timestamp
-                    iso_timestamp = ensure_iso_timestamp(hour_key)
+                    # Try to detect source from data
+                    source_type = None
+                    if isinstance(data, dict) and "source" in data:
+                        source_type = data["source"]
+                    iso_timestamp = ensure_iso_timestamp(hour_key, source_type=source_type)
                     hourly_prices[iso_timestamp] = float(price)
                 except (ValueError, TypeError):
                     # If not a timestamp, might be an hour number
@@ -522,7 +570,15 @@ def _extract_from_array(entries: List[Dict[str, Any]], area: Optional[str] = Non
                 api_timezone = parent_data.get("api_timezone") if isinstance(parent_data, dict) else None
                 
                 # Ensure timestamp is in ISO format with API timezone
-                iso_timestamp = ensure_iso_timestamp(timestamp, api_timezone)
+                # Get source type from parent_data if available
+                source_type = None
+                if isinstance(parent_data, dict):
+                    if "source" in parent_data:
+                        source_type = parent_data["source"]
+                    elif parent_data.get("raw_data") and isinstance(parent_data["raw_data"], dict) and "source" in parent_data["raw_data"]:
+                        source_type = parent_data["raw_data"]["source"]
+                
+                iso_timestamp = ensure_iso_timestamp(timestamp, api_timezone, source_type=source_type)
                 hourly_prices[iso_timestamp] = float(price)
             except (ValueError, TypeError) as e:
                 _LOGGER.debug(f"Failed to parse timestamp or price: {timestamp}, {price} - {e}")

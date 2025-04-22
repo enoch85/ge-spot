@@ -6,6 +6,7 @@ from .aemo_parser import AemoParser
 from .epex_parser import EpexParser
 from .omie_parser import OmieParser
 from .stromligning_parser import StromligningParser
+from .comed_parser import ComedParser
 
 __all__ = [
     "NordpoolPriceParser",
@@ -14,5 +15,6 @@ __all__ = [
     "AemoParser",
     "EpexParser",
     "OmieParser",
-    "StromligningParser"
+    "StromligningParser",
+    "ComedParser"
 ]
