@@ -32,12 +32,36 @@ def ensure_iso_timestamp(timestamp_str: str, api_timezone: Optional[str] = None,
     )
     
     if has_timezone:
-        # Already has timezone info, just ensure it's in ISO format
+        # Already has timezone info, ensure it's in ISO format and convert to API timezone if provided
         try:
             dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            
+            # If API timezone is provided, convert to that timezone
+            if api_timezone:
+                from ..timezone.timezone_utils import get_timezone_object, convert_datetime
+                tz_obj = get_timezone_object(api_timezone)
+                if tz_obj:
+                    dt = convert_datetime(dt, tz_obj)
+                    _LOGGER.debug(f"Converted timestamp from UTC to {api_timezone}: {timestamp_str} -> {dt.isoformat()}")
+                    return dt.isoformat()
+            
+            # If source_type is provided but no API timezone, try to get timezone from source type
+            elif source_type:
+                from ..const.api import SourceTimezone
+                api_tz = SourceTimezone.API_TIMEZONES.get(source_type)
+                if api_tz:
+                    from ..timezone.timezone_utils import get_timezone_object, convert_datetime
+                    tz_obj = get_timezone_object(api_tz)
+                    if tz_obj:
+                        dt = convert_datetime(dt, tz_obj)
+                        _LOGGER.debug(f"Converted timestamp from UTC to {api_tz} (from source {source_type}): {timestamp_str} -> {dt.isoformat()}")
+                        return dt.isoformat()
+            
+            # If no conversion was done, just return the ISO format
             return dt.isoformat()
-        except (ValueError, TypeError):
-            # If parsing fails, return the original string
+        except (ValueError, TypeError, ImportError) as e:
+            # If parsing fails, log the error and return the original string
+            _LOGGER.debug(f"Failed to parse or convert timestamp with timezone: {timestamp_str} - {e}")
             return timestamp_str
     else:
         # No timezone info, add the API timezone if provided
