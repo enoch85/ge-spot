@@ -6,9 +6,7 @@ from typing import Dict, Any, Optional
 
 from ..utils.api_client import ApiClient
 from ..utils.debug_utils import sanitize_sensitive_data
-from ..price.conversion import async_convert_energy_price
 from ..timezone import TimezoneService
-from ..timezone.timezone_utils import get_source_timezone, get_timezone_object
 from ..const.sources import Source
 from ..const.areas import AreaMapping
 from ..const.config import Config
@@ -29,13 +27,9 @@ _LOGGER = logging.getLogger(__name__)
 BASE_URL = Network.URLs.ENTSOE
 
 async def fetch_day_ahead_prices(source_type, config, area, currency, reference_time=None, hass=None, session=None):
-    """Fetch day-ahead prices using ENTSO-E API."""
+    """Fetch day-ahead prices using ENTSO-E API (refactored: returns only raw, standardized data)."""
     client = ApiClient(session=session)
     try:
-        # Settings
-        use_subunit = config.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS
-        vat = config.get(Config.VAT, 0)
-
         # Fetch raw data
         raw_data = await _fetch_data(client, config, area, reference_time)
         if not raw_data:
@@ -45,16 +39,22 @@ async def fetch_day_ahead_prices(source_type, config, area, currency, reference_
         if isinstance(raw_data, dict) and raw_data.get("skipped"):
             return raw_data
 
-        # Process data
-        result = await _process_data(raw_data, area, currency, vat, use_subunit, reference_time, hass, session, config)
+        # Use the parser to extract raw, standardized data
+        parser = EntsoeParser()
+        parsed = parser.parse(raw_data)
+        metadata = parser.extract_metadata(raw_data)
 
-        # Add metadata
-        if result:
-            result["data_source"] = "ENTSO-E"
-            result["last_updated"] = datetime.now(timezone.utc).isoformat()
-            result["currency"] = currency
-            result["api_key_valid"] = True
-
+        # Build standardized raw result
+        result = {
+            "hourly_prices": parsed.get("hourly_prices", {}),  # keys: HH:00 or ISO, values: price in EUR
+            "currency": metadata.get("currency", "EUR"),
+            "timezone": metadata.get("timezone", "Europe/Brussels"),
+            "area": area,
+            "raw_data": raw_data,  # keep original for debugging/fallback
+            "source": Source.ENTSOE,
+            "metadata": metadata,
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
         return result
     finally:
         if not session and client:
@@ -164,155 +164,6 @@ async def _fetch_data(client, config, area, reference_time):
         "data_source": "ENTSO-E",
         "message": "No matching data found"
     }
-
-async def _process_data(data, area, currency, vat, use_subunit, reference_time, hass, session, config):
-    """Process XML data from ENTSO-E."""
-    if not data:
-        return None
-
-    try:
-        # Initialize timezone service with area and config to use area-specific timezone
-        tz_service = TimezoneService(hass, area, config)
-        _LOGGER.debug(f"Initialized TimezoneService for area {area} with timezone {tz_service.area_timezone or tz_service.ha_timezone}")
-
-        # Use default timezone for ENTSOE
-        source_timezone = get_source_timezone(Source.ENTSOE)
-        _LOGGER.debug(f"Using source timezone for ENTSO-E: {source_timezone}")
-
-        # Ensure we have a valid timezone object, not just a string
-        source_tz_obj = get_timezone_object(source_timezone)
-        if not source_tz_obj:
-            _LOGGER.error(f"Failed to get timezone object for {source_timezone}, falling back to UTC")
-            source_tz_obj = timezone.utc
-
-        # Initialize result structure
-        result = {
-            "current_price": None,
-            "next_hour_price": None,
-            "day_average_price": None,
-            "peak_price": None,
-            "off_peak_price": None,
-            "hourly_prices": {},
-            "raw_values": {},
-            "raw_prices": [],
-            "api_timezone": source_timezone  # Store API timezone for reference
-        }
-
-        try:
-            # Use the EntsoeParser to parse hourly prices
-            parser = EntsoeParser()
-
-            # Extract metadata
-            metadata = parser.extract_metadata(data)
-            entsoe_currency = metadata.get("currency", Currency.EUR)
-
-            # Parse hourly prices
-            hourly_prices = parser.parse_hourly_prices(data, area)
-
-            # Create raw prices array for reference
-            for hour_str, price in hourly_prices.items():
-                hour = int(hour_str.split(":")[0])
-                # Create a timezone-aware datetime using HA timezone
-                now = datetime.now().date()
-                hour_time = datetime.combine(now, time(hour=hour))
-                # Make it timezone-aware using HA timezone - explicitly pass source_timezone
-                hour_time = tz_service.converter.convert(hour_time, source_tz=source_timezone)
-                end_time = hour_time + timedelta(hours=1)
-
-                # Store raw price
-                result["raw_prices"].append({
-                    "start": hour_time.isoformat(),
-                    "end": end_time.isoformat(),
-                    "price": price
-                })
-
-            # Convert hourly prices to area-specific timezone (or HA timezone) in a single step
-            converted_prices = tz_service.normalize_hourly_prices(
-                hourly_prices, source_timezone)
-
-            # Process each hour with price conversion
-            for hour_str, price in converted_prices.items():
-                # Apply price conversion
-                converted_price = await async_convert_energy_price(
-                    price=price,
-                    from_unit=EnergyUnit.MWH,
-                    to_unit="kWh",
-                    from_currency=entsoe_currency,
-                    to_currency=currency,
-                    vat=vat,
-                    to_subunit=use_subunit,
-                    session=session
-                )
-
-                # Store converted price
-                result["hourly_prices"][hour_str] = converted_price
-
-            # Get current and next hour prices
-            current_hour_key = tz_service.get_current_hour_key()
-            if current_hour_key in result["hourly_prices"]:
-                result["current_price"] = result["hourly_prices"][current_hour_key]
-                # Get original hour key from before conversion
-                original_hour = int(current_hour_key.split(":")[0])
-                current_dt = datetime.now().replace(hour=original_hour)
-                current_dt = tz_service.converter.convert(current_dt, source_tz=source_timezone)
-                original_hour_key = f"{current_dt.hour:02d}:00"
-
-                result["raw_values"]["current_price"] = {
-                    "raw": hourly_prices.get(original_hour_key),
-                    "unit": f"{entsoe_currency}/MWh",
-                    "final": result["current_price"],
-                    "currency": currency,
-                    "vat_rate": vat
-                }
-
-            # Calculate next hour
-            current_hour = int(current_hour_key.split(":")[0])
-            next_hour = (current_hour + 1) % 24
-            next_hour_key = f"{next_hour:02d}:00"
-
-            if next_hour_key in result["hourly_prices"]:
-                result["next_hour_price"] = result["hourly_prices"][next_hour_key]
-                result["raw_values"]["next_hour_price"] = {
-                    "raw": hourly_prices.get(next_hour_key),
-                    "unit": f"{entsoe_currency}/MWh",
-                    "final": result["next_hour_price"],
-                    "currency": currency,
-                    "vat_rate": vat
-                }
-
-            # Calculate statistics
-            all_prices = list(result["hourly_prices"].values())
-            if all_prices:
-                result["day_average_price"] = sum(all_prices) / len(all_prices)
-                result["peak_price"] = max(all_prices)
-                result["off_peak_price"] = min(all_prices)
-
-                # Raw value details for statistics
-                result["raw_values"]["day_average_price"] = {
-                    "value": result["day_average_price"],
-                    "calculation": "average of all hourly prices"
-                }
-                result["raw_values"]["peak_price"] = {
-                    "value": result["peak_price"],
-                    "calculation": "maximum of all hourly prices"
-                }
-                result["raw_values"]["off_peak_price"] = {
-                    "value": result["off_peak_price"],
-                    "calculation": "minimum of all hourly prices"
-                }
-
-        except ValueError as e:
-            _LOGGER.error(f"Error parsing ENTSO-E data: {e}")
-            return None
-
-        return result
-
-    except ET.ParseError as e:
-        _LOGGER.error(f"Error parsing ENTSO-E XML: {e}")
-        return None
-    except Exception as e:
-        _LOGGER.error(f"Error processing ENTSO-E data: {e}", exc_info=True)
-        return None
 
 async def validate_api_key(api_key, area, session=None):
     """Validate an API key by making a test request."""

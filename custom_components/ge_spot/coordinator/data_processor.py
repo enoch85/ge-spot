@@ -11,6 +11,20 @@ from ..utils.exchange_service import get_exchange_service
 
 _LOGGER = logging.getLogger(__name__)
 
+# NOTE: All API modules should return raw, unprocessed data in this standardized format:
+# {
+#     "hourly_prices": {"HH:00" or ISO: price, ...},
+#     "currency": str,
+#     "timezone": str,
+#     "area": str,
+#     "raw_data": dict (original API response),
+#     "source": str,
+#     "last_updated": ISO8601 str,
+#     ...
+# }
+# All timezone, currency, and statistics logic must be handled here or in the adapter, not in the API modules.
+# TODO: Refactor all remaining API modules to follow this pattern for consistency and maintainability.
+
 class DataProcessor:
     """Processor for formatting and enriching price data."""
 

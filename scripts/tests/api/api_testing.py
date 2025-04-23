@@ -102,8 +102,17 @@ async def test_api_area(api_name: str, area: str, timeout: int) -> Dict[str, Any
             result["status"] = "skipped"
             result["message"] = f"API was skipped: {reason}"
             result["debug_info"]["skip_response"] = api_result
-        elif api_result and isinstance(api_result, dict) and "hourly_prices" in api_result:
-            if api_result["hourly_prices"]:
+        elif api_result and isinstance(api_result, dict):
+            # Assert required keys for standardized API format
+            required_keys = ["hourly_prices", "currency", "timezone"]
+            missing_keys = [k for k in required_keys if k not in api_result]
+            if missing_keys:
+                error_msg = f"API result missing required keys: {missing_keys}"
+                logger.error(f"  ❌ Failed: {error_msg}")
+                result["status"] = "failure"
+                result["message"] = error_msg
+                result["debug_info"]["response"] = api_result
+            elif api_result["hourly_prices"]:
                 # We have hourly prices data
                 current_price = "N/A"
                 if "current_price" in api_result and api_result["current_price"] is not None:
@@ -148,6 +157,8 @@ async def test_api_area(api_name: str, area: str, timeout: int) -> Dict[str, Any
             await session.close()
     
     return result
+
+# TODO: Add further assertions for value types and edge cases in future test improvements.
 
 
 async def run_tests(apis_to_test: List[str], areas_to_test: List[str], timeout: int) -> Dict[str, Any]:

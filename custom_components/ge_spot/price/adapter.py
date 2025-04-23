@@ -8,6 +8,20 @@ from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
+# NOTE: This adapter expects raw API data in the following standardized format:
+#   {
+#       "hourly_prices": {"HH:00" or ISO: price, ...},
+#       "currency": str,
+#       "timezone": str,
+#       "area": str,
+#       "raw_data": dict (original API response),
+#       "source": str,
+#       "last_updated": ISO8601 str,
+#       ...
+#   }
+# All timezone, currency, and statistics logic must be handled here or in the data processor, not in the API modules.
+# TODO: Refactor all remaining API modules to follow this pattern for consistency and maintainability.
+
 class ElectricityPriceAdapter:
     """Adapter for electricity price data with simplified API."""
 
