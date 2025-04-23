@@ -496,3 +496,6 @@ class EntsoeParser(BasePriceParser):
             return sum(today_prices) / len(today_prices)
 
         return None
+
+# Add alias for backward compatibility with refactored code
+EntsoePriceParser = EntsoeParser

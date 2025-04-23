@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import ATTR_ATTRIBUTION
 
-from ..const import DOMAIN, ATTRIBUTION
+from ..const import DOMAIN
 from ..const.config import Config
 from ..utils.formatter import format_price, format_price_value, format_relative_price
 from ..coordinator import UnifiedPriceCoordinator

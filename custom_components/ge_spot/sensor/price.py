@@ -179,3 +179,215 @@ class TomorrowExtremaPriceSensor(TomorrowSensorMixin, ExtremaPriceSensor):
 class TomorrowAveragePriceSensor(TomorrowSensorMixin, PriceValueSensor):
     """Average price sensor for tomorrow data with proper availability behavior."""
     pass
+
+
+class PriceStatisticSensor(PriceValueSensor):
+    """Sensor for price statistics (average, min, max)."""
+
+    def __init__(self, coordinator, entity_id, name, stat_type, include_vat=False, vat=0, price_in_cents=False):
+        """Initialize the price statistic sensor."""
+        # Create value extraction function
+        def extract_value(data):
+            if "today_stats" not in data:
+                return None
+            return data["today_stats"].get(stat_type)
+
+        # Initialize parent class
+        super().__init__(
+            coordinator,
+            {
+                "area": coordinator.area,
+                "currency": coordinator.currency,
+                "vat": vat,
+                "precision": 3
+            },
+            f"{stat_type}_price",
+            name,
+            extract_value,
+            None
+        )
+        self._stat_type = stat_type
+        self._include_vat = include_vat
+        self._price_in_cents = price_in_cents
+
+
+class PriceDifferenceSensor(PriceValueSensor):
+    """Sensor for price difference between two values."""
+
+    def __init__(self, coordinator, entity_id, name, value1_key, value2_key, 
+                include_vat=False, vat=0, price_in_cents=False):
+        """Initialize the price difference sensor."""
+        # Create value extraction function
+        def extract_value(data):
+            if value1_key not in data or value2_key not in data:
+                return None
+                
+            value1 = data.get(value1_key)
+            if value1_key == "current_price" and value1 is None:
+                # Try to get from today_stats
+                if "today_stats" in data:
+                    value1 = data["today_stats"].get("current")
+                    
+            value2 = None
+            if value2_key == "average":
+                # Get from today_stats
+                if "today_stats" in data:
+                    value2 = data["today_stats"].get("average")
+            else:
+                value2 = data.get(value2_key)
+                
+            if value1 is None or value2 is None:
+                return None
+                
+            return value1 - value2
+
+        # Initialize parent class
+        super().__init__(
+            coordinator,
+            {
+                "area": coordinator.area,
+                "currency": coordinator.currency,
+                "vat": vat,
+                "precision": 3
+            },
+            "price_difference",
+            name,
+            extract_value,
+            None
+        )
+        self._value1_key = value1_key
+        self._value2_key = value2_key
+        self._include_vat = include_vat
+        self._price_in_cents = price_in_cents
+
+
+class PricePercentSensor(PriceValueSensor):
+    """Sensor for price percentage relative to a reference value."""
+
+    def __init__(self, coordinator, entity_id, name, value_key, reference_key, 
+                include_vat=False, vat=0):
+        """Initialize the price percentage sensor."""
+        # Create value extraction function
+        def extract_value(data):
+            if value_key not in data:
+                return None
+                
+            value = data.get(value_key)
+            if value_key == "current_price" and value is None:
+                # Try to get from today_stats
+                if "today_stats" in data:
+                    value = data["today_stats"].get("current")
+                    
+            reference = None
+            if reference_key == "average":
+                # Get from today_stats
+                if "today_stats" in data:
+                    reference = data["today_stats"].get("average")
+            else:
+                reference = data.get(reference_key)
+                
+            if value is None or reference is None or reference == 0:
+                return None
+                
+            return (value / reference - 1) * 100
+
+        # Initialize parent class
+        super().__init__(
+            coordinator,
+            {
+                "area": coordinator.area,
+                "currency": coordinator.currency,
+                "vat": vat,
+                "precision": 1
+            },
+            "price_percentage",
+            name,
+            extract_value,
+            None
+        )
+        self._value_key = value_key
+        self._reference_key = reference_key
+        self._include_vat = include_vat
+        
+    @property
+    def native_unit_of_measurement(self):
+        """Return the unit of measurement."""
+        return "%"
+
+
+class OffPeakPeakSensor(PriceValueSensor):
+    """Sensor for off-peak and peak price periods."""
+
+    def __init__(self, coordinator, entity_id, name, include_vat=False, vat=0, price_in_cents=False):
+        """Initialize the off-peak/peak sensor."""
+        # Create value extraction function that returns a string representation
+        def extract_value(data):
+            if "today_stats" not in data:
+                return None
+                
+            stats = data["today_stats"]
+            if "peak" not in stats or "off_peak" not in stats:
+                return None
+                
+            peak = stats["peak"]
+            off_peak = stats["off_peak"]
+            
+            if not peak or not off_peak:
+                return None
+                
+            peak_avg = peak.get("average")
+            off_peak_avg = off_peak.get("average")
+            
+            if peak_avg is None or off_peak_avg is None:
+                return None
+                
+            # Return the ratio between peak and off-peak
+            return peak_avg / off_peak_avg if off_peak_avg != 0 else None
+
+        # Initialize parent class
+        super().__init__(
+            coordinator,
+            {
+                "area": coordinator.area,
+                "currency": coordinator.currency,
+                "vat": vat,
+                "precision": 2
+            },
+            "peak_offpeak",
+            name,
+            extract_value,
+            self._get_additional_attrs
+        )
+        self._include_vat = include_vat
+        self._price_in_cents = price_in_cents
+        
+    def _get_additional_attrs(self, data):
+        """Get additional attributes for the sensor."""
+        if "today_stats" not in data:
+            return {}
+            
+        stats = data["today_stats"]
+        if "peak" not in stats or "off_peak" not in stats:
+            return {}
+            
+        peak = stats["peak"]
+        off_peak = stats["off_peak"]
+        
+        if not peak or not off_peak:
+            return {}
+            
+        return {
+            "peak_average": peak.get("average"),
+            "peak_min": peak.get("min"),
+            "peak_max": peak.get("max"),
+            "peak_hours": peak.get("hours", []),
+            "off_peak_average": off_peak.get("average"),
+            "off_peak_min": off_peak.get("min"),
+            "off_peak_max": off_peak.get("max"),
+            "off_peak_hours": off_peak.get("hours", [])
+        }
+        
+    @property
+    def native_unit_of_measurement(self):
+        """Return the unit of measurement."""
+        return "ratio"

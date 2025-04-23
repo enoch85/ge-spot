@@ -8,8 +8,35 @@ import zoneinfo
 from ..const.sources import Source
 from ..const.time import TimezoneConstants, TimezoneName
 from ..const.api import SourceTimezone
+from ..const.areas import Timezone
 
 _LOGGER = logging.getLogger(__name__)
+
+def get_timezone_by_name(timezone_name: str) -> str:
+    """Get timezone identifier for a given name or area.
+    
+    Args:
+        timezone_name: Timezone name or area code
+        
+    Returns:
+        Timezone identifier (IANA format)
+    """
+    # Check if it's a direct timezone identifier already (contains a '/')
+    if "/" in timezone_name:
+        return timezone_name
+        
+    # Check if it's in the area timezones mapping
+    if timezone_name in Timezone.AREA_TIMEZONES:
+        return Timezone.AREA_TIMEZONES[timezone_name]
+        
+    # Check if it's a known timezone name that can be mapped
+    iana_name = TimezoneName.get_iana_name(timezone_name)
+    if iana_name != timezone_name:  # If mapping occurred
+        return iana_name
+        
+    # Fallback
+    _LOGGER.warning(f"Could not resolve timezone for name: {timezone_name}, using default")
+    return TimezoneConstants.DEFAULT_FALLBACK
 
 def get_source_timezone(source: str, area: Optional[str] = None) -> str:
     """Get timezone for a specific API source.

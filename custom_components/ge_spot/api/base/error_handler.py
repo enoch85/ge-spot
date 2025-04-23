@@ -2,12 +2,114 @@
 import logging
 import asyncio
 import time
+import functools
 from datetime import datetime
 from typing import Callable, Any, Dict, Optional, Union, List, Tuple
 
 from ...const.network import NetworkErrorType, RetryStrategy
 
 _LOGGER = logging.getLogger(__name__)
+
+def with_error_handling(func=None, *, source_type: str = "unknown"):
+    """Decorator to handle errors in API calls.
+    
+    Can be used as a decorator with or without arguments:
+    
+    @with_error_handling
+    async def my_func():
+        ...
+        
+    @with_error_handling(source_type="my_source")
+    async def my_func():
+        ...
+    
+    Args:
+        func: The function to decorate
+        source_type: The source type identifier
+        
+    Returns:
+        Decorated function
+    """
+    # Used as a decorator with arguments @with_error_handling(...)
+    if func is None:
+        return functools.partial(
+            with_error_handling,
+            source_type=source_type
+        )
+    
+    # For direct function calls or @with_error_handling without arguments
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        handler = ErrorHandler(source_type)
+        try:
+            return await func(*args, **kwargs)
+        except Exception as error:
+            error_type = handler.classify_error(error)
+            _LOGGER.error(
+                f"Error in {source_type} API call: {error}. "
+                f"Classified as {error_type}."
+            )
+            raise error
+    
+    return wrapper
+
+def retry_with_backoff(
+    func=None, 
+    *,
+    max_retries: int = 3,
+    strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF,
+    source_type: str = "unknown",
+    max_attempts=None,  # For backward compatibility
+    base_delay=None     # For backward compatibility
+):
+    """Run a function with retry logic.
+    
+    Can be used as a decorator with or without arguments:
+    
+    @retry_with_backoff
+    async def my_func():
+        ...
+        
+    @retry_with_backoff(max_retries=5)
+    async def my_func():
+        ...
+    
+    Or as a function call:
+    await retry_with_backoff(my_func, max_retries=5)
+    
+    Args:
+        func: The function to decorate or call
+        max_retries: Maximum number of retries
+        strategy: Retry strategy to use
+        source_type: The source type identifier
+        max_attempts: Alias for max_retries for compatibility
+        base_delay: Base delay for retries
+        
+    Returns:
+        Decorated function or function result
+    """
+    # Handle compatibility parameters
+    if max_attempts is not None:
+        max_retries = max_attempts
+    
+    # Used as a decorator with arguments @retry_with_backoff(...)
+    if func is None:
+        return functools.partial(
+            retry_with_backoff,
+            max_retries=max_retries,
+            strategy=strategy,
+            source_type=source_type
+        )
+    
+    # For direct function calls or @retry_with_backoff without arguments
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        handler = ErrorHandler(source_type)
+        return await handler.run_with_retry(
+            func, *args, max_retries=max_retries, strategy=strategy, **kwargs
+        )
+    
+    return wrapper
 
 class ErrorHandler:
     """Centralized error handling for API calls."""
@@ -226,4 +328,4 @@ class ErrorHandler:
             "error_counts": self.error_counts,
             "last_error_time": {k: v.isoformat() for k, v in self.last_error_time.items()},
             "backoff_index": self.backoff_index
-        } 
+        }

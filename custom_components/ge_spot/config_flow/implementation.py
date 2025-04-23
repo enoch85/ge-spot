@@ -15,7 +15,7 @@ from ..const.defaults import Defaults
 from ..const.areas import AreaMapping
 from ..api import get_sources_for_region
 from ..api import entsoe
-from ..price.conversion import async_convert_energy_price
+from ..utils.exchange_service import get_exchange_service
 
 from .utils import (
     get_deduplicated_regions,

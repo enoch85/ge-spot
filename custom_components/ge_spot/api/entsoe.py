@@ -74,9 +74,9 @@ class EntsoeAPI(BasePriceAPI):
                 area=area,
                 reference_time=kwargs.get('reference_time')
             )
-    finally:
+        finally:
             if session is None and client:
-            await client.close()
+                await client.close()
 
     async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
         """Fetch data from ENTSO-E.
@@ -90,36 +90,36 @@ class EntsoeAPI(BasePriceAPI):
             Raw data from API
         """
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
-    if not api_key:
-        _LOGGER.debug("No API key provided for ENTSO-E, skipping")
+        if not api_key:
+            _LOGGER.debug("No API key provided for ENTSO-E, skipping")
             raise ValueError("No API key provided for ENTSO-E")
 
-    if reference_time is None:
-        reference_time = datetime.now(timezone.utc)
+        if reference_time is None:
+            reference_time = datetime.now(timezone.utc)
 
-    # Map our area code to ENTSO-E area code
-    entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area, area)
-    _LOGGER.debug(f"Using ENTSO-E area code {entsoe_area} for area {area}")
+        # Map our area code to ENTSO-E area code
+        entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area, area)
+        _LOGGER.debug(f"Using ENTSO-E area code {entsoe_area} for area {area}")
 
-    # Use custom headers for ENTSO-E API
-    headers = {
-        "User-Agent": Network.Defaults.USER_AGENT,
-        "Accept": ContentType.XML,
-        "Content-Type": ContentType.XML
-    }
+        # Use custom headers for ENTSO-E API
+        headers = {
+            "User-Agent": Network.Defaults.USER_AGENT,
+            "Accept": ContentType.XML,
+            "Content-Type": ContentType.XML
+        }
 
-    # Generate date ranges to try
-    # ENTSO-E sometimes has data for different time periods depending on the area
-    date_ranges = generate_date_ranges(reference_time, Source.ENTSOE)
+        # Generate date ranges to try
+        # ENTSO-E sometimes has data for different time periods depending on the area
+        date_ranges = generate_date_ranges(reference_time, Source.ENTSOE)
 
         # Store all successful responses
         xml_responses = []
         
         # Try fetching data for each date range
-    for start_date, end_date in date_ranges:
-        # Format dates for ENTSO-E API (YYYYMMDDHHMM format)
-        period_start = start_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
-        period_end = end_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
+        for start_date, end_date in date_ranges:
+            # Format dates for ENTSO-E API (YYYYMMDDHHMM format)
+            period_start = start_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
+            period_end = end_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
 
             # Document types to try - based on ENTSO-E improvements
             doc_types = ["A44", "A62", "A65"]
@@ -127,29 +127,29 @@ class EntsoeAPI(BasePriceAPI):
             
             # Create tasks for all document types to run in parallel
             for doc_type in doc_types:
-            # Build query parameters
-            params = {
-                "securityToken": api_key,
-                "documentType": doc_type,
-                "in_Domain": entsoe_area,
-                "out_Domain": entsoe_area,
-                "periodStart": period_start,
-                "periodEnd": period_end,
-            }
+                # Build query parameters
+                params = {
+                    "securityToken": api_key,
+                    "documentType": doc_type,
+                    "in_Domain": entsoe_area,
+                    "out_Domain": entsoe_area,
+                    "periodStart": period_start,
+                    "periodEnd": period_end,
+                }
 
-            _LOGGER.debug(f"Trying ENTSO-E with document type {doc_type} and date range: {period_start} to {period_end}")
+                _LOGGER.debug(f"Trying ENTSO-E with document type {doc_type} and date range: {period_start} to {period_end}")
 
-            # Sanitize params before logging to hide security token
-            sanitized_params = sanitize_sensitive_data(params)
-            _LOGGER.debug(f"ENTSO-E request params: {sanitized_params}")
+                # Sanitize params before logging to hide security token
+                sanitized_params = sanitize_sensitive_data(params)
+                _LOGGER.debug(f"ENTSO-E request params: {sanitized_params}")
 
                 # Create task for fetching with this document type
                 task = client.fetch(
                     self.base_url,
-                params=params,
-                headers=headers,
-                timeout=Network.Defaults.PARALLEL_FETCH_TIMEOUT
-            )
+                    params=params,
+                    headers=headers,
+                    timeout=Network.Defaults.PARALLEL_FETCH_TIMEOUT
+                )
                 doc_type_tasks.append((doc_type, task))
             
             # Wait for all tasks to complete and process results
@@ -158,22 +158,22 @@ class EntsoeAPI(BasePriceAPI):
                 try:
                     response = await task
 
-            if not response:
-                _LOGGER.debug(f"ENTSO-E returned empty response for document type {doc_type} and date range {period_start} to {period_end}")
-                continue
+                    if not response:
+                        _LOGGER.debug(f"ENTSO-E returned empty response for document type {doc_type} and date range {period_start} to {period_end}")
+                        continue
 
-            # Handle authentication errors
-            if isinstance(response, str):
-                if "Not authorized" in response:
-                    _LOGGER.error("ENTSO-E API authentication failed: Not authorized. Check your API key.")
+                    # Handle authentication errors
+                    if isinstance(response, str):
+                        if "Not authorized" in response:
+                            _LOGGER.error("ENTSO-E API authentication failed: Not authorized. Check your API key.")
                             raise ValueError("ENTSO-E API authentication failed: Not authorized")
-                elif "No matching data found" in response:
+                        elif "No matching data found" in response:
                             # Log but continue with next document type
-                    _LOGGER.debug(f"ENTSO-E returned 'No matching data found' for document type {doc_type} and date range {period_start} to {period_end}")
-                    continue
-                elif "Publication_MarketDocument" in response:
-                    # We got a valid response with data
-                    _LOGGER.info(f"Successfully fetched ENTSO-E data with document type {doc_type} for area {area}")
+                            _LOGGER.debug(f"ENTSO-E returned 'No matching data found' for document type {doc_type} and date range {period_start} to {period_end}")
+                            continue
+                        elif "Publication_MarketDocument" in response:
+                            # We got a valid response with data
+                            _LOGGER.info(f"Successfully fetched ENTSO-E data with document type {doc_type} for area {area}")
                             xml_responses.append(response)
                     elif isinstance(response, dict) and response:
                         # We got a valid response with data in dictionary format
@@ -417,7 +417,7 @@ async def validate_api_key(api_key, area, session=None):
         try:
             await api.fetch_raw_data(area, session)
             _LOGGER.info(f"API key validation successful for area {area}")
-                return True
+            return True
         except ValueError as e:
             if "Not authorized" in str(e) or "authentication failed" in str(e):
                 _LOGGER.warning(f"API key validation failed: {e}")
@@ -445,7 +445,7 @@ async def validate_api_key(api_key, area, session=None):
                         # Reuse the client but with different area
                         await api.fetch_raw_data(alt_area, session)
                         _LOGGER.info(f"API key validation successful with alternative area {alt_area}")
-                            return True
+                        return True
                     except ValueError as alt_e:
                         if "Not authorized" in str(alt_e) or "authentication failed" in str(alt_e):
                             _LOGGER.warning(f"API key validation failed with alternative area {alt_area}: {alt_e}")

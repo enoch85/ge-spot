@@ -15,7 +15,7 @@ from ..const.currencies import Currency, CurrencyInfo
 from ..const.network import Network
 from ..const.api import ECB
 from ..const.attributes import Attributes
-from .error import with_retry
+from ..api.base.error_handler import retry_with_backoff
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,8 +53,8 @@ class ExchangeRateService:
             await self.session.close()
             self.session = None
 
-    @with_retry(max_attempts=Network.Defaults.RETRY_COUNT,
-                base_delay=Network.Defaults.RETRY_BASE_DELAY)
+    @retry_with_backoff(max_attempts=Network.Defaults.RETRY_COUNT,
+                        base_delay=Network.Defaults.RETRY_BASE_DELAY)
     async def _fetch_ecb_rates(self):
         """Fetch exchange rates from European Central Bank API."""
         await self._ensure_session()
@@ -350,3 +350,6 @@ async def get_exchange_service(session=None):
         await _EXCHANGE_SERVICE.get_rates()  # Initialize rates
 
     return _EXCHANGE_SERVICE
+
+# Alias for backward compatibility
+ExchangeService = ExchangeRateService

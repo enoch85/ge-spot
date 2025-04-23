@@ -4,8 +4,7 @@ from typing import Dict, Any, Optional, Tuple, List, Union, Callable
 from datetime import datetime, timedelta
 
 # Import common exceptions for use throughout the codebase
-from ..api.base.error_handler import ErrorHandler, retry_with_backoff as retry_async
-from ..api.base.error_handler import with_retry, with_error_handling as handle_api_errors
+from ..api.base.error_handler import ErrorHandler, retry_with_backoff
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,13 +58,11 @@ __all__ = [
     "log_statistics",
 
     # Error handling
-    "retry_async",
-    "with_retry",
+    "retry_with_backoff",
     "APIError",
     "RateLimitError",
     "AuthenticationError",
     "DataParsingError",
-    "handle_api_errors",
     "ErrorHandler",
 
     # Exchange service

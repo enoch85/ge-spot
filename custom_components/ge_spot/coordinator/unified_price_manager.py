@@ -31,7 +31,7 @@ from ..api.nordpool import NordpoolAPI
 from ..api.entsoe import EntsoeAPI
 from ..api.aemo import AemoAPI
 from ..api.epex import EpexAPI
-from ..api.eds import EdsAPI
+from ..api.energi_data import EnergiDataAPI
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class UnifiedPriceManager:
             Source.ENTSOE: EntsoeAPI,
             Source.AEMO: AemoAPI,
             Source.EPEX: EpexAPI,
-            Source.EDS: EdsAPI,
+            Source.ENERGI_DATA_SERVICE: EnergiDataAPI,
             # Add other API classes here
         }
         
@@ -340,4 +340,4 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
     
     async def async_close(self):
         """Close any open sessions and resources."""
-        await self.price_manager.async_close() 
+        await self.price_manager.async_close()
