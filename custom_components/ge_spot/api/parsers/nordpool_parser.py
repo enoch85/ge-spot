@@ -1,12 +1,13 @@
 """Parser for Nordpool API responses."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List, Tuple
 
 from ...const.sources import Source
 from ...timezone.timezone_utils import normalize_hour_value
 from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
+from ...const.currencies import Currency
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -17,173 +18,129 @@ class NordpoolPriceParser(BasePriceParser):
         """Initialize the parser."""
         super().__init__(Source.NORDPOOL, timezone_service)
 
-    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse Nordpool API response.
+    def parse(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse raw Nordpool API response.
 
         Args:
-            data: Raw API response data
+            raw_data: Raw API response from Nordpool
 
         Returns:
-            Parsed data with hourly prices
+            Dict with parsed data
         """
-        # Validate data
-        data = validate_data(data, self.source)
+        if not raw_data or not isinstance(raw_data, dict):
+            _LOGGER.warning("Invalid Nordpool data format: empty or not a dictionary")
+            return {"hourly_prices": {}, "currency": Currency.EUR}
+        
+        try:
+            return self._parse_response(raw_data)
+        except Exception as e:
+            _LOGGER.warning(f"Failed to parse Nordpool data: {str(e)}")
+            return {"hourly_prices": {}, "currency": Currency.EUR}
 
+    def _parse_response(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract hourly prices from Nordpool response.
+
+        Args:
+            raw_data: Raw API response
+
+        Returns:
+            Dict with hourly prices and currency
+        """
         result = {
             "hourly_prices": {},
-            "currency": data.get("currency", "EUR"),
-            "source": self.source
+            "currency": self._get_currency(raw_data)
         }
 
-        # Extract hourly prices
-        if "data" in data and "Areas" in data["data"]:
-            areas = data["data"]["Areas"]
-
-            # Find the first area with prices
-            for area_code, area_data in areas.items():
-                if "values" in area_data:
-                    values = area_data["values"]
-
-                    for value in values:
-                        if "start" in value and "end" in value and "value" in value:
-                            start_time = self._parse_timestamp(value["start"])
-                            price = self._parse_price(value["value"])
-
-                            if start_time and price is not None:
-                                # Format as ISO string for the hour
-                                hour_key = start_time.strftime("%Y-%m-%dT%H:00:00")
-                                result["hourly_prices"][hour_key] = price
-
-                    # Only process the first area with prices
-                    if result["hourly_prices"]:
-                        break
-
-        # If hourly prices were already processed
-        if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
-            result["hourly_prices"] = data["hourly_prices"]
-
-        # Add current and next hour prices if available
-        if "current_price" in data:
-            result["current_price"] = data["current_price"]
-
-        if "next_hour_price" in data:
-            result["next_hour_price"] = data["next_hour_price"]
-
-        # Calculate current and next hour prices if not provided
-        if "current_price" not in result:
-            result["current_price"] = self._get_current_price(result["hourly_prices"])
-
-        if "next_hour_price" not in result:
-            result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
-
-        # Calculate day average if enough prices
-        if len(result["hourly_prices"]) >= 12:
-            result["day_average_price"] = self._calculate_day_average(result["hourly_prices"])
+        # Extract data series
+        data = raw_data.get("data", {})
+        
+        # Process the graph series data, which contains the hourly prices
+        rows = data.get("Rows", [])
+        
+        # Each row represents an hour
+        for row in rows:
+            # Get timestamp from row
+            start_time = self._parse_datetime(row.get("StartTime"))
+            if not start_time:
+                continue
+                
+            # Get price values for this hour
+            columns = row.get("Columns", [])
+            if not columns or len(columns) == 0:
+                continue
+                
+            # Typically, the first column contains the price
+            price_column = columns[0]
+            price_value = self._parse_price(price_column.get("Value"))
+            
+            if price_value is not None:
+                # Format hour as ISO string for consistent key format
+                hour_key = start_time.isoformat()
+                result["hourly_prices"][hour_key] = price_value
 
         return result
 
-    def _parse_timestamp(self, timestamp_str: str) -> Optional[datetime]:
-        """Parse timestamp from Nordpool format.
+    def _get_currency(self, raw_data: Dict[str, Any]) -> str:
+        """Extract currency from Nordpool response.
 
         Args:
-            timestamp_str: Timestamp string
+            raw_data: Raw API response
 
         Returns:
-            Parsed datetime or None if parsing fails
+            Currency code as string
         """
+        # Try to get currency from response
+        data = raw_data.get("data", {})
+        currency = data.get("Currency", Currency.EUR)
+        return currency
+
+    def _parse_datetime(self, date_str: Optional[str]) -> Optional[datetime]:
+        """Parse datetime string from Nordpool.
+
+        Args:
+            date_str: Datetime string from API response
+
+        Returns:
+            Datetime object or None if parsing fails
+        """
+        if not date_str:
+            return None
+
         try:
-            # Try ISO format
-            return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-        except (ValueError, AttributeError):
-            try:
-                # Try Nordpool specific format
-                return datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%f")
-            except (ValueError, AttributeError):
-                _LOGGER.warning(f"Failed to parse timestamp: {timestamp_str}")
-                return None
+            # Nordpool uses format like "/Date(1625097600000)/" 
+            # or sometimes ISO format
+            if date_str.startswith("/Date(") and date_str.endswith(")/"):
+                # Extract timestamp from /Date(1625097600000)/
+                timestamp_ms = int(date_str.replace("/Date(", "").replace(")/", ""))
+                return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+            else:
+                # Try ISO format
+                return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        except (ValueError, TypeError) as e:
+            _LOGGER.debug(f"Error parsing datetime '{date_str}': {str(e)}")
+            return None
 
-    def _parse_price(self, price_value: Any) -> Optional[float]:
-        """Parse price value.
+    def _parse_price(self, price_str: Optional[str]) -> Optional[float]:
+        """Parse price string from Nordpool.
 
         Args:
-            price_value: Price value from API
+            price_str: Price string from API response
 
         Returns:
-            Parsed price or None if parsing fails
+            Float price or None if parsing fails
         """
+        if not price_str:
+            return None
+
         try:
-            price = float(price_value)
-            return price
-        except (ValueError, TypeError):
-            _LOGGER.warning(f"Failed to parse price: {price_value}")
-            return None
-
-    def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get current hour price.
-
-        Args:
-            hourly_prices: Dictionary of hourly prices
-
-        Returns:
-            Current hour price or None if not available
-        """
-        if not hourly_prices:
-            return None
-
-        now = datetime.now()
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
-        current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
-
-        return hourly_prices.get(current_hour_key)
-
-    def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get next hour price.
-
-        Args:
-            hourly_prices: Dictionary of hourly prices
-
-        Returns:
-            Next hour price or None if not available
-        """
-        if not hourly_prices:
-            return None
-
-        now = datetime.now()
-        next_hour = (now.replace(minute=0, second=0, microsecond=0) +
-                    timedelta(hours=1))
-        next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
-
-        return hourly_prices.get(next_hour_key)
-
-    def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Calculate day average price.
-
-        Args:
-            hourly_prices: Dictionary of hourly prices
-
-        Returns:
-            Day average price or None if not enough data
-        """
-        if not hourly_prices:
-            return None
-
-        # Get today's date
-        today = datetime.now().date()
-
-        # Filter prices for today
-        today_prices = []
-        for hour_key, price in hourly_prices.items():
-            try:
-                hour_dt = datetime.fromisoformat(hour_key)
-                if hour_dt.date() == today:
-                    today_prices.append(price)
-            except (ValueError, TypeError):
-                continue
-
-        # Calculate average if we have enough prices
-        if len(today_prices) >= 12:
-            return sum(today_prices) / len(today_prices)
-
+            # Nordpool returns prices with currency symbols and possibly commas
+            # Replace commas with dots and strip non-numeric characters
+            price_str = price_str.replace(',', '.')
+            # Extract numeric part, handling cases like "10.45 €/MWh"
+            numeric_part = ''.join(c for c in price_str if c.isdigit() or c == '.')
+            return float(numeric_part)
+        except (ValueError, TypeError) as e:
+            _LOGGER.debug(f"Error parsing price '{price_str}': {str(e)}")
         return None
 
     def parse_hourly_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:

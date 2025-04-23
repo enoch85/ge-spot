@@ -1,7 +1,7 @@
 """API handler for Nordpool."""
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from ..utils.api_client import ApiClient
 from ..const.sources import Source
@@ -13,53 +13,76 @@ from ..const.config import Config
 from .parsers.nordpool_parser import NordpoolPriceParser
 from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
+from .base.error_handler import ErrorHandler
+from .base.data_structure import create_standardized_price_data
 
 _LOGGER = logging.getLogger(__name__)
 
-BASE_URL = Network.URLs.NORDPOOL
-
 class NordpoolAPI(BasePriceAPI):
-    async def fetch_raw_data(self, area, session, **kwargs):
-        """Fetch raw, per-hour price data for Nordpool."""
-        client = ApiClient(session=session)
+    """API implementation for Nordpool."""
+    
+    def __init__(self, config: Optional[Dict[str, Any]] = None, session=None):
+        """Initialize the API.
+        
+        Args:
+            config: Configuration dictionary
+            session: Optional session for API requests
+        """
+        super().__init__(config, session)
+        self.error_handler = ErrorHandler(self.source_type)
+        self.parser = NordpoolPriceParser()
+    
+    def _get_source_type(self) -> str:
+        """Get the source type identifier.
+        
+        Returns:
+            Source type identifier
+        """
+        return Source.NORDPOOL
+    
+    def _get_base_url(self) -> str:
+        """Get the base URL for the API.
+        
+        Returns:
+            Base URL as string
+        """
+        return Network.URLs.NORDPOOL
+    
+    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
+        """Fetch raw price data for the given area.
+        
+        Args:
+            area: Area code
+            session: Optional session for API requests
+            **kwargs: Additional parameters
+            
+        Returns:
+            Raw data from API
+        """
+        client = ApiClient(session=session or self.session)
         try:
-            # Fetch raw data from Nordpool
-            raw_data = await _fetch_data(client, {}, area, kwargs.get('reference_time'))
-            if not raw_data:
-                return []
-            parser = NordpoolPriceParser()
-            parsed = parser.parse(raw_data)
-            # Standardize output: list of dicts with ISO datetime, price, currency, timezone
-            results = []
-            currency = parsed.get("currency", "EUR")
-            timezone_str = "Europe/Oslo"  # Could be improved with metadata
-            for hour_key, price in parsed.get("hourly_prices", {}).items():
-                # Try to parse hour_key as ISO, fallback to today with HH:00
-                try:
-                    if "T" in hour_key:
-                        dt = datetime.fromisoformat(hour_key.replace('Z', '+00:00'))
-                    else:
-                        # Assume today in Oslo time
-                        today = datetime.now(timezone.utc).astimezone().date()
-                        hour = int(hour_key.split(":")[0])
-                        dt = datetime.combine(today, datetime.min.time().replace(hour=hour))
-                    iso_dt = dt.isoformat()
-                except Exception:
-                    iso_dt = hour_key  # fallback
-                results.append({
-                    "datetime": iso_dt,
-                    "price": float(price),
-                    "currency": currency,
-                    "timezone": timezone_str,
-                    "source": Source.NORDPOOL
-                })
-            return results
+            # Run the fetch with retry logic
+            return await self.error_handler.run_with_retry(
+                self._fetch_data,
+                client=client,
+                area=area,
+                reference_time=kwargs.get('reference_time')
+            )
         finally:
-            await client.close()
-
-async def _fetch_data(client, config, area, reference_time):
-    """Fetch data from Nordpool."""
-    try:
+            if session is None:
+                await client.close()
+    
+    async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
+        """Fetch data from Nordpool.
+        
+        Args:
+            client: API client
+            area: Area code
+            reference_time: Optional reference time
+            
+        Returns:
+            Raw data from API
+        """
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
 
@@ -70,7 +93,6 @@ async def _fetch_data(client, config, area, reference_time):
 
         # Generate date ranges to try
         # For Nordpool, we need to handle today and tomorrow separately
-        # We'll use the date range utility to generate the ranges, but we'll process them differently
         date_ranges = generate_date_ranges(reference_time, Source.NORDPOOL)
 
         # Fetch today's data (first range is today to tomorrow)
@@ -84,7 +106,7 @@ async def _fetch_data(client, config, area, reference_time):
             "deliveryArea": delivery_area
         }
 
-        today_data = await client.fetch(BASE_URL, params=params_today)
+        today_data = await client.fetch(self.base_url, params=params_today)
 
         # Try to fetch tomorrow's data if it's after 13:00 CET (when typically available)
         tomorrow_data = None
@@ -108,13 +130,114 @@ async def _fetch_data(client, config, area, reference_time):
                 "deliveryArea": delivery_area
             }
 
-            tomorrow_data = await client.fetch(BASE_URL, params=params_tomorrow)
+            tomorrow_data = await client.fetch(self.base_url, params=params_tomorrow)
 
         return {
             "today": today_data,
             "tomorrow": tomorrow_data,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "api_timezone": "Europe/Oslo",  # Nordpool uses Central European Time
+            "source": Source.NORDPOOL,
+            "area": area,
+            "delivery_area": delivery_area
         }
-    except Exception as e:
-        _LOGGER.error(f"Error in _fetch_data for Nordpool: {str(e)}", exc_info=True)
-        return None
+    
+    async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse raw data into standardized format.
+        
+        Args:
+            raw_data: Raw data from API
+            
+        Returns:
+            Parsed data in standardized format
+        """
+        # Extract data
+        today_data = raw_data.get("today")
+        tomorrow_data = raw_data.get("tomorrow")
+        area = raw_data.get("area")
+        api_timezone = raw_data.get("api_timezone", "Europe/Oslo")
+        
+        # Parse data using the Nordpool parser
+        parsed_today = self.parser.parse(today_data) if today_data else {}
+        parsed_tomorrow = self.parser.parse(tomorrow_data) if tomorrow_data else {}
+        
+        # Merge hourly prices
+        hourly_prices = {}
+        hourly_prices.update(parsed_today.get("hourly_prices", {}))
+        hourly_prices.update(parsed_tomorrow.get("hourly_prices", {}))
+        
+        # Get current date and time
+        now = datetime.now(timezone.utc)
+        today = now.date()
+        tomorrow = today + timedelta(days=1)
+        
+        # Convert to market timezone (usually CET/CEST for Nordpool)
+        market_tz = timezone(timedelta(hours=1))  # CET/CEST
+        now_market = now.astimezone(market_tz)
+        
+        # Check if we should have tomorrow's prices available
+        expect_tomorrow = now_market.hour >= 13  # Tomorrow's prices typically published after 13:00 CET
+        
+        # Check for completeness of today's data
+        expected_hours = set(range(24))
+        found_today_hours = set()
+        found_tomorrow_hours = set()
+        
+        for hour_key in hourly_prices.keys():
+            try:
+                dt = None
+                if "T" in hour_key:
+                    # Format: 2023-01-01T12:00:00[+00:00]
+                    dt = datetime.fromisoformat(hour_key.replace("Z", "+00:00"))
+                elif ":" in hour_key:
+                    # Format: 12:00
+                    hour = int(hour_key.split(":")[0])
+                    dt = datetime.combine(today, datetime.min.time().replace(hour=hour))
+                
+                if dt:
+                    if dt.date() == today:
+                        found_today_hours.add(dt.hour)
+                    elif dt.date() == tomorrow:
+                        found_tomorrow_hours.add(dt.hour)
+            except (ValueError, TypeError):
+                continue
+        
+        # Check if we have complete data for today
+        today_complete = expected_hours.issubset(found_today_hours)
+        if not today_complete:
+            missing_hours = expected_hours - found_today_hours
+            _LOGGER.warning(
+                f"Incomplete data from Nordpool for area {area}: missing {len(missing_hours)} hours today "
+                f"({sorted(missing_hours)}). Found {len(found_today_hours)}/24 hours for today."
+            )
+        
+        # Check if we have tomorrow's data when expected
+        tomorrow_complete = False
+        if expect_tomorrow:
+            tomorrow_complete = expected_hours.issubset(found_tomorrow_hours)
+            if not tomorrow_complete:
+                missing_hours = expected_hours - found_tomorrow_hours
+                _LOGGER.warning(
+                    f"Incomplete tomorrow data from Nordpool for area {area}: missing {len(missing_hours)} hours "
+                    f"({sorted(missing_hours)}). Found {len(found_tomorrow_hours)}/24 hours for tomorrow."
+                )
+        else:
+            _LOGGER.debug(f"Not expecting tomorrow's prices yet (current market time: {now_market.hour:02d}:00, "
+                         f"cutoff is 13:00)")
+        
+        # Create standardized price data with validation
+        result = create_standardized_price_data(
+            source=Source.NORDPOOL,
+            area=area,
+            currency=Currency.EUR,  # Nordpool returns prices in EUR by default
+            hourly_prices=hourly_prices,
+            reference_time=now,
+            api_timezone=api_timezone,
+            raw_data=raw_data,
+            validate_complete=True,  # Enable validation to ensure we don't calculate stats for incomplete data
+            has_tomorrow_prices=expect_tomorrow and tomorrow_complete,
+            tomorrow_prices_expected=expect_tomorrow
+        )
+        
+        # Convert to dictionary
+        return result.to_dict()

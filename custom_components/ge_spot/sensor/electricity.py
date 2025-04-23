@@ -1,126 +1,154 @@
-"""Electricity price sensors setup and registration."""
+"""Electricity price data sensors for the GE-Spot integration."""
 import logging
-from typing import Any, Dict, List
+from datetime import datetime, timedelta
+import voluptuous as vol
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.const import ATTR_ATTRIBUTION
 
-from homeassistant.util import dt as dt_util
-
-from ..const import DOMAIN
+from ..const import DOMAIN, ATTRIBUTION
 from ..const.config import Config
-from ..const.sources import Source
-from ..const.attributes import Attributes
-from ..const.defaults import Defaults
-from ..const.currencies import CurrencyInfo
-from .base import BaseElectricityPriceSensor
+from ..utils.formatter import format_price, format_price_value, format_relative_price
+from ..coordinator import UnifiedPriceCoordinator
 from .price import (
     PriceValueSensor,
+    PriceStatisticSensor,
     ExtremaPriceSensor,
-    TomorrowExtremaPriceSensor,
-    TomorrowAveragePriceSensor,
+    PriceDifferenceSensor,
+    PricePercentSensor,
+    OffPeakPeakSensor
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Set up the electricity price sensors from config entries."""
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up sensors based on a config entry."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
-    area = config_entry.data.get(Config.AREA)
+    
+    # Get config options
+    config = dict(config_entry.data)
+    if config_entry.options:
+        config.update(config_entry.options)
 
-    # Get VAT from options first, then fallback to data
-    vat = config_entry.options.get(Config.VAT, config_entry.data.get(Config.VAT, 0))
-
-    # Determine currency based on area
-    currency = config_entry.data.get(Config.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(area))
-
-    # Get display unit setting from coordinator
-    display_unit = coordinator.display_unit
-
-    config_data = {
-        Attributes.AREA: area,
-        Attributes.VAT: vat,
-        Attributes.CURRENCY: currency,
-        Config.DISPLAY_UNIT: display_unit,
-    }
-
-    # Define sensor entities
-    entities = [
-        # Current price sensor
+    # Get VAT setting
+    vat = config.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
+    include_vat = config.get(Config.INCLUDE_VAT, False)
+    currency = config.get(Config.CURRENCY, coordinator.currency)
+    price_in_cents = config.get(Config.DISPLAY_UNIT) == "cents"
+    
+    # Create sensor entities
+    sensors = []
+    
+    # Current price sensor
+    sensors.append(
         PriceValueSensor(
-            coordinator,
-            config_data,
+            coordinator, 
+            f"{coordinator.area}_current_price",
+            "Current Price", 
             "current_price",
-            "Current Price",
-            lambda data: data.get("current_price"),
-            lambda data: {
-                "tomorrow_valid": data.get("tomorrow_valid", False),
-            }
-        ),
-
-        # Next hour price
-        PriceValueSensor(
-            coordinator,
-            config_data,
-            "next_hour_price",
-            "Next Hour Price",
-            lambda data: data.get("next_hour_price")
-        ),
-
-        # Day average
-        PriceValueSensor(
-            coordinator,
-            config_data,
-            "day_average_price",
-            "Day Average",
-            lambda data: data.get("today_stats", {}).get("average")
-        ),
-
-        # Today peak price (max)
-        ExtremaPriceSensor(
-            coordinator,
-            config_data,
-            "peak_price",
-            "Peak Price",
-            day_offset=0,
-            extrema_type="max"
-        ),
-
-        # Today off-peak price (min)
-        ExtremaPriceSensor(
-            coordinator,
-            config_data,
-            "off_peak_price",
-            "Off-Peak Price",
-            day_offset=0,
-            extrema_type="min"
-        ),
-
-        # Tomorrow average price
-        TomorrowAveragePriceSensor(
-            coordinator,
-            config_data,
-            "tomorrow_average_price",
-            "Tomorrow Average",
-            lambda data: data.get("tomorrow_stats", {}).get("average")
-        ),
-
-        # Tomorrow peak price (max)
-        TomorrowExtremaPriceSensor(
-            coordinator,
-            config_data,
-            "tomorrow_peak_price",
-            "Tomorrow Peak",
-            day_offset=1,
-            extrema_type="max"
-        ),
-
-        # Tomorrow off-peak price (min)
-        TomorrowExtremaPriceSensor(
-            coordinator,
-            config_data,
-            "tomorrow_off_peak_price",
-            "Tomorrow Off-Peak",
-            day_offset=1,
-            extrema_type="min"
+            include_vat,
+            vat,
+            price_in_cents
         )
-    ]
+    )
+    
+    # Next hour price sensor
+    sensors.append(
+        PriceValueSensor(
+            coordinator, 
+            f"{coordinator.area}_next_hour_price",
+            "Next Hour Price", 
+            "next_hour_price",
+            include_vat,
+            vat,
+            price_in_cents
+        )
+    )
+    
+    # Average price sensor
+    sensors.append(
+        PriceStatisticSensor(
+            coordinator, 
+            f"{coordinator.area}_average_price",
+            "Average Price", 
+            "average",
+            include_vat,
+            vat,
+            price_in_cents
+        )
+    )
+    
+    # Peak price sensor
+    sensors.append(
+        ExtremaPriceSensor(
+            coordinator, 
+            f"{coordinator.area}_peak_price",
+            "Peak Price", 
+            "max",
+            include_vat,
+            vat,
+            price_in_cents
+        )
+    )
+    
+    # Off-peak price sensor
+    sensors.append(
+        ExtremaPriceSensor(
+            coordinator, 
+            f"{coordinator.area}_off_peak_price",
+            "Off-Peak Price", 
+            "min",
+            include_vat,
+            vat,
+            price_in_cents
+        )
+    )
+    
+    # Off-peak/peak periods
+    sensors.append(
+        OffPeakPeakSensor(
+            coordinator,
+            f"{coordinator.area}_peak_offpeak_prices",
+            "Peak/Off-Peak Prices",
+            include_vat,
+            vat,
+            price_in_cents
+        )
+    )
+    
+    # Price difference (current vs average)
+    sensors.append(
+        PriceDifferenceSensor(
+            coordinator,
+            f"{coordinator.area}_price_difference",
+            "Price Difference",
+            "current_price",
+            "average",
+            include_vat,
+            vat,
+            price_in_cents
+        )
+    )
+    
+    # Price percentage (current vs average)
+    sensors.append(
+        PricePercentSensor(
+            coordinator,
+            f"{coordinator.area}_price_percentage",
+            "Price Percentage",
+            "current_price",
+            "average",
+            include_vat,
+            vat
+        )
+    )
 
-    async_add_entities(entities)
+    # Add all entities
+    async_add_entities(sensors, True)

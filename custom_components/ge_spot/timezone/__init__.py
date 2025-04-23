@@ -23,4 +23,7 @@ __all__ = [
     # Supporting functions
     "get_source_timezone",
     "get_timezone_object",
+
+    # New additions
+    "get_timezone_for_area",
 ]

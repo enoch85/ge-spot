@@ -39,11 +39,11 @@ def test_utils_imports() -> bool:
         # Import from custom_components.ge_spot.utils.validation
         from custom_components.ge_spot.utils.validation import validate_data, Schema, SchemaValidator, ValidationError
 
-        # Import from custom_components.ge_spot.utils.error
-        from custom_components.ge_spot.utils.error import retry_with_backoff, ErrorManager, with_error_handling
+        # Import from custom_components.ge_spot.api.base.error_handler
+        from custom_components.ge_spot.api.base.error_handler import retry_with_backoff, ErrorHandler, with_error_handling
 
-        # Import from custom_components.ge_spot.utils.fallback
-        from custom_components.ge_spot.utils.fallback import FallbackManager
+        # Import from custom_components.ge_spot.api.base.data_fetch
+        from custom_components.ge_spot.api.base.data_fetch import PriceDataFetcher as FallbackManager
 
         logger.debug("Utils imports successful")
         return True

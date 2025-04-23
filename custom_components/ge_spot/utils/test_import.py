@@ -8,24 +8,25 @@ import os
 import sys
 import logging
 from pathlib import Path
+from typing import List, Dict, Any
 
 _LOGGER = logging.getLogger(__name__)
 
 def test_utils_imports():
-    """Test function to verify utils imports are working correctly."""
+    """Test function to verify imports are working correctly."""
     try:
         # Test importing from utils.validation
         from .validation import validate_data, Schema, SchemaValidator, ValidationError
 
-        # Test importing from utils.error
-        from .error import retry_with_backoff, ErrorManager, with_error_handling
+        # Test importing from api.base.error_handler
+        from ..api.base.error_handler import retry_with_backoff, ErrorHandler, with_error_handling
 
-        # Test importing from utils.fallback
-        from .fallback import FallbackManager
+        # Test importing from api.base.data_fetch
+        from ..api.base.data_fetch import PriceDataFetcher
 
         return True
     except ImportError as e:
-        _LOGGER.error(f"Utils import error: {e}")
+        _LOGGER.error(f"Import error: {e}")
         return False
 
 def test_all_imports():
@@ -67,6 +68,60 @@ def test_all_imports():
             print(f"  - {error}")
 
     return error_count == 0
+
+def test_imports() -> Dict[str, bool]:
+    """Test importing component modules."""
+    results = {}
+
+    # Test importing from utils
+    try:
+        from ..utils import api_client, date_range
+        results["utils_core"] = True
+    except Exception as e:
+        _LOGGER.error(f"Error importing utils core: {e}")
+        results["utils_core"] = False
+
+    # Test importing from api.base.error_handler
+    try:
+        from ..api.base.error_handler import ErrorHandler, retry_with_backoff
+        results["api_base_error_handler"] = True
+    except Exception as e:
+        _LOGGER.error(f"Error importing api.base.error_handler: {e}")
+        results["api_base_error_handler"] = False
+
+    # Test importing from api.base.data_fetch
+    try:
+        from ..api.base.data_fetch import PriceDataFetcher
+        results["api_base_data_fetch"] = True
+    except Exception as e:
+        _LOGGER.error(f"Error importing api.base.data_fetch: {e}")
+        results["api_base_data_fetch"] = False
+
+    # Test importing utils.validation
+    try:
+        from ..utils.validation import data_validator
+        results["utils_validation"] = True
+    except Exception as e:
+        _LOGGER.error(f"Error importing utils.validation: {e}")
+        results["utils_validation"] = False
+
+    # Test importing timezone
+    try:
+        from ..timezone import TimezoneService
+        results["timezone"] = True
+    except Exception as e:
+        _LOGGER.error(f"Error importing timezone: {e}")
+        results["timezone"] = False
+
+    # Test importing price
+    try:
+        from ..price import ElectricityPriceAdapter
+        results["price"] = True
+    except Exception as e:
+        _LOGGER.error(f"Error importing price: {e}")
+        results["price"] = False
+
+    return results
 
 if __name__ == "__main__":
     # Configure logging

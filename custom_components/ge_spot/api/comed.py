@@ -1,7 +1,7 @@
 """API handler for ComEd Hourly Pricing."""
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import asyncio
 import json
 import re
@@ -14,125 +14,191 @@ from ..const.display import DisplayUnit
 from ..const.api import ComEd
 from .parsers.comed_parser import ComedParser
 from ..utils.date_range import generate_date_ranges
+from .base.base_price_api import BasePriceAPI
 
 _LOGGER = logging.getLogger(__name__)
 
-async def fetch_day_ahead_prices(source_type, config, area, currency, reference_time=None, hass=None, session=None):
-    """Fetch electricity prices using ComEd Hourly Pricing API (refactored: returns only raw, standardized data)."""
-    client = ApiClient(session=session)
-    try:
-        # Fetch raw data
-        raw_data = await _fetch_data(client, config, area, reference_time)
-        if not raw_data:
-            _LOGGER.warning(f"No data received from ComEd API for area {area}")
-            return None
+class ComedAPI(BasePriceAPI):
+    """API client for ComEd Hourly Pricing."""
 
-        # Use the parser to extract raw, standardized data
+    def _get_source_type(self) -> str:
+        """Get the source type identifier.
+        
+        Returns:
+            Source type identifier
+        """
+        return Source.COMED
+    
+    def _get_base_url(self) -> str:
+        """Get the base URL for the API.
+        
+        Returns:
+            Base URL as string
+        """
+        return ComEd.BASE_URL
+        
+    async def fetch_raw_data(self, area: str, reference_time: Optional[datetime] = None, session=None, **kwargs) -> List[Dict[str, Any]]:
+        """Fetch raw price data for the given area.
+        
+        Args:
+            area: Area code
+            reference_time: Optional reference time
+            session: Optional session for API requests
+            **kwargs: Additional parameters
+            
+        Returns:
+            List of standardized price data dictionaries
+        """
+        client = ApiClient(session=session or self.session)
+        try:
+            # Fetch raw data
+            raw_data = await self._fetch_data(client, area, reference_time)
+            if not raw_data:
+                _LOGGER.warning(f"No data received from ComEd API for area {area}")
+                return []
+                
+            return [raw_data]
+        finally:
+            if session is None and client:
+                await client.close()
+    
+    async def parse_raw_data(self, raw_data: Any) -> Dict[str, Any]:
+        """Parse raw data into standardized format.
+        
+        Args:
+            raw_data: Raw data from API
+            
+        Returns:
+            Parsed data in standardized format
+        """
+        if not raw_data or not isinstance(raw_data, list) or len(raw_data) == 0:
+            return {}
+            
+        data = raw_data[0]  # Get first item from list
+        
+        # Use the parser to extract standardized data
         parser = ComedParser()
-        parsed = parser.parse(raw_data)
-        metadata = parser.extract_metadata(raw_data)
+        parsed = parser.parse(data)
+        metadata = parser.extract_metadata(data)
 
-        # Build standardized raw result
+        # Build standardized result
         result = {
             "hourly_prices": parsed.get("hourly_prices", {}),  # keys: HH:00 or ISO, values: price in cents/kWh
             "currency": metadata.get("currency", "cents"),
             "timezone": metadata.get("timezone", "America/Chicago"),
-            "area": area,
-            "raw_data": raw_data,  # keep original for debugging/fallback
+            "area": metadata.get("area", "5minutefeed"),
+            "raw_data": data,  # keep original for debugging/fallback
             "source": Source.COMED,
             "metadata": metadata,
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
+        
         return result
-    except Exception as e:
-        _LOGGER.error(f"Error in ComEd fetch_day_ahead_prices: {e}", exc_info=True)
-        return None
-    finally:
-        if not session and client:
-            await client.close()
+    
+    def get_timezone_for_area(self, area: str) -> str:
+        """Get timezone for the area.
+        
+        Args:
+            area: Area code
+            
+        Returns:
+            Timezone string
+        """
+        return "America/Chicago"
+    
+    def get_parser_for_area(self, area: str) -> Any:
+        """Get parser for the area.
+        
+        Args:
+            area: Area code
+            
+        Returns:
+            Parser instance
+        """
+        return ComedParser()
 
-async def _fetch_data(client, config, area, reference_time):
-    """Fetch data from ComEd Hourly Pricing API."""
-    try:
-        # Map area to endpoint if it's a valid ComEd area
-        if area in ComEd.AREAS:
-            endpoint = area
-        else:
-            # Default to 5minutefeed if area is not recognized
-            _LOGGER.warning(f"Unrecognized ComEd area: {area}, defaulting to 5minutefeed")
-            endpoint = ComEd.FIVE_MINUTE_FEED
-
-        # Generate date ranges to try - ComEd uses 5-minute intervals
-        # Ensure reference_time is not None to avoid TypeError
-        current_time = reference_time if reference_time is not None else datetime.now(timezone.utc)
-        date_ranges = generate_date_ranges(current_time, Source.COMED)
-
-        # Try each date range until we get a valid response
-        for start_date, end_date in date_ranges:
-            url = f"{ComEd.BASE_URL}?type={endpoint}"
-
-            # ComEd API doesn't use date parameters in the URL, but we log the date range for debugging
-            _LOGGER.debug(f"Fetching ComEd data from URL: {url} for date range: {start_date.isoformat()} to {end_date.isoformat()}")
-
-            response = None
-            try:
-                async with asyncio.timeout(60):
-                    response = await client.fetch(url)
-            except TimeoutError:
-                _LOGGER.error("Timeout fetching ComEd data")
-                continue  # Try next date range
-            except Exception as e:
-                _LOGGER.error(f"Error fetching ComEd data: {e}")
-                continue  # Try next date range
-
-            if not response:
-                _LOGGER.warning(f"Empty response from ComEd API for date range: {start_date.isoformat()} to {end_date.isoformat()}")
-                continue  # Try next date range
-
-            # If we got a valid response, process it
-            if response:
-                break
-
-        # If we've tried all date ranges and still have no data, return None
-        if not response:
-            _LOGGER.warning("No valid data found from ComEd after trying multiple date ranges")
-            return None
-
-        # Check if response is valid
-        if isinstance(response, dict) and "error" in response:
-            _LOGGER.error(f"Error response from ComEd API: {response.get('message', 'Unknown error')}")
-            return None
-
-        # Check if response is valid JSON
+    async def _fetch_data(self, client, area, reference_time):
+        """Fetch data from ComEd Hourly Pricing API."""
         try:
-            # If response is already a string, try to parse it as JSON
-            if isinstance(response, str):
-                # First try standard JSON parsing
-                json.loads(response)
-            # If response is already parsed JSON (dict or list), no need to parse
-        except json.JSONDecodeError:
-            # If that fails, try to fix the malformed JSON
-            try:
-                # Add missing commas between properties
-                fixed_json = re.sub(r'""', '","', response)
-                # Fix array brackets if needed
-                if not fixed_json.startswith('['):
-                    fixed_json = '[' + fixed_json
-                if not fixed_json.endswith(']'):
-                    fixed_json = fixed_json + ']'
-                json.loads(fixed_json)
-                _LOGGER.debug("Successfully fixed malformed JSON from ComEd API")
-                # Replace the response with the fixed JSON
-                response = fixed_json
-            except (json.JSONDecodeError, ValueError) as e:
-                _LOGGER.error(f"Invalid JSON response from ComEd API: {e}")
+            # Map area to endpoint if it's a valid ComEd area
+            if area in ComEd.AREAS:
+                endpoint = area
+            else:
+                # Default to 5minutefeed if area is not recognized
+                _LOGGER.warning(f"Unrecognized ComEd area: {area}, defaulting to 5minutefeed")
+                endpoint = ComEd.FIVE_MINUTE_FEED
+
+            # Generate date ranges to try - ComEd uses 5-minute intervals
+            # Ensure reference_time is not None to avoid TypeError
+            current_time = reference_time if reference_time is not None else datetime.now(timezone.utc)
+            date_ranges = generate_date_ranges(current_time, Source.COMED)
+
+            # Try each date range until we get a valid response
+            for start_date, end_date in date_ranges:
+                url = f"{ComEd.BASE_URL}?type={endpoint}"
+
+                # ComEd API doesn't use date parameters in the URL, but we log the date range for debugging
+                _LOGGER.debug(f"Fetching ComEd data from URL: {url} for date range: {start_date.isoformat()} to {end_date.isoformat()}")
+
+                response = None
+                try:
+                    async with asyncio.timeout(60):
+                        response = await client.fetch(url)
+                except TimeoutError:
+                    _LOGGER.error("Timeout fetching ComEd data")
+                    continue  # Try next date range
+                except Exception as e:
+                    _LOGGER.error(f"Error fetching ComEd data: {e}")
+                    continue  # Try next date range
+
+                if not response:
+                    _LOGGER.warning(f"Empty response from ComEd API for date range: {start_date.isoformat()} to {end_date.isoformat()}")
+                    continue  # Try next date range
+
+                # If we got a valid response, process it
+                if response:
+                    break
+
+            # If we've tried all date ranges and still have no data, return None
+            if not response:
+                _LOGGER.warning("No valid data found from ComEd after trying multiple date ranges")
                 return None
 
-        return {
-            "raw_data": response,
-            "endpoint": endpoint,
-            "url": url
-        }
-    except Exception as e:
-        _LOGGER.error(f"Failed to fetch data from ComEd API: {e}", exc_info=True)
-        return None
+            # Check if response is valid
+            if isinstance(response, dict) and "error" in response:
+                _LOGGER.error(f"Error response from ComEd API: {response.get('message', 'Unknown error')}")
+                return None
+
+            # Check if response is valid JSON
+            try:
+                # If response is already a string, try to parse it as JSON
+                if isinstance(response, str):
+                    # First try standard JSON parsing
+                    json.loads(response)
+                # If response is already parsed JSON (dict or list), no need to parse
+            except json.JSONDecodeError:
+                # If that fails, try to fix the malformed JSON
+                try:
+                    # Add missing commas between properties
+                    fixed_json = re.sub(r'""', '","', response)
+                    # Fix array brackets if needed
+                    if not fixed_json.startswith('['):
+                        fixed_json = '[' + fixed_json
+                    if not fixed_json.endswith(']'):
+                        fixed_json = fixed_json + ']'
+                    json.loads(fixed_json)
+                    _LOGGER.debug("Successfully fixed malformed JSON from ComEd API")
+                    # Replace the response with the fixed JSON
+                    response = fixed_json
+                except (json.JSONDecodeError, ValueError) as e:
+                    _LOGGER.error(f"Invalid JSON response from ComEd API: {e}")
+                    return None
+
+            return {
+                "raw_data": response,
+                "endpoint": endpoint,
+                "url": url
+            }
+        except Exception as e:
+            _LOGGER.error(f"Failed to fetch data from ComEd API: {e}", exc_info=True)
+            return None

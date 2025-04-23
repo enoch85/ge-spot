@@ -1,6 +1,8 @@
-"""Coordinators for data updates."""
-from .region import RegionPriceCoordinator
+"""GE-Spot coordinator module."""
+
+from .unified_price_manager import UnifiedPriceCoordinator, UnifiedPriceManager
 
 __all__ = [
-    "RegionPriceCoordinator",
+    "UnifiedPriceCoordinator",
+    "UnifiedPriceManager"
 ]

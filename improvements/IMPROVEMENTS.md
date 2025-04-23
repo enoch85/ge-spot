@@ -22,12 +22,18 @@ The code has been organized into logical packages:
   - `api/parsers/`: Dedicated parsers for each API source
   - `api/base/`: Base classes for API functionality
 - `utils/`: Utility functions and classes
-  - `utils/error/`: Error handling and recovery
-  - `utils/fallback/`: Fallback mechanisms
   - `utils/validation/`: Data validation
 - `timezone/`: Timezone handling and conversion
-- `price/`: Price data processing and conversion
+- `coordinator/`: Data coordination and management
 - `const/`: Constants and configuration
+
+### Compatibility Layer Removal
+
+Backward compatibility layers have been removed to improve code clarity and reduce redundancy:
+
+- Removed `utils/error/` in favor of `api/base/error_handler.py`
+- Removed `utils/fallback/` in favor of `api/base/data_fetch.py`
+- Removed `utils/data_fetcher.py` in favor of direct usage of `PriceDataFetcher` from `api/base/data_fetch.py`
 
 ## Reliability Improvements
 

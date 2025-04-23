@@ -3,10 +3,11 @@ import logging
 import json
 import csv
 from io import StringIO
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List, Tuple
 
 from ...const.sources import Source
+from ...const.currencies import Currency
 from ...timezone.timezone_utils import normalize_hour_value
 from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
@@ -16,61 +17,56 @@ _LOGGER = logging.getLogger(__name__)
 class AemoParser(BasePriceParser):
     """Parser for AEMO API responses."""
 
-    def __init__(self):
+    def __init__(self, timezone_service=None):
         """Initialize the parser."""
-        super().__init__(Source.AEMO)
+        super().__init__(Source.AEMO, timezone_service)
 
-    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(self, raw_data: Any) -> Dict[str, Any]:
         """Parse AEMO API response.
 
         Args:
-            data: Raw API response data
+            raw_data: Raw API response data
 
         Returns:
             Parsed data with hourly prices
         """
-        # Validate data
-        data = validate_data(data, self.source)
-
         result = {
             "hourly_prices": {},
-            "currency": data.get("currency", "AUD"),
-            "source": self.source
+            "currency": Currency.AUD,
         }
 
-        # If hourly prices were already processed
-        if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
-            result["hourly_prices"] = data["hourly_prices"]
-        elif "raw_data" in data and isinstance(data["raw_data"], str):
-            # Try to parse raw data
+        # Check for valid data
+        if not raw_data:
+            _LOGGER.warning("Empty AEMO data received")
+            return result
+
+        # If raw_data is a string (CSV or JSON), parse it
+        if isinstance(raw_data, str):
             try:
-                # Try JSON format
-                json_data = json.loads(data["raw_data"])
+                # Try JSON format first
+                json_data = json.loads(raw_data)
                 self._parse_json(json_data, result)
             except json.JSONDecodeError:
                 # Try CSV format
                 try:
-                    self._parse_csv(data["raw_data"], result)
+                    self._parse_csv(raw_data, result)
                 except Exception as e:
-                    _LOGGER.warning(f"Failed to parse AEMO CSV: {e}")
-
-        # Add current and next hour prices if available
-        if "current_price" in data:
-            result["current_price"] = data["current_price"]
-
-        if "next_hour_price" in data:
-            result["next_hour_price"] = data["next_hour_price"]
+                    _LOGGER.warning(f"Failed to parse AEMO data as CSV: {e}")
+        # If raw_data is a dictionary, extract data directly
+        elif isinstance(raw_data, dict):
+            # If hourly prices were already processed
+            if "hourly_prices" in raw_data and isinstance(raw_data["hourly_prices"], dict):
+                result["hourly_prices"] = raw_data["hourly_prices"]
+            elif "raw_data" in raw_data:
+                # Try to parse raw_data entry
+                self._parse_json(raw_data, result)
 
         # Calculate current and next hour prices if not provided
-        if "current_price" not in result:
+        if not result.get("current_price"):
             result["current_price"] = self._get_current_price(result["hourly_prices"])
-
-        if "next_hour_price" not in result:
+        
+        if not result.get("next_hour_price"):
             result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
-
-        # Calculate day average if enough prices
-        if len(result["hourly_prices"]) >= 12:
-            result["day_average_price"] = self._calculate_day_average(result["hourly_prices"])
 
         return result
 
@@ -83,86 +79,106 @@ class AemoParser(BasePriceParser):
         Returns:
             Metadata dictionary
         """
-        metadata = {
-            "currency": "AUD",  # Default currency for AEMO
-            "data_sources": []
-        }
+        metadata = super().extract_metadata(data)
+        metadata.update({
+            "currency": Currency.AUD,  # Default currency for AEMO
+            "timezone": "Australia/Sydney",
+            "area": "NSW1",  # Default area
+        })
 
-        # Check if we're using the consolidated endpoint
+        # Extract additional metadata
         if isinstance(data, dict):
-            # Check if this is the new consolidated format
+            # Check for area information
+            if "area" in data:
+                metadata["area"] = data["area"]
+            
+            # Check for additional fields
             from ...const.api import Aemo
-
             if Aemo.SUMMARY_ARRAY in data:
-                metadata["data_sources"].append("current")
-
-                # Add price details
-                price_details = {
-                    "current": {
-                        "source": Aemo.SUMMARY_ARRAY
-                    }
-                }
-
-                # Add price details for the prices array if available
-                if Aemo.PRICES_ARRAY in data:
-                    price_details["prices"] = {
-                        "source": Aemo.PRICES_ARRAY
-                    }
-
-                metadata["price_details"] = price_details
-
-            # Legacy format handling (for backward compatibility)
-            else:
-                # Check which data sources are available in legacy format
-                if "current" in data and data["current"]:
-                    metadata["data_sources"].append("current")
-
-                if "historical" in data and data["historical"]:
-                    metadata["data_sources"].append("historical")
-
-                if "forecast" in data and data["forecast"]:
-                    metadata["data_sources"].append("forecast")
-
-                # Add price details if available
-                price_details = {}
-
-                # Try to extract price details from current data
-                if "current" in data and data["current"] and isinstance(data["current"], str):
-                    try:
-                        current_json = json.loads(data["current"])
-                        if "ELEC_NEM_SUMMARY" in current_json:
-                            price_details["current"] = {
-                                "timestamp": current_json.get("timestamp"),
-                                "source": "ELEC_NEM_SUMMARY"
-                            }
-                    except (json.JSONDecodeError, TypeError, KeyError):
-                        pass
-
-                # Try to extract price details from historical data
-                if "historical" in data and data["historical"] and isinstance(data["historical"], str):
-                    try:
-                        price_details["historical"] = {
-                            "source": "DAILY_PRICE"
-                        }
-                    except (TypeError, KeyError):
-                        pass
-
-                # Try to extract price details from forecast data
-                if "forecast" in data and data["forecast"] and isinstance(data["forecast"], str):
-                    try:
-                        forecast_json = json.loads(data["forecast"])
-                        if "PREDISPATCH_PRICE" in forecast_json:
-                            price_details["forecast"] = {
-                                "timestamp": forecast_json.get("timestamp"),
-                                "source": "PREDISPATCH_PRICE"
-                            }
-                    except (json.JSONDecodeError, TypeError, KeyError):
-                        pass
-
-                if price_details:
-                    metadata["price_details"] = price_details
+                metadata["data_source"] = "ELEC_NEM_SUMMARY"
+                
+                # Look for region information in the first entry
+                if data[Aemo.SUMMARY_ARRAY] and isinstance(data[Aemo.SUMMARY_ARRAY], list):
+                    first_entry = data[Aemo.SUMMARY_ARRAY][0]
+                    if Aemo.REGION_FIELD in first_entry:
+                        metadata["area"] = first_entry[Aemo.REGION_FIELD]
 
         return metadata
+
+    def _parse_json(self, json_data: Dict[str, Any], result: Dict[str, Any]) -> None:
+        """Parse JSON formatted data from AEMO.
+
+        Args:
+            json_data: JSON data
+            result: Result dictionary to update
+        """
+        # Check if we're using the consolidated endpoint
+        from ...const.api import Aemo
+        hourly_prices = {}
+
+        if Aemo.SUMMARY_ARRAY in json_data:
+            # Process data from the main summary array
+            for entry in json_data[Aemo.SUMMARY_ARRAY]:
+                if Aemo.PRICE_FIELD in entry and Aemo.SETTLEMENT_DATE_FIELD in entry:
+                    try:
+                        # Parse timestamp
+                        timestamp_str = entry[Aemo.SETTLEMENT_DATE_FIELD]
+                        try:
+                            # AEMO timestamps are typically in ISO format
+                            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                            # Format as hour key 
+                            hour_key = dt.isoformat()
+                            
+                            # Parse price
+                            price = float(entry[Aemo.PRICE_FIELD])
+                            hourly_prices[hour_key] = price
+                        except (ValueError, TypeError):
+                            _LOGGER.debug(f"Failed to parse AEMO timestamp: {timestamp_str}")
+                    except (KeyError, TypeError):
+                        continue
+
+        # Update result with parsed hourly prices
+        result["hourly_prices"].update(hourly_prices)
+
+    def _parse_csv(self, csv_data: str, result: Dict[str, Any]) -> None:
+        """Parse CSV formatted data from AEMO.
+
+        Args:
+            csv_data: CSV data
+            result: Result dictionary to update
+        """
+        hourly_prices = {}
+        
+        try:
+            # Read CSV data
+            csv_file = StringIO(csv_data)
+            csv_reader = csv.DictReader(csv_file)
+            
+            # Parse rows
+            for row in csv_reader:
+                # Check for required fields
+                if "SETTLEMENTDATE" in row and "RRP" in row and "REGIONID" in row:
+                    try:
+                        # Parse timestamp
+                        timestamp_str = row["SETTLEMENTDATE"]
+                        try:
+                            # AEMO CSV timestamps are typically in ISO format
+                            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                            # Format as hour key
+                            hour_key = dt.isoformat()
+                            
+                            # Parse price
+                            price = float(row["RRP"])
+                            hourly_prices[hour_key] = price
+                        except (ValueError, TypeError):
+                            _LOGGER.debug(f"Failed to parse AEMO CSV timestamp: {timestamp_str}")
+                    except (KeyError, TypeError):
+                        continue
+        except Exception as e:
+            _LOGGER.warning(f"Error parsing AEMO CSV data: {e}")
+        
+        # Update result with parsed hourly prices
+        result["hourly_prices"].update(hourly_prices)
 
     def parse_hourly_prices(self, data: Any, area: str) -> Dict[str, float]:
         """Parse hourly prices from AEMO API response.
@@ -410,94 +426,6 @@ class AemoParser(BasePriceParser):
                                 hourly_prices[hour_key] = price
                     except (ValueError, TypeError) as e:
                         _LOGGER.warning(f"Failed to parse AEMO forecast price: {e}")
-
-    def _parse_json(self, json_data: Dict[str, Any], result: Dict[str, Any]) -> None:
-        """Parse AEMO JSON response.
-
-        Args:
-            json_data: JSON data
-            result: Result dictionary to update
-        """
-        # AEMO API can return data in different formats
-        # Try to handle common formats
-
-        # Format 1: Data in "data" field with "SETTLEMENTDATE" and "RRP" fields
-        if "data" in json_data and isinstance(json_data["data"], list):
-            for item in json_data["data"]:
-                if "SETTLEMENTDATE" in item and "RRP" in item:
-                    try:
-                        # Parse timestamp
-                        timestamp = self._parse_timestamp(item["SETTLEMENTDATE"])
-                        if timestamp:
-                            # Format as ISO string for the hour
-                            hour_key = timestamp.strftime("%Y-%m-%dT%H:00:00")
-
-                            # Parse price
-                            price = float(item["RRP"])
-
-                            # Add to hourly prices
-                            result["hourly_prices"][hour_key] = price
-                    except (ValueError, TypeError) as e:
-                        _LOGGER.warning(f"Failed to parse AEMO data item: {e}")
-
-        # Format 2: Data in "price_data" field with "timestamp" and "price" fields
-        elif "price_data" in json_data and isinstance(json_data["price_data"], list):
-            for item in json_data["price_data"]:
-                if "timestamp" in item and "price" in item:
-                    try:
-                        # Parse timestamp
-                        timestamp = self._parse_timestamp(item["timestamp"])
-                        if timestamp:
-                            # Format as ISO string for the hour
-                            hour_key = timestamp.strftime("%Y-%m-%dT%H:00:00")
-
-                            # Parse price
-                            price = float(item["price"])
-
-                            # Add to hourly prices
-                            result["hourly_prices"][hour_key] = price
-                    except (ValueError, TypeError) as e:
-                        _LOGGER.warning(f"Failed to parse AEMO price data item: {e}")
-
-    def _parse_csv(self, csv_data: str, result: Dict[str, Any]) -> None:
-        """Parse AEMO CSV response.
-
-        Args:
-            csv_data: CSV data
-            result: Result dictionary to update
-        """
-        # Try to parse CSV
-        csv_reader = csv.DictReader(StringIO(csv_data))
-
-        # Look for common field names
-        timestamp_fields = ["SETTLEMENTDATE", "INTERVAL_DATETIME", "Time", "Timestamp"]
-        price_fields = ["RRP", "PRICE", "Price", "Value"]
-
-        for row in csv_reader:
-            # Find timestamp field
-            timestamp_field = next((f for f in timestamp_fields if f in row), None)
-            if not timestamp_field:
-                continue
-
-            # Find price field
-            price_field = next((f for f in price_fields if f in row), None)
-            if not price_field:
-                continue
-
-            try:
-                # Parse timestamp
-                timestamp = self._parse_timestamp(row[timestamp_field])
-                if timestamp:
-                    # Format as ISO string for the hour
-                    hour_key = timestamp.strftime("%Y-%m-%dT%H:00:00")
-
-                    # Parse price
-                    price = float(row[price_field])
-
-                    # Add to hourly prices
-                    result["hourly_prices"][hour_key] = price
-            except (ValueError, TypeError) as e:
-                _LOGGER.warning(f"Failed to parse AEMO CSV row: {e}")
 
     def _parse_timestamp(self, timestamp_str: str) -> Optional[datetime]:
         """Parse timestamp from AEMO format.

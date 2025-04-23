@@ -15,13 +15,16 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 from .const.config import Config
 from .const.defaults import Defaults
 from .const.network import Network
-from .price.currency import get_default_currency
-from .coordinator.region import RegionPriceCoordinator
+from .utils.currency_service import get_default_currency
+from .coordinator import UnifiedPriceCoordinator  # Import only the new coordinator
 from .api.base.session_manager import register_shutdown_task
 from .utils.exchange_service import get_exchange_service
 
 PLATFORMS = [Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)
+
+# Use feature flag to enable new coordinator
+USE_UNIFIED_COORDINATOR = True
 
 async def async_setup(hass: HomeAssistant, config):  # pylint: disable=unused-argument
     """Set up the GE-Spot component."""
@@ -51,9 +54,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # based on the source-specific intervals defined in SourceIntervals
     update_interval = Defaults.UPDATE_INTERVAL
 
-    coordinator = RegionPriceCoordinator(
+    # Always use UnifiedPriceCoordinator - remove legacy coordinator completely
+    _LOGGER.info(f"Using UnifiedPriceCoordinator for area {area}")
+    coordinator = UnifiedPriceCoordinator(
         hass, area, currency, timedelta(minutes=update_interval), config
     )
+    
     register_shutdown_task(hass)
     await coordinator.async_config_entry_first_refresh()
 

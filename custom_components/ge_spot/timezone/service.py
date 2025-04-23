@@ -1,7 +1,7 @@
 """Main timezone service coordinating all timezone operations."""
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any, Optional, List
 
 from homeassistant.util import dt as dt_util
 from homeassistant.core import HomeAssistant
@@ -198,3 +198,42 @@ class TimezoneService:
     def is_dst_transition_day(self, dt=None):
         """Check if today is a DST transition day."""
         return self.dst_handler.is_dst_transition_day(dt)
+
+    def get_next_hour_key(self) -> str:
+        """Get key for the next hour in target timezone.
+        
+        Returns:
+            String key in format HH:00
+        """
+        # Delegate to hour calculator for consistent handling
+        now = dt_util.now()
+        next_hour = now + timedelta(hours=1)
+        
+        # Use the hour calculator for consistent timezone handling based on timezone_reference
+        return self.hour_calculator.get_hour_key_for_datetime(next_hour)
+    
+    def get_today_range(self) -> List[str]:
+        """Get list of hour keys for today.
+        
+        Returns:
+            List of hour keys in format HH:00
+        """
+        # Figure out which timezone to use based on timezone_reference
+        target_timezone = self.ha_timezone
+        if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
+            target_timezone = self.area_timezone
+        
+        # Get current time in the target timezone
+        now = dt_util.now().astimezone(target_timezone)
+        
+        # Create a list of hour keys for the whole day
+        return [f"{hour:02d}:00" for hour in range(24)]
+    
+    def get_tomorrow_range(self) -> List[str]:
+        """Get list of hour keys for tomorrow.
+        
+        Returns:
+            List of hour keys in format HH:00
+        """
+        # Same as today but represents tomorrow's hours
+        return [f"{hour:02d}:00" for hour in range(24)]

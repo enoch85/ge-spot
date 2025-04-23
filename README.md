@@ -190,7 +190,7 @@ flowchart TD
     
     subgraph ErrorHandling["Error Handling"]
         Retry["Exponential Backoff Retry"]
-        SourceHealth["Source Health Tracking"]
+        PriceDataFetcher["Source Health Tracking"]
         FallbackChain["Fallback Chain"]
     end
     

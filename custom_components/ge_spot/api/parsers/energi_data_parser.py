@@ -1,9 +1,11 @@
 """Parser for Energi Data Service API responses."""
 import logging
-from datetime import datetime
-from typing import Dict, Any, Optional
+import json
+from datetime import datetime, timezone, timedelta
+from typing import Dict, Any, Optional, List
 
 from ...const.sources import Source
+from ...const.currencies import Currency
 from ...utils.validation import validate_data
 from ...timezone.timezone_utils import normalize_hour_value
 from ..base.price_parser import BasePriceParser
@@ -11,31 +13,65 @@ from ..base.price_parser import BasePriceParser
 _LOGGER = logging.getLogger(__name__)
 
 class EnergiDataParser(BasePriceParser):
-    """Parser for Energi Data Service API responses (refactored: returns only raw, unprocessed data)."""
+    """Parser for Energi Data Service API responses."""
 
-    def __init__(self):
-        super().__init__(Source.ENERGI_DATA_SERVICE)
+    def __init__(self, timezone_service=None):
+        """Initialize the parser."""
+        super().__init__(Source.ENERGI_DATA_SERVICE, timezone_service)
 
-    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse Energi Data Service API response to raw hourly prices (ISO hour -> price)."""
-        data = validate_data(data, self.source)
-        result = {"hourly_prices": {}, "currency": data.get("currency", "DKK"), "source": self.source}
-        if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
-            result["hourly_prices"] = data["hourly_prices"]
-        elif "records" in data and isinstance(data["records"], list):
-            for record in data["records"]:
+    def parse(self, raw_data: Any) -> Dict[str, Any]:
+        """Parse Energi Data Service API response.
+
+        Args:
+            raw_data: Raw API response data
+
+        Returns:
+            Parsed data with hourly prices
+        """
+        result = {
+            "hourly_prices": {},
+            "currency": Currency.DKK
+        }
+
+        # Check for valid data
+        if not raw_data:
+            _LOGGER.warning("Empty Energi Data Service data received")
+            return result
+
+        # Extract records from response
+        records = None
+        if isinstance(raw_data, dict) and "records" in raw_data:
+            records = raw_data["records"]
+        
+        if not records or not isinstance(records, list):
+            _LOGGER.warning("No valid records found in Energi Data Service data")
+            return result
+
+        # Parse hourly prices from records
+        for record in records:
+            try:
+                # Extract timestamp and price
                 if "HourDK" in record and "SpotPriceDKK" in record:
-                    try:
-                        timestamp = self._parse_timestamp(record["HourDK"])
-                        if timestamp:
-                            hour_key = timestamp.strftime("%Y-%m-%dT%H:00:00")
-                            price = float(record["SpotPriceDKK"])
-                            result["hourly_prices"][hour_key] = price
-                    except (ValueError, TypeError) as e:
-                        _LOGGER.warning(f"Failed to parse record: {e}")
+                    # Parse timestamp
+                    timestamp_str = record["HourDK"]
+                    dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    hour_key = dt.isoformat()
+                    
+                    # Parse price
+                    price = float(record["SpotPriceDKK"])
+                    
+                    # Add to hourly prices
+                    result["hourly_prices"][hour_key] = price
+            except (ValueError, TypeError) as e:
+                _LOGGER.debug(f"Failed to parse Energi Data Service record: {e}")
+
+        # Calculate current and next hour prices
+        result["current_price"] = self._get_current_price(result["hourly_prices"])
+        result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
+
         return result
 
-    def extract_metadata(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_metadata(self, data: Any) -> Dict[str, Any]:
         """Extract metadata from Energi Data Service API response.
 
         Args:
@@ -44,27 +80,26 @@ class EnergiDataParser(BasePriceParser):
         Returns:
             Metadata dictionary
         """
-        metadata = {
-            "currency": "DKK",  # Default currency for Energi Data Service
-            "has_eur_prices": False
-        }
+        metadata = super().extract_metadata(data)
+        metadata.update({
+            "currency": Currency.DKK,  # Default currency for Energi Data Service
+            "timezone": "Europe/Copenhagen",
+            "area": "DK1",  # Default area
+        })
 
-        # Check if we have records
-        if "records" in data and isinstance(data["records"], list) and data["records"]:
-            # Get first record for metadata
-            first_record = data["records"][0]
-
-            # Check for area
-            if "PriceArea" in first_record:
-                metadata["area"] = first_record["PriceArea"]
-
-            # Check for dataset info
-            if "dataset" in data:
-                metadata["dataset"] = data["dataset"]
-
-            # Check if EUR prices are available
-            if "SpotPriceEUR" in first_record:
-                metadata["has_eur_prices"] = True
+        # Extract additional metadata
+        if isinstance(data, dict):
+            # Check for area information
+            if "area" in data:
+                metadata["area"] = data["area"]
+            
+            # Check for records information
+            if "records" in data and isinstance(data["records"], list):
+                metadata["record_count"] = len(data["records"])
+                
+                # Extract area from the first record if available
+                if data["records"] and "PriceArea" in data["records"][0]:
+                    metadata["area"] = data["records"][0]["PriceArea"]
 
         return metadata
 
