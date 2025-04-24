@@ -180,8 +180,8 @@ class ExchangeRateService:
         rates = await self.get_rates()
 
         # Handle same currency early
-        if from_currency == to_currency:
-            return amount
+        # Removed redundant check: if from_currency == to_currency:
+        #     return amount
 
         # Special handling for cents currency
         if from_currency == Currency.CENTS and to_currency == Currency.USD:
