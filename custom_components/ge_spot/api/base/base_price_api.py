@@ -73,7 +73,7 @@ class BasePriceAPI(ABC):
         """
         pass
     
-    async def fetch_day_ahead_prices(self, area=None):
+    async def fetch_day_ahead_prices(self, area=None, **kwargs): # Add **kwargs
         try:
             if not self.timezone_service:
                 raise ValueError("timezone_service is not initialized")
@@ -84,8 +84,11 @@ class BasePriceAPI(ABC):
             # Get source timezone for this area
             source_timezone = self.get_timezone_for_area(area)
             
-            # Fetch raw data
-            raw_data = await self.fetch_raw_data(area, reference_time, **kwargs)
+            # Get reference_time from kwargs
+            reference_time = kwargs.get('reference_time')
+
+            # Fetch raw data - pass session and kwargs down
+            raw_data = await self.fetch_raw_data(area, session=kwargs.get('session'), reference_time=reference_time, **kwargs)
             if not raw_data:
                 _LOGGER.warning(f"{self.source_type}: No data returned for area {area}")
                 return {}
@@ -126,10 +129,12 @@ class BasePriceAPI(ABC):
         except Exception as e:
             _LOGGER.error(f"Error in fetch_day_ahead_prices for {self.source_type}: {str(e)}", exc_info=True)
             # Return a structured empty dict on error
+            # Get currency from kwargs for the error case too
+            currency = kwargs.get("currency", "EUR") 
             return {
                 "source": self.source_type,
                 "area": area,
-                "currency": currency,
+                "currency": currency, # Use currency from kwargs
                 "hourly_prices": {},
                 "error": str(e)
             }

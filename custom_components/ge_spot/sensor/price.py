@@ -10,7 +10,7 @@ from .base import BaseElectricityPriceSensor
 
 _LOGGER = logging.getLogger(__name__)
 
-class PriceValueSensor(BaseSensor):
+class PriceValueSensor(BaseElectricityPriceSensor):
     """Representation of a GE Spot price sensor."""
 
     def __init__(

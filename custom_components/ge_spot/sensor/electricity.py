@@ -40,11 +40,14 @@ async def async_setup_entry(
     
     entities = []
     
+    # Get configuration settings from options flow
+    options = config_entry.options
+    
     # Get VAT setting
-    vat = config.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
-    include_vat = config.get(Config.INCLUDE_VAT, False)
-    currency = config.get(Config.CURRENCY, coordinator.currency)
-    price_in_cents = config.get(Config.DISPLAY_UNIT) == "cents"
+    vat = options.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
+    include_vat = options.get(Config.INCLUDE_VAT, False)
+    currency = options.get(Config.CURRENCY, coordinator.currency)
+    price_in_cents = options.get(Config.DISPLAY_UNIT) == "cents"
     
     # Create sensor entities
     
