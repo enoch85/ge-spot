@@ -13,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 class PriceValueSensor(BaseElectricityPriceSensor):
     """Generic sensor for price values with flexible data extraction."""
 
-    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value_fn, additional_attrs=None):
+    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value_fn, additional_attrs=None, *args, **kwargs):
         """Initialize the price value sensor."""
         super().__init__(coordinator, config_data, sensor_type, name_suffix)
         self._value_fn = value_fn

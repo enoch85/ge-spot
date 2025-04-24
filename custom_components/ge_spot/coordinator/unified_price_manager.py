@@ -78,7 +78,8 @@ class UnifiedPriceManager:
             self._tz_service,
             self._exchange_service
         )
-        self._rate_limiter = RateLimiter(f"unified_price_manager_{area}")
+        # Store rate limiter context information instead of creating an instance
+        self._rate_limiter_context = f"unified_price_manager_{area}"
         
         # API request tracking
         self._last_api_fetch = None

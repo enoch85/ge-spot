@@ -37,6 +37,7 @@ class EntsoeAPI(BasePriceAPI):
         super().__init__(config, session)
         self.error_handler = ErrorHandler(self.source_type)
         self.parser = EntsoeParser()
+        self.timezone_service = None  # Initialize timezone_service
     
     def _get_source_type(self) -> str:
         """Get the source type identifier.
