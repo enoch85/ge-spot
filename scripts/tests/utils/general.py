@@ -80,7 +80,7 @@ def _get_api_key(key_name: str, is_required: bool, is_secret: bool = False) -> s
     Returns:
         The API key value or an empty string if not available
     """
-    global _ASKED_KEYS
+    global _ASKED_KEYS  # noqa: F824
     
     # Check environment variables first
     value = os.environ.get(key_name)
