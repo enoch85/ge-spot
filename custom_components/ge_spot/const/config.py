@@ -5,6 +5,7 @@ class Config:
     SOURCE = "source"
     AREA = "area"
     VAT = "vat"
+    INCLUDE_VAT = "include_vat"  # Whether to include VAT in price calculations
     UPDATE_INTERVAL = "update_interval"
     DISPLAY_UNIT = "display_unit"
     CURRENCY = "currency"

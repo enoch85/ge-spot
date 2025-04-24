@@ -45,13 +45,14 @@ class TimezoneConverter:
                              hourly_prices: Dict[str, float],
                              source_timezone_str: str, 
                              target_tz_str: Optional[str] = None,
-                             ) -> Dict[str, Dict[str, float]]:
+                             today_date: Optional[date] = None) -> Dict[str, Dict[str, float]]:
         """Convert hourly prices dictionary keyed by ISO timestamps to target timezone.
 
         Args:
             hourly_prices: Dict mapping ISO timestamp strings to prices.
             source_timezone_str: Source timezone identifier string.
             target_tz_str: Target timezone identifier string (defaults to instance default).
+            today_date: Optional specific date to use as reference for "today" (defaults to current date).
 
         Returns:
             Dict containing "today" and "tomorrow" keys, each holding a 
@@ -84,8 +85,8 @@ class TimezoneConverter:
             _LOGGER.debug(f"Converting prices from {source_tz} to {target_tz}")
 
             # Determine Reference Date (Today in Target Timezone)
-            # Use dt_util.now() for testability with freezegun
-            today_target_date = dt_util.now(target_tz).date()
+            # Use provided date or dt_util.now() for testability with freezegun
+            today_target_date = today_date or dt_util.now(target_tz).date()
             tomorrow_target_date = today_target_date + timedelta(days=1)
             _LOGGER.debug(f"Reference date (today in target TZ {target_tz}): {today_target_date}")
 
@@ -136,8 +137,8 @@ class TimezoneConverter:
                             )
                         else:
                             # This shouldn't happen unless input data is strange
-                            _LOGGER.warning(f"Duplicate target hour key {target_hour_key} found for date {target_date} 
-                                             without being a DST duplicate. Input {iso_key}. Overwriting.")
+                            _LOGGER.warning(f"Duplicate target hour key {target_hour_key} found for date {target_date}. "
+                                            f"Input {iso_key} maps to this hour. Overwriting with later value.")
                             
                     target_dict[target_hour_key] = price
                     # _LOGGER.debug(f"Mapped {iso_key} ({source_tz}) to {target_date} {target_hour_key} ({target_tz})")

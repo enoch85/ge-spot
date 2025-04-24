@@ -1,6 +1,6 @@
 """Timezone utility functions to avoid circular imports."""
 import logging
-from datetime import datetime, tzinfo, timedelta
+from datetime import datetime, tzinfo, timedelta, timezone
 from typing import Dict, Any, Optional, Union
 
 import zoneinfo
@@ -94,9 +94,8 @@ def get_timezone_object(timezone_id: str) -> tzinfo:
         return timezone_id
 
     # Special case for UTC
-    if timezone_id == "UTC":
-        import datetime
-        return datetime.timezone.utc
+    if get_timezone_object(timezone_id) is timezone.utc:
+        return timezone.utc
 
     # Convert common timezone names to IANA names
     iana_timezone_id = TimezoneName.get_iana_name(timezone_id)
@@ -104,8 +103,8 @@ def get_timezone_object(timezone_id: str) -> tzinfo:
     try:
         return zoneinfo.ZoneInfo(iana_timezone_id)
     except Exception as e:
-        error_msg = f"Failed to get timezone object for {timezone_id} (as {iana_timezone_id}): {e}"
-        _LOGGER.error(error_msg)
+        error_msg = f"Invalid source timezone identifier: {timezone_id}"
+        _LOGGER.error(f"Failed to get timezone object for {timezone_id} (as {iana_timezone_id}): {e}")
         raise ValueError(error_msg)
 
 def convert_datetime(dt: datetime, target_tz: Union[str, tzinfo], source_tz: Optional[Union[str, tzinfo]] = None) -> datetime:

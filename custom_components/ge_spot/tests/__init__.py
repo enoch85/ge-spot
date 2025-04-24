@@ -1,1 +1,4 @@
-# Tests for ge-spot component 
+import warnings
+
+# Suppress DeprecationWarnings from dependencies
+warnings.filterwarnings("ignore", category=DeprecationWarning)

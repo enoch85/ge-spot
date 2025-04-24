@@ -6,6 +6,8 @@ class Defaults:
     """Default values."""
     NAME = "Electricity Price"
     VAT = 0.0
+    VAT_RATE = 0  # Default VAT rate in percentage
+    INCLUDE_VAT = False  # Whether to include VAT by default
     UPDATE_INTERVAL = 30  # minutes
     DISPLAY_UNIT = DisplayUnit.DECIMAL
     PRECISION = 3
