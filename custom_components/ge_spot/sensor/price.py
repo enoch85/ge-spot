@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, Optional, Callable
 from datetime import datetime
 
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
 
 from .base import BaseElectricityPriceSensor
@@ -183,6 +184,8 @@ class TomorrowAveragePriceSensor(TomorrowSensorMixin, PriceValueSensor):
 
 class PriceStatisticSensor(PriceValueSensor):
     """Sensor for price statistics (average, min, max)."""
+    device_class    = SensorDeviceClass.MONETARY
+    state_class     = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, entity_id, name, stat_type, include_vat=False, vat=0, price_in_cents=False):
         """Initialize the price statistic sensor."""
@@ -213,6 +216,8 @@ class PriceStatisticSensor(PriceValueSensor):
 
 class PriceDifferenceSensor(PriceValueSensor):
     """Sensor for price difference between two values."""
+    device_class    = SensorDeviceClass.MONETARY
+    state_class     = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, entity_id, name, value1_key, value2_key, 
                 include_vat=False, vat=0, price_in_cents=False):
@@ -263,6 +268,8 @@ class PriceDifferenceSensor(PriceValueSensor):
 
 class PricePercentSensor(PriceValueSensor):
     """Sensor for price percentage relative to a reference value."""
+    device_class    = SensorDeviceClass.MONETARY
+    state_class     = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, entity_id, name, value_key, reference_key, 
                 include_vat=False, vat=0):
@@ -317,6 +324,8 @@ class PricePercentSensor(PriceValueSensor):
 
 class OffPeakPeakSensor(PriceValueSensor):
     """Sensor for off-peak and peak price periods."""
+    device_class    = None
+    state_class     = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator, entity_id, name, include_vat=False, vat=0, price_in_cents=False):
         """Initialize the off-peak/peak sensor."""
@@ -362,29 +371,27 @@ class OffPeakPeakSensor(PriceValueSensor):
         self._price_in_cents = price_in_cents
         
     def _get_additional_attrs(self, data):
-        """Get additional attributes for the sensor."""
-        if "today_stats" not in data:
+        """Get additional attributes specific to off-peak/peak sensor."""
+        if "hour_stats" not in data or not data["hour_stats"]:
             return {}
-            
-        stats = data["today_stats"]
-        if "peak" not in stats or "off_peak" not in stats:
-            return {}
-            
-        peak = stats["peak"]
-        off_peak = stats["off_peak"]
-        
-        if not peak or not off_peak:
-            return {}
-            
+
+        stats = data["hour_stats"]
+        peak_avg = stats.get("peak_avg")
+        off_peak_avg = stats.get("off_peak_avg")
+        ratio = None
+        if peak_avg is not None and off_peak_avg is not None and off_peak_avg != 0:
+             ratio = peak_avg / off_peak_avg
+
         return {
-            "peak_average": peak.get("average"),
-            "peak_min": peak.get("min"),
-            "peak_max": peak.get("max"),
-            "peak_hours": peak.get("hours", []),
-            "off_peak_average": off_peak.get("average"),
-            "off_peak_min": off_peak.get("min"),
-            "off_peak_max": off_peak.get("max"),
-            "off_peak_hours": off_peak.get("hours", [])
+            "peak_average": peak_avg,
+            "peak_min": stats.get("peak_min"),
+            "peak_max": stats.get("peak_max"),
+            "peak_hours": stats.get("peak_hours", []),
+            "off_peak_average": off_peak_avg,
+            "off_peak_min": stats.get("off_peak_min"),
+            "off_peak_max": stats.get("off_peak_max"),
+            "off_peak_hours": stats.get("off_peak_hours", []),
+            "ratio": ratio,
         }
         
     @property

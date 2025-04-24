@@ -35,7 +35,7 @@ def get_timezone_by_name(timezone_name: str) -> str:
         return iana_name
         
     # Fallback
-    _LOGGER.warning(f"Could not resolve timezone for name: {timezone_name}, using default")
+    _LOGGER.warning("Could not resolve timezone for name: %s, using default", timezone_name)
     return TimezoneConstants.DEFAULT_FALLBACK
 
 def get_source_timezone(source: str, area: Optional[str] = None) -> str:

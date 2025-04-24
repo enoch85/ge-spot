@@ -4,3 +4,4 @@ homeassistant>=2023.8.0
 voluptuous>=0.13.0
 xmltodict>=0.13.0
 PyJWT>=2.6.0
+aiofiles>=23.2
