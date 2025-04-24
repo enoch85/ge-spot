@@ -9,7 +9,7 @@ from ..api.base.error_handler import ErrorHandler, retry_with_backoff
 _LOGGER = logging.getLogger(__name__)
 
 # API client and validation
-from .api_client import ApiClient, ApiFallbackManager
+from .api_client import ApiFallbackManager
 from .api_validator import ApiValidator
 # Import DataValidator from the local file
 from .data_validator import DataValidator
@@ -38,7 +38,7 @@ class DataParsingError(APIError):
 from .exchange_service import ExchangeRateService, get_exchange_service
 
 # Form helper
-from .form_helper import FormHelper
+# from .form_helper import FormHelper # Removed unused import
 
 # Validation utilities
 from .validation.schema_validator import SchemaValidator
@@ -47,7 +47,7 @@ from .validation.validation_error import ValidationError
 
 __all__ = [
     # API utilities
-    "ApiClient",
+    # "ApiClient", # Removed unused
     "ApiFallbackManager",
     "ApiValidator",
     "DataValidator",
@@ -70,7 +70,7 @@ __all__ = [
     "get_exchange_service",
 
     # Form helper
-    "FormHelper",
+    # "FormHelper", # Removed unused
 
     # Validation utilities
     "SchemaValidator",
