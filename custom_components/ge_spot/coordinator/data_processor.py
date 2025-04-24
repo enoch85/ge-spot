@@ -1,14 +1,20 @@
 """Data processor for electricity spot prices."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, List, Tuple
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..price import ElectricityPriceAdapter
-from ..utils.exchange_service import get_exchange_service
+from ..utils.exchange_service import get_exchange_service, ExchangeRateService
 from ..timezone.source_tz import get_source_timezone
+from ..const.config import Config
+from ..const.defaults import Defaults
+from ..const.display import DisplayUnit
+from ..timezone.service import TimezoneService
+from ..api.base.data_structure import PriceStatistics, StandardizedPriceData
+from ..const.currencies import Currency
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,362 +33,232 @@ _LOGGER = logging.getLogger(__name__)
 # TODO: Refactor all remaining API modules to follow this pattern for consistency and maintainability.
 
 class DataProcessor:
-    """Processor for formatting and enriching price data."""
+    """Processor for formatting and enriching price data AFTER source selection."""
 
     def __init__(
         self,
         hass: HomeAssistant,
         area: str,
-        currency: str,
+        target_currency: str,
         config: Dict[str, Any],
-        tz_service: Any
+        tz_service: TimezoneService,
+        exchange_service: ExchangeRateService
     ):
         """Initialize the data processor.
 
         Args:
             hass: Home Assistant instance
             area: Area code
-            currency: Currency code
+            target_currency: Target currency code
             config: Configuration dictionary
             tz_service: Timezone service instance
+            exchange_service: Exchange rate service instance
         """
         self.hass = hass
         self.area = area
-        self.currency = currency
+        self.target_currency = target_currency
         self.config = config
         self._tz_service = tz_service
-        self._last_successful_data = None
+        self._exchange_service = exchange_service
+        
+        # Extract config settings needed for processing
+        self.vat_rate = config.get(Config.VAT, Defaults.VAT_RATE) / 100  # Convert % to rate
+        self.include_vat = config.get(Config.INCLUDE_VAT, Defaults.INCLUDE_VAT)
+        self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
+        self.use_subunit = self.display_unit == DisplayUnit.CENTS
 
-    async def process_api_result(
-        self,
-        result: Dict[str, Any],
-        primary_adapter: ElectricityPriceAdapter,
-        fallback_adapters: Dict[str, ElectricityPriceAdapter],
-        last_api_fetch: datetime,
-        next_scheduled_api_fetch: datetime,
-        api_key_status: Dict[str, Any],
-        session: Optional[Any] = None
-    ) -> Dict[str, Any]:
-        """Process API result into final format.
+    async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process the selected source data: Normalize timezone, convert currency, calculate stats."""
+        
+        _LOGGER.debug(f"Processing data for area {self.area} from source {data.get('source')}")
+        
+        # Basic validation
+        if not data or not isinstance(data, dict) or not data.get("hourly_prices"):
+            _LOGGER.warning(f"Invalid or empty data received for processing in area {self.area}. Data keys: {data.keys() if isinstance(data, dict) else 'N/A'}")
+            return self._generate_empty_processed_result(data)
 
-        Args:
-            result: Result from API fetch
-            primary_adapter: Primary adapter
-            fallback_adapters: Fallback adapters
-            last_api_fetch: Last API fetch time
-            next_scheduled_api_fetch: Next scheduled API fetch time
-            api_key_status: API key status
-            session: Optional session for API requests
+        # Extract key info from input data (result of fetch_with_fallback)
+        raw_hourly_prices = data.get("hourly_prices", {})
+        source_timezone = data.get("api_timezone")
+        source_currency = data.get("currency")
+        source = data.get("source", "unknown")
+        raw_api_data = data.get("raw_data") # Keep raw data if available
+        has_tomorrow_prices_flag = data.get("has_tomorrow_prices", False) # Flag from parser/fetcher
 
-        Returns:
-            Dictionary with processed data
-        """
-        data = result["data"]
+        if not source_timezone:
+            _LOGGER.error(f"Missing source timezone for source {source}. Cannot process.")
+            return self._generate_empty_processed_result(data, error="Missing source timezone")
+            
+        if not source_currency:
+            _LOGGER.error(f"Missing source currency for source {source}. Cannot process.")
+            return self._generate_empty_processed_result(data, error="Missing source currency")
 
-        # Check if any adapter has valid tomorrow data
-        any_adapter_has_tomorrow = primary_adapter.is_tomorrow_valid()
-        for fb_adapter in fallback_adapters.values():
-            if fb_adapter.is_tomorrow_valid():
-                any_adapter_has_tomorrow = True
-                break
-
-        # Get exchange rate info
-        try:
-            exchange_service = await get_exchange_service(session)
-            exchange_rate_info = exchange_service.get_exchange_rate_info("EUR", self.currency)
-            ecb_rate = exchange_rate_info.get("formatted")
-            ecb_updated = exchange_rate_info.get("timestamp")
-        except Exception as e:
-            _LOGGER.error(f"Error getting exchange rate info: {e}")
-            ecb_rate = None
-            ecb_updated = None
-
-        # Build result with actual API fetch timestamp
-        final_result = {
-            "adapter": primary_adapter,
-            "fallback_adapters": fallback_adapters,
-            "current_price": primary_adapter.get_current_price(self.area, self.config),
-            "next_hour_price": primary_adapter.find_next_price(self.area, self.config),
-            "today_stats": primary_adapter.get_day_statistics(0),
-            "tomorrow_stats": primary_adapter.get_day_statistics(1),
-            "tomorrow_valid": any_adapter_has_tomorrow,
-            "last_updated": dt_util.now().isoformat(),
-            "last_api_fetch": last_api_fetch.isoformat(),
-            "next_api_fetch": next_scheduled_api_fetch.isoformat(),
-            "api_key_status": api_key_status,
-            "raw_values": data.get("raw_values", {}),
-            "source": result["source"],
-            "active_source": result["active_source"],
-            "attempted_sources": result["attempted_sources"],
-            "skipped_sources": result.get("skipped_sources", []),
-            "fallback_sources": result.get("fallback_sources", []),
-            "fallback_used": result.get("fallback_used", False),
-            "primary_source": result.get("primary_source"),
-            "ecb_rate": ecb_rate,
-            "ecb_updated": ecb_updated,
-            "ha_timezone": str(self.hass.config.time_zone) if self.hass else None,
-            "api_timezone": data.get("api_timezone"),
-            "area_timezone": str(self._tz_service.area_timezone) if self._tz_service.area_timezone else None,
-            "current_hour_key": self._tz_service.get_current_hour_key()
+        processed_result = { 
+            "source": source,
+            "area": self.area,
+            "source_currency": source_currency,
+            "target_currency": self.target_currency,
+            "source_timezone": source_timezone,
+            "target_timezone": str(self._tz_service.ha_timezone), # Assuming HA time is the target
+            "hourly_prices": {}, # Today's FINAL prices (HH:00 keys)
+            "tomorrow_hourly_prices": {}, # Tomorrow's FINAL prices (HH:00 keys)
+            "raw_hourly_prices_normalized_today": {}, # Optional intermediate step
+            "raw_hourly_prices_normalized_tomorrow": {}, # Optional intermediate step
+            "raw_hourly_prices_original": raw_hourly_prices, # Store original parser output
+            "current_price": None,
+            "next_hour_price": None,
+            "current_hour_key": None,
+            "next_hour_key": None,
+            "statistics": PriceStatistics(complete_data=False).to_dict(), # Today's stats
+            "tomorrow_statistics": PriceStatistics(complete_data=False).to_dict(), # Tomorrow's stats
+            "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
+            "vat_included": self.include_vat,
+            "display_unit": self.display_unit,
+            "raw_data": raw_api_data,
+            "ecb_rate": None,
+            "ecb_updated": None,
+            "has_tomorrow_prices": False, # This will be set based on processed tomorrow data
+            # Pass through tracking info from fetch_with_fallback
+            "attempted_sources": data.get("attempted_sources", []),
+            "fallback_sources": data.get("fallback_sources", []),
+            "using_cached_data": data.get("using_cached_data", False),
+            "fetched_at": data.get("fetched_at")
         }
 
-        self._last_successful_data = final_result
-        return final_result
-
-    def process_cached_data(
-        self,
-        data: Dict[str, Any],
-        last_api_fetch: Optional[datetime] = None,
-        next_scheduled_api_fetch: Optional[datetime] = None,
-        consecutive_failures: int = 0
-    ) -> Dict[str, Any]:
-        """Process cached data into consistent format.
-
-        Args:
-            data: Cached data
-            last_api_fetch: Last API fetch time
-            next_scheduled_api_fetch: Next scheduled API fetch time
-            consecutive_failures: Number of consecutive failures
-
-        Returns:
-            Dictionary with processed data
-        """
-        now = dt_util.now()
-        result = dict(data)
-
-        # Add metadata
-        result["last_checked"] = now.isoformat()
-        result["last_updated"] = now.isoformat()  # Keep last_updated for compatibility
-        result["using_cached_data"] = True
-        result["error_recovery"] = True
-
-        # Make sure we have all necessary fields
-        if "current_hour_key" not in result:
-            result["current_hour_key"] = self._tz_service.get_current_hour_key()
-
-        # Include API status info
-        if last_api_fetch:
-            result["last_api_fetch"] = last_api_fetch.isoformat()
-
-        if next_scheduled_api_fetch:
-            result["next_api_fetch"] = next_scheduled_api_fetch.isoformat()
-        else:
-            # Schedule next fetch after a backoff period
-            backoff = min(60, 5 * (2 ** min(consecutive_failures - 1, 3)))  # Exponential backoff
-            next_fetch = now + timedelta(minutes=backoff)
-            result["next_api_fetch"] = next_fetch.isoformat()
-
-        return result
-
-    def get_last_successful_data(self) -> Optional[Dict[str, Any]]:
-        """Get last successful data.
-
-        Returns:
-            Dictionary with last successful data, or None if not available
-        """
-        return self._last_successful_data
-
-    def process(self, data: Dict[str, Any], source: str) -> Dict[str, Any]:
-        """Process data from the simplified fallback mechanism.
-        
-        Args:
-            data: Raw data from API
-            source: Source identifier
-            
-        Returns:
-            Dictionary with processed data
-            
-        Raises:
-            ValueError: If required timezone information cannot be determined
-        """
-        # Ensure we don't double-convert timezones
-        # If the data already has timezone info, use it as is
-        has_timezone_info = (
-            data.get("api_timezone") is not None or 
-            data.get("area_timezone") is not None or
-            data.get("ha_timezone") is not None
-        )
-        
-        if not has_timezone_info:
-            # First try to extract timezone from the API response
-            api_timezone = None
-            
-            # Check common timezone fields in the API response
-            timezone_fields = ["timezone", "tz", "time_zone", "api_timezone"]
-            for field in timezone_fields:
-                if field in data and data[field]:
-                    api_timezone = data[field]
-                    _LOGGER.debug(f"Extracted timezone {api_timezone} from API response field '{field}'")
-                    break
-            
-            # If we couldn't extract from the API, fall back to the source's predefined timezone
-            if not api_timezone:
-                api_timezone = get_source_timezone(source)
-                if api_timezone:
-                    _LOGGER.debug(f"Using predefined timezone {api_timezone} for source {source}")
-                else:
-                    error_msg = f"Cannot determine timezone for source {source}. Processing aborted."
-                    _LOGGER.error(error_msg)
-                    raise ValueError(error_msg)
-            
-            # Set the API timezone
-            data["api_timezone"] = api_timezone
-            
-            # Set HA timezone - must have valid timezone
-            if not self.hass or not self.hass.config.time_zone:
-                error_msg = "Home Assistant timezone not available. Processing aborted."
-                _LOGGER.error(error_msg)
-                raise ValueError(error_msg)
-            
-            data["ha_timezone"] = str(self.hass.config.time_zone)
-            
-            # Set area timezone - must have valid timezone if area is set
-            if self.area and not self._tz_service.area_timezone:
-                error_msg = f"Area timezone not available for {self.area}. Processing aborted."
-                _LOGGER.error(error_msg)
-                raise ValueError(error_msg)
-            elif self._tz_service.area_timezone:
-                data["area_timezone"] = str(self._tz_service.area_timezone)
-            
-            # Log timezone info for debugging
-            _LOGGER.debug(f"Added timezone info for {self.area}: API={data['api_timezone']}, Area={data.get('area_timezone')}, HA={data['ha_timezone']}")
-        else:
-            # Skip any additional timezone conversion to avoid double-conversion
-            _LOGGER.debug(f"Using existing timezone info for {self.area}: {data.get('api_timezone', 'unknown')} -> {data.get('area_timezone', data.get('ha_timezone', 'unknown'))}")
-        
-        # Ensure current_price and next_hour_price are set
-        if "current_price" not in data or "next_hour_price" not in data:
-            # Calculate current and next hour prices
-            current_hour_key = self._tz_service.get_current_hour_key()
-            next_hour_key = self._tz_service.get_next_hour_key()
-            
-            if "hourly_prices" in data and current_hour_key in data["hourly_prices"]:
-                data["current_price"] = data["hourly_prices"][current_hour_key]
-                _LOGGER.debug(f"Set current_price to {data['current_price']} for hour {current_hour_key}")
-            else:
-                error_msg = f"Cannot find current price for hour {current_hour_key} in hourly_prices"
-                _LOGGER.error(error_msg)
-                if "hourly_prices" in data:
-                    _LOGGER.error(f"Available hours: {list(data['hourly_prices'].keys())}")
-                raise ValueError(error_msg)
-            
-            if "hourly_prices" in data and next_hour_key in data["hourly_prices"]:
-                data["next_hour_price"] = data["hourly_prices"][next_hour_key]
-                _LOGGER.debug(f"Set next_hour_price to {data['next_hour_price']} for hour {next_hour_key}")
-            else:
-                error_msg = f"Cannot find next hour price for hour {next_hour_key} in hourly_prices"
-                _LOGGER.error(error_msg)
-                raise ValueError(error_msg)
-        
-        # Add/update metadata
-        now = dt_util.now()
-        data["last_updated"] = now.isoformat()
-        data["source"] = source
-        data["area"] = self.area
-        data["currency"] = data.get("currency", self.currency)
-        data["current_hour_key"] = self._tz_service.get_current_hour_key()
-        
-        # Calculate missing statistics if needed
-        if "today_stats" not in data and "hourly_prices" in data:
-            today_range = self._tz_service.get_today_range()
-            data["today_stats"] = self._calculate_statistics(data["hourly_prices"], today_range)
-            _LOGGER.debug(f"Calculated today_stats for range {today_range[0]} to {today_range[-1]}")
-        
-        if "tomorrow_stats" not in data and "tomorrow_hourly_prices" in data:
-            tomorrow_range = self._tz_service.get_tomorrow_range()
-            data["tomorrow_stats"] = self._calculate_statistics(data["tomorrow_hourly_prices"], tomorrow_range)
-            _LOGGER.debug(f"Calculated tomorrow_stats for range {tomorrow_range[0]} to {tomorrow_range[-1]}")
-        
-        # Cache this as last successful data
-        self._last_successful_data = data
-        
-        return data
-    
-    def _calculate_statistics(self, hourly_prices: Dict[str, float], date_range: List[str]) -> Dict[str, Any]:
-        """Calculate statistics for a set of hourly prices.
-        
-        Args:
-            hourly_prices: Dictionary mapping hour keys to prices
-            date_range: List of hour keys to include
-            
-        Returns:
-            Dictionary with statistics
-        """
-        # Filter prices to the given range
-        prices = [hourly_prices.get(hour) for hour in date_range if hour in hourly_prices]
-        
-        if not prices:
-            return {
-                "min": None,
-                "max": None,
-                "average": None,
-                "median": None,
-                "off_peak_1": None,
-                "off_peak_2": None,
-                "peak": None,
-                "current": None
-            }
-        
-        # Calculate basic statistics
         try:
-            min_price = min(prices)
-            max_price = max(prices)
-            avg_price = sum(prices) / len(prices)
-            
-            # Calculate median
-            sorted_prices = sorted(prices)
-            mid = len(sorted_prices) // 2
-            median_price = sorted_prices[mid] if len(sorted_prices) % 2 == 1 else (sorted_prices[mid-1] + sorted_prices[mid]) / 2
-            
-            # Get current price if available
-            current_hour_key = self._tz_service.get_current_hour_key()
-            current_price = hourly_prices.get(current_hour_key)
-            
-            # Calculate peak/off-peak if possible
-            peak_hours = list(range(6, 22))  # 06:00-22:00, adjust as needed
-            off_peak_1 = list(range(0, 6))   # 00:00-06:00
-            off_peak_2 = list(range(22, 24)) # 22:00-00:00
-            
-            # Get prices for each period, filtering out missing hours
-            peak_prices = []
-            off_peak_1_prices = []
-            off_peak_2_prices = []
-            
-            for hour_key in date_range:
-                if hour_key in hourly_prices:
-                    hour = int(hour_key.split(":")[0])
-                    if hour in peak_hours:
-                        peak_prices.append(hourly_prices[hour_key])
-                    elif hour in off_peak_1:
-                        off_peak_1_prices.append(hourly_prices[hour_key])
-                    elif hour in off_peak_2:
-                        off_peak_2_prices.append(hourly_prices[hour_key])
-            
-            # Calculate averages for each period
-            peak_avg = sum(peak_prices) / len(peak_prices) if peak_prices else None
-            off_peak_1_avg = sum(off_peak_1_prices) / len(off_peak_1_prices) if off_peak_1_prices else None
-            off_peak_2_avg = sum(off_peak_2_prices) / len(off_peak_2_prices) if off_peak_2_prices else None
-            
-            return {
-                "min": min_price,
-                "max": max_price,
-                "average": avg_price,
-                "median": median_price,
-                "off_peak_1": off_peak_1_avg,
-                "off_peak_2": off_peak_2_avg,
-                "peak": peak_avg,
-                "current": current_price
-            }
+            # 1. Normalize Timezones
+            # This returns {"today": {...}, "tomorrow": {...}, "other": {...}}
+            # Keys in the inner dicts are HH:00 in HA timezone
+            normalized_data = self._tz_service.normalize_hourly_prices(raw_hourly_prices, source_timezone)
+            normalized_today = normalized_data.get("today", {})
+            normalized_tomorrow = normalized_data.get("tomorrow", {})
+            processed_result["raw_hourly_prices_normalized_today"] = normalized_today
+            processed_result["raw_hourly_prices_normalized_tomorrow"] = normalized_tomorrow
+            _LOGGER.debug(f"Normalized prices: {len(normalized_today)} today, {len(normalized_tomorrow)} tomorrow")
+
+            # Helper Function for Currency Conv/VAT/Subunit
+            async def process_price(price, source_curr, target_curr):
+                if price is None: return None
+                # Convert currency
+                converted = await self._exchange_service.convert(price, source_curr, target_curr)
+                # Apply VAT
+                if self.include_vat:
+                    converted *= (1 + self.vat_rate)
+                # Handle subunit
+                if self.use_subunit:
+                    if target_curr in [Currency.EUR, Currency.USD, Currency.GBP, Currency.SEK, Currency.NOK, Currency.DKK]: 
+                        converted *= 100
+                    else:
+                        _LOGGER.warning(f"Subunit conversion not implemented for {target_curr}, using base unit.")
+                return converted
+
+            # 2a. Process Today's Prices
+            final_today_prices = {}
+            for hour_key, price in normalized_today.items():
+                final_today_prices[hour_key] = await process_price(price, source_currency, self.target_currency)
+            processed_result["hourly_prices"] = final_today_prices
+            _LOGGER.debug(f"Processed {len(final_today_prices)} prices for today")
+
+            # 2b. Process Tomorrow's Prices
+            final_tomorrow_prices = {}
+            if normalized_tomorrow:
+                for hour_key, price in normalized_tomorrow.items():
+                    final_tomorrow_prices[hour_key] = await process_price(price, source_currency, self.target_currency)
+                processed_result["tomorrow_hourly_prices"] = final_tomorrow_prices
+                processed_result["has_tomorrow_prices"] = True # Set flag based on processed data
+                _LOGGER.debug(f"Processed {len(final_tomorrow_prices)} prices for tomorrow")
+            else:
+                processed_result["has_tomorrow_prices"] = False
+
+            # 3a. Calculate Today's Statistics and Current/Next Prices
+            if final_today_prices:
+                current_hour_key = self._tz_service.get_current_hour_key()
+                next_hour_key = self._tz_service.get_next_hour_key()
+                processed_result["current_hour_key"] = current_hour_key
+                processed_result["next_hour_key"] = next_hour_key
+                processed_result["current_price"] = final_today_prices.get(current_hour_key)
+                processed_result["next_hour_price"] = final_today_prices.get(next_hour_key)
+
+                today_keys = set(self._tz_service.get_today_range())
+                found_keys = set(final_today_prices.keys())
+                today_complete = today_keys.issubset(found_keys)
+                
+                if today_complete:
+                    stats = self._calculate_statistics(final_today_prices)
+                    stats.complete_data = True 
+                    processed_result["statistics"] = stats.to_dict()
+                    _LOGGER.debug(f"Calculated today's statistics for {self.area}")
+                else:
+                    missing_keys = sorted(list(today_keys - found_keys))
+                    _LOGGER.warning(f"Incomplete data for today ({len(found_keys)}/{len(today_keys)} keys found, missing: {missing_keys}), skipping statistics calculation for {self.area}.")
+                    processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
+            else:
+                _LOGGER.warning(f"No final prices for today available after processing for area {self.area}, skipping stats.")
+                processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
+
+            # 3b. Calculate Tomorrow's Statistics
+            if final_tomorrow_prices:
+                tomorrow_keys = set(self._tz_service.get_tomorrow_range())
+                found_keys = set(final_tomorrow_prices.keys())
+                tomorrow_complete = tomorrow_keys.issubset(found_keys)
+                
+                if tomorrow_complete:
+                    stats = self._calculate_statistics(final_tomorrow_prices)
+                    stats.complete_data = True
+                    processed_result["tomorrow_statistics"] = stats.to_dict()
+                    _LOGGER.debug(f"Calculated tomorrow's statistics for {self.area}")
+                else:
+                    missing_keys = sorted(list(tomorrow_keys - found_keys))
+                    _LOGGER.warning(f"Incomplete data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, missing: {missing_keys}), skipping statistics calculation for {self.area}.")
+                    processed_result["tomorrow_statistics"] = PriceStatistics(complete_data=False).to_dict()
+            else:
+                # No tomorrow prices, ensure stats reflect incompleteness
+                processed_result["tomorrow_statistics"] = PriceStatistics(complete_data=False).to_dict()
+
         except Exception as e:
-            _LOGGER.error(f"Error calculating statistics: {e}")
-            return {
-                "min": None,
-                "max": None,
-                "average": None,
-                "median": None,
-                "off_peak_1": None,
-                "off_peak_2": None,
-                "peak": None,
-                "current": None,
-                "error": str(e)
-            }
+            _LOGGER.error(f"Error during data processing for area {self.area}: {e}", exc_info=True)
+            # Return structure with error, preserving original raw data if possible
+            error_result = self._generate_empty_processed_result(data, error=str(e))
+            error_result["raw_hourly_prices_original"] = raw_hourly_prices # Keep original raw input
+            return error_result
+            
+        # Add ECB rate info for attributes
+        try:
+            # Use source_currency for base if not EUR?
+            # The service currently assumes EUR base for ECB, might need adjustment if source_currency != EUR
+            base_curr = Currency.EUR if source_currency == Currency.EUR else source_currency 
+            ecb_info = self._exchange_service.get_exchange_rate_info(base_curr, self.target_currency)
+            processed_result["ecb_rate"] = ecb_info.get("formatted")
+            processed_result["ecb_updated"] = ecb_info.get("timestamp")
+        except Exception as e:
+            _LOGGER.warning(f"Could not get ECB info: {e}")
+            # Keep default None values
+
+        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source}, Today Prices: {len(processed_result['hourly_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_hourly_prices'])}")
+        return processed_result
+
+    def _calculate_statistics(self, hourly_prices: Dict[str, float]) -> PriceStatistics:
+        """Calculate price statistics from a dictionary of hourly prices (HH:00 keys)."""
+        prices = [p for p in hourly_prices.values() if p is not None]
+        if not prices:
+            return PriceStatistics(complete_data=False)
+            
+        prices.sort()
+        mid = len(prices) // 2
+        # Ensure indices are valid before access
+        median = None
+        if prices:
+            if len(prices) % 2 == 1:
+                median = prices[mid]
+            elif mid > 0:
+                median = (prices[mid - 1] + prices[mid]) / 2
+            else: # Only one element
+                median = prices[0]
+
+        return PriceStatistics(
+            min=min(prices) if prices else None,
+            max=max(prices) if prices else None,
+            average=sum(prices) / len(prices) if prices else None,
+            median=median,
+            complete_data=True # Assume complete if this function is called
+        )

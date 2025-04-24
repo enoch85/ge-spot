@@ -225,16 +225,16 @@ class NordpoolAPI(BasePriceAPI):
             _LOGGER.debug(f"Not expecting tomorrow's prices yet (current market time: {now_market.hour:02d}:00, "
                          f"cutoff is 13:00)")
         
-        # Create standardized price data with validation
+        # Create standardized price data using the simplified helper
+        # Pass raw hourly_prices (with ISO keys from parser), source currency/timezone
         result = create_standardized_price_data(
             source=Source.NORDPOOL,
             area=area,
             currency=Currency.EUR,  # Nordpool returns prices in EUR by default
-            hourly_prices=hourly_prices,
+            hourly_prices=hourly_prices, # Pass the dict with ISO keys
             reference_time=now,
             api_timezone=api_timezone,
             raw_data=raw_data,
-            validate_complete=True,  # Enable validation to ensure we don't calculate stats for incomplete data
             has_tomorrow_prices=expect_tomorrow and tomorrow_complete,
             tomorrow_prices_expected=expect_tomorrow
         )

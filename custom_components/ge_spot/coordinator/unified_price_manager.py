@@ -70,7 +70,14 @@ class UnifiedPriceManager:
         self._data_fetcher = PriceDataFetcher()
         self._tz_service = TimezoneService(hass, area, config)
         self._exchange_service = ExchangeService(hass, config)
-        self._data_processor = DataProcessor(hass, area, currency, config, self._tz_service)
+        self._data_processor = DataProcessor(
+            hass,
+            area,
+            currency,
+            config,
+            self._tz_service,
+            self._exchange_service
+        )
         self._rate_limiter = RateLimiter(f"unified_price_manager_{area}")
         
         # API request tracking

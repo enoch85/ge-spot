@@ -164,138 +164,70 @@ def create_standardized_price_data(
         source: Source identifier
         area: Area code
         currency: Currency code
-        hourly_prices: Hourly prices dictionary
+        hourly_prices: Hourly prices dictionary (RAW, from parser, likely ISO keys)
         reference_time: Optional reference time
         api_timezone: Optional API timezone
         vat_rate: Optional VAT rate
         vat_included: Whether VAT is included
         raw_data: Optional raw API response
-        validate_complete: Whether to validate data completeness
-        has_tomorrow_prices: Whether complete data for tomorrow is available
-        tomorrow_prices_expected: Whether tomorrow's prices are expected to be available
+        validate_complete: Whether to validate data completeness (REMOVED - validation should happen AFTER normalization)
+        has_tomorrow_prices: Whether complete data for tomorrow is available (determined by parser/fetcher)
+        tomorrow_prices_expected: Whether tomorrow's prices are expected to be available (determined by parser/fetcher)
         
     Returns:
-        StandardizedPriceData object
+        StandardizedPriceData object containing mostly raw/parsed data
     """
     now = datetime.now()
     today = now.date()
     
-    # Validate completeness if requested
-    complete_data = True
-    if validate_complete:
-        # We should have 24 hours of data for a complete day
-        required_hours = set(range(24))
-        found_hours = set()
-        
-        for hour_key in hourly_prices.keys():
-            try:
-                # Try to extract datetime from hour key formats
-                dt = None
-                if 'T' in hour_key:
-                    # Format: 2023-01-01T12:00:00[+00:00]
-                    dt = datetime.fromisoformat(hour_key.replace('Z', '+00:00'))
-                elif ':' in hour_key:
-                    # Format: 12:00
-                    hour = int(hour_key.split(':')[0])
-                    # We use this just to get the hour
-                    dt = datetime.combine(today, datetime.min.time().replace(hour=hour))
-                
-                # Check if this is the date we want and add the hour
-                if dt and dt.date() == today:
-                    found_hours.add(dt.hour)
-            except (ValueError, TypeError):
-                continue
-        
-        # Check if we found all required hours
-        complete_data = required_hours.issubset(found_hours)
+    # REMOVED: Validation logic - should happen in DataProcessor after normalization
+    # REMOVED: Statistics calculation
+    # REMOVED: Current/Next hour price calculation
     
-    # Create raw_prices list
-    raw_prices = []
+    # Create raw_prices list from the input hourly_prices (assuming ISO keys from parser)
+    raw_prices_list = []
     for hour_key, price in hourly_prices.items():
-        # Try to create datetime from hour_key
         try:
-            if ":" in hour_key:
-                hour = int(hour_key.split(":")[0])
-                dt = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-            else:
-                dt = datetime.fromisoformat(hour_key)
+            # Attempt to parse ISO string key
+            dt_obj = datetime.fromisoformat(hour_key.replace('Z', '+00:00'))
+            # Create simple HH:00 key for compatibility if needed, but prefer ISO
+            simple_hour_key = dt_obj.strftime("%H:00")
+        except (ValueError, TypeError):
+            # Fallback if key is not ISO (e.g., HH:00) - less ideal
+            iso_dt = f"{today.isoformat()}T{hour_key}:00" # Placeholder
+            simple_hour_key = hour_key
             
-            iso_dt = dt.isoformat()
-        except:
-            iso_dt = f"{now.date().isoformat()}T{hour_key}:00"
-            
-        raw_prices.append(HourlyPrice(
-            datetime=iso_dt,
+        raw_prices_list.append(HourlyPrice(
+            datetime=hour_key, # Store original key as datetime string
             price=price,
-            hour_key=hour_key,
+            hour_key=simple_hour_key, # Store HH:00 for potential compatibility
             currency=currency,
             timezone=api_timezone or "UTC",
             source=source,
             vat_included=vat_included
         ))
     
-    # Get current and next hour keys
-    current_hour_key = f"{now.hour:02d}:00"
-    next_hour = (now.hour + 1) % 24
-    next_hour_key = f"{next_hour:02d}:00"
-    
-    # Get current and next hour prices
-    current_price = hourly_prices.get(current_hour_key)
-    next_hour_price = hourly_prices.get(next_hour_key)
-    
-    # Create statistics if we have complete data
-    statistics = None
-    if complete_data:
-        # Extract prices for today
-        today_prices = []
-        for hour_key, price in hourly_prices.items():
-            try:
-                # Check if this is for today
-                if ':' in hour_key:
-                    # Format: 12:00
-                    hour = int(hour_key.split(':')[0])
-                    # We use this to get the hour for today
-                    today_prices.append(price)
-                elif 'T' in hour_key:
-                    # Format: 2023-01-01T12:00:00[+00:00]
-                    dt = datetime.fromisoformat(hour_key.replace('Z', '+00:00'))
-                    if dt.date() == today:
-                        today_prices.append(price)
-            except (ValueError, TypeError):
-                continue
-        
-        if today_prices:
-            # Sort prices for accurate median calculation
-            today_prices.sort()
-            mid = len(today_prices) // 2
-            median = today_prices[mid] if len(today_prices) % 2 == 1 else (today_prices[mid-1] + today_prices[mid]) / 2
-            
-            statistics = PriceStatistics(
-                min=min(today_prices),
-                max=max(today_prices),
-                average=sum(today_prices) / len(today_prices),
-                median=median,
-                complete_data=complete_data
-            )
-    
-    # Create standardized data
+    # Return a simplified object with raw data
     return StandardizedPriceData(
         source=source,
         area=area,
         currency=currency,
         fetched_at=now.isoformat(),
         reference_time=reference_time.isoformat() if reference_time else None,
-        hourly_prices=hourly_prices,
-        raw_prices=raw_prices,
+        hourly_prices=hourly_prices, # Store the RAW hourly prices dict from parser
+        raw_prices=raw_prices_list,
         api_timezone=api_timezone,
         vat_rate=vat_rate,
         vat_included=vat_included,
         raw_data=raw_data,
-        current_price=current_price,
-        next_hour_price=next_hour_price,
-        current_hour_key=current_hour_key,
-        next_hour_key=next_hour_key,
-        statistics=statistics,
         has_tomorrow_prices=has_tomorrow_prices,
-        tomorrow_prices_expected=tomorrow_prices_expected
+        tomorrow_prices_expected=tomorrow_prices_expected,
+        # Fields below will be populated by DataProcessor
+        current_price=None,
+        next_hour_price=None,
+        current_hour_key=None,
+        next_hour_key=None,
+        statistics=None,
+        peak_hours=None,
+        off_peak_hours=None
     ) 

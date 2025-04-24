@@ -15,7 +15,7 @@ class TimezoneConverter:
 
     def __init__(self, default_target_tz=None):
         """Initialize with optional default target timezone."""
-        self.default_target_tz = default_target_tz or dt_util.DEFAULT_TIME_ZONE
+        self.default_target_tz = get_timezone_object(default_target_tz) or dt_util.DEFAULT_TIME_ZONE
 
     def convert(self, dt: datetime, target_tz=None, source_tz=None) -> datetime:
         """Convert datetime with explicit timezone handling.
@@ -41,106 +41,115 @@ class TimezoneConverter:
             _LOGGER.error(f"Error converting datetime: {e}")
             raise
 
-    def convert_hourly_prices(self, hourly_prices: Dict[str, float],
-                             source_timezone: str, target_tz=None,
-                             today_date=None, area_timezone=None) -> Dict[str, float]:
-        """Convert hourly prices from source timezone to target timezone.
+    def convert_hourly_prices(self, 
+                             hourly_prices: Dict[str, float],
+                             source_timezone_str: str, 
+                             target_tz_str: Optional[str] = None,
+                             ) -> Dict[str, Dict[str, float]]:
+        """Convert hourly prices dictionary keyed by ISO timestamps to target timezone.
 
         Args:
-            hourly_prices: Dict mapping hour strings to prices
-            source_timezone: Source timezone string or source identifier
-            target_tz: Target timezone (defaults to instance default)
-            today_date: Optional date to use (defaults to today)
-            area_timezone: Area-specific timezone (takes precedence over target_tz)
+            hourly_prices: Dict mapping ISO timestamp strings to prices.
+            source_timezone_str: Source timezone identifier string.
+            target_tz_str: Target timezone identifier string (defaults to instance default).
 
         Returns:
-            Dict with hours adjusted to target timezone or area_timezone
+            Dict containing "today" and "tomorrow" keys, each holding a 
+            dictionary mapping target timezone hour strings (HH:00) to prices.
+            Example: {"today": {"00:00": 10.0, ...}, "tomorrow": {"00:00": 15.0, ...}}
 
         Raises:
-            ValueError: If source_timezone is invalid
+            ValueError: If source_timezone is invalid.
         """
         if not hourly_prices:
-            return {}
+            return {"today": {}, "tomorrow": {}}
 
         try:
-            # Get timezone objects
-            source_tz = get_timezone_object(source_timezone)
+            # Determine Timezones
+            source_tz = get_timezone_object(source_timezone_str)
             if not source_tz:
-                # Try to get timezone from source type constant
-                source_tz_str = get_source_timezone(source_timezone)
-                source_tz = get_timezone_object(source_tz_str)
+                # If string is invalid, maybe it's a source identifier?
+                source_tz_lookup = get_source_timezone(source_timezone_str)
+                source_tz = get_timezone_object(source_tz_lookup)
+                if not source_tz:
+                    raise ValueError(f"Invalid source timezone identifier: {source_timezone_str}")
+            
+            # Determine target timezone object
+            target_tz = None
+            if target_tz_str:
+                target_tz = get_timezone_object(target_tz_str)
+            if not target_tz:
+                target_tz = self.default_target_tz # Use instance default if needed
+            
+            _LOGGER.debug(f"Converting prices from {source_tz} to {target_tz}")
 
-            if not source_tz:
-                error_msg = f"Invalid source timezone: {source_timezone}, cannot proceed with conversion"
-                _LOGGER.error(error_msg)
-                raise ValueError(error_msg)
+            # Determine Reference Date (Today in Target Timezone)
+            # Use dt_util.now() for testability with freezegun
+            today_target_date = dt_util.now(target_tz).date()
+            tomorrow_target_date = today_target_date + timedelta(days=1)
+            _LOGGER.debug(f"Reference date (today in target TZ {target_tz}): {today_target_date}")
 
-            # Determine target timezone - area_timezone takes precedence if provided
-            if area_timezone:
-                if isinstance(area_timezone, str):
-                    area_tz_obj = get_timezone_object(area_timezone)
-                    if not area_tz_obj:
-                        _LOGGER.warning(f"Invalid area timezone: {area_timezone}, falling back to target timezone")
-                        area_timezone = None
-                    else:
-                        target = area_tz_obj
-                        _LOGGER.debug(f"Using area-specific timezone for price conversion: {area_timezone}")
-                else:
-                    # Assume it's already a timezone object
-                    target = area_timezone
-                    _LOGGER.debug(f"Using area-specific timezone object for price conversion")
-            else:
-                # Use specified target timezone or default
-                target = target_tz or self.default_target_tz
-                if isinstance(target, str):
-                    target = get_timezone_object(target)
-                    _LOGGER.debug(f"Using target timezone for price conversion: {target_tz}")
+            # Process Each Hour
+            result = {"today": {}, "tomorrow": {}}
+            processed_target_datetimes = set() # To detect DST fallbacks
 
-            if today_date is None:
-                today_date = dt_util.now(target).date()
-            elif isinstance(today_date, datetime):
-                today_date = today_date.date()
-
-            converted = {}
-
-            # Track hours that have already been processed
-            processed_hours = set()
-
-            for hour_str, price in hourly_prices.items():
+            for iso_key, price in hourly_prices.items():
+                if price is None: continue # Skip null prices
+                
                 try:
-                    # Parse hour in source timezone
-                    hour = int(hour_str.split(":")[0])
-                    source_dt = datetime.combine(today_date, time(hour=hour))
+                    # Parse the ISO timestamp key
+                    # Assume it includes offset, make aware UTC first for reliable conversion
+                    source_dt_aware = datetime.fromisoformat(iso_key.replace("Z", "+00:00"))
+                    
+                    # Convert to target timezone
+                    target_dt = source_dt_aware.astimezone(target_tz)
+                    
+                    # Determine target date and hour key
+                    target_date = target_dt.date()
+                    target_hour_key = f"{target_dt.hour:02d}:00"
 
-                    # Use timezone_utils functions for conversion
-                    source_dt = localize_datetime(source_dt, source_tz)
-                    target_dt = convert_datetime(source_dt, target)
-
-                    # Create hour key in target timezone
-                    target_hour_str = f"{target_dt.hour:02d}:00"
-
-                    # Check if this hour key has already been processed
-                    if target_hour_str in processed_hours:
-                        # Handle DST transition - log it for debugging
-                        _LOGGER.debug(f"DST transition detected - hour {hour_str} ({source_timezone}) maps to already processed hour {target_hour_str}")
-
-                        # Check if this is a new date (e.g., transition from 23:00 to 00:00)
-                        if target_dt.date() != today_date:
-                            # Don't replace since we're focused on today
-                            _LOGGER.debug(f"Skipping hour from next day: {target_dt}")
-                            continue
+                    # Check for DST fallback duplicate: same target hour but different source time
+                    # We store the full target datetime to check
+                    target_dt_tuple = (target_date, target_dt.hour)
+                    is_duplicate = target_dt_tuple in processed_target_datetimes
+                    processed_target_datetimes.add(target_dt_tuple)
+                    
+                    # Decide which dictionary to put it in
+                    target_dict = None
+                    if target_date == today_target_date:
+                        target_dict = result["today"]
+                    elif target_date == tomorrow_target_date:
+                        target_dict = result["tomorrow"]
                     else:
-                        processed_hours.add(target_hour_str)
+                        # Belongs to a different day (e.g., day after tomorrow or yesterday)
+                        # Log and skip for now, could be stored in "other" if needed
+                        _LOGGER.debug(f"Skipping price for {iso_key} - maps to date {target_date} (ref: {today_target_date})")
+                        continue
+                        
+                    # Handle potential overwrites (e.g., DST fallback hour)
+                    if target_hour_key in target_dict:
+                        if is_duplicate:
+                            _LOGGER.warning(f"DST Fallback? Hour {target_hour_key} on {target_date} already exists. 
+                                             Input {iso_key} maps to this hour. Overwriting with later value.")
+                            # Policy: Overwrite with the value that occurs later in wall time (usually standard time)
+                            # Since we process sequentially, the later one will naturally overwrite.
+                        else:
+                            # This shouldn't happen unless input data is strange
+                            _LOGGER.warning(f"Duplicate target hour key {target_hour_key} found for date {target_date} 
+                                             without being a DST duplicate. Input {iso_key}. Overwriting.")
+                            
+                    target_dict[target_hour_key] = price
+                    # _LOGGER.debug(f"Mapped {iso_key} ({source_tz}) to {target_date} {target_hour_key} ({target_tz})")
 
-                    # Store with correct target hour
-                    converted[target_hour_str] = price
-                    _LOGGER.debug(f"Converted hour {hour_str} ({source_timezone}) to {target_hour_str} ({target})")
                 except (ValueError, TypeError) as e:
-                    _LOGGER.error(f"Error converting hour {hour_str}: {e}")
-                    converted[hour_str] = price  # Keep original in case of error
+                    _LOGGER.error(f"Error processing timestamp key '{iso_key}': {e}. Skipping price.")
+                    continue # Skip this price
 
-            return converted
+            # Log counts for verification
+            _LOGGER.debug(f"Conversion result: {len(result['today'])} today prices, {len(result['tomorrow'])} tomorrow prices")
+            return result
+
         except Exception as e:
-            _LOGGER.error(f"Error in convert_hourly_prices: {e}")
-            # Return original prices in case of error
-            return hourly_prices
+            _LOGGER.error(f"Error in convert_hourly_prices: {e}", exc_info=True)
+            # Return empty structure in case of major error
+            return {"today": {}, "tomorrow": {}}
