@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, List
 
 from aiohttp import ClientSession
 
-from .base.api import PriceAPIBase
+from .base.base_price_api import BasePriceAPI
 from .base.error_handler import retry_with_backoff
 from .base.data_structure import StandardizedPriceData
 from .parsers.amber_parser import AmberParser
@@ -16,7 +16,7 @@ from ..const.api import Amber
 
 _LOGGER = logging.getLogger(__name__)
 
-class AmberAPI(PriceAPIBase):
+class AmberAPI(BasePriceAPI):
     """API client for Amber Energy."""
 
     def __init__(self, session: Optional[ClientSession] = None):

@@ -109,3 +109,16 @@ class SourceTimezone:
         Source.STROMLIGNING: "%Y-%m-%dT%H:%M:%S.%fZ",  # ISO format with milliseconds
         Source.COMED: "%Y-%m-%dT%H:%M:%S"  # ISO format without timezone
     }
+
+
+class Amber:
+    """Amber Energy API constants."""
+    # Default currency for Australia
+    DEFAULT_CURRENCY = "AUD"
+    
+    # Amber API constants
+    PRICE_FIELD = "perKwh"
+    TIMESTAMP_FIELD = "date"
+    
+    # Australian regions
+    REGIONS = ["NSW", "QLD", "SA", "TAS", "VIC"]

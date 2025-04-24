@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], 
                         default="INFO", help="Set logging level")
     parser.add_argument("--tests", nargs="+", 
-                        choices=["today", "tomorrow", "adapter", "api", "import", "date_range", "all"],
+                        choices=["unified", "adapter", "api", "import", "date_range", "all"],
                         default=["all"], help="Specific tests to run")
     parser.add_argument("--apis", nargs="+", help="Specific APIs to test")
     parser.add_argument("--regions", nargs="+", help="Specific regions to test")
@@ -45,6 +45,20 @@ def run_test(test_script, description):
     print(f"\nRunning {description}...")
     result = os.system(f"python {test_script}")
     return result == 0  # True if test passed (exit code 0)
+
+def run_unified_tests():
+    """Run unified price manager tests by importing test cases from test_unified_price_manager."""
+    from scripts.tests.test_unified_price_manager import TestUnifiedPriceManager
+    
+    # Create a test suite with the unified price manager tests
+    suite = unittest.TestSuite()
+    for test_method in [method for method in dir(TestUnifiedPriceManager) if method.startswith('test_')]:
+        suite.addTest(TestUnifiedPriceManager(test_method))
+    
+    # Run the tests
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+    return result.wasSuccessful()
 
 def run_adapter_tests():
     """Run adapter tests by importing test cases from test_tomorrow_data_manager."""
@@ -77,23 +91,23 @@ def run_tests(args):
     # Determine which tests to run
     run_all = "all" in args.tests
     
-    # Run today data manager tests
-    if run_all or "today" in args.tests:
-        results["Today Data Manager"] = run_test(
-            "scripts/tests/test_today_data_manager.py", 
-            "Today Data Manager tests"
-        )
-    
-    # Run tomorrow data manager tests
-    if run_all or "tomorrow" in args.tests:
-        results["Tomorrow Data Manager"] = run_test(
-            "scripts/tests/test_tomorrow_data_manager.py", 
-            "Tomorrow Data Manager tests"
-        )
+    # Run unified price manager tests
+    if run_all or "unified" in args.tests:
+        try:
+            print("\nRunning Unified Price Manager tests...")
+            results["Unified Price Manager"] = run_unified_tests()
+        except Exception as e:
+            print(f"Error running Unified Price Manager tests: {e}")
+            results["Unified Price Manager"] = False
     
     # Run adapter tests
     if run_all or "adapter" in args.tests:
-        results["Adapter"] = run_adapter_tests()
+        try:
+            print("\nRunning Adapter tests...")
+            results["Adapter"] = run_adapter_tests()
+        except Exception as e:
+            print(f"Error running Adapter tests: {e}")
+            results["Adapter"] = False
     
     # Run API tests
     if run_all or "api" in args.tests:
@@ -146,16 +160,20 @@ def run_tests(args):
     print("=" * 80)
     
     print("""
-1. ElectricityPriceAdapter Fix:
-   - Added support for parsing ISO format dates in hourly_prices and tomorrow_hourly_prices
-   - Added ability to extract tomorrow's data from hourly_prices when it has dates
-   - Improved error handling for invalid hour formats
+1. Test Framework Updates:
+   - Unified today and tomorrow data manager tests into a single UnifiedPriceManager test class
+   - Fixed imports by using the current architecture instead of deprecated modules
+   - Updated test structure to match the current codebase organization
 
-2. Testing Infrastructure:
-   - Created core testing modules for adapter and API testing
-   - Added sample data files with ISO format dates
-   - Created comprehensive tests for verifying the fixes
-   - Organized test files into appropriate directories
+2. API Module Fixes:
+   - Added missing Amber API constants
+   - Created AmberParser implementation
+   - Fixed import paths in amber.py to match the current codebase structure
+
+3. Adapter Testing:
+   - Fixed ElectricityPriceAdapter tests for timestamp format compatibility
+   - Updated method calls to match current API (has_tomorrow_prices instead of is_tomorrow_valid)
+   - Added support for ISO format dates in hourly prices
     """)
     
     # Return overall status

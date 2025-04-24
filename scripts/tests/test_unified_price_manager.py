@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Tests for the UnifiedPriceManager - Today data functionality."""
+"""Tests for the UnifiedPriceManager functionality."""
 import sys
 import os
 import asyncio
 import unittest
 import logging
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Configure logging
 logging.basicConfig(
@@ -22,8 +22,8 @@ from custom_components.ge_spot.coordinator.unified_price_manager import UnifiedP
 from custom_components.ge_spot.price import ElectricityPriceAdapter
 from scripts.tests.mocks.hass import MockHass
 
-class TestTodayDataHandling(unittest.TestCase):
-    """Test the UnifiedPriceManager's today data handling."""
+class TestUnifiedPriceManager(unittest.TestCase):
+    """Test the UnifiedPriceManager class."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -122,6 +122,57 @@ class TestTodayDataHandling(unittest.TestCase):
         # Verify the processor was called
         self.manager._data_processor.process.assert_called_once_with(result)
         self.assertEqual(processed, expected_processed)
+        
+    @patch('custom_components.ge_spot.coordinator.unified_price_manager.PriceDataFetcher')
+    async def test_fetch_with_tomorrow_data(self, mock_fetcher):
+        """Test fetch_data with tomorrow data."""
+        # Set up the mock to return a result with tomorrow data
+        mock_instance = MagicMock()
+        mock_fetcher.return_value = mock_instance
+        
+        # Create mock data with tomorrow prices
+        today = datetime.now(timezone.utc).date()
+        tomorrow = today + timedelta(days=1)
+        
+        # Create hourly prices for today and tomorrow
+        hourly_prices = {}
+        tomorrow_hourly_prices = {}
+        
+        # Add today's prices (using simple HH:00 format)
+        for hour in range(24):
+            hourly_prices[f"{hour:02d}:00"] = 10.0 + hour
+            
+        # Add tomorrow's prices
+        for hour in range(24):
+            tomorrow_hourly_prices[f"{hour:02d}:00"] = 50.0 + hour
+        
+        mock_result = {
+            "source": "test_source",
+            "attempted_sources": ["source1", "source2"],
+            "fallback_sources": ["fallback1"],
+            "hourly_prices": hourly_prices,
+            "tomorrow_hourly_prices": tomorrow_hourly_prices,
+            "has_tomorrow_prices": True
+        }
+        
+        # Create a coroutine that returns the mock result
+        async def mock_fetch(*args, **kwargs):
+            return mock_result
+            
+        mock_instance.fetch_with_fallback.return_value = mock_fetch()
+        
+        # Mock the data processor
+        self.manager._data_processor = MagicMock()
+        self.manager._data_processor.process.return_value = mock_result
+        
+        # Call the method
+        result = await self.manager.fetch_data()
+        
+        # Verify the result
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result["hourly_prices"]), 24)
+        self.assertEqual(len(result["tomorrow_hourly_prices"]), 24)
+        self.assertTrue(result["has_tomorrow_prices"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -94,7 +94,7 @@ def get_timezone_object(timezone_id: str) -> tzinfo:
         return timezone_id
 
     # Special case for UTC
-    if get_timezone_object(timezone_id) is timezone.utc:
+    if timezone_id in ('UTC', 'Z', 'GMT', 'GMT0', 'GMT+0', 'GMT-0'):
         return timezone.utc
 
     # Convert common timezone names to IANA names

@@ -483,3 +483,42 @@ class AreaInfo:
             List of area codes in the region
         """
         return [area for area, reg in cls.AREA_REGIONS.items() if reg == region]
+
+
+def get_available_sources(area: str) -> list:
+    """Get a list of available sources for an area.
+    
+    Args:
+        area: The area code to check
+        
+    Returns:
+        List of source identifiers that support this area
+    """
+    available_sources = []
+    
+    # Check each source's area mappings
+    if area in AreaMapping.NORDPOOL_AREAS:
+        available_sources.append("nordpool")
+        
+    if area in AreaMapping.ENERGI_DATA_AREAS:
+        available_sources.append("energi_data_service")
+    
+    if area in AreaMapping.ENTSOE_AREAS or area in AreaMapping.ENTSOE_MAPPING:
+        available_sources.append("entsoe")
+        
+    if area in AreaMapping.EPEX_AREAS:
+        available_sources.append("epex")
+        
+    if area in AreaMapping.OMIE_AREAS:
+        available_sources.append("omie")
+        
+    if area in AreaMapping.AEMO_AREAS:
+        available_sources.append("aemo")
+        
+    if area in AreaMapping.STROMLIGNING_AREAS:
+        available_sources.append("stromligning")
+        
+    if area in AreaMapping.COMED_AREAS:
+        available_sources.append("comed")
+    
+    return available_sources
