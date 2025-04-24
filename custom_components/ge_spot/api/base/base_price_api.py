@@ -73,7 +73,7 @@ class BasePriceAPI(ABC):
         """
         pass
     
-    async def fetch_day_ahead_prices(self):
+    async def fetch_day_ahead_prices(self, area=None):
         try:
             if not self.timezone_service:
                 raise ValueError("timezone_service is not initialized")

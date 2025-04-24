@@ -10,11 +10,21 @@ from .base import BaseElectricityPriceSensor
 
 _LOGGER = logging.getLogger(__name__)
 
-class PriceValueSensor(BaseElectricityPriceSensor):
-    """Generic sensor for price values with flexible data extraction."""
+class PriceValueSensor(BaseSensor):
+    """Representation of a GE Spot price sensor."""
 
-    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value_fn, additional_attrs=None, *args, **kwargs):
-        """Initialize the price value sensor."""
+    def __init__(
+        self,
+        coordinator,
+        config_data,
+        sensor_type,
+        name_suffix,
+    ):
+        """Initialize the sensor."""
+        # Ensure config_data is a dictionary before passing to super().__init__
+        if not isinstance(config_data, dict):
+            config_data = {"entry_id": coordinator.config_entry.entry_id}
+            
         super().__init__(coordinator, config_data, sensor_type, name_suffix)
         self._value_fn = value_fn
         self._additional_attrs = additional_attrs

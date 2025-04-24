@@ -19,7 +19,7 @@ from .base.data_structure import create_standardized_price_data
 _LOGGER = logging.getLogger(__name__)
 
 class NordpoolAPI(BasePriceAPI):
-    """API implementation for Nordpool."""
+    """Nordpool API implementation."""
     
     def __init__(self, config: Optional[Dict[str, Any]] = None, session=None):
         """Initialize the API.

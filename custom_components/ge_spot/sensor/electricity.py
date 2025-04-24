@@ -24,15 +24,22 @@ from .price import (
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Set up sensors based on a config entry."""
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+):
+    """Set up the GE Spot electricity sensors."""
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
     
-    # Get config options
-    config = dict(config_entry.data)
-    if config_entry.options:
-        config.update(config_entry.options)
-
+    # Create a proper config_data dictionary
+    config_data = {
+        "entry_id": config_entry.entry_id,
+        # Add any other configuration data needed
+    }
+    
+    entities = []
+    
     # Get VAT setting
     vat = config.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
     include_vat = config.get(Config.INCLUDE_VAT, False)
@@ -40,12 +47,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     price_in_cents = config.get(Config.DISPLAY_UNIT) == "cents"
     
     # Create sensor entities
-    sensors = []
     
     # Current price sensor
-    sensors.append(
+    entities.append(
         PriceValueSensor(
             coordinator, 
+            config_data,  # Now passing a dictionary
             f"{coordinator.area}_current_price",
             "Current Price", 
             "current_price",
@@ -56,9 +63,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     )
     
     # Next hour price sensor
-    sensors.append(
+    entities.append(
         PriceValueSensor(
             coordinator, 
+            config_data,
             f"{coordinator.area}_next_hour_price",
             "Next Hour Price", 
             "next_hour_price",
@@ -69,9 +77,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     )
     
     # Average price sensor
-    sensors.append(
+    entities.append(
         PriceStatisticSensor(
             coordinator, 
+            config_data,
             f"{coordinator.area}_average_price",
             "Average Price", 
             "average",
@@ -82,9 +91,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     )
     
     # Peak price sensor
-    sensors.append(
+    entities.append(
         ExtremaPriceSensor(
             coordinator, 
+            config_data,
             f"{coordinator.area}_peak_price",
             "Peak Price", 
             "max",
@@ -95,9 +105,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     )
     
     # Off-peak price sensor
-    sensors.append(
+    entities.append(
         ExtremaPriceSensor(
             coordinator, 
+            config_data,
             f"{coordinator.area}_off_peak_price",
             "Off-Peak Price", 
             "min",
@@ -108,9 +119,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     )
     
     # Off-peak/peak periods
-    sensors.append(
+    entities.append(
         OffPeakPeakSensor(
             coordinator,
+            config_data,
             f"{coordinator.area}_peak_offpeak_prices",
             "Peak/Off-Peak Prices",
             include_vat,
@@ -120,9 +132,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     )
     
     # Price difference (current vs average)
-    sensors.append(
+    entities.append(
         PriceDifferenceSensor(
             coordinator,
+            config_data,
             f"{coordinator.area}_price_difference",
             "Price Difference",
             "current_price",
@@ -134,9 +147,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     )
     
     # Price percentage (current vs average)
-    sensors.append(
+    entities.append(
         PricePercentSensor(
             coordinator,
+            config_data,
             f"{coordinator.area}_price_percentage",
             "Price Percentage",
             "current_price",
@@ -147,4 +161,4 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     )
 
     # Add all entities
-    async_add_entities(sensors, True)
+    async_add_entities(entities)
