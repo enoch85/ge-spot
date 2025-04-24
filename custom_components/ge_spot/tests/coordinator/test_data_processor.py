@@ -1,10 +1,13 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+import pytz # Add missing import
+from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime
 
 from custom_components.ge_spot.coordinator.data_processor import DataProcessor
 from custom_components.ge_spot.api.base.data_structure import StandardizedPriceData, PriceStatistics
 from custom_components.ge_spot.const.currencies import Currency
+from custom_components.ge_spot.const.config import Config # Add import for Config
+from custom_components.ge_spot.const.display import DisplayUnit # Add import for DisplayUnit
 
 # Sample data resembling output from PriceDataFetcher.fetch_with_fallback
 # This data has NOT been processed by DataProcessor yet
@@ -132,6 +135,7 @@ def data_processor_subunit(mock_tz_service, mock_exchange_service):
 
 # --- Test Cases ---
 
+
 @pytest.mark.asyncio
 async def test_process_basic_eur(data_processor_eur_target):
     """Test processing data that is already in EUR, no VAT."""
@@ -235,4 +239,4 @@ async def test_process_missing_currency(data_processor_eur_target):
 # TODO: Add test for subunit conversion (e.g., to Cents) - DONE
 # TODO: Add test for statistics calculation with complete data - DONE
 # TODO: Add test for incomplete data handling (stats should be None/incomplete) - DONE
-# TODO: Add test for error handling (e.g., missing timezone/currency) - DONE 
+# TODO: Add test for error handling (e.g., missing timezone/currency) - DONE

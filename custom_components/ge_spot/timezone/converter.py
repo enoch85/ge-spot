@@ -129,10 +129,11 @@ class TimezoneConverter:
                     # Handle potential overwrites (e.g., DST fallback hour)
                     if target_hour_key in target_dict:
                         if is_duplicate:
-                            _LOGGER.warning(f"DST Fallback? Hour {target_hour_key} on {target_date} already exists. 
-                                             Input {iso_key} maps to this hour. Overwriting with later value.")
-                            # Policy: Overwrite with the value that occurs later in wall time (usually standard time)
-                            # Since we process sequentially, the later one will naturally overwrite.
+                            # Handle potential DST fallback where the same hour might appear twice
+                            _LOGGER.warning(
+                                f"DST Fallback? Hour {target_hour_key} on {target_date} already exists. "
+                                f"Input {iso_key} maps to this hour. Overwriting with later value."
+                            )
                         else:
                             # This shouldn't happen unless input data is strange
                             _LOGGER.warning(f"Duplicate target hour key {target_hour_key} found for date {target_date} 
