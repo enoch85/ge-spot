@@ -27,6 +27,8 @@ class BaseElectricityPriceSensor(SensorEntity):
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):
         """Initialize the base sensor."""
         self.coordinator = coordinator
+        if not isinstance(config_data, dict):
+            raise TypeError("config_data must be a dictionary")
         self._area = config_data.get(Attributes.AREA)
         self._vat = config_data.get(Attributes.VAT, 0)
         self._precision = config_data.get("precision", 3)

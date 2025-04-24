@@ -73,32 +73,16 @@ class BasePriceAPI(ABC):
         """
         pass
     
-    async def fetch_day_ahead_prices(
-        self, 
-        area: str,
-        currency: str = "EUR",
-        reference_time: Optional[datetime] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """Fetch day-ahead prices for the given area.
-
-        Args:
-            area: The area code (e.g., 'SE1', 'FI')
-            currency: The currency code (default: EUR)
-            reference_time: Optional reference time for price period
-            **kwargs: Additional keyword arguments
-
-        Returns:
-            Dictionary with standardized price data
-        """
+    async def fetch_day_ahead_prices(self):
         try:
+            if not self.timezone_service:
+                raise ValueError("timezone_service is not initialized")
+            target_timezone = self.timezone_service.get_target_timezone()
+            
             _LOGGER.debug(f"{self.source_type}: Fetching day-ahead prices for area {area}")
             
             # Get source timezone for this area
             source_timezone = self.get_timezone_for_area(area)
-            
-            # Get user/target timezone
-            target_timezone = self.timezone_service.get_target_timezone()
             
             # Fetch raw data
             raw_data = await self.fetch_raw_data(area, reference_time, **kwargs)
@@ -219,4 +203,4 @@ class BasePriceAPI(ABC):
         from ..parsers import get_parser_for_source
         
         # Create parser with our timezone service
-        return get_parser_for_source(self.source_type, self.timezone_service) 
+        return get_parser_for_source(self.source_type, self.timezone_service)
