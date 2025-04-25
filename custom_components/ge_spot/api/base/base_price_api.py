@@ -89,10 +89,10 @@ class BasePriceAPI(ABC):
             # Get reference_time from kwargs
             reference_time = kwargs.get('reference_time')
 
-            # Remove keys that are passed explicitly
-            kwargs.pop('reference_time', None)
-            kwargs.pop('session', None)
-            raw_data = await self.fetch_raw_data(area, session=kwargs.get('session'), reference_time=reference_time, **kwargs)
+            # Remove keys that are passed explicitly to avoid TypeError
+            kwargs_filtered = {k: v for k, v in kwargs.items() if k not in ['reference_time', 'session']}
+
+            raw_data = await self.fetch_raw_data(area, session=kwargs.get('session'), reference_time=reference_time, **kwargs_filtered)
             if not raw_data:
                 _LOGGER.warning(f"{self.source_type}: No data returned for area {area}")
                 return {}

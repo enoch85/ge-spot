@@ -1,5 +1,6 @@
 """API handler for ENTSO-E Transparency Platform."""
 import logging
+import asyncio
 from datetime import datetime, timezone, timedelta, time
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, Optional, List
@@ -80,16 +81,7 @@ class EntsoeAPI(BasePriceAPI):
                 await client.close()
 
     async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
-        """Fetch data from ENTSO-E.
-        
-        Args:
-            client: API client
-            area: Area code
-            reference_time: Optional reference time
-            
-        Returns:
-            Raw data from API
-        """
+        """Fetch data from ENTSO-E using parallel requests for different document types."""
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
         if not api_key:
             _LOGGER.debug("No API key provided for ENTSO-E, skipping")
@@ -115,7 +107,9 @@ class EntsoeAPI(BasePriceAPI):
 
         # Store all successful responses
         xml_responses = []
-        
+        dict_response_found = None # Store the first dict response found
+        found_doc_type = None
+
         # Try fetching data for each date range
         for start_date, end_date in date_ranges:
             # Format dates for ENTSO-E API (YYYYMMDDHHMM format)
@@ -124,8 +118,9 @@ class EntsoeAPI(BasePriceAPI):
 
             # Document types to try - based on ENTSO-E improvements
             doc_types = ["A44", "A62", "A65"]
-            doc_type_tasks = []
-            
+            tasks_to_gather = []
+            doc_type_map = {}
+
             # Create tasks for all document types to run in parallel
             for doc_type in doc_types:
                 # Build query parameters
@@ -137,13 +132,9 @@ class EntsoeAPI(BasePriceAPI):
                     "periodStart": period_start,
                     "periodEnd": period_end,
                 }
-
-                _LOGGER.debug(f"Trying ENTSO-E with document type {doc_type} and date range: {period_start} to {period_end}")
-
-                # Sanitize params before logging to hide security token
                 sanitized_params = sanitize_sensitive_data(params)
-                _LOGGER.debug(f"ENTSO-E request params: {sanitized_params}")
-
+                _LOGGER.debug(f"Creating task for ENTSO-E doc type {doc_type}, range {period_start}-{period_end}, params: {sanitized_params}")
+                
                 # Create task for fetching with this document type
                 task = client.fetch(
                     self.base_url,
@@ -151,67 +142,81 @@ class EntsoeAPI(BasePriceAPI):
                     headers=headers,
                     timeout=Network.Defaults.PARALLEL_FETCH_TIMEOUT
                 )
-                doc_type_tasks.append((doc_type, task))
-            
-            # Wait for all tasks to complete and process results
-            import asyncio
-            for doc_type, task in doc_type_tasks:
-                try:
-                    response = await task
+                tasks_to_gather.append(task)
+                doc_type_map[task] = doc_type
 
-                    if not response:
-                        _LOGGER.debug(f"ENTSO-E returned empty response for document type {doc_type} and date range {period_start} to {period_end}")
+            # Gather results, return_exceptions=True to handle individual failures
+            results = await asyncio.gather(*tasks_to_gather, return_exceptions=True)
+
+            # Process results
+            for i, result in enumerate(results):
+                task = tasks_to_gather[i]
+                doc_type = doc_type_map[task]
+
+                if isinstance(result, Exception):
+                    if isinstance(result, asyncio.TimeoutError):
+                         _LOGGER.warning(f"ENTSO-E request timed out for document type {doc_type} and date range {period_start} to {period_end}")
+                    else:
+                         _LOGGER.error(f"Error fetching ENTSO-E data with document type {doc_type}: {result}")
+                    continue # Skip to next result
+                
+                # Process successful response (result is the 'response' variable from the old loop)
+                response = result 
+                if not response:
+                    _LOGGER.debug(f"ENTSO-E returned empty response for document type {doc_type} and date range {period_start} to {period_end}")
+                    continue
+
+                # Handle specific string responses (errors or valid XML)
+                if isinstance(response, str):
+                    if "Not authorized" in response:
+                        _LOGGER.error("ENTSO-E API authentication failed: Not authorized. Check your API key.")
+                        raise ValueError("ENTSO-E API authentication failed: Not authorized")
+                    elif "No matching data found" in response:
+                        _LOGGER.debug(f"ENTSO-E returned 'No matching data found' for document type {doc_type} and date range {period_start} to {period_end}")
                         continue
+                    elif "Publication_MarketDocument" in response:
+                        _LOGGER.info(f"Successfully fetched ENTSO-E XML data with document type {doc_type} for area {area}")
+                        xml_responses.append(response)
+                        # Continue checking other doc types in case they have more data
+                    else:
+                        _LOGGER.warning(f"Received unexpected string response from ENTSO-E for doc type {doc_type}: {response[:200]}...")
+                
+                # Handle dictionary response (should ideally not happen with Accept: XML, but handle defensively)
+                elif isinstance(response, dict) and response:
+                     _LOGGER.info(f"Successfully fetched ENTSO-E dictionary data with document type {doc_type} for area {area}")
+                     # Prioritize dict response if found, store it and break inner loop
+                     if not dict_response_found:
+                          dict_response_found = response
+                          found_doc_type = doc_type
+                     # Continue checking other doc types
 
-                    # Handle authentication errors
-                    if isinstance(response, str):
-                        if "Not authorized" in response:
-                            _LOGGER.error("ENTSO-E API authentication failed: Not authorized. Check your API key.")
-                            raise ValueError("ENTSO-E API authentication failed: Not authorized")
-                        elif "No matching data found" in response:
-                            # Log but continue with next document type
-                            _LOGGER.debug(f"ENTSO-E returned 'No matching data found' for document type {doc_type} and date range {period_start} to {period_end}")
-                            continue
-                        elif "Publication_MarketDocument" in response:
-                            # We got a valid response with data
-                            _LOGGER.info(f"Successfully fetched ENTSO-E data with document type {doc_type} for area {area}")
-                            xml_responses.append(response)
-                    elif isinstance(response, dict) and response:
-                        # We got a valid response with data in dictionary format
-                        return {
-                            "xml_responses": xml_responses,
-                            "dict_response": response,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "api_timezone": "Europe/Brussels",  # ENTSO-E typically uses CET/CEST
-                            "source": Source.ENTSOE,
-                            "area": area,
-                            "entsoe_area": entsoe_area,
-                            "document_type": doc_type
-                        }
-                except asyncio.TimeoutError:
-                    _LOGGER.warning(f"ENTSO-E request timed out for document type {doc_type} and date range {period_start} to {period_end}")
-                except Exception as e:
-                    _LOGGER.error(f"Error fetching ENTSO-E data with document type {doc_type}: {str(e)}")
-            
-            # If we got any valid responses from this date range, don't try the next one
-            if xml_responses:
+            # If we found any data (XML or Dict) in this date range, stop trying older ranges
+            if xml_responses or dict_response_found:
                 _LOGGER.info(f"Got valid ENTSO-E responses for date range {period_start} to {period_end}, skipping remaining ranges")
                 break
 
-        # If we got any valid XML responses, return them
-        if xml_responses:
-            return {
-                "xml_responses": xml_responses,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "api_timezone": "Europe/Brussels",  # ENTSO-E typically uses CET/CEST
-                "source": Source.ENTSOE,
-                "area": area,
-                "entsoe_area": entsoe_area
-            }
+        # Prepare the final result dictionary
+        final_result = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "api_timezone": "Europe/Brussels",
+            "source": Source.ENTSOE,
+            "area": area,
+            "entsoe_area": entsoe_area
+        }
 
-        # If we've tried all date ranges and still have no data, raise an error
-        _LOGGER.warning(f"ENTSO-E: No data found for area {area} after trying multiple date ranges")
-        raise ValueError(f"No matching data found for area {area} after trying multiple date ranges and document types")
+        if dict_response_found:
+            final_result["dict_response"] = dict_response_found
+            final_result["document_type"] = found_doc_type
+            # Include XML responses found in the same successful date range run if any
+            if xml_responses:
+                 final_result["xml_responses"] = xml_responses
+            return final_result
+        elif xml_responses:
+            final_result["xml_responses"] = xml_responses
+            return final_result
+        else:
+            _LOGGER.warning(f"ENTSO-E: No data found for area {area} after trying multiple date ranges")
+            raise ValueError(f"No matching data found for area {area} after trying multiple date ranges and document types")
     
     async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse raw data into standardized format.

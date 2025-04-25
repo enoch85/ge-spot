@@ -14,7 +14,7 @@ from ..const.attributes import Attributes
 from ..const.config import Config
 from ..const.currencies import Currency, CurrencyInfo
 from ..const.defaults import Defaults
-from ..const.display import DisplayUnit
+from ..const.display import DisplayUnit # Ensure DisplayUnit is imported
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +36,8 @@ class BaseElectricityPriceSensor(SensorEntity):
 
         # Display settings
         self._display_unit = config_data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT) # Get from config_data
-        self._use_subunit = config_data.get(Config.USE_SUBUNIT, Defaults.USE_SUBUNIT) # Get from config_data
+        # Determine if subunit should be used based on the display_unit setting
+        self._use_subunit = self._display_unit == DisplayUnit.CENTS
         self._currency = config_data.get(Attributes.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(self._area))
 
         # Create entity ID and name
@@ -69,8 +70,8 @@ class BaseElectricityPriceSensor(SensorEntity):
             "currency": self._currency,
             "area": self._area,
             "vat": f"{self._vat * 100:.0f}%",
-            "display_unit": self._display_unit,
-            "use_subunit": self._use_subunit,
+            "display_unit": self._display_unit, # Use the value set in __init__
+            "use_subunit": self._use_subunit, # Use the value set in __init__
             "data_source": self.coordinator.data.get("source", "unknown"),
         }
 
@@ -87,9 +88,14 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Add raw value if available for current hour only
         if "raw_values" in self.coordinator.data and self._sensor_type in self.coordinator.data["raw_values"]:
             raw_info = self.coordinator.data["raw_values"][self._sensor_type]
+            # Check if raw_info is a dictionary and contains the 'raw' key
             if isinstance(raw_info, dict) and "raw" in raw_info:
                 attrs["raw_value"] = raw_info["raw"]
                 attrs["raw_unit"] = raw_info.get("unit")
+            # Handle cases where raw_info might not be a dict (optional, based on expected data structure)
+            # else:
+            #     _LOGGER.debug(f"Unexpected format for raw_values[{self._sensor_type}]: {raw_info}")
+
 
         # Add source info dictionary
         source_info = {}
