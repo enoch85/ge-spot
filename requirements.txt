@@ -6,3 +6,4 @@ xmltodict>=0.13.0
 PyJWT>=2.6.0
 aiofiles>=23.2
 pytz>=2023.3 # Added for timezone handling
+pytest-homeassistant-custom-component

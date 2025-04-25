@@ -19,6 +19,8 @@ class PriceValueSensor(BaseElectricityPriceSensor):
         config_data,
         sensor_type,
         name_suffix,
+        value_fn: Callable[[Dict[str, Any]], Optional[float]], # Added parameter
+        additional_attrs: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None # Added parameter
     ):
         """Initialize the sensor."""
         # Ensure config_data is a dictionary before passing to super().__init__

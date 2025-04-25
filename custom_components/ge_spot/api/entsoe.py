@@ -130,7 +130,7 @@ class EntsoeAPI(BasePriceAPI):
                         self.base_url,
                         params=params,
                         headers=headers,
-                        timeout=Network.Defaults.API_TIMEOUT # Use standard timeout
+                        timeout=Network.Defaults.TIMEOUT # Use standard timeout
                     )
 
                     if not response:

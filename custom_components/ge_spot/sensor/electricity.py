@@ -22,6 +22,10 @@ from .price import (
     OffPeakPeakSensor
 )
 
+from ..const.attributes import Attributes
+from ..const.defaults import Defaults
+from ..const.display import DisplayUnit
+
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
@@ -30,94 +34,98 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ):
     """Set up the GE Spot electricity sensors."""
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]
-    
-    # Create a proper config_data dictionary
-    config_data = {
-        "entry_id": config_entry.entry_id,
-        # Add any other configuration data needed
-    }
-    
-    entities = []
-    
-    # Get configuration settings from options flow
+    coordinator: UnifiedPriceCoordinator = hass.data[DOMAIN][config_entry.entry_id]
     options = config_entry.options
-    
-    # Get VAT setting
+
+    # Create a proper config_data dictionary including area and other relevant options
+    config_data = {
+        Attributes.AREA: coordinator.area, # Get area from coordinator
+        Attributes.VAT: options.get(Config.VAT, 0), # Get VAT from options
+        Config.PRECISION: options.get(Config.PRECISION, Defaults.PRECISION), # Get precision from options
+        Config.DISPLAY_UNIT: options.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT), # Get display unit from options
+        Attributes.CURRENCY: options.get(Config.CURRENCY, coordinator.currency), # Get currency from options
+        # Add entry_id if needed elsewhere, though base sensor doesn't use it directly
+        "entry_id": config_entry.entry_id,
+    }
+
+    # Define value extraction functions
+    get_current_price = lambda data: data.get('current_price')
+    get_next_hour_price = lambda data: data.get('next_hour_price')
+    # Define a simple additional attributes function
+    get_base_attrs = lambda data: {"tomorrow_valid": data.get("tomorrow_valid", False)}
+
+    entities = []
+
+    # Get specific settings used by some sensors directly (already present)
     vat = options.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
     include_vat = options.get(Config.INCLUDE_VAT, False)
-    currency = options.get(Config.CURRENCY, coordinator.currency)
-    price_in_cents = options.get(Config.DISPLAY_UNIT) == "cents"
-    
-    # Create sensor entities
-    
+    price_in_cents = options.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS # Use DisplayUnit constant
+
+    # Create sensor entities (passing the populated config_data)
+
     # Current price sensor
     entities.append(
         PriceValueSensor(
-            coordinator, 
-            config_data,  # Now passing a dictionary
+            coordinator,
+            config_data, # Pass the correctly populated config_data
             f"{coordinator.area}_current_price",
-            "Current Price"
+            "Current Price",
+            get_current_price, # Pass the function
+            get_base_attrs     # Pass the function for additional attributes
         )
     )
-    
+
     # Next hour price sensor
     entities.append(
         PriceValueSensor(
-            coordinator, 
-            config_data,
+            coordinator,
+            config_data, # Pass the correctly populated config_data
             f"{coordinator.area}_next_hour_price",
-            "Next Hour Price"
+            "Next Hour Price",
+            get_next_hour_price, # Pass the function
+            None                 # No specific additional attributes needed here yet
         )
     )
-    
+
     # Average price sensor
     entities.append(
         PriceStatisticSensor(
-            coordinator, 
-            config_data,
+            coordinator,
             f"{coordinator.area}_average_price",
-            "Average Price", 
+            "Average Price",
             "average",
             include_vat,
             vat,
             price_in_cents
         )
     )
-    
+
     # Peak price sensor
     entities.append(
         ExtremaPriceSensor(
-            coordinator, 
-            config_data,
+            coordinator,
+            config_data, # Pass the correctly populated config_data
             f"{coordinator.area}_peak_price",
-            "Peak Price", 
-            "max",
-            include_vat,
-            vat,
-            price_in_cents
+            "Peak Price",
+            extrema_type="max" # Pass as keyword argument
         )
     )
-    
+
     # Off-peak price sensor
     entities.append(
         ExtremaPriceSensor(
-            coordinator, 
-            config_data,
+            coordinator,
+            config_data, # Pass the correctly populated config_data
             f"{coordinator.area}_off_peak_price",
-            "Off-Peak Price", 
-            "min",
-            include_vat,
-            vat,
-            price_in_cents
+            "Off-Peak Price",
+            extrema_type="min" # Pass as keyword argument
         )
     )
-    
+
     # Off-peak/peak periods
     entities.append(
         OffPeakPeakSensor(
             coordinator,
-            config_data,
             f"{coordinator.area}_peak_offpeak_prices",
             "Peak/Off-Peak Prices",
             include_vat,
@@ -125,12 +133,11 @@ async def async_setup_entry(
             price_in_cents
         )
     )
-    
+
     # Price difference (current vs average)
     entities.append(
         PriceDifferenceSensor(
             coordinator,
-            config_data,
             f"{coordinator.area}_price_difference",
             "Price Difference",
             "current_price",
@@ -140,12 +147,11 @@ async def async_setup_entry(
             price_in_cents
         )
     )
-    
+
     # Price percentage (current vs average)
     entities.append(
         PricePercentSensor(
             coordinator,
-            config_data,
             f"{coordinator.area}_price_percentage",
             "Price Percentage",
             "current_price",
