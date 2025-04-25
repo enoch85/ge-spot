@@ -37,7 +37,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Display settings
         self._display_unit = config_data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT) # Get from config_data
         # Determine if subunit should be used based on the display_unit setting
-        self._use_subunit = self._display_unit == DisplayUnit.CENTS
+        self._use_subunit = self._display_unit == DisplayUnit.CENTS # Correctly determine based on _display_unit
         self._currency = config_data.get(Attributes.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(self._area))
 
         # Create entity ID and name
