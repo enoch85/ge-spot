@@ -57,11 +57,7 @@ async def async_setup_entry(
             coordinator, 
             config_data,  # Now passing a dictionary
             f"{coordinator.area}_current_price",
-            "Current Price", 
-            "current_price",
-            include_vat,
-            vat,
-            price_in_cents
+            "Current Price"
         )
     )
     
@@ -71,11 +67,7 @@ async def async_setup_entry(
             coordinator, 
             config_data,
             f"{coordinator.area}_next_hour_price",
-            "Next Hour Price", 
-            "next_hour_price",
-            include_vat,
-            vat,
-            price_in_cents
+            "Next Hour Price"
         )
     )
     

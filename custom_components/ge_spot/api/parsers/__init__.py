@@ -24,7 +24,7 @@ def get_parser_for_source(source_type: str, timezone_service=None):
         Source.NORDPOOL: NordpoolPriceParser,
         Source.ENTSOE: EntsoePriceParser,
         Source.AEMO: AemoParser,
-        Source.EDS: EnergiDataParser,
+        Source.ENERGI_DATA_SERVICE: EnergiDataParser,
         Source.EPEX: EpexParser,
         Source.OMIE: OmieParser,
         Source.COMED: ComedParser,

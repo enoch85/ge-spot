@@ -16,18 +16,20 @@ _LOGGER = logging.getLogger(__name__)
 class BasePriceAPI(ABC):
     """Abstract base class for all price APIs."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, session=None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None):
         """Initialize the API.
         
         Args:
             config: Configuration dictionary
             session: Optional session for API requests
+            timezone_service: TimezoneService instance
         """
         self.config = config or {}
         self.session = session
         self.source_type = self._get_source_type()
         self.base_url = self._get_base_url()
         self.client = None
+        self.timezone_service = timezone_service
 
     @abstractmethod
     def _get_source_type(self) -> str:
@@ -77,7 +79,7 @@ class BasePriceAPI(ABC):
         try:
             if not self.timezone_service:
                 raise ValueError("timezone_service is not initialized")
-            target_timezone = self.timezone_service.get_target_timezone()
+            target_timezone = self.timezone_service.ha_timezone
             
             _LOGGER.debug(f"{self.source_type}: Fetching day-ahead prices for area {area}")
             
@@ -87,7 +89,9 @@ class BasePriceAPI(ABC):
             # Get reference_time from kwargs
             reference_time = kwargs.get('reference_time')
 
-            # Fetch raw data - pass session and kwargs down
+            # Remove keys that are passed explicitly
+            kwargs.pop('reference_time', None)
+            kwargs.pop('session', None)
             raw_data = await self.fetch_raw_data(area, session=kwargs.get('session'), reference_time=reference_time, **kwargs)
             if not raw_data:
                 _LOGGER.warning(f"{self.source_type}: No data returned for area {area}")
@@ -186,8 +190,8 @@ class BasePriceAPI(ABC):
             Timezone object for the area
         """
         # Use TimezoneService to get the area-specific timezone if possible
-        if self.timezone_service:
-            area_timezone = self.timezone_service.get_area_timezone(area)
+        if self.timezone_service and hasattr(self.timezone_service, 'area_timezone'):
+            area_timezone = self.timezone_service.area_timezone
             if area_timezone:
                 return area_timezone
         

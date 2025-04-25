@@ -147,9 +147,9 @@ class UnifiedPriceManager:
                     f"Next fetch allowed in {remaining_seconds:.1f} seconds. "
                     f"Using cached data."
                 )
-                
                 # Use last data if available
                 if self._last_data:
+                    self._consecutive_failures += 1
                     return self._last_data
         
         # Fetch data using our unified fetcher with fallback support
@@ -160,8 +160,12 @@ class UnifiedPriceManager:
         
         try:
             # Prepare API instances - needed for proper typing
-            api_instances = [cls(self.config) for cls in self._api_classes]
-            
+            api_instances = [cls(self.config, timezone_service=self._tz_service) for cls in self._api_classes]
+            # If no API classes are available, treat as failure
+            if not self._api_classes:
+                _LOGGER.error(f"No API sources available for area {self.area}")
+                self._consecutive_failures += 1
+                return await self._generate_empty_result()
             # Fetch with fallback
             result = await self._data_fetcher.fetch_with_fallback(
                 sources=api_instances,
@@ -172,21 +176,17 @@ class UnifiedPriceManager:
                 vat=self.vat_rate if self.include_vat else None,
                 include_vat=self.include_vat
             )
-            
-            if not result:
+            if not result or not result.get("hourly_prices"):
                 _LOGGER.error(f"Failed to fetch data for area {self.area}")
                 self._consecutive_failures += 1
-                return self._generate_empty_result()
-            
+                return await self._generate_empty_result()
             # Reset failure counter on success
             self._consecutive_failures = 0
-            
             # Extract tracking info
             self._active_source = result.get("source", "unknown")
             self._attempted_sources = result.get("attempted_sources", [])
             self._fallback_sources = result.get("fallback_sources", [])
             self._using_cached_data = result.get("using_cached_data", False)
-            
             # Log result
             _LOGGER.info(
                 f"Fetch complete for area {self.area} - "
@@ -194,10 +194,8 @@ class UnifiedPriceManager:
                 f"Using cached data: {self._using_cached_data}, "
                 f"Fallbacks: {self._fallback_sources}"
             )
-            
             # Process result data
-            processed_data = self._process_result(result)
-            
+            processed_data = await self._process_result(result)
             # Store as last data
             self._last_data = processed_data
             
@@ -211,9 +209,9 @@ class UnifiedPriceManager:
             if self._last_data:
                 return self._last_data
             else:
-                return self._generate_empty_result()
+                return await self._generate_empty_result()
     
-    def _process_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+    async def _process_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Process raw result data.
         
         Args:
@@ -225,12 +223,12 @@ class UnifiedPriceManager:
         # Basic validation
         if not result or not isinstance(result, dict):
             _LOGGER.error(f"Invalid result for area {self.area}")
-            return self._generate_empty_result()
+            return await self._generate_empty_result()
         
         # Use data processor to generate final result
-        return self._data_processor.process(result)
+        return await self._data_processor.process(result)
     
-    def _generate_empty_result(self) -> Dict[str, Any]:
+    async def _generate_empty_result(self) -> Dict[str, Any]:
         """Generate an empty result when data is unavailable.
         
         Returns:
@@ -256,7 +254,7 @@ class UnifiedPriceManager:
             "error": f"Failed to fetch data after {self._consecutive_failures} attempts"
         })
         
-        return self._data_processor.process(empty_data)
+        return await self._data_processor.process(empty_data)
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get statistics about the data cache.

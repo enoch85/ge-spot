@@ -89,8 +89,8 @@ def get_timezone_object(timezone_id: str) -> tzinfo:
     Raises:
         ValueError: If timezone_id is invalid or cannot be resolved
     """
-    # Handle case where timezone_id is already a ZoneInfo object
-    if isinstance(timezone_id, zoneinfo.ZoneInfo):
+    if isinstance(timezone_id, tzinfo):
+        # If already a tzinfo object (like datetime.timezone.utc), return as is
         return timezone_id
 
     # Special case for UTC

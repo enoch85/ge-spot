@@ -21,17 +21,17 @@ _LOGGER = logging.getLogger(__name__)
 class NordpoolAPI(BasePriceAPI):
     """Nordpool API implementation."""
     
-    def __init__(self, config: Optional[Dict[str, Any]] = None, session=None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None):
         """Initialize the API.
         
         Args:
             config: Configuration dictionary
             session: Optional session for API requests
+            timezone_service: Optional timezone service
         """
-        super().__init__(config, session)
+        super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
         self.parser = NordpoolPriceParser()
-        self.timezone_service = None  # Initialize timezone_service
     
     def _get_source_type(self) -> str:
         """Get the source type identifier.

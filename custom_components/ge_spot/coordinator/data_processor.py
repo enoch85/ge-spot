@@ -262,3 +262,27 @@ class DataProcessor:
             median=median,
             complete_data=True # Assume complete if this function is called
         )
+
+    def _generate_empty_processed_result(self, data, error=None):
+        return {
+            "source": data.get("source", "unknown"),
+            "area": self.area,
+            "source_currency": data.get("currency"),
+            "target_currency": self.target_currency,
+            "source_timezone": data.get("api_timezone"),
+            "hourly_prices": {},
+            "tomorrow_hourly_prices": {},
+            "statistics": {},
+            "tomorrow_statistics": {},
+            "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
+            "vat_included": self.include_vat,
+            "display_unit": self.display_unit,
+            "raw_data": data.get("raw_data"),
+            "ecb_rate": None,
+            "ecb_updated": None,
+            "has_tomorrow_prices": False,
+            "attempted_sources": data.get("attempted_sources", []),
+            "fallback_sources": data.get("fallback_sources", []),
+            "using_cached_data": data.get("using_cached_data", False),
+            "error": error or "No data available"
+        }
