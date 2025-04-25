@@ -35,8 +35,8 @@ class BaseElectricityPriceSensor(SensorEntity):
         self._sensor_type = sensor_type
 
         # Display settings
-        self._display_unit = coordinator.display_unit
-        self._use_subunit = coordinator.use_subunit
+        self._display_unit = config_data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT) # Get from config_data
+        self._use_subunit = config_data.get(Config.USE_SUBUNIT, Defaults.USE_SUBUNIT) # Get from config_data
         self._currency = config_data.get(Attributes.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(self._area))
 
         # Create entity ID and name

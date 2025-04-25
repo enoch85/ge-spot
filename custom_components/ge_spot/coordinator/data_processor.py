@@ -42,7 +42,8 @@ class DataProcessor:
         target_currency: str,
         config: Dict[str, Any],
         tz_service: TimezoneService,
-        exchange_service: ExchangeRateService
+        # Accept the manager initially, get exchange_service later
+        manager: Any 
     ):
         """Initialize the data processor.
 
@@ -52,14 +53,16 @@ class DataProcessor:
             target_currency: Target currency code
             config: Configuration dictionary
             tz_service: Timezone service instance
-            exchange_service: Exchange rate service instance
+            manager: Manager instance to retrieve services
         """
         self.hass = hass
         self.area = area
         self.target_currency = target_currency
         self.config = config
         self._tz_service = tz_service
-        self._exchange_service = exchange_service
+        # Store manager to get exchange_service later
+        self._manager = manager 
+        self._exchange_service: Optional[ExchangeRateService] = None
         
         # Extract config settings needed for processing
         self.vat_rate = config.get(Config.VAT, Defaults.VAT_RATE) / 100  # Convert % to rate
@@ -67,8 +70,28 @@ class DataProcessor:
         self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         self.use_subunit = self.display_unit == DisplayUnit.CENTS
 
+    async def _ensure_exchange_service(self):
+        """Ensure the exchange service is available from the manager."""
+        if self._exchange_service is None:
+            # Access the exchange service instance from the manager
+            # This assumes the manager has an initialized _exchange_service attribute
+            if hasattr(self._manager, '_exchange_service') and self._manager._exchange_service is not None:
+                 self._exchange_service = self._manager._exchange_service
+            else:
+                # Attempt to initialize it via the manager if not already done
+                # This might be redundant if manager ensures init before calling process
+                await self._manager._ensure_exchange_service()
+                self._exchange_service = self._manager._exchange_service
+            
+            if self._exchange_service is None:
+                 _LOGGER.error("Exchange service not available in DataProcessor")
+                 # Handle error appropriately, maybe raise an exception
+                 raise RuntimeError("Exchange service could not be initialized or retrieved.")
+
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Process the selected source data: Normalize timezone, convert currency, calculate stats."""
+        # Ensure exchange service is ready
+        await self._ensure_exchange_service()
         
         _LOGGER.debug(f"Processing data for area {self.area} from source {data.get('source')}")
         
@@ -139,6 +162,8 @@ class DataProcessor:
             # Helper Function for Currency Conv/VAT/Subunit
             async def process_price(price, source_curr, target_curr):
                 if price is None: return None
+                # Ensure exchange service is ready before converting
+                await self._ensure_exchange_service()
                 # Convert currency
                 converted = await self._exchange_service.convert(price, source_curr, target_curr)
                 # Apply VAT
@@ -217,6 +242,11 @@ class DataProcessor:
 
         except Exception as e:
             _LOGGER.error(f"Error during data processing for area {self.area}: {e}", exc_info=True)
+            # Ensure exchange service is ready even on error path
+            try:
+                await self._ensure_exchange_service()
+            except Exception as init_err:
+                 _LOGGER.error(f"Failed to ensure exchange service during error handling: {init_err}")
             # Return structure with error, preserving original raw data if possible
             error_result = self._generate_empty_processed_result(data, error=str(e))
             error_result["raw_hourly_prices_original"] = raw_hourly_prices # Keep original raw input
@@ -224,6 +254,8 @@ class DataProcessor:
             
         # Add ECB rate info for attributes
         try:
+            # Ensure exchange service is ready
+            await self._ensure_exchange_service()
             # Use source_currency for base if not EUR?
             # The service currently assumes EUR base for ECB, might need adjustment if source_currency != EUR
             base_curr = Currency.EUR if source_currency == Currency.EUR else source_currency 
@@ -264,6 +296,7 @@ class DataProcessor:
         )
 
     def _generate_empty_processed_result(self, data, error=None):
+        # No need to ensure exchange service here as it doesn't use it directly
         return {
             "source": data.get("source", "unknown"),
             "area": self.area,

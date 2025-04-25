@@ -151,24 +151,46 @@ class ExchangeRateService:
     async def get_rates(self, force_refresh=False):
         """Get exchange rates (from cache or fresh fetch)."""
         now = time.time()
+        cache_loaded = False
+        if not self.rates: # If no rates in memory
+            cache_loaded = await self._load_cache()
 
-        # Try to load from cache if we don't have rates or force refresh requested
-        if not self.rates or force_refresh:
-            # Try to load from cache first (unless forced refresh)
-            if not force_refresh and await self._load_cache():
-                return self.rates
+        # Decide if fetch is needed
+        needs_fetch = force_refresh or not self.rates # Fetch if forced or no rates in memory/cache
 
-            # Fetch fresh rates if cache is unavailable or refresh is requested
-            fresh_rates = await self._fetch_ecb_rates()
+        if needs_fetch:
+            fresh_rates = None
+            fetch_exception = None
+            try:
+                _LOGGER.debug("Attempting to fetch fresh exchange rates from ECB.")
+                fresh_rates = await self._fetch_ecb_rates() # Decorated with retry
+            except Exception as e:
+                fetch_exception = e # Store exception
+                _LOGGER.warning(f"Fetching fresh ECB rates failed after retries: {e}")
+
             if fresh_rates:
+                _LOGGER.info("Successfully fetched fresh exchange rates.")
                 self.rates = fresh_rates
                 self.last_update = now
                 await self._save_cache()
-                return self.rates
-            elif not self.rates:
-                # If failed to fetch and have no cached rates, log error and raise exception
-                _LOGGER.error("Failed to fetch exchange rates and no cache available")
-                raise ValueError("Could not retrieve exchange rates")
+                # Fall through to return self.rates
+            elif self.rates: # Fetch failed, but we have rates (from memory or loaded cache)
+                _LOGGER.warning("Using existing rates as fresh fetch failed.")
+                # Fall through to return self.rates
+            else: # Fetch failed AND we still have no rates
+                _LOGGER.error("Failed to fetch exchange rates and no cache available.")
+                # Raise the original exception if it exists, otherwise a generic one
+                if fetch_exception:
+                    raise fetch_exception # Raise the original error (e.g., ClientConnectorError)
+                else:
+                    # Should not happen if fetch was attempted, but as a fallback
+                    raise ValueError("Could not retrieve exchange rates (fetch attempt failed silently)")
+
+        # Return rates (either fresh, loaded from cache, or from memory)
+        if not self.rates:
+             # This case should only be hit if fetch wasn't needed but rates are somehow empty.
+             _LOGGER.error("Exchange rates are unexpectedly empty after processing.")
+             raise ValueError("Exchange rates unavailable.")
 
         return self.rates
 

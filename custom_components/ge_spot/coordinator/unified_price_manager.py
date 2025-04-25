@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from ..const import DOMAIN
 from ..const.config import Config
@@ -22,7 +23,7 @@ from ..api.base.data_structure import StandardizedPriceData, create_standardized
 from ..api.base.data_fetch import PriceDataFetcher
 from ..api.base.session_manager import close_session
 from ..timezone import TimezoneService
-from ..utils.exchange_service import ExchangeService
+from ..utils.exchange_service import ExchangeService, get_exchange_service # Import get_exchange_service
 from ..utils.rate_limiter import RateLimiter
 from .data_processor import DataProcessor
 
@@ -69,14 +70,19 @@ class UnifiedPriceManager:
         # Services and utilities
         self._data_fetcher = PriceDataFetcher()
         self._tz_service = TimezoneService(hass, area, config)
-        self._exchange_service = ExchangeService(hass, config)
+        # Correctly instantiate ExchangeService with session
+        # Using get_exchange_service might be better if it handles singleton logic
+        # Let's try using the singleton pattern helper first
+        # self._exchange_service = ExchangeService(session=async_get_clientsession(hass))
+        # Defer initialization to ensure singleton pattern is used if intended
+        self._exchange_service: Optional[ExchangeService] = None 
         self._data_processor = DataProcessor(
             hass,
             area,
             currency,
             config,
             self._tz_service,
-            self._exchange_service
+            self # Pass self to DataProcessor, it will get exchange_service later
         )
         # Store rate limiter context information instead of creating an instance
         self._rate_limiter_context = f"unified_price_manager_{area}"
@@ -123,6 +129,15 @@ class UnifiedPriceManager:
         
         _LOGGER.info(f"Configured sources for area {self.area}: {self._source_priority}")
     
+    async def _ensure_exchange_service(self):
+        """Ensure the exchange service is initialized."""
+        if self._exchange_service is None:
+            self._exchange_service = await get_exchange_service(session=async_get_clientsession(self.hass))
+            # Pass the initialized service to the data processor if it expects it
+            # Need to check DataProcessor's __init__ signature again
+            # Assuming DataProcessor needs the actual service instance:
+            self._data_processor._exchange_service = self._exchange_service
+
     async def fetch_data(self, force: bool = False) -> Dict[str, Any]:
         """Fetch price data considering rate limits and caching.
         
@@ -133,6 +148,9 @@ class UnifiedPriceManager:
             Dictionary with processed data
         """
         now = dt_util.now()
+
+        # Ensure exchange service is initialized before fetching/processing
+        await self._ensure_exchange_service()
         
         # Check rate limiting unless forcing an update
         if not force and self._last_api_fetch:
@@ -205,6 +223,9 @@ class UnifiedPriceManager:
             _LOGGER.error(f"Error fetching price data for area {self.area}: {e}", exc_info=True)
             self._consecutive_failures += 1
             
+            # Ensure exchange service is initialized even on error path for _generate_empty_result
+            await self._ensure_exchange_service()
+
             # Use last known data if available, otherwise return empty result
             if self._last_data:
                 return self._last_data
@@ -220,6 +241,9 @@ class UnifiedPriceManager:
         Returns:
             Processed data
         """
+        # Ensure exchange service is initialized before processing
+        await self._ensure_exchange_service()
+
         # Basic validation
         if not result or not isinstance(result, dict):
             _LOGGER.error(f"Invalid result for area {self.area}")
@@ -234,6 +258,9 @@ class UnifiedPriceManager:
         Returns:
             Empty result dictionary
         """
+        # Ensure exchange service is initialized before processing empty result
+        await self._ensure_exchange_service()
+
         now = dt_util.now()
         
         # Create empty price data
@@ -275,8 +302,9 @@ class UnifiedPriceManager:
     
     async def async_close(self):
         """Close any open sessions and resources."""
-        if hasattr(self, '_exchange_service') and self._exchange_service:
-            await self._exchange_service.async_close()
+        # Use the initialized service if available
+        if self._exchange_service:
+            await self._exchange_service.close() # Use close() method instead of async_close()
 
 class UnifiedPriceCoordinator(DataUpdateCoordinator):
     """Data update coordinator using the unified price manager."""
