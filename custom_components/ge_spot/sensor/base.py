@@ -41,9 +41,21 @@ class BaseElectricityPriceSensor(SensorEntity):
         self._currency = config_data.get(Attributes.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(self._area))
 
         # Create entity ID and name
-        self.entity_id = f"sensor.gespot_{sensor_type.lower()}_{self._area.lower()}"
-        self._attr_name = f"GE-Spot {name_suffix} {self._area}"
-        self._attr_unique_id = f"gespot_{sensor_type}_{self._area}".lower()
+        if self._area:
+            area_lower = self._area.lower()
+            self.entity_id = f"sensor.gespot_{sensor_type.lower()}_{area_lower}"
+            self._attr_name = f"GE-Spot {name_suffix} {self._area}"
+            self._attr_unique_id = f"gespot_{sensor_type}_{area_lower}"
+        else:
+            # Log an error and potentially set default/invalid values or raise to prevent setup
+            _LOGGER.error("Area is not configured or is None. Cannot create sensor entity.")
+            # Option 1: Set dummy values (might hide the config issue)
+            # self.entity_id = f"sensor.gespot_{sensor_type.lower()}_invalid_area"
+            # self._attr_name = f"GE-Spot {name_suffix} (Invalid Area)"
+            # self._attr_unique_id = f"gespot_{sensor_type}_invalid_area"
+            # Option 2: Raise an error to clearly signal failed setup (might be better)
+            raise ValueError("Area configuration is missing, cannot initialize sensor.")
+
 
         # Set unit based on display_unit configuration
         if self._use_subunit:
