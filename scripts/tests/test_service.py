@@ -252,9 +252,3 @@ def test_get_next_hour_key_dst_fallback_first(timezone_service_ha_mode):
     # Current hour 02:00 (first) -> Next hour should be 03:00 (representing second 2am -> 3am)
     # Based on HourCalculator logic, it should return "03:00"
     assert timezone_service_ha_mode.get_next_hour_key() == "03:00" 
-
-# TODO: Add test for get_current_hour_key during DST fallback ambiguity - DONE
-# TODO: Add test for get_next_hour_key - DONE
-
-# TODO: Add test for get_current_hour_key during DST fallback ambiguity
-# TODO: Add test for get_next_hour_key 

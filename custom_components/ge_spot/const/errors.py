@@ -28,3 +28,8 @@ class Errors:
     NETWORK_ERROR = "network_error"
     TIMEZONE_ERROR = "timezone_error"
     AUTH_ERROR = "auth_error"
+
+# Custom Exception Classes
+class PriceFetchError(Exception):
+    """Custom exception for errors during price fetching."""
+    pass

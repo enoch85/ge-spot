@@ -15,6 +15,14 @@ from ..const.display import DisplayUnit
 from ..timezone.service import TimezoneService
 from ..api.base.data_structure import PriceStatistics, StandardizedPriceData
 from ..const.currencies import Currency
+# Import Defaults class to access PRECISION
+from ..const.defaults import Defaults
+from ..const.energy import EnergyUnit
+# Fix import path for CacheManager
+from .cache_manager import CacheManager
+
+from ..utils.timezone_converter import TimezoneConverter # Import TimezoneConverter
+from ..utils.currency_converter import CurrencyConverter # Import CurrencyConverter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,7 +51,7 @@ class DataProcessor:
         config: Dict[str, Any],
         tz_service: TimezoneService,
         # Accept the manager initially, get exchange_service later
-        manager: Any 
+        manager: Any
     ):
         """Initialize the data processor.
 
@@ -61,14 +69,22 @@ class DataProcessor:
         self.config = config
         self._tz_service = tz_service
         # Store manager to get exchange_service later
-        self._manager = manager 
+        self._manager = manager
         self._exchange_service: Optional[ExchangeRateService] = None
-        
+
         # Extract config settings needed for processing
         self.vat_rate = config.get(Config.VAT, Defaults.VAT_RATE) / 100  # Convert % to rate
         self.include_vat = config.get(Config.INCLUDE_VAT, Defaults.INCLUDE_VAT)
         self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         self.use_subunit = self.display_unit == DisplayUnit.CENTS
+        # Use Defaults.PRECISION instead of DEFAULT_PRICE_PRECISION
+        self.precision = config.get(Config.PRECISION, Defaults.PRECISION)
+
+        # Instantiate converters
+        self._tz_converter = TimezoneConverter(tz_service)
+        # CurrencyConverter needs exchange service, which is async, handle in process
+        self._currency_converter: Optional[CurrencyConverter] = None
+
 
     async def _ensure_exchange_service(self):
         """Ensure the exchange service is available from the manager."""
@@ -82,19 +98,36 @@ class DataProcessor:
                 # This might be redundant if manager ensures init before calling process
                 await self._manager._ensure_exchange_service()
                 self._exchange_service = self._manager._exchange_service
-            
+
             if self._exchange_service is None:
                  _LOGGER.error("Exchange service not available in DataProcessor")
                  # Handle error appropriately, maybe raise an exception
                  raise RuntimeError("Exchange service could not be initialized or retrieved.")
+            # Instantiate CurrencyConverter once exchange service is ready
+            if self._currency_converter is None:
+                self._currency_converter = CurrencyConverter(
+                    exchange_service=self._exchange_service,
+                    target_currency=self.target_currency,
+                    display_unit=self.display_unit,
+                    include_vat=self.include_vat,
+                    vat_rate=self.vat_rate
+                )
+
 
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Process the selected source data: Normalize timezone, convert currency, calculate stats."""
-        # Ensure exchange service is ready
+        # Ensure exchange service and currency converter are ready
         await self._ensure_exchange_service()
-        
+
+        # Check if currency converter was initialized (should be by _ensure_exchange_service)
+        if self._currency_converter is None:
+             _LOGGER.error("Currency converter not initialized. Cannot process.")
+             # Return an empty result with error
+             return self._generate_empty_processed_result(data, error="Currency converter failed to initialize")
+
+
         _LOGGER.debug(f"Processing data for area {self.area} from source {data.get('source')}")
-        
+
         # Basic validation
         if not data or not isinstance(data, dict) or not data.get("hourly_prices"):
             _LOGGER.warning(f"Invalid or empty data received for processing in area {self.area}. Data keys: {data.keys() if isinstance(data, dict) else 'N/A'}")
@@ -102,32 +135,40 @@ class DataProcessor:
 
         # Extract key info from input data (result of fetch_with_fallback)
         raw_hourly_prices = data.get("hourly_prices", {})
+        # Assume API adapters provide *all* hourly prices in one dict now
+        # raw_today_prices = data.get("hourly_prices", {}) # Adapt based on actual API output structure
+        # raw_tomorrow_prices = data.get("tomorrow_hourly_prices", {}) # Adapt based on actual API output structure
         source_timezone = data.get("api_timezone")
         source_currency = data.get("currency")
+        # Use EnergyUnit.MWH instead of EnergyUnit.MEGA_WATT_HOUR
+        source_unit = data.get("unit", EnergyUnit.MWH) # Get source unit, default MWh
+        # Define source variable
         source = data.get("source", "unknown")
-        raw_api_data = data.get("raw_data") # Keep raw data if available
-        has_tomorrow_prices_flag = data.get("has_tomorrow_prices", False) # Flag from parser/fetcher
+        # Define raw_api_data variable
+        raw_api_data = data.get("raw_data")
+
+        # 1. Timezone Normalization
+        normalized_prices = {}
 
         if not source_timezone:
             _LOGGER.error(f"Missing source timezone for source {source}. Cannot process.")
             return self._generate_empty_processed_result(data, error="Missing source timezone")
-            
+
         if not source_currency:
             _LOGGER.error(f"Missing source currency for source {source}. Cannot process.")
             return self._generate_empty_processed_result(data, error="Missing source currency")
 
-        processed_result = { 
+        processed_result = {
             "source": source,
             "area": self.area,
             "source_currency": source_currency,
             "target_currency": self.target_currency,
             "source_timezone": source_timezone,
-            "target_timezone": str(self._tz_service.ha_timezone), # Assuming HA time is the target
+            "target_timezone": str(self._tz_service.target_timezone), # Use target_timezone from service
             "hourly_prices": {}, # Today's FINAL prices (HH:00 keys)
             "tomorrow_hourly_prices": {}, # Tomorrow's FINAL prices (HH:00 keys)
-            "raw_hourly_prices_normalized_today": {}, # Optional intermediate step
-            "raw_hourly_prices_normalized_tomorrow": {}, # Optional intermediate step
-            "raw_hourly_prices_original": raw_hourly_prices, # Store original parser output
+            # Keep raw original prices for debugging if needed
+            "raw_hourly_prices_original": raw_hourly_prices,
             "current_price": None,
             "next_hour_price": None,
             "current_hour_key": None,
@@ -145,55 +186,74 @@ class DataProcessor:
             "attempted_sources": data.get("attempted_sources", []),
             "fallback_sources": data.get("fallback_sources", []),
             "using_cached_data": data.get("using_cached_data", False),
-            "fetched_at": data.get("fetched_at")
+            "fetched_at": data.get("fetched_at") # Or use dt_util.now() here?
         }
 
         try:
-            # 1. Normalize Timezones
-            # This returns {"today": {...}, "tomorrow": {...}, "other": {...}}
-            # Keys in the inner dicts are HH:00 in HA timezone
-            normalized_data = self._tz_service.normalize_hourly_prices(raw_hourly_prices, source_timezone)
-            normalized_today = normalized_data.get("today", {})
-            normalized_tomorrow = normalized_data.get("tomorrow", {})
-            processed_result["raw_hourly_prices_normalized_today"] = normalized_today
-            processed_result["raw_hourly_prices_normalized_tomorrow"] = normalized_tomorrow
-            _LOGGER.debug(f"Normalized prices: {len(normalized_today)} today, {len(normalized_tomorrow)} tomorrow")
+            # 1. Normalize Timezones using TimezoneConverter
+            # This assumes the converter uses the tz_service internally as needed
+            # And returns prices keyed by 'HH:00' in the target timezone
+            # We need to split today/tomorrow AFTER normalization based on the target TZ date
+            _LOGGER.debug("Normalizing all raw prices...")
+            all_normalized_prices = self._tz_converter.normalize_hourly_prices(
+                raw_hourly_prices,
+                source_timezone_str=source_timezone
+            )
+            _LOGGER.debug(f"Total normalized prices: {len(all_normalized_prices)}")
 
-            # Helper Function for Currency Conv/VAT/Subunit
-            async def process_price(price, source_curr, target_curr):
-                if price is None: return None
-                # Ensure exchange service is ready before converting
-                await self._ensure_exchange_service()
-                # Convert currency
-                converted = await self._exchange_service.convert(price, source_curr, target_curr)
-                # Apply VAT
-                if self.include_vat:
-                    converted *= (1 + self.vat_rate)
-                # Handle subunit
-                if self.use_subunit:
-                    if target_curr in [Currency.EUR, Currency.USD, Currency.GBP, Currency.SEK, Currency.NOK, Currency.DKK]: 
-                        converted *= 100
-                    else:
-                        _LOGGER.warning(f"Subunit conversion not implemented for {target_curr}, using base unit.")
-                return converted
+            # Split normalized prices into today and tomorrow based on target timezone date
+            today_keys = set(self._tz_service.get_today_range())
+            tomorrow_keys = set(self._tz_service.get_tomorrow_range())
+
+            normalized_today = {k: v for k, v in all_normalized_prices.items() if k in today_keys}
+            normalized_tomorrow = {k: v for k, v in all_normalized_prices.items() if k in tomorrow_keys}
+            _LOGGER.debug(f"Split into: {len(normalized_today)} today, {len(normalized_tomorrow)} tomorrow")
+
+            # 2. Convert Currency, Units, Apply VAT using CurrencyConverter
+            ecb_rate = None
+            ecb_updated = None
 
             # 2a. Process Today's Prices
             final_today_prices = {}
-            for hour_key, price in normalized_today.items():
-                final_today_prices[hour_key] = await process_price(price, source_currency, self.target_currency)
-            processed_result["hourly_prices"] = final_today_prices
-            _LOGGER.debug(f"Processed {len(final_today_prices)} prices for today")
+            if normalized_today:
+                _LOGGER.debug("Converting today's prices...")
+                converted_today, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
+                    hourly_prices=normalized_today,
+                    source_currency=source_currency,
+                    source_unit=source_unit
+                )
+                final_today_prices = converted_today
+                # Store ECB rate info if conversion happened
+                if rate is not None:
+                    ecb_rate = rate
+                    ecb_updated = rate_ts
+                processed_result["hourly_prices"] = final_today_prices
+                _LOGGER.debug(f"Processed {len(final_today_prices)} prices for today")
 
             # 2b. Process Tomorrow's Prices
             final_tomorrow_prices = {}
             if normalized_tomorrow:
-                for hour_key, price in normalized_tomorrow.items():
-                    final_tomorrow_prices[hour_key] = await process_price(price, source_currency, self.target_currency)
+                _LOGGER.debug("Converting tomorrow's prices...")
+                converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
+                    hourly_prices=normalized_tomorrow,
+                    source_currency=source_currency,
+                    source_unit=source_unit
+                )
+                final_tomorrow_prices = converted_tomorrow
+                # Store ECB rate info if not already stored from today's conversion
+                if ecb_rate is None and rate is not None:
+                    ecb_rate = rate
+                    ecb_updated = rate_ts
                 processed_result["tomorrow_hourly_prices"] = final_tomorrow_prices
                 processed_result["has_tomorrow_prices"] = True # Set flag based on processed data
                 _LOGGER.debug(f"Processed {len(final_tomorrow_prices)} prices for tomorrow")
             else:
                 processed_result["has_tomorrow_prices"] = False
+
+            # Store ECB info in the result
+            processed_result["ecb_rate"] = ecb_rate
+            processed_result["ecb_updated"] = ecb_updated
+
 
             # 3a. Calculate Today's Statistics and Current/Next Prices
             if final_today_prices:
@@ -207,10 +267,10 @@ class DataProcessor:
                 today_keys = set(self._tz_service.get_today_range())
                 found_keys = set(final_today_prices.keys())
                 today_complete = today_keys.issubset(found_keys)
-                
+
                 if today_complete:
                     stats = self._calculate_statistics(final_today_prices)
-                    stats.complete_data = True 
+                    stats.complete_data = True
                     processed_result["statistics"] = stats.to_dict()
                     _LOGGER.debug(f"Calculated today's statistics for {self.area}")
                 else:
@@ -226,7 +286,7 @@ class DataProcessor:
                 tomorrow_keys = set(self._tz_service.get_tomorrow_range())
                 found_keys = set(final_tomorrow_prices.keys())
                 tomorrow_complete = tomorrow_keys.issubset(found_keys)
-                
+
                 if tomorrow_complete:
                     stats = self._calculate_statistics(final_tomorrow_prices)
                     stats.complete_data = True
@@ -251,22 +311,8 @@ class DataProcessor:
             error_result = self._generate_empty_processed_result(data, error=str(e))
             error_result["raw_hourly_prices_original"] = raw_hourly_prices # Keep original raw input
             return error_result
-            
-        # Add ECB rate info for attributes
-        try:
-            # Ensure exchange service is ready
-            await self._ensure_exchange_service()
-            # Use source_currency for base if not EUR?
-            # The service currently assumes EUR base for ECB, might need adjustment if source_currency != EUR
-            base_curr = Currency.EUR if source_currency == Currency.EUR else source_currency 
-            ecb_info = self._exchange_service.get_exchange_rate_info(base_curr, self.target_currency)
-            processed_result["ecb_rate"] = ecb_info.get("formatted")
-            processed_result["ecb_updated"] = ecb_info.get("timestamp")
-        except Exception as e:
-            _LOGGER.warning(f"Could not get ECB info: {e}")
-            # Keep default None values
 
-        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source}, Today Prices: {len(processed_result['hourly_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_hourly_prices'])}")
+        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source}, Today Prices: {len(processed_result['hourly_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_hourly_prices'])}, Cached: {processed_result['using_cached_data']}")
         return processed_result
 
     def _calculate_statistics(self, hourly_prices: Dict[str, float]) -> PriceStatistics:
@@ -274,7 +320,7 @@ class DataProcessor:
         prices = [p for p in hourly_prices.values() if p is not None]
         if not prices:
             return PriceStatistics(complete_data=False)
-            
+
         prices.sort()
         mid = len(prices) // 2
         # Ensure indices are valid before access
@@ -297,16 +343,23 @@ class DataProcessor:
 
     def _generate_empty_processed_result(self, data, error=None):
         # No need to ensure exchange service here as it doesn't use it directly
+        # when generating the *initial* empty structure.
         return {
             "source": data.get("source", "unknown"),
             "area": self.area,
             "source_currency": data.get("currency"),
             "target_currency": self.target_currency,
             "source_timezone": data.get("api_timezone"),
+            "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None,
             "hourly_prices": {},
             "tomorrow_hourly_prices": {},
-            "statistics": {},
-            "tomorrow_statistics": {},
+            "raw_hourly_prices_original": data.get("hourly_prices"), # Store original if available
+            "current_price": None,
+            "next_hour_price": None,
+            "current_hour_key": None,
+            "next_hour_key": None,
+            "statistics": PriceStatistics(complete_data=False).to_dict(),
+            "tomorrow_statistics": PriceStatistics(complete_data=False).to_dict(),
             "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,
@@ -317,5 +370,6 @@ class DataProcessor:
             "attempted_sources": data.get("attempted_sources", []),
             "fallback_sources": data.get("fallback_sources", []),
             "using_cached_data": data.get("using_cached_data", False),
-            "error": error or "No data available"
+            "error": error or "No data available",
+            "fetched_at": data.get("fetched_at")
         }

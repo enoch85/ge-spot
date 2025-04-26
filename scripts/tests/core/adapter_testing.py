@@ -3,7 +3,13 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Tuple
 
-from custom_components.ge_spot.price.adapter import ElectricityPriceAdapter
+import pytest
+import asyncio
+from unittest.mock import MagicMock, AsyncMock
+
+# Correct the import path
+from custom_components.ge_spot.price import ElectricityPriceAdapter
+from custom_components.ge_spot.api.base.data_structure import StandardizedPriceData, PriceStatistics
 
 logger = logging.getLogger(__name__)
 

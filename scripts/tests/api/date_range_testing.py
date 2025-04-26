@@ -6,9 +6,10 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 
 import aiohttp
-from custom_components.ge_spot.const.sources import Source
+from custom_components.ge_spot.const.config import Config
 from custom_components.ge_spot.const.currencies import Currency
-from custom_components.ge_spot.api import get_sources_for_region, fetch_day_ahead_prices
+# Import create_api instead of fetch_day_ahead_prices
+from custom_components.ge_spot.api import get_sources_for_region, create_api
 from custom_components.ge_spot.api.base.data_fetch import is_skipped_response
 from custom_components.ge_spot.utils.date_range import generate_date_ranges
 
@@ -87,29 +88,37 @@ async def test_api_with_date_range(
         # Fetch data from the API
         logger.debug(f"Fetching data from {api_name} for {area} with config: {config}")
         try:
-            api_result = await fetch_day_ahead_prices(
-                source_type=api_name,
-                config=config,
+            # Instantiate the correct API using create_api
+            api_instance = create_api(source_type=api_name, config=config, session=session)
+
+            # Call the fetch_day_ahead_prices method on the instance
+            api_result = await api_instance.fetch_day_ahead_prices(
                 area=area,
-                currency=Currency.EUR,
+                currency=Currency.EUR, # Assuming EUR, adjust if needed
                 reference_time=reference_time,
-                hass=mock_hass,
-                session=session
+                hass=mock_hass # Pass hass if required
             )
         except TypeError as e:
+            # Handle potential TypeError if method signature changed significantly
             if "got an unexpected keyword argument" in str(e):
-                # If the function doesn't accept some parameter, retry without it
-                logger.debug(f"API doesn't accept all parameters: {str(e)}, retrying with basic params")
-                api_result = await fetch_day_ahead_prices(
-                    source_type=api_name,
-                    config=config,
-                    area=area,
-                    currency=Currency.EUR,
-                    reference_time=reference_time
-                )
+                logger.debug(f"API method doesn't accept all parameters: {str(e)}, retrying with basic params")
+                # Retry with potentially fewer arguments
+                api_instance_retry = create_api(source_type=api_name, config=config, session=session)
+                try:
+                    api_result = await api_instance_retry.fetch_day_ahead_prices(
+                        area=area,
+                        reference_time=reference_time
+                        # Add other essential kwargs if known
+                    )
+                except Exception as retry_e:
+                     logger.error(f"Retry failed: {retry_e}")
+                     raise retry_e
             else:
                 raise
-        
+        except Exception as fetch_exc:
+             logger.error(f"Error fetching data: {fetch_exc}")
+             raise fetch_exc
+
         # Process the result
         if is_skipped_response(api_result):
             reason = api_result.get('reason', 'unknown') if isinstance(api_result, dict) else 'unknown'

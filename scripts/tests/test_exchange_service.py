@@ -151,4 +151,4 @@ async def test_get_rates_fetch_on_force_refresh(exchange_service, tmp_path):
         mock_save.assert_called_once()
         assert rates == new_rates
 
-# No TODOs left here 
+# No TODOs left here

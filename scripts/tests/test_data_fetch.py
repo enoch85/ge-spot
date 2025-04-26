@@ -175,6 +175,6 @@ async def test_fetch_with_fallback_empty_sources(price_data_fetcher):
     result = await price_data_fetcher.fetch_with_fallback(sources, "ANY_AREA", "EUR")
     assert result is None
 
-# TODO: Add test for fallback with cache hit - DONE
-# TODO: Add test for fallback with expired cache - DONE
-# TODO: Add test for empty sources list - DONE 
+# TODO: Add test for fallback with cache hit
+# TODO: Add test for fallback with expired cache
+# TODO: Add test for empty sources list

@@ -235,8 +235,8 @@ async def test_process_missing_currency(data_processor_eur_target):
     assert not result["hourly_prices"] # Should be empty on error
     assert result["statistics"]["complete_data"] is False
 
-# TODO: Add test for VAT calculation - DONE
-# TODO: Add test for subunit conversion (e.g., to Cents) - DONE
-# TODO: Add test for statistics calculation with complete data - DONE
-# TODO: Add test for incomplete data handling (stats should be None/incomplete) - DONE
-# TODO: Add test for error handling (e.g., missing timezone/currency) - DONE
+# TODO: Add test for VAT calculation
+# TODO: Add test for subunit conversion (e.g., to Cents)
+# TODO: Add test for statistics calculation with complete data
+# TODO: Add test for incomplete data handling (stats should be None/incomplete)
+# TODO: Add test for error handling (e.g., missing timezone/currency)
