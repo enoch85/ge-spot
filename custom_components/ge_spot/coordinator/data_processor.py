@@ -164,7 +164,7 @@ class DataProcessor:
             "source_currency": source_currency,
             "target_currency": self.target_currency,
             "source_timezone": source_timezone,
-            "target_timezone": str(self._tz_service.target_timezone), # Use target_timezone from service
+            "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None, # Use target_timezone attribute
             "hourly_prices": {}, # Today's FINAL prices (HH:00 keys)
             "tomorrow_hourly_prices": {}, # Tomorrow's FINAL prices (HH:00 keys)
             # Keep raw original prices for debugging if needed
@@ -350,7 +350,7 @@ class DataProcessor:
             "source_currency": data.get("currency"),
             "target_currency": self.target_currency,
             "source_timezone": data.get("api_timezone"),
-            "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None,
+            "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None, # Use target_timezone attribute
             "hourly_prices": {},
             "tomorrow_hourly_prices": {},
             "raw_hourly_prices_original": data.get("hourly_prices"), # Store original if available

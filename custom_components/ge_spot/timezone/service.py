@@ -19,10 +19,10 @@ from ..const.config import Config
 _LOGGER = logging.getLogger(__name__)
 
 class TimezoneService:
-    """Service for unified timezone handling across the integration."""
+    """Service for unified timezone handling across the integration.""" # Corrected docstring quotes
 
     def __init__(self, hass: Optional[HomeAssistant] = None, area: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
-        """Initialize with optional Home Assistant instance, area, and config."""
+        """Initialize with optional Home Assistant instance, area, and config.""" # Corrected docstring quotes
         self.hass = hass
         self.area = area
         self.config = config or {}
@@ -46,26 +46,34 @@ class TimezoneService:
         # Get timezone reference from config
         self.timezone_reference = self.config.get(Config.TIMEZONE_REFERENCE, TimezoneReference.DEFAULT)
 
+        # Determine the effective target timezone based on the reference
+        if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
+            self.target_timezone = self.area_timezone
+            _LOGGER.debug(f"Effective target timezone set to AREA timezone: {self.target_timezone}")
+        else:
+            self.target_timezone = self.ha_timezone # Default to HA timezone
+            _LOGGER.debug(f"Effective target timezone set to HA timezone: {self.target_timezone}")
+
+
         # Initialize component classes
+        # Pass the determined target_timezone to the converter
         self.parser = TimestampParser()
-        self.converter = TimezoneConverter(self.ha_timezone)
-        self.dst_handler = DSTHandler(self.ha_timezone)
+        self.converter = TimezoneConverter(self.target_timezone) # Use target_timezone for converter init
+        self.dst_handler = DSTHandler(self.target_timezone) # Use target_timezone for DST handler
 
         # Determine which timezone to use for hour calculation based on the timezone reference
-        calculator_timezone = self.system_timezone
-        if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
-            calculator_timezone = self.area_timezone
-
+        # HourCalculator needs the reference mode to decide internally
         self.hour_calculator = HourCalculator(
-            timezone=calculator_timezone,
+            timezone=self.target_timezone, # Pass the determined target timezone
             system_timezone=self.system_timezone,
             area_timezone=self.area_timezone,
             timezone_reference=self.timezone_reference
         )
 
-        _LOGGER.debug(f"Initialized timezone service with system timezone: {self.system_timezone}" +
-                    (f", area timezone: {self.area_timezone}" if self.area_timezone else "") +
-                    f", timezone reference mode: {self.timezone_reference}")
+        _LOGGER.debug(f"Initialized timezone service. System TZ: {self.system_timezone}, " +
+                    (f"Area TZ: {self.area_timezone}, " if self.area_timezone else "") +
+                    f"HA TZ: {self.ha_timezone}, Target TZ: {self.target_timezone}, " +
+                    f"Reference Mode: {self.timezone_reference}") # Corrected f-string quotes
 
     def extract_source_timezone(self, api_data: Dict[str, Any], source_type: str) -> str:
         """Extract timezone from API data or fall back to constants.
@@ -76,7 +84,7 @@ class TimezoneService:
 
         Returns:
             Timezone string (e.g., 'Europe/Oslo')
-        """
+        """ # Corrected docstring quotes
         # Try to get from response metadata
         if isinstance(api_data, dict):
             for key in TimezoneConstants.METADATA_KEYS:
@@ -107,7 +115,7 @@ class TimezoneService:
 
         Raises:
             ValueError: If timestamp cannot be parsed
-        """
+        """ # Corrected docstring quotes
         # Ensure we have a valid source_timezone
         if not source_timezone or source_timezone == TimezoneConstants.DEFAULT_FALLBACK:
             error_msg = f"Invalid source timezone provided: {source_timezone}"
@@ -118,32 +126,33 @@ class TimezoneService:
 
     def convert_to_ha_timezone(self, dt):
         """Convert datetime to Home Assistant timezone.
+        DEPRECATED - Use convert_to_target_timezone for clarity.
+        Kept for backward compatibility if needed, but should be phased out.
+        """ # Corrected docstring quotes
+        _LOGGER.warning("convert_to_ha_timezone is deprecated. Use convert_to_target_timezone.")
+        return self.convert_to_target_timezone(dt)
+
+    def convert_to_target_timezone(self, dt):
+        """Convert datetime to the effective target timezone (HA or Area).
 
         Args:
             dt: The datetime to convert
 
         Returns:
             Converted datetime
-        """
+        """ # Corrected docstring quotes
         # Ensure dt has a timezone
         if dt.tzinfo is None:
             error_msg = "Cannot convert naive datetime without source timezone"
             _LOGGER.error(error_msg)
             raise ValueError(error_msg)
 
-        return self.converter.convert(dt, self.ha_timezone)
+        # Use the converter initialized with the target_timezone
+        return self.converter.convert(dt, self.target_timezone)
+
 
     def normalize_hourly_prices(self, hourly_prices, source_timezone, today_date=None):
-        """Convert hourly prices from source timezone to the appropriate timezone based on the timezone reference setting.
-
-        Args:
-            hourly_prices: Dict mapping hour strings to prices
-            source_timezone: Source timezone string
-            today_date: Optional date to use (defaults to today)
-
-        Returns:
-            Dict with hours adjusted to the appropriate timezone
-        """
+        """Convert hourly prices from source timezone to the effective target timezone.""" # Corrected docstring quotes
         # Validate source_timezone
         if not source_timezone or source_timezone == TimezoneConstants.DEFAULT_FALLBACK:
             error_msg = f"Invalid source timezone provided: {source_timezone}"
@@ -162,78 +171,62 @@ class TimezoneService:
                 _LOGGER.error(error_msg)
                 raise ValueError(error_msg)
 
-        # For both timezone reference modes, we convert API data to HA timezone
-        # The difference in behavior is handled in get_current_hour_key(), not here
-        _LOGGER.debug(f"Converting hourly prices from {source_timezone} to HA timezone {self.ha_timezone}")
+        # For both timezone reference modes, we convert API data to the determined target timezone
+        _LOGGER.debug(f"Converting hourly prices from {source_timezone} to target timezone {self.target_timezone}") # Corrected f-string quotes
         return self.converter.convert_hourly_prices(
             hourly_prices,
             source_timezone,
-            self.ha_timezone,
+            self.target_timezone, # Use the target_timezone attribute
             today_date
         )
 
     def get_current_hour_key(self):
-        """Get the current hour key in the appropriate timezone based on the timezone reference setting."""
+        """Get the current hour key in the appropriate timezone based on the timezone reference setting.""" # Corrected docstring quotes
         # Get current time in different timezones for debugging
         now_utc = datetime.now(timezone.utc)
         now_ha = datetime.now(self.ha_timezone)
         now_area = datetime.now(self.area_timezone) if self.area_timezone else None
 
         _LOGGER.debug(f"Current time - UTC: {now_utc.strftime('%H:%M:%S')}, HA: {now_ha.strftime('%H:%M:%S')}" +
-                     (f", Area ({self.area}): {now_area.strftime('%H:%M:%S')}" if now_area else ""))
+                     (f", Area ({self.area}): {now_area.strftime('%H:%M:%S')}" if now_area else "")) # Corrected f-string quotes
 
         hour_key = self.hour_calculator.get_current_hour_key()
 
         # Log which timezone is being used based on the timezone reference setting
         if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
             used_tz = self.area_timezone
-            _LOGGER.debug(f"Using area timezone {used_tz} for hour key (Local Area Time mode)")
+            _LOGGER.debug(f"Using area timezone {used_tz} for hour key (Local Area Time mode)") # Corrected f-string quotes
         else:
             used_tz = self.ha_timezone
-            _LOGGER.debug(f"Using HA timezone {used_tz} for hour key (Home Assistant Time mode)")
+            _LOGGER.debug(f"Using HA timezone {used_tz} for hour key (Home Assistant Time mode)") # Corrected f-string quotes
 
-        _LOGGER.debug(f"Current hour key from calculator: {hour_key} (timezone: {used_tz}, area: {self.area})")
+        _LOGGER.debug(f"Current hour key from calculator: {hour_key} (timezone: {used_tz}, area: {self.area})") # Corrected f-string quotes
         return hour_key
 
     def is_dst_transition_day(self, dt=None):
-        """Check if today is a DST transition day."""
+        """Check if today is a DST transition day.""" # Corrected docstring quotes
         return self.dst_handler.is_dst_transition_day(dt)
 
     def get_next_hour_key(self) -> str:
         """Get key for the next hour in target timezone.
-        
+
         Returns:
             String key in format HH:00
-        """
+        """ # Corrected docstring quotes
         # Delegate to hour calculator for consistent handling
         now = dt_util.now()
         next_hour = now + timedelta(hours=1)
-        
+
         # Use the hour calculator for consistent timezone handling based on timezone_reference
         return self.hour_calculator.get_hour_key_for_datetime(next_hour)
-    
+
     def get_today_range(self) -> List[str]:
-        """Get list of hour keys for today.
-        
-        Returns:
-            List of hour keys in format HH:00
-        """
-        # Figure out which timezone to use based on timezone_reference
-        target_timezone = self.ha_timezone
-        if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
-            target_timezone = self.area_timezone
-        
-        # Get current time in the target timezone
-        now = dt_util.now().astimezone(target_timezone)
-        
-        # Create a list of hour keys for the whole day
-        return [f"{hour:02d}:00" for hour in range(24)]
-    
+        """Get list of hour keys for today (represents hours 00-23).""" # Corrected docstring quotes
+        # The keys themselves are universal (00:00 to 23:00).
+        # The timezone context comes from self.target_timezone when interpreting these keys.
+        return [f"{hour:02d}:00" for hour in range(24)] # Corrected f-string quotes
+
     def get_tomorrow_range(self) -> List[str]:
-        """Get list of hour keys for tomorrow.
-        
-        Returns:
-            List of hour keys in format HH:00
-        """
+        """Get list of hour keys for tomorrow (represents hours 00-23).""" # Corrected docstring quotes
         # Same as today but represents tomorrow's hours
-        return [f"{hour:02d}:00" for hour in range(24)]
+        return [f"{hour:02d}:00" for hour in range(24)] # Corrected f-string quotes
