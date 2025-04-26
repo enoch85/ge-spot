@@ -194,7 +194,7 @@ class UnifiedPriceManager:
                         f"Using cached data if available."
                     )
                     # Use cached data if rate limited
-                    cached_data = self._cache_manager.get_cached_data() # Removed max_age here, CacheManager handles TTL internally
+                    cached_data = self._cache_manager.get_data(self.area) # Use get_data with area
                     if cached_data:
                         _LOGGER.debug("Returning rate-limited cached data for %s", self.area)
                         # Ensure the cached data is marked correctly before processing
@@ -236,7 +236,7 @@ class UnifiedPriceManager:
                 _LOGGER.error(f"No API sources available/configured for area {self.area}")
                 self._consecutive_failures += 1
                 # Try cache before giving up - Use CACHE_TTL for max age
-                cached_data = self._cache_manager.get_cached_data(max_age_minutes=Defaults.CACHE_TTL)
+                cached_data = self._cache_manager.get_data(self.area, max_age_minutes=Defaults.CACHE_TTL)
                 if cached_data:
                     _LOGGER.warning("No APIs available for %s, using cached data.", self.area)
                     cached_data["using_cached_data"] = True
@@ -284,7 +284,7 @@ class UnifiedPriceManager:
                 self._fallback_sources = self._attempted_sources # All attempted sources failed
 
                 # Try to use cached data as a last resort - Use CACHE_TTL for max age
-                cached_data = self._cache_manager.get_cached_data(max_age_minutes=Defaults.CACHE_TTL)
+                cached_data = self._cache_manager.get_data(self.area, max_age_minutes=Defaults.CACHE_TTL)
                 if cached_data:
                     _LOGGER.warning("Using cached data for %s due to fetch failure.", self.area)
                     self._using_cached_data = True
@@ -308,7 +308,7 @@ class UnifiedPriceManager:
             await self._ensure_exchange_service()
 
             # Try cache on unexpected error - Use CACHE_TTL for max age
-            cached_data = self._cache_manager.get_cached_data(max_age_minutes=Defaults.CACHE_TTL)
+            cached_data = self._cache_manager.get_data(self.area, max_age_minutes=Defaults.CACHE_TTL)
             if cached_data:
                  _LOGGER.warning("Using cached data for %s due to unexpected error: %s", self.area, e)
                  self._using_cached_data = True
