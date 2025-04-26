@@ -23,6 +23,7 @@ from .cache_manager import CacheManager
 
 from ..utils.timezone_converter import TimezoneConverter # Import TimezoneConverter
 from ..utils.currency_converter import CurrencyConverter # Import CurrencyConverter
+from ..utils.statistics import calculate_statistics
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -350,7 +351,7 @@ class DataProcessor:
             "source_currency": data.get("currency"),
             "target_currency": self.target_currency,
             "source_timezone": data.get("api_timezone"),
-            "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None, # Use target_timezone attribute
+            "target_timezone": str(self._tz_service.area_timezone) if self._tz_service else None, # Use area_timezone as suggested by error
             "hourly_prices": {},
             "tomorrow_hourly_prices": {},
             "raw_hourly_prices_original": data.get("hourly_prices"), # Store original if available

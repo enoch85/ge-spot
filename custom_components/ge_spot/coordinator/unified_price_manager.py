@@ -235,8 +235,8 @@ class UnifiedPriceManager:
             if not api_instances:
                 _LOGGER.error(f"No API sources available/configured for area {self.area}")
                 self._consecutive_failures += 1
-                # Try cache before giving up - Use CACHE_TTL for max age
-                cached_data = self._cache_manager.get_data(self.area, max_age_minutes=Defaults.CACHE_TTL)
+                # Try cache before giving up - Remove max_age_minutes argument
+                cached_data = self._cache_manager.get_data(self.area)
                 if cached_data:
                     _LOGGER.warning("No APIs available for %s, using cached data.", self.area)
                     cached_data["using_cached_data"] = True
@@ -283,8 +283,8 @@ class UnifiedPriceManager:
                 self._active_source = "None"
                 self._fallback_sources = self._attempted_sources # All attempted sources failed
 
-                # Try to use cached data as a last resort - Use CACHE_TTL for max age
-                cached_data = self._cache_manager.get_data(self.area, max_age_minutes=Defaults.CACHE_TTL)
+                # Try to use cached data as a last resort - Remove max_age_minutes argument
+                cached_data = self._cache_manager.get_data(self.area)
                 if cached_data:
                     _LOGGER.warning("Using cached data for %s due to fetch failure.", self.area)
                     self._using_cached_data = True
@@ -307,8 +307,8 @@ class UnifiedPriceManager:
             # Ensure exchange service is initialized even on error path for _generate_empty_result
             await self._ensure_exchange_service()
 
-            # Try cache on unexpected error - Use CACHE_TTL for max age
-            cached_data = self._cache_manager.get_data(self.area, max_age_minutes=Defaults.CACHE_TTL)
+            # Try cache on unexpected error - Remove max_age_minutes argument
+            cached_data = self._cache_manager.get_data(self.area)
             if cached_data:
                  _LOGGER.warning("Using cached data for %s due to unexpected error: %s", self.area, e)
                  self._using_cached_data = True
