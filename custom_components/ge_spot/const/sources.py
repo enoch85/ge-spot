@@ -11,6 +11,7 @@ class Source:
     OMIE = "omie"
     STROMLIGNING = "stromligning"
     COMED = "comed"
+    AMBER = "amber"
 
     # List of all sources
     ALL = [
@@ -21,7 +22,8 @@ class Source:
         EPEX,
         OMIE,
         STROMLIGNING,
-        COMED
+        COMED,
+        AMBER
     ]
 
     # Default source priority
@@ -33,6 +35,7 @@ class Source:
         OMIE,
         STROMLIGNING,
         AEMO,
+        AMBER,
         COMED
     ]
 
@@ -45,7 +48,8 @@ class Source:
         EPEX: "EPEX SPOT",
         OMIE: "OMIE",
         STROMLIGNING: "Strømligning",
-        COMED: "ComEd Hourly Pricing"
+        COMED: "ComEd Hourly Pricing",
+        AMBER: "Amber Electric"
     }
 
     # Source URLs
@@ -57,7 +61,8 @@ class Source:
         EPEX: "https://www.epexspot.com/",
         OMIE: "https://www.omie.es/",
         STROMLIGNING: "https://www.stromligning.no/",
-        COMED: "https://hourlypricing.comed.com/"
+        COMED: "https://hourlypricing.comed.com/",
+        AMBER: "https://amber.com.au/"
     }
 
     @staticmethod
@@ -117,7 +122,8 @@ class SourceInfo:
         Source.OMIE: ["ES", "PT"],
         Source.AEMO: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
         Source.STROMLIGNING: ["DK1", "DK2"],
-        Source.COMED: ["COMED"]
+        Source.COMED: ["COMED"],
+        Source.AMBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
     }
     
     # Map areas to recommended sources
@@ -151,11 +157,11 @@ class SourceInfo:
         "PT": [Source.ENTSOE, Source.OMIE],
         
         # Australia
-        "NSW1": [Source.AEMO],
-        "QLD1": [Source.AEMO],
-        "SA1": [Source.AEMO],
-        "TAS1": [Source.AEMO],
-        "VIC1": [Source.AEMO],
+        "NSW1": [Source.AEMO, Source.AMBER],
+        "QLD1": [Source.AEMO, Source.AMBER],
+        "SA1": [Source.AEMO, Source.AMBER],
+        "TAS1": [Source.AEMO, Source.AMBER],
+        "VIC1": [Source.AEMO, Source.AMBER],
         
         # USA
         "COMED": [Source.COMED]

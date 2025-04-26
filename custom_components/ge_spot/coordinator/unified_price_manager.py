@@ -187,25 +187,26 @@ class UnifiedPriceManager:
             if not force and last_fetch:
                 time_since_last_fetch = now - last_fetch
                 if time_since_last_fetch < min_interval:
-                    remaining_seconds = (min_interval - time_since_last_fetch).total_seconds()
                     _LOGGER.info(
                         f"Rate limiting in effect for area {self.area}. "
-                        f"Next fetch allowed in {remaining_seconds:.1f} seconds. "
+                        f"Next fetch allowed in {(min_interval - time_since_last_fetch).total_seconds():.1f} seconds. "
                         f"Using cached data if available."
                     )
                     # Use cached data if rate limited
-                    cached_data = self._cache_manager.get_cached_data()
+                    cached_data = self._cache_manager.get_cached_data() # Removed max_age here, CacheManager handles TTL internally
                     if cached_data:
                         _LOGGER.debug("Returning rate-limited cached data for %s", self.area)
-                        # Process cached data to ensure format consistency (e.g., stats)
-                        # Mark as cached if not already marked
-                        if not cached_data.get("using_cached_data"):
-                             cached_data["using_cached_data"] = True # Mark as cached for clarity
+                        # Ensure the cached data is marked correctly before processing
+                        cached_data["using_cached_data"] = True
                         # Re-process to ensure stats etc. are up-to-date relative to 'now'
-                        return await self._process_result(cached_data, is_cached=True)
+                        processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                        # Explicitly set the flag again after processing, as _process_result might reset it based on input
+                        processed_cached_data["using_cached_data"] = True
+                        return processed_cached_data
                     else:
                         _LOGGER.warning("Rate limited for %s, but no cached data available.", self.area)
                         # Generate empty result if no cache and rate limited
+                        # Pass the specific rate limit error message
                         return await self._generate_empty_result(error="Rate limited, no cache available")
 
             # If not rate limited or forced, proceed to fetch
@@ -233,12 +234,14 @@ class UnifiedPriceManager:
             if not api_instances:
                 _LOGGER.error(f"No API sources available/configured for area {self.area}")
                 self._consecutive_failures += 1
-                # Try cache before giving up
-                cached_data = self._cache_manager.get_cached_data(max_age_minutes=Defaults.MAX_CACHE_AGE_MINUTES)
+                # Try cache before giving up - Use CACHE_TTL for max age
+                cached_data = self._cache_manager.get_cached_data(max_age_minutes=Defaults.CACHE_TTL)
                 if cached_data:
                     _LOGGER.warning("No APIs available for %s, using cached data.", self.area)
                     cached_data["using_cached_data"] = True
-                    return await self._process_result(cached_data, is_cached=True)
+                    processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                    processed_cached_data["using_cached_data"] = True # Ensure flag is set
+                    return processed_cached_data
                 return await self._generate_empty_result(error="No API sources configured")
 
             # Fetch with fallback using the new manager
@@ -279,14 +282,16 @@ class UnifiedPriceManager:
                 self._active_source = "None"
                 self._fallback_sources = self._attempted_sources # All attempted sources failed
 
-                # Try to use cached data as a last resort
-                cached_data = self._cache_manager.get_cached_data(max_age_minutes=Defaults.MAX_CACHE_AGE_MINUTES)
+                # Try to use cached data as a last resort - Use CACHE_TTL for max age
+                cached_data = self._cache_manager.get_cached_data(max_age_minutes=Defaults.CACHE_TTL)
                 if cached_data:
                     _LOGGER.warning("Using cached data for %s due to fetch failure.", self.area)
                     self._using_cached_data = True
                     cached_data["using_cached_data"] = True # Mark as cached
                     # Re-process cached data
-                    return await self._process_result(cached_data, is_cached=True)
+                    processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                    processed_cached_data["using_cached_data"] = True # Ensure flag is set
+                    return processed_cached_data
                 else:
                     _LOGGER.error("All sources failed for %s and no usable cache available.", self.area)
                     self._using_cached_data = True # Indicate we intended to use cache but failed
@@ -301,13 +306,15 @@ class UnifiedPriceManager:
             # Ensure exchange service is initialized even on error path for _generate_empty_result
             await self._ensure_exchange_service()
 
-            # Try cache on unexpected error
-            cached_data = self._cache_manager.get_cached_data(max_age_minutes=Defaults.MAX_CACHE_AGE_MINUTES)
+            # Try cache on unexpected error - Use CACHE_TTL for max age
+            cached_data = self._cache_manager.get_cached_data(max_age_minutes=Defaults.CACHE_TTL)
             if cached_data:
                  _LOGGER.warning("Using cached data for %s due to unexpected error: %s", self.area, e)
                  self._using_cached_data = True
                  cached_data["using_cached_data"] = True
-                 return await self._process_result(cached_data, is_cached=True)
+                 processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                 processed_cached_data["using_cached_data"] = True # Ensure flag is set
+                 return processed_cached_data
             else:
                  # Use last known data if available, otherwise return empty result
                  # if self._last_data: # Replaced by cache check
@@ -337,7 +344,8 @@ class UnifiedPriceManager:
         # Add/update metadata before processing
         result["area"] = self.area
         result["target_currency"] = self.currency
-        result["using_cached_data"] = is_cached or result.get("using_cached_data", False) # Ensure flag is accurate
+        # Set using_cached_data based on the flag passed, not just the input dict
+        result["using_cached_data"] = is_cached
         result["vat_rate"] = self.vat_rate * 100
         result["include_vat"] = self.include_vat
         result["display_unit"] = self.display_unit
@@ -351,7 +359,8 @@ class UnifiedPriceManager:
             processed_data["attempted_sources"] = self._attempted_sources
             processed_data["fallback_sources"] = self._fallback_sources
             processed_data["data_source"] = self._active_source # Reflect the source determined during fetch
-            processed_data["using_cached_data"] = self._using_cached_data # Reflect fetch status
+            # Ensure the final flag reflects the input is_cached status
+            processed_data["using_cached_data"] = is_cached
 
             return processed_data
         except Exception as proc_err:
@@ -384,15 +393,17 @@ class UnifiedPriceManager:
             # Include metadata about the failure state
             "attempted_sources": self._attempted_sources,
             "fallback_sources": self._fallback_sources, # All attempted if failed
-            "using_cached_data": self._using_cached_data, # Reflects if cache was *intended*
+            # Reflects if cache was *intended* or if this is due to rate limit w/o cache
+            "using_cached_data": self._using_cached_data or (error == "Rate limited, no cache available"),
             "consecutive_failures": self._consecutive_failures,
             "last_fetch_attempt": _LAST_FETCH_TIME.get(self.area, now).isoformat() if _LAST_FETCH_TIME.get(self.area) else now.isoformat(),
             "error": error or f"Failed to fetch data after {self._consecutive_failures} attempts"
         }
 
-        # Process this empty structure to get consistent keys (like stats, display units etc.)
-        # Pass is_cached=True if we are generating empty because cache was intended but failed/missing
-        processed_empty = await self._process_result(empty_data, is_cached=self._using_cached_data)
+        # Process this empty structure
+        # Pass the correct cache status based on the error or internal state
+        is_cached_status = self._using_cached_data or (error == "Rate limited, no cache available")
+        processed_empty = await self._process_result(empty_data, is_cached=is_cached_status)
         processed_empty["has_data"] = False # Explicitly mark as no data
         processed_empty["last_update"] = now.isoformat() # Timestamp the failure time
 

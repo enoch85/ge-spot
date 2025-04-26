@@ -2,7 +2,8 @@ import sys
 import os
 import getpass
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Go up two levels to reach the workspace root where custom_components is located
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from custom_components.ge_spot.api.entsoe import EntsoeAPI
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
