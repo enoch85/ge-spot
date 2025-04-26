@@ -429,42 +429,44 @@ class EntsoeParser(BasePriceParser):
         return hourly_prices
 
     def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get current hour price.
-
-        Args:
-            hourly_prices: Dictionary of hourly prices
-
-        Returns:
-            Current hour price or None if not available
-        """
         if not hourly_prices:
             return None
-
-        # Use timezone-aware datetime
+        # Try to match current hour in all possible key formats
         now = datetime.now(timezone.utc)
         current_hour = now.replace(minute=0, second=0, microsecond=0)
-        current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
-
-        return hourly_prices.get(current_hour_key)
+        iso_key = current_hour.isoformat()
+        short_key = current_hour.strftime("%H:00")
+        for key in (iso_key, short_key):
+            if key in hourly_prices:
+                return hourly_prices[key]
+        # Fallback: try to match by hour only
+        for key in hourly_prices:
+            try:
+                dt = datetime.fromisoformat(key)
+                if dt.hour == current_hour.hour and dt.date() == current_hour.date():
+                    return hourly_prices[key]
+            except Exception:
+                continue
+        return None
 
     def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get next hour price.
-
-        Args:
-            hourly_prices: Dictionary of hourly prices
-
-        Returns:
-            Next hour price or None if not available
-        """
         if not hourly_prices:
             return None
-
         now = datetime.now(timezone.utc)
-        next_hour = (now.replace(minute=0, second=0, microsecond=0) +
-                    timedelta(hours=1))
-        next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
-
-        return hourly_prices.get(next_hour_key)
+        next_hour = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+        iso_key = next_hour.isoformat()
+        short_key = next_hour.strftime("%H:00")
+        for key in (iso_key, short_key):
+            if key in hourly_prices:
+                return hourly_prices[key]
+        for key in hourly_prices:
+            try:
+                dt = datetime.fromisoformat(key)
+                if dt.hour == next_hour.hour and dt.date() == next_hour.date():
+                    return hourly_prices[key]
+            except Exception:
+                continue
+        return None
 
     def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
         """Calculate day average price.

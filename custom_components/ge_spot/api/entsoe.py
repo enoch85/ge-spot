@@ -369,10 +369,8 @@ class EntsoeAPI(BasePriceAPI):
             raw_data=raw_data,
             validate_complete=True,  # Enable validation to ensure we don't calculate stats for incomplete data
             has_tomorrow_prices=expect_tomorrow and tomorrow_complete,
-            tomorrow_prices_expected=expect_tomorrow,
-            metadata=combined_metadata
+            tomorrow_prices_expected=expect_tomorrow
         )
-        
         # Convert to dictionary
         return result.to_dict()
 

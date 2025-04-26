@@ -18,24 +18,38 @@ class NordpoolPriceParser(BasePriceParser):
         """Initialize the parser."""
         super().__init__(Source.NORDPOOL, timezone_service)
 
-    def parse(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse raw Nordpool API response.
+    def parse(self, raw_data: Dict[str, Any], area: str = None) -> Dict[str, Any]:
+        # Accept both full API response or just a day dict (with multiAreaEntries)
+        result = {"hourly_prices": {}, "currency": Currency.EUR}
+        area_arg = area
+        # If this is just a day dict, wrap it for uniform handling
+        if raw_data and "multiAreaEntries" in raw_data:
+            day_data = raw_data
+            for entry in day_data["multiAreaEntries"]:
+                if not isinstance(entry, dict):
+                    continue
+                ts = entry.get("deliveryStart")
+                if not ts:
+                    continue
+                if not area_arg or "entryPerArea" not in entry or area_arg not in entry["entryPerArea"]:
+                    continue
+                price = entry["entryPerArea"][area_arg]
+                try:
+                    dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                    hour_key = dt.isoformat()
+                    result["hourly_prices"][hour_key] = float(price)
+                except Exception as e:
+                    _LOGGER.error(f"Failed to parse timestamp {ts}: {e}")
+                    continue
+            return result
 
-        Args:
-            raw_data: Raw API response from Nordpool
-
-        Returns:
-            Dict with parsed data
-        """
-        if not raw_data or not isinstance(raw_data, dict):
-            _LOGGER.warning("Invalid Nordpool data format: empty or not a dictionary")
-            return {"hourly_prices": {}, "currency": Currency.EUR}
-        
-        try:
-            return self._parse_response(raw_data)
-        except Exception as e:
-            _LOGGER.warning(f"Failed to parse Nordpool data: {str(e)}")
-            return {"hourly_prices": {}, "currency": Currency.EUR}
+        # Fallback to super for legacy/other cases
+        if not result["hourly_prices"]:
+            legacy = super().parse(raw_data)
+            if legacy:
+                result = legacy
+        _LOGGER.debug(f"[NordpoolPriceParser] Parsed hourly_prices keys: {list(result.get('hourly_prices', {}).keys())}")
+        return result
 
     def _parse_response(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Extract hourly prices from Nordpool response.

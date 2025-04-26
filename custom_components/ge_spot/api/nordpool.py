@@ -63,12 +63,15 @@ class NordpoolAPI(BasePriceAPI):
         client = ApiClient(session=session or self.session)
         try:
             # Run the fetch with retry logic
-            return await self.error_handler.run_with_retry(
+            data = await self.error_handler.run_with_retry(
                 self._fetch_data,
                 client=client,
                 area=area,
                 reference_time=kwargs.get('reference_time')
             )
+            if not data or not isinstance(data, dict) or not data.get('today'):
+                _LOGGER.error(f"Nordpool API returned empty or invalid data for area {area}: {data}")
+            return data
         finally:
             if session is None:
                 await client.close()
@@ -157,10 +160,9 @@ class NordpoolAPI(BasePriceAPI):
         tomorrow_data = raw_data.get("tomorrow")
         area = raw_data.get("area")
         api_timezone = raw_data.get("api_timezone", "Europe/Oslo")
-        
-        # Parse data using the Nordpool parser
-        parsed_today = self.parser.parse(today_data) if today_data else {}
-        parsed_tomorrow = self.parser.parse(tomorrow_data) if tomorrow_data else {}
+        # Parse data using the Nordpool parser, always passing area
+        parsed_today = self.parser.parse(today_data, area=area) if today_data else {}
+        parsed_tomorrow = self.parser.parse(tomorrow_data, area=area) if tomorrow_data else {}
         
         # Merge hourly prices
         hourly_prices = {}

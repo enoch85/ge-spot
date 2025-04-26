@@ -197,7 +197,7 @@ class TomorrowAveragePriceSensor(TomorrowSensorMixin, PriceValueSensor):
 class PriceStatisticSensor(PriceValueSensor):
     """Sensor for price statistics (average, min, max)."""
     device_class    = SensorDeviceClass.MONETARY
-    state_class     = SensorStateClass.MEASUREMENT
+    state_class     = SensorStateClass.TOTAL  # Changed from MEASUREMENT to TOTAL for HA compliance
 
     def __init__(self, coordinator, entity_id, name, stat_type, include_vat=False, vat=0, price_in_cents=False):
         """Initialize the price statistic sensor."""
@@ -229,7 +229,7 @@ class PriceStatisticSensor(PriceValueSensor):
 class PriceDifferenceSensor(PriceValueSensor):
     """Sensor for price difference between two values."""
     device_class    = SensorDeviceClass.MONETARY
-    state_class     = SensorStateClass.MEASUREMENT
+    state_class     = SensorStateClass.TOTAL  # Changed from MEASUREMENT to TOTAL for HA compliance
 
     def __init__(self, coordinator, entity_id, name, value1_key, value2_key, 
                 include_vat=False, vat=0, price_in_cents=False):
@@ -281,7 +281,7 @@ class PriceDifferenceSensor(PriceValueSensor):
 class PricePercentSensor(PriceValueSensor):
     """Sensor for price percentage relative to a reference value."""
     device_class    = SensorDeviceClass.MONETARY
-    state_class     = SensorStateClass.MEASUREMENT
+    state_class     = None  # Percent is not a monetary total, so set to None
 
     def __init__(self, coordinator, entity_id, name, value_key, reference_key, 
                 include_vat=False, vat=0):
