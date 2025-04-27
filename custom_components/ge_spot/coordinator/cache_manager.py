@@ -155,28 +155,74 @@ class CacheManager:
         return self.get_current_hour_price(area) is not None
 
     def clear(self, area: str) -> bool:
-        """Clear cache for area.
-
+        """Clear cache for a specific area.
+        
         Args:
-            area: Area code
-
+            area: Area code to clear cache for
+            
         Returns:
             True if cache was cleared
         """
-        # Find all keys for this area
         cache_info = self._price_cache.get_info()
         area_keys = [key for key in cache_info.get("entries", {}).keys() if key.startswith(f"{area}_")]
         
-        # Delete each key
+        if not area_keys:
+            _LOGGER.debug("No cache keys found for area %s", area)
+            return False
+        
         deleted = False
         for key in area_keys:
             if self._price_cache.delete(key):
                 deleted = True
-                
+                _LOGGER.debug("Deleted cache key %s", key)
+        
         return deleted
+
+    def clear_cache(self, area: Optional[str] = None) -> bool:
+        """Clear all cache or cache for a specific area.
+        
+        Args:
+            area: Optional area code. If None, clear all cache.
+            
+        Returns:
+            True if cache was cleared.
+        """
+        if area:
+            return self.clear(area)
+        else:
+            # Clear all areas
+            cache_info = self._price_cache.get_info()
+            all_keys = list(cache_info.get("entries", {}).keys())
+            
+            deleted = False
+            for key in all_keys:
+                if self._price_cache.delete(key):
+                    deleted = True
+                    
+            return deleted
 
     def cleanup(self) -> None:
         """Clean up cache."""
         # The AdvancedCache automatically cleans up expired entries
         # when accessing them, but we can also manually evict entries
         self._price_cache._evict_if_needed()
+
+    def update_cache(self, data: Dict[str, Any]) -> None:
+        """Update the cache with processed data.
+        
+        Args:
+            data: Processed data to cache
+        """
+        if not data or not isinstance(data, dict):
+            _LOGGER.warning("Cannot cache invalid data")
+            return
+            
+        area = data.get("area")
+        source = data.get("source", data.get("data_source", "unknown"))
+        
+        if not area:
+            _LOGGER.warning("Cannot cache data without area")
+            return
+            
+        # Store in cache
+        self.store(data, area, source)

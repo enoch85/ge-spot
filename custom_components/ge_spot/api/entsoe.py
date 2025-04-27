@@ -147,13 +147,10 @@ class EntsoeAPI(BasePriceAPI):
                         elif "Publication_MarketDocument" in response:
                             _LOGGER.info(f"Successfully fetched ENTSO-E XML data with doc type {doc_type} for area {area}")
                             xml_responses.append(response)
-                            # Found data, no need to try other doc types for this range
-                            # We might potentially miss *some* data if different doc types cover slightly different hours,
-                            # but this prioritizes getting *any* valid data quickly and avoiding rate limits.
-                            # Consider adding logic later to merge if needed, but sequential fetch is safer for now.
                             break # Move to processing results for this date range
                         else:
-                            _LOGGER.warning(f"Received unexpected string response from ENTSO-E for doc type {doc_type}: {response[:200]}...")
+                            _LOGGER.error(f"Received unexpected string response from ENTSO-E for doc type {doc_type}: {response[:200]}...")
+                            raise ValueError(f"Unexpected string response from ENTSO-E: {response}")
                     elif isinstance(response, dict) and response:
                         _LOGGER.info(f"Successfully fetched ENTSO-E dictionary data with doc type {doc_type} for area {area}")
                         if not dict_response_found: # Store the first dict response found
@@ -199,14 +196,9 @@ class EntsoeAPI(BasePriceAPI):
             raise ValueError(f"No matching data found for area {area} after trying multiple date ranges and document types")
     
     async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse raw data into standardized format.
+        if not isinstance(raw_data, dict):
+            raise ValueError(f"ENTSOE parse_raw_data expected dict, got {type(raw_data).__name__}: {raw_data}")
         
-        Args:
-            raw_data: Raw data from API
-            
-        Returns:
-            Parsed data in standardized format
-        """
         area = raw_data.get("area")
         api_timezone = raw_data.get("api_timezone", "Europe/Brussels")
         entsoe_area = raw_data.get("entsoe_area", area)  # Use the mapped ENTSO-E area if available

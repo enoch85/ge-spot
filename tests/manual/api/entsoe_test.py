@@ -24,7 +24,7 @@ import logging
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
 
 from custom_components.ge_spot.api.entsoe import EntsoeAPI
-from custom_components.ge_spot.const.areas import Area
+from custom_components.ge_spot.const.areas import AreaMapping
 from custom_components.ge_spot.const.config import Config
 
 # Configure logging
@@ -42,14 +42,11 @@ async def main():
 
     # Get area code from command line or use default
     area_code = sys.argv[1] if len(sys.argv) > 1 else "SE3"
-    
-    # Map area code to ENTSOE area if it's a recognized code
-    mapped_area = Area.get_area_code(area_code, fail_silent=True)
-    if mapped_area:
-        area_code = mapped_area
-    
-    logger.info(f"Testing ENTSOE API for area: {area_code}")
-    
+
+    # Map area code to ENTSOE EIC code if possible
+    entsoe_code = AreaMapping.ENTSOE_MAPPING.get(area_code, area_code)
+    logger.info(f"Testing ENTSOE API for area: {area_code} (EIC: {entsoe_code})")
+
     # Initialize API
     api = EntsoeAPI(api_key)
     
@@ -58,15 +55,14 @@ async def main():
     try:
         # Fetch raw data
         logger.info("Fetching data from ENTSOE API...")
-        start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=2)
-        
-        raw_data = await api.fetch_raw_data(area_code, start, end)
+        raw_data = await api.fetch_raw_data(entsoe_code)
+        if not isinstance(raw_data, dict):
+            logger.error(f"ENTSOE API returned a non-dict response: {raw_data}")
+            return 1
         logger.info("Successfully fetched raw data")
-        
         # Parse data
         logger.info("Parsing raw data...")
-        parsed_data = await api.parse_raw_data(raw_data, area_code)
+        parsed_data = await api.parse_raw_data(raw_data)
         
         if not parsed_data or not parsed_data.get("hourly_prices"):
             logger.error("Failed to parse data or no hourly prices returned")

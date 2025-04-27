@@ -35,9 +35,9 @@ async def main():
     area_code = sys.argv[1] if len(sys.argv) > 1 else "SE3"
     
     # Map area code to Nordpool area if it's a recognized code
-    mapped_area = Area.get_area_code(area_code, fail_silent=True)
-    if mapped_area:
-        area_code = mapped_area
+    # mapped_area = Area.get_area_code(area_code, fail_silent=True) # Removed non-existent method call
+    # if mapped_area:
+    #     area_code = mapped_area
     
     logger.info(f"Testing Nordpool API for area: {area_code}")
     
@@ -52,12 +52,14 @@ async def main():
         start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         end = start + timedelta(days=2)
         
-        raw_data = await api.fetch_raw_data(area_code, start, end)
+        # Pass only the area code, start/end are handled internally
+        raw_data = await api.fetch_raw_data(area_code)
         logger.info("Successfully fetched raw data")
         
         # Parse data
         logger.info("Parsing raw data...")
-        parsed_data = await api.parse_raw_data(raw_data, area_code)
+        # Pass only raw_data, area is inside it
+        parsed_data = await api.parse_raw_data(raw_data)
         
         if not parsed_data or not parsed_data.get("hourly_prices"):
             logger.error("Failed to parse data or no hourly prices returned")

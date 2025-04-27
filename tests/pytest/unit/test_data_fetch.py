@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 import time
 import logging
+from custom_components.ge_spot.timezone.service import TimezoneService
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -12,8 +13,17 @@ from custom_components.ge_spot.api.base.base_price_api import BasePriceAPI
 
 # --- Mocks ---
 
+class MockParser:
+    def parse(self, raw_data):
+        return raw_data
+
 class MockSuccessfulAPI(BasePriceAPI):
     """Mock API that successfully returns price data."""
+    def __init__(self, *args, **kwargs):
+        tz_service = TimezoneService()
+        super().__init__(timezone_service=tz_service)
+    def get_parser_for_area(self, area):
+        return MockParser()
     def _get_source_type(self): return "mock_success"
     def _get_base_url(self): return "http://success.test"
     async def fetch_raw_data(self, *args, **kwargs): return {"data": "raw_success"}
@@ -23,9 +33,18 @@ class MockSuccessfulAPI(BasePriceAPI):
             "currency": "EUR",
             "api_timezone": "UTC"
         }
+    # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
+    async def fetch_day_ahead_prices(self, area=None, **kwargs):
+        # Pass the correct arguments to the super method
+        return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
 class MockFailedAPI(BasePriceAPI):
     """Mock API that fails with a connection error."""
+    def __init__(self, *args, **kwargs):
+        tz_service = TimezoneService()
+        super().__init__(timezone_service=tz_service)
+    def get_parser_for_area(self, area):
+        return MockParser()
     def _get_source_type(self): return "mock_fail"
     def _get_base_url(self): return "http://fail.test"
     async def fetch_raw_data(self, *args, **kwargs): 
@@ -33,18 +52,36 @@ class MockFailedAPI(BasePriceAPI):
     async def parse_raw_data(self, *args, **kwargs): 
         # This shouldn't be reached if fetch fails
         return {}
+    # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
+    async def fetch_day_ahead_prices(self, area=None, **kwargs):
+        # This will raise ConnectionError from fetch_raw_data
+        return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
 class MockEmptyAPI(BasePriceAPI):
     """Mock API that returns no price data (empty hourly_prices)."""
+    def __init__(self, *args, **kwargs):
+        tz_service = TimezoneService()
+        super().__init__(timezone_service=tz_service)
+    def get_parser_for_area(self, area):
+        return MockParser()
     def _get_source_type(self): return "mock_empty"
     def _get_base_url(self): return "http://empty.test"
     async def fetch_raw_data(self, *args, **kwargs): return {"data": "raw_empty"}
     async def parse_raw_data(self, *args, **kwargs):
         # Simulate parser returning no valid prices
         return {"hourly_prices": {}, "currency": "EUR", "api_timezone": "UTC"}
+    # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
+    async def fetch_day_ahead_prices(self, area=None, **kwargs):
+        # Pass the correct arguments to the super method
+        return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
 class MockTimeoutAPI(BasePriceAPI):
     """Mock API that times out after a delay."""
+    def __init__(self, *args, **kwargs):
+        tz_service = TimezoneService()
+        super().__init__(timezone_service=tz_service)
+    def get_parser_for_area(self, area):
+        return MockParser()
     def _get_source_type(self): return "mock_timeout"
     def _get_base_url(self): return "http://timeout.test"
     async def fetch_raw_data(self, *args, **kwargs): 
@@ -53,9 +90,18 @@ class MockTimeoutAPI(BasePriceAPI):
     async def parse_raw_data(self, *args, **kwargs): 
         # This shouldn't be reached if fetch times out
         return {}
+    # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
+    async def fetch_day_ahead_prices(self, area=None, **kwargs):
+        # This will raise TimeoutError from fetch_raw_data
+        return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
 class MockErrorAPI(BasePriceAPI):
     """Mock API that returns a server error."""
+    def __init__(self, *args, **kwargs):
+        tz_service = TimezoneService()
+        super().__init__(timezone_service=tz_service)
+    def get_parser_for_area(self, area):
+        return MockParser()
     def _get_source_type(self): return "mock_error"
     def _get_base_url(self): return "http://error.test"
     async def fetch_raw_data(self, *args, **kwargs): 
@@ -64,9 +110,18 @@ class MockErrorAPI(BasePriceAPI):
     async def parse_raw_data(self, *args, **kwargs): 
         # This shouldn't be reached if fetch fails
         return {}
+    # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
+    async def fetch_day_ahead_prices(self, area=None, **kwargs):
+        # This will raise Exception from fetch_raw_data
+        return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
 class MockPartialDataAPI(BasePriceAPI):
     """Mock API that returns incomplete data (missing some hours)."""
+    def __init__(self, *args, **kwargs):
+        tz_service = TimezoneService()
+        super().__init__(timezone_service=tz_service)
+    def get_parser_for_area(self, area):
+        return MockParser()
     def _get_source_type(self): return "mock_partial"
     def _get_base_url(self): return "http://partial.test"
     async def fetch_raw_data(self, *args, **kwargs): return {"data": "raw_partial"}
@@ -81,6 +136,10 @@ class MockPartialDataAPI(BasePriceAPI):
             "currency": "EUR",
             "api_timezone": "UTC"
         }
+    # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
+    async def fetch_day_ahead_prices(self, area=None, **kwargs):
+        # Pass the correct arguments to the super method
+        return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
 @pytest.fixture
 def price_data_fetcher():
@@ -293,7 +352,7 @@ async def test_fetch_with_fallback_all_fail_cache_expired(price_data_fetcher):
                  "source": "mock_empty",
                  "hourly_prices": {},
                  "currency": currency,
-                 "api_timezone": "UTC"
+                 "api_timezone": "UTC",
               }) as mock_fetch_empty:
 
         result = await price_data_fetcher.fetch_with_fallback(sources, area, currency)

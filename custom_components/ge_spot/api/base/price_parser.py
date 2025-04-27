@@ -110,7 +110,12 @@ class BasePriceParser(ABC):
             # Handle ISO format with or without timezone info
             dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
             if dt.tzinfo is None:
+                # Apply source timezone if no timezone in the string
                 dt = dt.replace(tzinfo=source_timezone)
+            else:
+                # Keep the original timezone from the timestamp string
+                # No need to convert to source_timezone
+                pass
             return dt
         elif " " in timestamp_str:  # Date + time format (e.g. "2023-05-15 12:00")
             # Try common formats

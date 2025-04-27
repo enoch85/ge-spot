@@ -194,7 +194,7 @@ class UnifiedPriceManager:
                         f"Using cached data if available."
                     )
                     # Use cached data if rate limited
-                    cached_data = self._cache_manager.get_data(self.area) # Use get_data with area
+                    cached_data = self._cache_manager.get_data(area=self.area, max_age_minutes=Defaults.CACHE_TTL)
                     if cached_data:
                         _LOGGER.debug("Returning rate-limited cached data for %s", self.area)
                         # Ensure the cached data is marked correctly before processing
@@ -216,7 +216,6 @@ class UnifiedPriceManager:
             _LAST_FETCH_TIME[area_key] = now
         # --- Rate Limiting End ---
 
-
         # Fetch data using the new FallbackManager
         try:
             # Prepare API instances - pass necessary context
@@ -235,8 +234,8 @@ class UnifiedPriceManager:
             if not api_instances:
                 _LOGGER.error(f"No API sources available/configured for area {self.area}")
                 self._consecutive_failures += 1
-                # Try cache before giving up - Remove max_age_minutes argument
-                cached_data = self._cache_manager.get_data(self.area)
+                # Try cache before giving up - Add max_age_minutes argument
+                cached_data = self._cache_manager.get_data(area=self.area, max_age_minutes=Defaults.CACHE_TTL)
                 if cached_data:
                     _LOGGER.warning("No APIs available for %s, using cached data.", self.area)
                     cached_data["using_cached_data"] = True
@@ -283,8 +282,8 @@ class UnifiedPriceManager:
                 self._active_source = "None"
                 self._fallback_sources = self._attempted_sources # All attempted sources failed
 
-                # Try to use cached data as a last resort - Remove max_age_minutes argument
-                cached_data = self._cache_manager.get_data(self.area)
+                # Try to use cached data as a last resort - Add max_age_minutes argument
+                cached_data = self._cache_manager.get_data(area=self.area, max_age_minutes=Defaults.CACHE_TTL)
                 if cached_data:
                     _LOGGER.warning("Using cached data for %s due to fetch failure.", self.area)
                     self._using_cached_data = True
@@ -299,7 +298,6 @@ class UnifiedPriceManager:
                     # Generate empty result if fetch and cache fail
                     return await self._generate_empty_result(error=f"All sources failed: {error_info}")
 
-
         except Exception as e:
             _LOGGER.error(f"Unexpected error during fetch_data for area {self.area}: {e}", exc_info=True)
             self._consecutive_failures += 1
@@ -307,8 +305,8 @@ class UnifiedPriceManager:
             # Ensure exchange service is initialized even on error path for _generate_empty_result
             await self._ensure_exchange_service()
 
-            # Try cache on unexpected error - Remove max_age_minutes argument
-            cached_data = self._cache_manager.get_data(self.area)
+            # Try cache on unexpected error - Add max_age_minutes argument
+            cached_data = self._cache_manager.get_data(area=self.area, max_age_minutes=Defaults.CACHE_TTL)
             if cached_data:
                  _LOGGER.warning("Using cached data for %s due to unexpected error: %s", self.area, e)
                  self._using_cached_data = True
@@ -317,11 +315,8 @@ class UnifiedPriceManager:
                  processed_cached_data["using_cached_data"] = True # Ensure flag is set
                  return processed_cached_data
             else:
-                 # Use last known data if available, otherwise return empty result
-                 # if self._last_data: # Replaced by cache check
-                 #     return self._last_data
-                 # else:
-                 return await self._generate_empty_result(error=f"Unexpected error: {e}")
+                 # Generate empty result if no cache
+                 return await self._generate_empty_result(error=f"Unexpected error: {str(e)}")
 
 
     async def _process_result(self, result: Dict[str, Any], is_cached: bool = False) -> Dict[str, Any]:
@@ -376,40 +371,47 @@ class UnifiedPriceManager:
             error: Optional error message to include.
 
         Returns:
-            Empty result dictionary, processed to have standard structure.
+            Empty result dictionary with standard structure.
         """
         # Ensure exchange service is initialized before processing empty result
         await self._ensure_exchange_service()
 
         now = dt_util.now()
 
-        # Create base empty data structure
+        # Create complete empty data structure without calling _process_result again
         empty_data = {
             "source": "None",
             "area": self.area,
-            "currency": self.currency, # Use target currency
+            "currency": self.currency,
+            "target_currency": self.currency,
             "hourly_prices": {},
-            "raw_data": None, # No raw data available
-            "api_timezone": None, # Unknown timezone
-            # Include metadata about the failure state
+            "raw_data": None,
+            "api_timezone": None,
             "attempted_sources": self._attempted_sources,
-            "fallback_sources": self._fallback_sources, # All attempted if failed
-            # Reflects if cache was *intended* or if this is due to rate limit w/o cache
+            "fallback_sources": self._fallback_sources,
             "using_cached_data": self._using_cached_data or (error == "Rate limited, no cache available"),
             "consecutive_failures": self._consecutive_failures,
             "last_fetch_attempt": _LAST_FETCH_TIME.get(self.area, now).isoformat() if _LAST_FETCH_TIME.get(self.area) else now.isoformat(),
-            "error": error or f"Failed to fetch data after {self._consecutive_failures} attempts"
+            "error": error or f"Failed to fetch data after {self._consecutive_failures} attempts",
+            "has_data": False,
+            "last_update": now.isoformat(),
+            "vat_rate": self.vat_rate * 100,
+            "include_vat": self.include_vat,
+            "display_unit": self.display_unit,
+            "current_price": None,
+            "average_price": None,
+            "min_price": None,
+            "max_price": None,
+            "off_peak_1": None,
+            "peak": None,
+            "off_peak_2": None,
+            "weighted_average_price": None,
+            "data_source": "None",
+            "price_in_cents": False
         }
 
-        # Process this empty structure
-        # Pass the correct cache status based on the error or internal state
-        is_cached_status = self._using_cached_data or (error == "Rate limited, no cache available")
-        processed_empty = await self._process_result(empty_data, is_cached=is_cached_status)
-        processed_empty["has_data"] = False # Explicitly mark as no data
-        processed_empty["last_update"] = now.isoformat() # Timestamp the failure time
-
-        return processed_empty
-
+        # Directly return the structured empty data without processing
+        return empty_data
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get statistics about the data cache.

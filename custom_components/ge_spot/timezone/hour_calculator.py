@@ -111,10 +111,14 @@ class HourCalculator:
             elif transition_type == DSTTransitionType.FALL_BACK and now_display.hour == 2:
                 # Check if we're in the first occurrence of 2:00
                 dst_offset = now.dst().total_seconds()
-                if dst_offset > 0 and TimezoneConstants.DST_OPTIONS["fall_back_first"]:
-                    # First time through 2:00, next is second 2:00
-                    _LOGGER.debug("Next hour during fall back: second 02:00")
-                    return "02:00"
+                if dst_offset > 0:
+                    # First time through 2:00, next is 3:00 (representing "after both 2:00 hours")
+                    _LOGGER.debug("Next hour during fall back first 02:00: moving to 03:00")
+                    return "03:00"
+                else:
+                    # Second time through 2:00, next is normal 3:00
+                    _LOGGER.debug("Next hour during fall back second 02:00: normal 03:00")
+                    return "03:00"
 
         # Log next hour determination for debugging
         next_hour_key = f"{next_hour:02d}:00"
