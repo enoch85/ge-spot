@@ -214,7 +214,6 @@ class DataProcessor:
 
             normalized_today = {}
             normalized_tomorrow = {}
-            # FIX: Convert datetime keys to HH:00 strings before checking against today/tomorrow keys
             for dt_key, price in all_normalized_prices.items():
                 # Ensure dt_key is timezone-aware (should be from converter)
                 if dt_key.tzinfo is None:
@@ -230,10 +229,18 @@ class DataProcessor:
                 elif hour_str_key in tomorrow_keys:
                     normalized_tomorrow[hour_str_key] = price
 
-            # Remove the old splitting logic
-            # normalized_today = {k: v for k, v in all_normalized_prices.items() if k in today_keys}
-            # normalized_tomorrow = {k: v for k, v in all_normalized_prices.items() if k in tomorrow_keys}
-            _LOGGER.debug(f"Split into: {len(normalized_today)} today, {len(normalized_tomorrow)} tomorrow")
+            # --- Add target_date logic for cache ---
+            # Use the date in the target timezone for which 'hourly_prices' (today) are valid
+            if normalized_today:
+                # Get the current date in the target timezone
+                target_date = dt_util.now(self._tz_service.target_timezone).date()
+            elif normalized_tomorrow:
+                # If only tomorrow's prices, use tomorrow's date
+                target_date = (dt_util.now(self._tz_service.target_timezone) + timedelta(days=1)).date()
+            else:
+                target_date = dt_util.now(self._tz_service.target_timezone).date()
+            processed_result["target_date"] = target_date
+            # --- End target_date logic ---
 
             # 2. Convert Currency, Units, Apply VAT using CurrencyConverter
             ecb_rate = None

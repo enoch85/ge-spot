@@ -1,6 +1,6 @@
 """Unified Price Manager for ge-spot integration."""
 import logging
-from datetime import timedelta, datetime, time
+from datetime import timedelta, datetime, time, date
 from typing import Any, Dict, Optional, List, Type, Union
 import asyncio # Added for rate limiting
 
@@ -175,6 +175,7 @@ class UnifiedPriceManager:
             Dictionary with processed data
         """
         now = dt_util.now()
+        today_date = now.date() # Get today's date
         area_key = self.area # Key for rate limiting
 
         # Ensure exchange service is initialized before fetching/processing
@@ -193,8 +194,12 @@ class UnifiedPriceManager:
                         f"Next fetch allowed in {(min_interval - time_since_last_fetch).total_seconds():.1f} seconds. "
                         f"Using cached data if available."
                     )
-                    # Use cached data if rate limited
-                    cached_data = self._cache_manager.get_data(area=self.area, max_age_minutes=Defaults.CACHE_TTL)
+                    # Use cached data if rate limited - specify today's date
+                    cached_data = self._cache_manager.get_data(
+                        area=self.area,
+                        target_date=today_date, # Specify today
+                        max_age_minutes=Defaults.CACHE_TTL
+                    )
                     if cached_data:
                         _LOGGER.debug("Returning rate-limited cached data for %s", self.area)
                         # Ensure the cached data is marked correctly before processing
@@ -205,8 +210,7 @@ class UnifiedPriceManager:
                         processed_cached_data["using_cached_data"] = True
                         return processed_cached_data
                     else:
-                        _LOGGER.warning("Rate limited for %s, but no cached data available.", self.area)
-                        # Generate empty result if no cache and rate limited
+                        _LOGGER.warning("Rate limited for %s, but no cached data available for today (%s).", self.area, today_date)
                         # Pass the specific rate limit error message
                         return await self._generate_empty_result(error="Rate limited, no cache available")
 
@@ -234,8 +238,12 @@ class UnifiedPriceManager:
             if not api_instances:
                 _LOGGER.error(f"No API sources available/configured for area {self.area}")
                 self._consecutive_failures += 1
-                # Try cache before giving up - Add max_age_minutes argument
-                cached_data = self._cache_manager.get_data(area=self.area, max_age_minutes=Defaults.CACHE_TTL)
+                # Try cache before giving up - specify today's date
+                cached_data = self._cache_manager.get_data(
+                    area=self.area,
+                    target_date=today_date, # Specify today
+                    max_age_minutes=Defaults.CACHE_TTL
+                )
                 if cached_data:
                     _LOGGER.warning("No APIs available for %s, using cached data.", self.area)
                     cached_data["using_cached_data"] = True
@@ -269,7 +277,17 @@ class UnifiedPriceManager:
                 processed_data = await self._process_result(result)
 
                 # Cache the successfully processed data
-                self._cache_manager.update_cache(processed_data)
+                # We need the target_date from processed_data (to be added in DataProcessor)
+                # For now, assume it's today, will refine after DataProcessor update
+                cache_target_date = processed_data.get("target_date", today_date) # Get date from processor
+                self._cache_manager.store(
+                    data=processed_data,
+                    area=self.area,
+                    source=processed_data.get("data_source", "unknown"),
+                    target_date=cache_target_date
+                )
+                # Note: update_cache is removed as we now call store directly with the date
+                # self._cache_manager.update_cache(processed_data)
 
                 return processed_data
 
@@ -282,8 +300,12 @@ class UnifiedPriceManager:
                 self._active_source = "None"
                 self._fallback_sources = self._attempted_sources # All attempted sources failed
 
-                # Try to use cached data as a last resort - Add max_age_minutes argument
-                cached_data = self._cache_manager.get_data(area=self.area, max_age_minutes=Defaults.CACHE_TTL)
+                # Try to use cached data as a last resort - specify today's date
+                cached_data = self._cache_manager.get_data(
+                    area=self.area,
+                    target_date=today_date, # Specify today
+                    max_age_minutes=Defaults.CACHE_TTL
+                )
                 if cached_data:
                     _LOGGER.warning("Using cached data for %s due to fetch failure.", self.area)
                     self._using_cached_data = True
@@ -293,7 +315,7 @@ class UnifiedPriceManager:
                     processed_cached_data["using_cached_data"] = True # Ensure flag is set
                     return processed_cached_data
                 else:
-                    _LOGGER.error("All sources failed for %s and no usable cache available.", self.area)
+                    _LOGGER.error("All sources failed for %s and no usable cache available for today (%s).", self.area, today_date)
                     self._using_cached_data = True # Indicate we intended to use cache but failed
                     # Generate empty result if fetch and cache fail
                     return await self._generate_empty_result(error=f"All sources failed: {error_info}")
@@ -305,8 +327,12 @@ class UnifiedPriceManager:
             # Ensure exchange service is initialized even on error path for _generate_empty_result
             await self._ensure_exchange_service()
 
-            # Try cache on unexpected error - Add max_age_minutes argument
-            cached_data = self._cache_manager.get_data(area=self.area, max_age_minutes=Defaults.CACHE_TTL)
+            # Try cache on unexpected error - specify today's date
+            cached_data = self._cache_manager.get_data(
+                area=self.area,
+                target_date=today_date, # Specify today
+                max_age_minutes=Defaults.CACHE_TTL
+            )
             if cached_data:
                  _LOGGER.warning("Using cached data for %s due to unexpected error: %s", self.area, e)
                  self._using_cached_data = True
@@ -422,16 +448,15 @@ class UnifiedPriceManager:
         # Delegate to CacheManager
         return self._cache_manager.get_cache_stats()
 
-    async def clear_cache(self) -> bool:
-        """Clear the data cache.
-
-        Returns:
-            True if cache was cleared.
-        """
-        # Delegate to CacheManager
-        self._cache_manager.clear_cache()
-        _LOGGER.info("Cleared cache for area %s", self.area)
-        return True
+    async def clear_cache(self, target_date: Optional[date] = None) -> bool:
+        """Clear the data cache, optionally for a specific date."""
+        # Delegate to CacheManager, passing the optional date
+        cleared = self._cache_manager.clear(area=self.area, target_date=target_date)
+        if cleared:
+            _LOGGER.info("Cache cleared for area %s" + (f" and date {target_date.isoformat()}" if target_date else ""), self.area)
+        else:
+            _LOGGER.info("No cache found to clear for area %s" + (f" and date {target_date.isoformat()}" if target_date else ""), self.area)
+        return cleared
 
     async def async_close(self):
         """Close any open sessions and resources."""
@@ -535,13 +560,13 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         _LOGGER.debug(f"Force update complete for area {self.area}")
 
 
-    async def clear_cache(self):
-        """Clear the price cache via the manager."""
-        cleared = await self.price_manager.clear_cache()
-        if cleared:
-            _LOGGER.info("Cache cleared for area %s via coordinator.", self.area)
-            # Optionally trigger a refresh after clearing cache
-            # await self.async_request_refresh()
+    async def clear_cache(self, target_date: Optional[date] = None):
+        """Clear the price cache via the manager, optionally for a specific date."""
+        # Pass the date down to the manager's clear method
+        cleared = await self.price_manager.clear_cache(target_date=target_date)
+        # Logging is handled within the manager's clear method now
+        # Optionally trigger a refresh after clearing cache
+        # await self.async_request_refresh()
         return cleared
 
     async def async_close(self):
