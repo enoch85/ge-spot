@@ -111,6 +111,7 @@ class BasePriceParser(ABC):
             dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=source_timezone)
+            return dt
         elif " " in timestamp_str:  # Date + time format (e.g. "2023-05-15 12:00")
             # Try common formats
             formats = [
@@ -130,14 +131,19 @@ class BasePriceParser(ABC):
                     continue
             else:
                 raise ValueError(f"Cannot parse timestamp format: {timestamp_str}")
+            return dt
         elif ":" in timestamp_str:  # HH:MM format (ambiguous date)
-            # We need date context for this timestamp
-            # This should be supplied by the specific parser implementation
-            raise ValueError(f"Timestamp without date information: {timestamp_str}")
+            # For time-only format, use today's date in the source timezone
+            try:
+                today = datetime.now(source_timezone).date()
+                time_format = "%H:%M" if len(timestamp_str.split(':')) == 2 else "%H:%M:%S"
+                time_obj = datetime.strptime(timestamp_str, time_format).time()
+                dt = datetime.combine(today, time_obj, tzinfo=source_timezone)
+                return dt
+            except ValueError:
+                raise ValueError(f"Cannot parse time format: {timestamp_str}")
         else:
             raise ValueError(f"Cannot determine datetime from timestamp: {timestamp_str}")
-        
-        return dt
 
     def classify_timestamp_day(self, dt: datetime, target_timezone: Any) -> str:
         """Classify if a timestamp belongs to today or tomorrow in the target timezone.
