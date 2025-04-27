@@ -75,17 +75,17 @@ class BasePriceAPI(ABC):
         """
         pass
     
-    async def fetch_day_ahead_prices(self, area=None, **kwargs): # Add **kwargs
+    async def fetch_day_ahead_prices(self, area=None, **kwargs):
         try:
             if not self.timezone_service:
                 raise ValueError("timezone_service is not initialized")
             target_timezone = self.timezone_service.ha_timezone
-            
+
             _LOGGER.debug(f"{self.source_type}: Fetching day-ahead prices for area {area}")
-            
+
             # Get source timezone for this area
             source_timezone = self.get_timezone_for_area(area)
-            
+
             # Get reference_time from kwargs
             reference_time = kwargs.get('reference_time')
 
@@ -96,49 +96,52 @@ class BasePriceAPI(ABC):
             if not raw_data:
                 _LOGGER.warning(f"{self.source_type}: No data returned for area {area}")
                 return {}
-                
+
             # Create parser with our timezone service
             parser = self.get_parser_for_area(area)
-            
+
             # Parse raw data
             parsed_data = parser.parse(raw_data)
-            
+
             # Add area and timezone info - Keep simple metadata, avoid processing
             parsed_data["area"] = area
             if source_timezone:
-                 parsed_data["api_timezone"] = str(source_timezone)
-            # target_timezone might not be needed here anymore if normalization is central
-            # parsed_data["target_timezone"] = str(target_timezone) 
-            
-            # REMOVED: Timezone normalization block
-            # REMOVED: _calculate_current_next_hour call
-            # REMOVED: _calculate_statistics call
-            # REMOVED: metadata extraction (can be done later if needed)
-            
+                parsed_data["api_timezone"] = str(source_timezone)
+
             # Ensure basic structure exists even if parser returns None/empty
             if not parsed_data:
-                 parsed_data = {}
+                parsed_data = {}
             if "hourly_prices" not in parsed_data:
-                 parsed_data["hourly_prices"] = {}
-            if "currency" not in parsed_data:
-                 # Attempt to get currency from kwargs or default
-                 parsed_data["currency"] = kwargs.get("currency", "EUR") # Default assumption
-            
+                parsed_data["hourly_prices"] = {}
+            if "currency" not in parsed_data or not parsed_data["currency"]:
+                # Use const.currencies mapping for area
+                from ...const.currencies import CurrencyInfo
+                currency = CurrencyInfo.REGION_TO_CURRENCY.get(str(area))
+                if not currency:
+                    _LOGGER.warning(f"{self.source_type}: Missing currency for area {area}. Please check REGION_TO_CURRENCY mapping.")
+                    parsed_data["currency"] = None
+                else:
+                    parsed_data["currency"] = currency
+
             # Add source type
             parsed_data["source"] = self.source_type
 
             _LOGGER.debug(f"Returning minimally processed data from {self.source_type}: {parsed_data.keys()}")
             return parsed_data
-            
+
         except Exception as e:
             _LOGGER.error(f"Error in fetch_day_ahead_prices for {self.source_type}: {str(e)}", exc_info=True)
             # Return a structured empty dict on error
-            # Get currency from kwargs for the error case too
-            currency = kwargs.get("currency", "EUR") 
+            # Use const.currencies mapping for area if possible
+            try:
+                from ...const.currencies import CurrencyInfo
+                currency = CurrencyInfo.REGION_TO_CURRENCY.get(str(area))
+            except Exception:
+                currency = None
             return {
                 "source": self.source_type,
                 "area": area,
-                "currency": currency, # Use currency from kwargs
+                "currency": currency,
                 "hourly_prices": {},
                 "error": str(e)
             }
