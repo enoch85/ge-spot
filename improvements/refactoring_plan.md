@@ -63,3 +63,360 @@ By executing Stage 4, we will have high confidence in the refactored integration
 
 - GE-Spot README – *Features and Technical Details (Fallbacks, Rate Limiting, Timezone, Currency)* ([[GitHub - enoch85/ge-spot: Global Energy Spotprices](https://github.com/enoch85/ge-spot#:~:text=sources%20fail%20,around%2013%3A00%20CET)](https://github.com/enoch85/ge-spot#:~:text=sources%20fail%20,around%2013%3A00%20CET)) ([[GitHub - enoch85/ge-spot: Global Energy Spotprices](https://github.com/enoch85/ge-spot#:~:text=GE,and%20reliable)](https://github.com/enoch85/ge-spot#:~:text=GE,and%20reliable))  
 - GE-Spot Code Snippets – *Nordpool API implementation and data processing* ([[ge-spot/custom_components/ge_spot/api/nordpool.py at main · enoch85/ge-spot · GitHub](https://github.com/enoch85/ge-spot/blob/main/custom_components/ge_spot/api/nordpool.py#:~:text=async%20def%20fetch_day_ahead_prices,currency%2C%20reference_time%3DNone%2C%20hass%3DNone%2C%20session%3DNone)](https://github.com/enoch85/ge-spot/blob/main/custom_components/ge_spot/api/nordpool.py#:~:text=async%20def%20fetch_day_ahead_prices,currency%2C%20reference_time%3DNone%2C%20hass%3DNone%2C%20session%3DNone)) ([[ge-spot/custom_components/ge_spot/api/nordpool.py at main · enoch85/ge-spot · GitHub](https://github.com/enoch85/ge-spot/blob/main/custom_components/ge_spot/api/nordpool.py#:~:text=for%20hour_str%2C%20price%20in%20converted_hourly_prices)](https://github.com/enoch85/ge-spot/blob/main/custom_components/ge_spot/api/nordpool.py#:~:text=for%20hour_str%2C%20price%20in%20converted_hourly_prices)); *Fallback manager usage* ([[ge-spot/custom_components/ge_spot/coordinator/today_data_manager.py at main · enoch85/ge-spot · GitHub](https://github.com/enoch85/ge-spot/blob/main/custom_components/ge_spot/coordinator/today_data_manager.py#:~:text=,API%20fetches%20with%20automatic%20fallbacks)](https://github.com/enoch85/ge-spot/blob/main/custom_components/ge_spot/coordinator/today_data_manager.py#:~:text=,API%20fetches%20with%20automatic%20fallbacks)); *Timezone normalization logic* ([[GitHub - enoch85/ge-spot: Global Energy Spotprices](https://github.com/enoch85/ge-spot#:~:text=1,DST%20transitions%20are%20handled%20automatically)](https://github.com/enoch85/ge-spot#:~:text=1,DST%20transitions%20are%20handled%20automatically)) ([[ge-spot/custom_components/ge_spot/api/nordpool.py at main · enoch85/ge-spot · GitHub](https://github.com/enoch85/ge-spot/blob/main/custom_components/ge_spot/api/nordpool.py#:~:text=,parse%20hourly%20prices)](https://github.com/enoch85/ge-spot/blob/main/custom_components/ge_spot/api/nordpool.py#:~:text=,parse%20hourly%20prices)); *Example of Stromligning data structure* ([[GitHub - enoch85/ge-spot: Global Energy Spotprices](https://github.com/enoch85/ge-spot#:~:text=,total)](https://github.com/enoch85/ge-spot#:~:text=,total)).
+
+
+
+2025-04-27:
+
+🔄 Revised Stage 2: Dynamic Adapter Registration
+1. Adapter Self-Registration via Decorator
+
+Each API adapter lives in its own module and decorates itself with the metadata the system needs (its name, supported regions, default priority in the fallback chain).
+
+# custom_components/ge_spot/api/nordpool.py
+
+from ..core import register_adapter
+from .base import BaseAPIAdapter
+
+@register_adapter(
+    name="nordpool",
+    regions=["SE1","SE2","DK1","DK2"],
+    default_priority=10
+)
+class NordpoolAdapter(BaseAPIAdapter):
+    ...
+
+    register_adapter is a tiny decorator (≈ 20 lines) that simply records the class in a global registry dict under the hood.
+
+    No more manual import lists—just dropping a new *.py adapter in the package automatically makes it available.
+
+2. Config-Driven Fallback Chains
+
+Rather than hard-coding the full chain in code, each region’s fallback order lives in its own small YAML/JSON under config/regions/SE1.yaml, for example:
+
+# config/regions/SE1.yaml
+fallback_chain:
+  - nordpool
+  - entsoe
+  - epex
+
+    A ~5-line loader reads config/regions/{region}.yaml to get the ordered list of adapter names.
+
+    The fallback loop simply does:
+
+    adapters = [registry[name] for name in chain]
+    for adapter in adapters:
+        try: return adapter.fetch_data(...)
+        except: continue
+
+3. Tiny Central Registry Module
+
+Your core registry file now looks like:
+
+# custom_components/ge_spot/api/registry.py
+import pkgutil, importlib, yaml
+from pathlib import Path
+
+ADAPTERS = {}
+
+def register_adapter(name, regions, default_priority):
+    def deco(cls):
+        ADAPTERS[name] = cls
+        cls._regions = regions
+        cls._priority = default_priority
+        return cls
+    return deco
+
+def get_chain_for_region(region: str) -> list[str]:
+    cfg = yaml.safe_load(Path(__file__).parent.parent.parent / f"config/regions/{region}.yaml")
+    return cfg["fallback_chain"]
+
+    Size: ~30 lines, independent of how many adapters you have.
+
+    Extensible: New adapters = new modules + a line in config; no central file bloat.
+
+4. Benefits Over the Monolith
+
+    Modularity: Each adapter is self-contained; removing or adding one never touches a central registry list.
+
+    Clarity: Fallback priority is explicit in small per-region files, not buried in thousands of lines.
+
+    Testability: You can unit-test each adapter and separately test the loader that builds the chain from YAML.
+
+    Performance: Dynamic discovery at startup is negligible; the runtime fallback loop is just iterating a small list.
+
+▶️ Next Steps
+
+    Implement the register_adapter decorator and move all existing adapters to use it.
+
+    Extract fallback chains into per-region YAML under config/regions/.
+
+    Replace any hard-coded source maps in your UnifiedPriceManager with calls to registry.get_chain_for_region().
+
+    Remove any massive, monolithic registry file you drafted earlier.
+
+    Add lightweight unit tests for:
+
+        Decorator registration
+
+        Config loader correctness
+
+        Fallback loop behavior with mocks
+
+        (Remaining adapter and conversion tests, as before)
+
+This way, the “registry” grows automatically with your code, yet stays tiny, readable, and fully under your control. Let me know if you’d like snippets to kick-start the decorator and the YAML loader!
+
+# How to implement
+
+1. Create the Registry and Decorator
+
+File: custom_components/ge_spot/api/registry.py
+Purpose: Collects adapters via decorator, loads per-region fallback chains from YAML, and builds adapter instances on demand.
+
+# custom_components/ge_spot/api/registry.py
+
+import yaml
+from pathlib import Path
+from typing import Type, List
+
+# Global mapping: adapter_name -> Adapter class
+ADAPTERS: dict[str, Type["BaseAPIAdapter"]] = {}
+
+
+def register_adapter(
+    name: str,
+    regions: List[str],
+    default_priority: int = 0
+):
+    """
+    Decorator to register an adapter class under a given name,
+    and annotate which regions it supports.
+    """
+    def decorator(cls: Type["BaseAPIAdapter"]) -> Type["BaseAPIAdapter"]:
+        cls.adapter_name = name
+        cls.supported_regions = regions
+        cls.default_priority = default_priority
+        ADAPTERS[name] = cls
+        return cls
+    return decorator
+
+
+def get_chain_for_region(region: str) -> List[str]:
+    """
+    Load the fallback_chain for a region from
+    custom_components/ge_spot/config/regions/{region}.yaml
+    """
+    cfg_path = Path(__file__).parent.parent.parent / "config" / "regions" / f"{region}.yaml"
+    data = yaml.safe_load(cfg_path.read_text())
+    return data.get("fallback_chain", [])
+
+
+def create_adapters_for_region(
+    region: str,
+    **adapter_kwargs,
+) -> List["BaseAPIAdapter"]:
+    """
+    Instantiates adapters in the order defined by the region's YAML.
+    Unrecognized adapter names are skipped.
+    """
+    chain = get_chain_for_region(region)
+    instances: List["BaseAPIAdapter"] = []
+    for name in chain:
+        AdapterCls = ADAPTERS.get(name)
+        if AdapterCls:
+            instances.append(AdapterCls(**adapter_kwargs))
+    return instances
+
+2. Define Your Base Adapter
+
+If you don’t already have it, add:
+
+File: custom_components/ge_spot/api/base_adapter.py
+
+# custom_components/ge_spot/api/base_adapter.py
+
+from abc import ABC, abstractmethod
+
+class BaseAPIAdapter(ABC):
+    @abstractmethod
+    def fetch_data(self, area: str) -> dict:
+        """
+        Must return raw API data in a standard dict format:
+        {
+          "hourly_raw":    { "2025-04-27T00:00:00+02:00": 10.5, ... },
+          "timezone":      "Europe/Stockholm",
+          "currency":      "EUR",
+          "source_name":   "nordpool",
+          ...
+        }
+        """
+        pass
+
+3. Turn Each Adapter into a Self-Registering Class
+
+For every adapter module under custom_components/ge_spot/api/, wrap its class with @register_adapter. Keep the existing logic intact.
+Example: nordpool.py
+
+# custom_components/ge_spot/api/nordpool.py
+
+from .base_adapter import BaseAPIAdapter
+from .registry import register_adapter
+import httpx
+from datetime import datetime, timedelta
+from ..utils import parse_nordpool_response  # your existing parser
+
+@register_adapter(
+    name="nordpool",
+    regions=["SE1","SE2","NO1","DK1","DK2"],
+    default_priority=10
+)
+class NordpoolAdapter(BaseAPIAdapter):
+    def __init__(self, session: httpx.AsyncClient):
+        self.session = session
+
+    async def fetch_data(self, area: str) -> dict:
+        # (keep all your existing HTTP calls + parsing logic)
+        resp = await self.session.get(f"https://api.nordpoolgroup.com/.../{area}")
+        data = parse_nordpool_response(resp.json())
+        return {
+            "hourly_raw": data["prices"],
+            "timezone": data["tz"],
+            "currency": data["currency"],
+            "source_name": "nordpool",
+        }
+
+Example: entsoe.py
+
+# custom_components/ge_spot/api/entsoe.py
+
+from .base_adapter import BaseAPIAdapter
+from .registry import register_adapter
+import httpx
+from .parsers import parse_entsoe
+
+@register_adapter(
+    name="entsoe",
+    regions=["DE","FR","PL","CZ"],
+    default_priority=20
+)
+class EntsoeAdapter(BaseAPIAdapter):
+    def __init__(self, session: httpx.AsyncClient, api_key: str):
+        self.session = session
+        self.api_key = api_key
+
+    async def fetch_data(self, area: str) -> dict:
+        # (existing logic to build URL, call entsoe, parse)
+        url = f"https://api.entsoe.eu/...?area={area}&token={self.api_key}"
+        resp = await self.session.get(url)
+        data = parse_entsoe(resp.text)
+        return {
+            "hourly_raw": data["prices"],
+            "timezone": data["tz"],
+            "currency": data["currency"],
+            "source_name": "entsoe",
+        }
+
+    You will repeat this pattern in every adapter module:
+
+        Import register_adapter and BaseAPIAdapter.
+
+        Apply the decorator with your adapter’s name, supported regions & priority.
+
+        Leave your existing fetch_data logic untouched.
+
+4. Add Per-Region Fallback Config
+
+Create a small YAML file for each region under:
+
+ge-spot/
+├── custom_components/ge_spot/config/regions/SE1.yaml
+├── custom_components/ge_spot/config/regions/SE2.yaml
+└── ...
+
+Example: SE1.yaml
+
+fallback_chain:
+  - nordpool
+  - entsoe
+  - epex
+
+You only list the adapter names exactly as used in the @register_adapter(name=…).
+5. Wire It Up in Your Coordinator
+
+In your UnifiedPriceManager (or wherever you fetch per region), replace manual maps with:
+
+# custom_components/ge_spot/coordinator/unified_price_manager.py
+
+from ..api.registry import create_adapters_for_region
+from ..utils.cache import CacheManager
+from ..utils.rate_limiter import RateLimiter
+from ..coordinator.data_processor import DataProcessor
+
+class UnifiedPriceManager:
+    def __init__(self, session, config):
+        self.session = session
+        self.config = config
+        self.cache = CacheManager()
+        self.data_processor = DataProcessor(...)
+        self._last_fetch = {}
+
+    async def fetch_data(self, region: str) -> dict:
+        # 1. Rate-limit guard
+        if not RateLimiter.allow(region, self._last_fetch.get(region)):
+            return self.cache.get(region)
+
+        # 2. Build adapters in fallback order
+        adapters = create_adapters_for_region(
+            region,
+            session=self.session,
+            api_key=self.config.get("entsoe_api_key", ""),
+        )
+
+        # 3. Try each in turn
+        raw_result = None
+        attempted = []
+        for adapter in adapters:
+            attempted.append(adapter.adapter_name)
+            try:
+                raw_result = await adapter.fetch_data(region)
+                break
+            except Exception as e:
+                # log and continue
+                continue
+
+        # 4. Fallback to cache if all failed
+        if raw_result is None:
+            return self.cache.get(region)
+
+        # 5. Process, cache & return
+        final = self.data_processor.process(raw_result, region)
+        self.cache.set(region, final)
+        self._last_fetch[region] = RateLimiter.current_time()
+        final["attempted_sources"] = attempted
+        final["data_source"] = raw_result["source_name"]
+        return final
+
+6. Clean Up Old Code
+
+    Delete any “manual map” of source_type→class you had in UnifiedPriceManager.
+
+    Remove the old monolithic registry file (if you created one).
+
+    Prune unused helpers under utils/fallback or utils/rate_limiter once you’ve standardized on your chosen approach.
+
+✅ Summary of Changes
+
+    api/registry.py – ~30 lines, dynamic decorator + YAML loader.
+
+    api/base_adapter.py – abstract base for all adapters.
+
+    Adapter Modules (nordpool.py, entsoe.py, etc.) – add @register_adapter(...) at the top.
+
+    Region Configs (config/regions/*.yaml) – tiny lists of adapter names per region.
+
+    Coordinator – create_adapters_for_region(), sequential try/except, rate-limiter & cache fallback.
+
+    Cleanup – remove any leftover monoliths or duplicated code.
+
+This delivers the full implementation in small, maintainable pieces, auto-growing as you add more adapters, without any thousand-line files. Let me know if you’d like clarification on any particular snippet!

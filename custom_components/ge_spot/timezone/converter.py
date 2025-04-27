@@ -96,25 +96,27 @@ class TimezoneConverter:
 
             for iso_key, price in hourly_prices.items():
                 if price is None: continue # Skip null prices
-                
+
                 try:
                     # Parse the ISO timestamp key
                     # Assume it includes offset, make aware UTC first for reliable conversion
+                    # Correction: Parse directly, fromisoformat handles offsets.
                     source_dt_aware = datetime.fromisoformat(iso_key.replace("Z", "+00:00"))
-                    
+
                     # Convert to target timezone
                     target_dt = source_dt_aware.astimezone(target_tz)
-                    
+
                     # Determine target date and hour key
                     target_date = target_dt.date()
                     target_hour_key = f"{target_dt.hour:02d}:00"
 
                     # Check for DST fallback duplicate: same target hour but different source time
                     # We store the full target datetime to check
+                    # Correction: Store tuple of (date, hour) for simpler check
                     target_dt_tuple = (target_date, target_dt.hour)
                     is_duplicate = target_dt_tuple in processed_target_datetimes
                     processed_target_datetimes.add(target_dt_tuple)
-                    
+
                     # Decide which dictionary to put it in
                     target_dict = None
                     if target_date == today_target_date:
@@ -126,7 +128,7 @@ class TimezoneConverter:
                         # Log and skip for now, could be stored in "other" if needed
                         _LOGGER.debug(f"Skipping price for {iso_key} - maps to date {target_date} (ref: {today_target_date})")
                         continue
-                        
+
                     # Handle potential overwrites (e.g., DST fallback hour)
                     if target_hour_key in target_dict:
                         if is_duplicate:
@@ -139,7 +141,7 @@ class TimezoneConverter:
                             # This shouldn't happen unless input data is strange
                             _LOGGER.warning(f"Duplicate target hour key {target_hour_key} found for date {target_date}. "
                                             f"Input {iso_key} maps to this hour. Overwriting with later value.")
-                            
+
                     target_dict[target_hour_key] = price
                     # _LOGGER.debug(f"Mapped {iso_key} ({source_tz}) to {target_date} {target_hour_key} ({target_tz})")
 

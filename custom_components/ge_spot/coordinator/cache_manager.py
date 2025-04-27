@@ -1,8 +1,9 @@
 """Cache manager for electricity spot prices."""
+import json
 import logging
-from datetime import datetime, timedelta # Added timedelta
-from typing import Any, Dict, Optional, List
-import pytz # Import pytz
+import os
+from datetime import datetime, timedelta, timezone # Ensure timezone is imported
+from typing import Any, Dict, Optional
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -67,99 +68,93 @@ class CacheManager:
         # Store in cache
         self._price_cache.set(key, data, metadata=metadata)
 
-    def get_data(self, area: str, max_age_minutes: Optional[int] = None) -> Optional[Dict[str, Any]]:
-        """Get data from cache, optionally filtering by maximum age.
+    def get_data(self, area: str, source: Optional[str] = None, max_age_minutes: int = 60) -> Optional[Dict[str, Any]]:
+        """Retrieve data from cache if valid and not expired.
 
         Args:
             area: Area code
+            source: Optional source identifier to filter the cache
             max_age_minutes: Optional maximum age of the cache entry in minutes.
 
         Returns:
             Dictionary with cached data, or None if not available or too old.
         """
-        cache_info = self._price_cache.get_info()
-        area_keys = [key for key in cache_info.get("entries", {}).keys() if key.startswith(f"{area}_")]
-
-        if not area_keys:
-            _LOGGER.debug("No cache keys found for area %s", area)
+        cache_data = self._load_cache()
+        if not cache_data:
+            _LOGGER.debug("Cache file is empty or could not be loaded.")
             return None
 
-        valid_keys = []
-        # Use timezone-aware UTC now
-        now_utc = dt_util.utcnow()
+        # If source is specified, try that first
+        if source:
+            cache_key = self._generate_cache_key(area, source)
+            entry = cache_data.get(cache_key)
+            if entry:
+                _LOGGER.debug(f"Checking specific cache key: {cache_key}")
+                validated_entry = self._validate_cache_entry(entry, cache_key, max_age_minutes)
+                if validated_entry:
+                    return validated_entry.get("data")
 
-        for key in area_keys:
-            entry_info = cache_info["entries"].get(key)
-            if not entry_info:
-                continue # Should not happen if key is from get_info, but safety first
+        # If specific source not found or not specified, iterate through all entries for the area
+        _LOGGER.debug(f"No specific source or entry invalid/expired. Searching all entries for area {area}")
+        valid_entries = []
+        for key, entry in cache_data.items():
+            # Basic check if the key belongs to the requested area
+            if key.startswith(f"{area}_"):
+                 validated_entry = self._validate_cache_entry(entry, key, max_age_minutes)
+                 if validated_entry:
+                     valid_entries.append(validated_entry)
 
-            # Check internal expiry based on TTL
-            if entry_info.get("is_expired", True):
-                 _LOGGER.debug("Cache entry %s is expired based on its TTL.", key)
-                 continue # Skip expired entries
-
-            # Check against max_age_minutes if provided
-            if max_age_minutes is not None:
-                created_at_utc = None # Initialize for error handling
-                try:
-                    created_at_str = entry_info.get("created_at")
-                    if not created_at_str:
-                         _LOGGER.warning("Cache entry %s missing 'created_at' metadata.", key)
-                         continue
-
-                    created_at = dt_util.parse_datetime(created_at_str)
-                    if created_at is None: # Handle potential parsing failure
-                         _LOGGER.warning("Could not parse created_at '%s' for cache key %s", created_at_str, key)
-                         continue
-
-                    # Ensure created_at is timezone-aware UTC
-                    if created_at.tzinfo is None:
-                         # Assume naive timestamps from cache are UTC
-                         _LOGGER.warning("Parsed 'created_at' for cache key %s is naive, assuming UTC.", key)
-                         created_at_utc = pytz.utc.localize(created_at) # Use pytz.utc.localize for naive
-                    else:
-                         created_at_utc = created_at.astimezone(pytz.utc) # Convert aware to UTC
-
-                    # Compare aware UTC timestamps
-                    age_seconds = (now_utc - created_at_utc).total_seconds()
-                    if age_seconds < 0:
-                        _LOGGER.warning("Cache entry %s has a future 'created_at' timestamp (%s). Skipping.", key, created_at_str)
-                        continue # Skip entries with future timestamps
-
-                    if age_seconds > max_age_minutes * 60:
-                        _LOGGER.debug("Cache entry %s is older (%s s) than max_age_minutes (%s min).", key, age_seconds, max_age_minutes)
-                        continue # Skip entries older than max_age_minutes
-                except TypeError as e: # Catch specific error
-                    _LOGGER.error("TypeError during age check for cache key %s: %s. now_utc=%s, created_at_utc=%s", key, e, now_utc, created_at_utc)
-                    continue # Skip if age check fails due to type error
-                except Exception as e:
-                    _LOGGER.warning("Error checking age for cache key %s: %s", key, e)
-                    continue # Skip if age check fails for other reasons
-
-            # If we reach here, the entry is valid
-            # Store the parsed and timezone-aware UTC timestamp for sorting
-            entry_info['_parsed_created_at_utc'] = created_at_utc if max_age_minutes is not None and created_at_utc else None
-            valid_keys.append(key)
-
-        if not valid_keys:
-            _LOGGER.debug("No valid (non-expired, within max_age) cache entries found for area %s", area)
+        if not valid_entries:
+            _LOGGER.debug(f"No valid (non-expired, within max_age) cache entries found for area {area}")
             return None
 
-        # Get the most recently created entry among the valid ones
+        # Sort valid entries by 'created_at' timestamp, newest first
+        valid_entries.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        _LOGGER.debug(f"Found {len(valid_entries)} valid cache entries for area {area}. Returning newest.")
+        # Return the data part of the newest valid entry
+        return valid_entries[0].get("data")
+
+
+    def _validate_cache_entry(self, entry: Dict[str, Any], cache_key: str, max_age_minutes: int) -> Optional[Dict[str, Any]]:
+        """Validate a single cache entry for timestamp and expiry."""
+        created_at_str = entry.get("created_at")
+        if not created_at_str:
+            _LOGGER.warning(f"Cache entry {cache_key} missing 'created_at' timestamp. Skipping.")
+            return None
+
         try:
-            # Use the pre-parsed UTC timestamp stored in entry_info for sorting
-            latest_key = max(
-                valid_keys,
-                key=lambda k: cache_info["entries"][k].get('_parsed_created_at_utc') or dt_util.utc_from_timestamp(0)
-            )
-            _LOGGER.debug("Selected latest valid cache key %s for area %s", latest_key, area)
-        except Exception as e:
-             _LOGGER.error("Error finding latest valid cache key for area %s: %s", area, e)
-             return None # Return None if finding the max fails
+            # Parse the stored timestamp string
+            created_at = dt_util.parse_datetime(created_at_str)
+            if created_at is None: # Handle parsing failure
+                _LOGGER.error(f"Failed to parse 'created_at' timestamp: {created_at_str} for key {cache_key}")
+                return None
 
-        # Return the data using the AdvancedCache.get method, which handles final access update
-        # and potentially another expiry check if time passed significantly
-        return self._price_cache.get(latest_key)
+            # Ensure the parsed timestamp is timezone-aware (it should be UTC)
+            if created_at.tzinfo is None:
+                _LOGGER.warning(f"Cache timestamp for {cache_key} is naive, assuming UTC: {created_at_str}")
+                created_at = created_at.replace(tzinfo=timezone.utc) # Assume UTC
+
+        except (TypeError, ValueError) as e:
+            _LOGGER.error(f"Invalid 'created_at' format in cache for key {cache_key}: {created_at_str}. Error: {e}")
+            return None # Skip invalid entry
+
+        # Get current time in UTC for comparison
+        now_utc = datetime.now(timezone.utc)
+
+        # Check for future timestamp (comparing UTC against UTC)
+        # Allow a small grace period (e.g., 5 seconds) for minor clock skew
+        if created_at > (now_utc + timedelta(seconds=5)):
+            _LOGGER.warning(f"Cache entry {cache_key} has a future 'created_at' timestamp ({created_at}) compared to now_utc ({now_utc}). Skipping.")
+            return None # Skip future entry
+
+        # Check max_age
+        if (now_utc - created_at) > timedelta(minutes=max_age_minutes):
+            _LOGGER.debug(f"Cache entry {cache_key} is expired based on its TTL ({max_age_minutes} min). Age: {now_utc - created_at}")
+            return None # Skip expired entry
+
+        _LOGGER.debug(f"Cache entry {cache_key} is valid and within TTL.")
+        # Return the original entry dict if valid
+        return entry
 
     def get_current_hour_price(self, area: str) -> Optional[Dict[str, Any]]:
         """Get current hour price from cache."""
@@ -245,22 +240,37 @@ class CacheManager:
         # when accessing them, but we can also manually evict entries
         self._price_cache._evict_if_needed()
 
-    def update_cache(self, data: Dict[str, Any]) -> None:
-        """Update the cache with processed data.
-        
-        Args:
-            data: Processed data to cache
-        """
-        if not data or not isinstance(data, dict):
-            _LOGGER.warning("Cannot cache invalid data")
+    def update_cache(self, processed_data: Dict[str, Any]):
+        """Update the cache file with new processed data."""
+        if not processed_data or not isinstance(processed_data, dict):
+            _LOGGER.warning("Attempted to update cache with invalid data.")
             return
-            
-        area = data.get("area")
-        source = data.get("source", data.get("data_source", "unknown"))
-        
-        if not area:
-            _LOGGER.warning("Cannot cache data without area")
+
+        area = processed_data.get("area")
+        source = processed_data.get("source") # Use 'source' which is set by DataProcessor
+
+        if not area or not source:
+            _LOGGER.warning("Cannot update cache: Area or Source missing in processed data.")
             return
-            
-        # Store in cache
-        self.store(data, area, source)
+
+        cache_data = self._load_cache()
+
+        # Use UTC timestamp consistently
+        timestamp_utc = datetime.now(timezone.utc).isoformat() # Generate UTC timestamp string
+        cache_key = self._generate_cache_key(area, source)
+        cache_entry = {
+            "created_at": timestamp_utc, # Store UTC ISO string
+            "data": processed_data
+        }
+
+        cache_data[cache_key] = cache_entry
+        _LOGGER.debug(f"Updating cache for key: {cache_key}")
+
+        try:
+            with open(self.cache_file_path, 'w') as f:
+                json.dump(cache_data, f, indent=4)
+            _LOGGER.debug(f"Saved cache entry {cache_key} with timestamp {timestamp_utc}")
+        except IOError as e:
+            _LOGGER.error(f"Error writing cache file {self.cache_file_path}: {e}")
+        except Exception as e:
+            _LOGGER.error(f"Unexpected error writing cache file: {e}", exc_info=True)

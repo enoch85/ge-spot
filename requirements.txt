@@ -7,3 +7,4 @@ PyJWT>=2.6.0
 aiofiles>=23.2
 pytz>=2023.3 # Added for timezone handling
 pytest-homeassistant-custom-component
+freezegun>=1.2.2 # Added for time manipulation in tests
