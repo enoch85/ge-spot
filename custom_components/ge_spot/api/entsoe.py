@@ -7,13 +7,13 @@ from typing import Dict, Any, Optional, List
 
 from ..utils.api_client import ApiClient
 from ..utils.debug_utils import sanitize_sensitive_data
+from ..utils.date_range import generate_date_ranges # Re-add this import
 from ..timezone import TimezoneService
-from ..const.sources import Source
+from ..const.api import EntsoE, SourceTimezone # Update import
+from ..const.sources import Source # Add Source import
 from ..const.areas import AreaMapping
 from ..const.config import Config
 from ..const.display import DisplayUnit
-from ..const.api import EntsoE
-from ..utils.date_range import generate_date_ranges
 from ..const.network import Network, ContentType
 from ..const.time import TimeFormat
 from ..const.energy import EnergyUnit
@@ -110,7 +110,8 @@ class EntsoeAPI(BasePriceAPI):
         for start_date, end_date in date_ranges:
             period_start = start_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
             period_end = end_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
-            doc_types = ["A44", "A62", "A65"] # Document types to try sequentially
+            # Remove A62 from the list of document types to try
+            doc_types = ["A44", "A65"] # Document types to try sequentially
 
             # Try fetching sequentially for each document type within the date range
             for doc_type in doc_types:
@@ -176,7 +177,8 @@ class EntsoeAPI(BasePriceAPI):
         # Prepare the final result dictionary
         final_result = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "api_timezone": "Europe/Brussels",
+            # FIX: Use the correct UTC timezone constant
+            "api_timezone": SourceTimezone.API_TIMEZONES[Source.ENTSOE],
             "source": Source.ENTSOE,
             "area": area,
             "entsoe_area": entsoe_area
@@ -357,8 +359,8 @@ class EntsoeAPI(BasePriceAPI):
             currency=Currency.EUR,  # ENTSO-E returns prices in EUR by default
             hourly_prices=all_hourly_prices,
             reference_time=now,
-            # FIX: Use the correct API timezone constant for ENTSO-E
-            api_timezone=EntsoE.TIMEZONE, # ENTSO-E data is in CET/CEST
+            # FIX: Use the correct UTC timezone constant for ENTSO-E
+            api_timezone=SourceTimezone.API_TIMEZONES[Source.ENTSOE], # ENTSO-E data is in UTC
             raw_data=raw_data,
             validate_complete=True,  # Enable validation to ensure we don't calculate stats for incomplete data
             has_tomorrow_prices=expect_tomorrow and tomorrow_complete,

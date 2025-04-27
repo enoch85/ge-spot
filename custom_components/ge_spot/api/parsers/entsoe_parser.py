@@ -153,7 +153,7 @@ class EntsoeParser(BasePriceParser):
         ns = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
         
         # Preference order for business types based on ENTSO-E API improvements
-        business_type_preference = ["A62", "A44", "A65"]
+        business_type_preference = ["A44", "A65"]
         
         # Preference order for resolution (hourly is preferred for consistency)
         resolution_preference = ["PT60M", "PT30M", "PT15M"]

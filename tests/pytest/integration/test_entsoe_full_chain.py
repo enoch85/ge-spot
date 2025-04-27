@@ -25,132 +25,72 @@ SAMPLE_ENTSOE_RAW_DATA = {
         "timestamp": datetime.now().isoformat(),
         "content": """
         <Publication_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:0">
-        <mRID>0e636363e8f54517a1f473d7fa143e99</mRID>
+        <mRID>ENTSOE_TRANS_AGGREGATED_ALLOCATIONS_1</mRID>
         <revisionNumber>1</revisionNumber>
-        <type>A44</type>
-        <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</sender_MarketParticipant.mRID>
+        <type>A62</type>
+        <process.processType>A01</process.processType>
+        <sender_MarketParticipant.mRID codingScheme="A01">10X1001A1001A83F</sender_MarketParticipant.mRID>
         <sender_MarketParticipant.marketRole.type>A32</sender_MarketParticipant.marketRole.type>
-        <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A450</receiver_MarketParticipant.mRID>
+        <receiver_MarketParticipant.mRID codingScheme="A01">10X1001A1001A83F</receiver_MarketParticipant.mRID>
         <receiver_MarketParticipant.marketRole.type>A33</receiver_MarketParticipant.marketRole.type>
-        <createdDateTime>2025-04-26T11:30:47Z</createdDateTime>
-        <period.timeInterval>
-        <start>2025-04-26T22:00Z</start>
-        <end>2025-04-27T22:00Z</end>
-        </period.timeInterval>
-        <TimeSeries>
-        <mRID>1</mRID>
-        <businessType>A62</businessType>
-        <in_Domain.mRID codingScheme="A01">10Y1001A1001A47J</in_Domain.mRID>
-        <out_Domain.mRID codingScheme="A01">10Y1001A1001A47J</out_Domain.mRID>
-        <currency_Unit.name>EUR</currency_Unit.name>
-        <price_Measure_Unit.name>MWH</price_Measure_Unit.name>
-        <curveType>A01</curveType>
+        <createdDateTime>2023-01-15T12:00:00Z</createdDateTime>
         <Period>
-        <timeInterval>
-        <start>2025-04-26T22:00Z</start>
-        <end>2025-04-27T22:00Z</end>
-        </timeInterval>
-        <resolution>PT60M</resolution>
-        <Point>
-        <position>1</position>
-        <price.amount>38.56</price.amount>
-        </Point>
-        <Point>
-        <position>2</position>
-        <price.amount>35.24</price.amount>
-        </Point>
-        <Point>
-        <position>3</position>
-        <price.amount>33.88</price.amount>
-        </Point>
-        <Point>
-        <position>4</position>
-        <price.amount>32.91</price.amount>
-        </Point>
-        <Point>
-        <position>5</position>
-        <price.amount>32.54</price.amount>
-        </Point>
-        <Point>
-        <position>6</position>
-        <price.amount>32.48</price.amount>
-        </Point>
-        <Point>
-        <position>7</position>
-        <price.amount>32.99</price.amount>
-        </Point>
-        <Point>
-        <position>8</position>
-        <price.amount>35.62</price.amount>
-        </Point>
-        <Point>
-        <position>9</position>
-        <price.amount>41.34</price.amount>
-        </Point>
-        <Point>
-        <position>10</position>
-        <price.amount>48.77</price.amount>
-        </Point>
-        <Point>
-        <position>11</position>
-        <price.amount>51.95</price.amount>
-        </Point>
-        <Point>
-        <position>12</position>
-        <price.amount>50.78</price.amount>
-        </Point>
-        <Point>
-        <position>13</position>
-        <price.amount>50.22</price.amount>
-        </Point>
-        <Point>
-        <position>14</position>
-        <price.amount>48.76</price.amount>
-        </Point>
-        <Point>
-        <position>15</position>
-        <price.amount>48.55</price.amount>
-        </Point>
-        <Point>
-        <position>16</position>
-        <price.amount>45.09</price.amount>
-        </Point>
-        <Point>
-        <position>17</position>
-        <price.amount>44.73</price.amount>
-        </Point>
-        <Point>
-        <position>18</position>
-        <price.amount>44.15</price.amount>
-        </Point>
-        <Point>
-        <position>19</position>
-        <price.amount>46.78</price.amount>
-        </Point>
-        <Point>
-        <position>20</position>
-        <price.amount>55.36</price.amount>
-        </Point>
-        <Point>
-        <position>21</position>
-        <price.amount>59.94</price.amount>
-        </Point>
-        <Point>
-        <position>22</position>
-        <price.amount>58.23</price.amount>
-        </Point>
-        <Point>
-        <position>23</position>
-        <price.amount>52.47</price.amount>
-        </Point>
-        <Point>
-        <position>24</position>
-        <price.amount>46.92</price.amount>
-        </Point>
+            <timeInterval>
+                <start>2023-01-15T23:00Z</start>
+                <end>2023-01-16T23:00Z</end>
+            </timeInterval>
+            <resolution>PT60M</resolution>
+            <TimeSeries>
+                <mRID>1</mRID>
+                <businessType>A44</businessType>
+                <in_Domain.mRID codingScheme="A01">10Y1001A1001A82H</in_Domain.mRID>
+                <out_Domain.mRID codingScheme="A01">10Y1001A1001A82H</out_Domain.mRID>
+                <currency_Unit.name>EUR</currency_Unit.name>
+                <price_Measure_Unit.name>MWH</price_Measure_Unit.name>
+                <curveType>A01</curveType>
+                <Period>
+                    <timeInterval>
+                        <start>2023-01-15T23:00Z</start>
+                        <end>2023-01-16T23:00Z</end>
+                    </timeInterval>
+                    <resolution>PT60M</resolution>
+                    <!-- Sample Points -->
+                    <Point>
+                        <position>1</position>
+                        <price.amount>100.00</price.amount>
+                    </Point>
+                    <Point>
+                        <position>2</position>
+                        <price.amount>105.50</price.amount>
+                    </Point>
+                    <!-- Add all 24 points -->
+                    <Point><position>3</position><price.amount>110.00</price.amount></Point>
+                    <Point><position>4</position><price.amount>115.25</price.amount></Point>
+                    <Point><position>5</position><price.amount>120.50</price.amount></Point>
+                    <Point><position>6</position><price.amount>125.75</price.amount></Point>
+                    <Point><position>7</position><price.amount>130.00</price.amount></Point>
+                    <Point><position>8</position><price.amount>135.25</price.amount></Point>
+                    <Point><position>9</position><price.amount>140.50</price.amount></Point>
+                    <Point><position>10</position><price.amount>145.75</price.amount></Point>
+                    <Point><position>11</position><price.amount>150.00</price.amount></Point>
+                    <Point><position>12</position><price.amount>155.25</price.amount></Point>
+                    <Point><position>13</position><price.amount>160.50</price.amount></Point>
+                    <Point><position>14</position><price.amount>158.75</price.amount></Point>
+                    <Point><position>15</position><price.amount>155.00</price.amount></Point>
+                    <Point><position>16</position><price.amount>150.25</price.amount></Point>
+                    <Point><position>17</position><price.amount>145.50</price.amount></Point>
+                    <Point><position>18</position><price.amount>140.75</price.amount></Point>
+                    <Point><position>19</position><price.amount>135.00</price.amount></Point>
+                    <Point><position>20</position><price.amount>130.25</price.amount></Point>
+                    <Point><position>21</position><price.amount>125.50</price.amount></Point>
+                    <Point><position>22</position><price.amount>120.75</price.amount></Point>
+                    <Point><position>23</position><price.amount>115.00</price.amount></Point>
+                    <Point><position>24</position><price.amount>110.25</price.amount></Point>
+                </Period>
+            </TimeSeries>
         </Period>
-        </TimeSeries>
-        </Publication_MarketDocument>
-        """
+    </Publication_MarketDocument>
+    """
     }
 }
 
