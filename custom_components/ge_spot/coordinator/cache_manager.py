@@ -58,23 +58,29 @@ class CacheManager:
         key = self._generate_cache_key(area, source, target_date) # Pass date to key gen
 
         # Ensure timestamp is aware and UTC before storing as ISO string
-        store_time = timestamp or dt_util.now()
+        # Use datetime.now(timezone.utc) for robust UTC timestamping
+        store_time = timestamp or datetime.now(timezone.utc)
         if store_time.tzinfo is None:
              _LOGGER.warning("Naive timestamp provided for caching, assuming UTC.")
              store_time = store_time.replace(tzinfo=timezone.utc)
         else:
              store_time = store_time.astimezone(timezone.utc)
 
+        # Extract api_timezone for metadata
+        api_timezone = data.get("api_timezone") or data.get("timezone")
+        if not api_timezone:
+            _LOGGER.warning(f"No api_timezone or timezone found in data for area {area}, source {source}, target_date {target_date}. Cache entry may not be processable from cache.")
         metadata = {
             "area": area,
             "source": source,
             "target_date": target_date.isoformat(), # Store target date in metadata
-            "timestamp": store_time.isoformat() # Store as UTC ISO string
+            "timestamp": store_time.isoformat(), # Store as UTC ISO string
+            "api_timezone": api_timezone
         }
 
         # Use AdvancedCache.set() - TTL is handled by AdvancedCache based on its config
         self._price_cache.set(key, data, metadata=metadata)
-        _LOGGER.debug(f"Stored cache entry for key: {key}")
+        _LOGGER.debug(f"Stored cache entry for key: {key} with api_timezone: {api_timezone}")
 
 
     def _generate_cache_key(self, area: str, source: str, target_date: date) -> str:
@@ -174,8 +180,8 @@ class CacheManager:
             now_utc = datetime.now(timezone.utc)
             max_age_delta = timedelta(minutes=max_age_minutes)
 
-            # Check for future timestamp (allow grace period)
-            future_threshold = now_utc + timedelta(seconds=10) # Increased grace period slightly
+            # Allow a 5-minute grace period for future timestamps
+            future_threshold = now_utc + timedelta(seconds=300)
             if created_at > future_threshold:
                  _LOGGER.warning(f"Cache entry has significant future timestamp: {created_at_str}. Invalidating.")
                  return False
@@ -189,11 +195,15 @@ class CacheManager:
             return False
 
 
-    def get_current_hour_price(self, area: str) -> Optional[Dict[str, Any]]:
-        """Get current hour price from cache for today's date."""
-        today = dt_util.now().date() # Get today's date
-        # Use default max_age (e.g., 60 mins) or a reasonable value for current hour price
-        data = self.get_data(area, target_date=today, max_age_minutes=Defaults.CACHE_TTL) # Pass today's date
+    def get_current_hour_price(self, area: str, target_timezone=None) -> Optional[Dict[str, Any]]:
+        """Get current hour price from cache for today's date in the target timezone."""
+        # Use the correct date in the target timezone for cache lookup
+        tz = target_timezone
+        if tz is None:
+            from custom_components.ge_spot.timezone.timezone_utils import get_timezone_object
+            tz = get_timezone_object("Europe/Stockholm")  # Fallback, should be passed in
+        today = dt_util.now(tz).date()
+        data = self.get_data(area, target_date=today, max_age_minutes=Defaults.CACHE_TTL)
         if not data:
             return None
 

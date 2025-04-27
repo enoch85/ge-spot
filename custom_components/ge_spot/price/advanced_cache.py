@@ -2,7 +2,7 @@
 import logging
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List, Tuple, Union, Set
 from pathlib import Path
 
@@ -26,7 +26,7 @@ class CacheEntry:
             metadata: Optional metadata
         """
         self.data = data
-        self.created_at = datetime.now()
+        self.created_at = datetime.now(timezone.utc)
         self.ttl = ttl
         self.metadata = metadata or {}
         self.access_count = 0
@@ -35,7 +35,7 @@ class CacheEntry:
     @property
     def age(self) -> float:
         """Get the age of the cache entry in seconds."""
-        return (datetime.now() - self.created_at).total_seconds()
+        return (datetime.now(timezone.utc) - self.created_at).total_seconds()
 
     @property
     def is_expired(self) -> bool:
@@ -45,7 +45,7 @@ class CacheEntry:
     def access(self) -> None:
         """Mark the cache entry as accessed."""
         self.access_count += 1
-        self.last_accessed = datetime.now()
+        self.last_accessed = datetime.now(timezone.utc)
 
     @property
     def info(self) -> Dict[str, Any]:
@@ -83,8 +83,12 @@ class CacheEntry:
         """
         entry = cls(data["data"], data["ttl"], data["metadata"])
         entry.created_at = datetime.fromisoformat(data["created_at"])
+        if entry.created_at.tzinfo is None:
+            entry.created_at = entry.created_at.replace(tzinfo=timezone.utc)
         entry.access_count = data["access_count"]
         entry.last_accessed = datetime.fromisoformat(data["last_accessed"])
+        if entry.last_accessed.tzinfo is None:
+            entry.last_accessed = entry.last_accessed.replace(tzinfo=timezone.utc)
         return entry
 
 

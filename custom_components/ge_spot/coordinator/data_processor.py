@@ -24,6 +24,7 @@ from .cache_manager import CacheManager
 from ..utils.timezone_converter import TimezoneConverter # Import TimezoneConverter
 from ..utils.currency_converter import CurrencyConverter # Import CurrencyConverter
 from ..utils.statistics import calculate_statistics
+from custom_components.ge_spot.timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -233,12 +234,21 @@ class DataProcessor:
             # Use the date in the target timezone for which 'hourly_prices' (today) are valid
             if normalized_today:
                 # Get the current date in the target timezone
-                target_date = dt_util.now(self._tz_service.target_timezone).date()
+                tz = self._tz_service.target_timezone
+                if isinstance(tz, str):
+                    tz = get_timezone_object(tz)
+                target_date = dt_util.now(tz).date()
             elif normalized_tomorrow:
                 # If only tomorrow's prices, use tomorrow's date
-                target_date = (dt_util.now(self._tz_service.target_timezone) + timedelta(days=1)).date()
+                tz = self._tz_service.target_timezone
+                if isinstance(tz, str):
+                    tz = get_timezone_object(tz)
+                target_date = (dt_util.now(tz) + timedelta(days=1)).date()
             else:
-                target_date = dt_util.now(self._tz_service.target_timezone).date()
+                tz = self._tz_service.target_timezone
+                if isinstance(tz, str):
+                    tz = get_timezone_object(tz)
+                target_date = dt_util.now(tz).date()
             processed_result["target_date"] = target_date
             # --- End target_date logic ---
 
@@ -344,6 +354,15 @@ class DataProcessor:
             error_result = self._generate_empty_processed_result(data, error=str(e))
             error_result["raw_hourly_prices_original"] = raw_hourly_prices # Keep original raw input
             return error_result
+
+        # Ensure api_timezone is always set in processed_result
+        if not processed_result.get("api_timezone"):
+            if self._tz_service and hasattr(self._tz_service, "target_timezone"):
+                processed_result["api_timezone"] = str(self._tz_service.target_timezone)
+                _LOGGER.warning(f"Patched missing api_timezone in processed result for area {self.area}: set to {processed_result['api_timezone']}")
+            else:
+                processed_result["api_timezone"] = "Europe/Stockholm"  # Fallback default
+                _LOGGER.warning(f"Patched missing api_timezone in processed result for area {self.area}: set to fallback Europe/Stockholm")
 
         _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source}, Today Prices: {len(processed_result['hourly_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_hourly_prices'])}, Cached: {processed_result['using_cached_data']}")
         return processed_result
