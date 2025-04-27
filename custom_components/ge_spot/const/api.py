@@ -5,12 +5,12 @@ from ..const.sources import Source
 from ..const.time import TimezoneName
 
 class EntsoE:
-    """ENTSO-E API constants."""
-    DOCUMENT_TYPE_DAY_AHEAD = "A44"
-    BUSINESS_TYPE_DAY_AHEAD_ALLOCATION = "A62"
-    BUSINESS_TYPE_DAY_AHEAD = "A44"
-    NS_URN = "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"
-    XMLNS_NS = "ns"
+    """Constants for ENTSO-E API."""
+    DOC_TYPE_A44 = "A44" # Day-ahead prices
+    DOC_TYPE_A62 = "A62" # System total load
+    DOC_TYPE_A65 = "A65" # Generation forecast
+    TIMEZONE = "Europe/Brussels" # Default timezone for ENTSO-E data
+    
 
 
 class Nordpool:

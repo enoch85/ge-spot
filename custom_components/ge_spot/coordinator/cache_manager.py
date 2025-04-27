@@ -1,7 +1,8 @@
 """Cache manager for electricity spot prices."""
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta # Added timedelta
 from typing import Any, Dict, Optional, List
+import pytz # Import pytz
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -45,14 +46,24 @@ class CacheManager:
         """
         # Create a cache key based on area and source
         key = f"{area}_{source}"
-        
+
+        # Ensure timestamp is aware and UTC before storing as ISO string
+        store_time = timestamp or dt_util.now()
+        if store_time.tzinfo is None:
+             # Assume naive timestamps are UTC, log warning
+             _LOGGER.warning("Naive timestamp provided for caching, assuming UTC.")
+             store_time = store_time.replace(tzinfo=pytz.utc)
+        else:
+             # Convert aware timestamp to UTC
+             store_time = store_time.astimezone(pytz.utc)
+
         # Add metadata
         metadata = {
             "area": area,
             "source": source,
-            "timestamp": (timestamp or dt_util.now()).isoformat()
+            "timestamp": store_time.isoformat() # Store as UTC ISO string
         }
-        
+
         # Store in cache
         self._price_cache.set(key, data, metadata=metadata)
 
@@ -74,7 +85,8 @@ class CacheManager:
             return None
 
         valid_keys = []
-        now = dt_util.now() # Use timezone-aware now
+        # Use timezone-aware UTC now
+        now_utc = dt_util.utcnow()
 
         for key in area_keys:
             entry_info = cache_info["entries"].get(key)
@@ -88,20 +100,45 @@ class CacheManager:
 
             # Check against max_age_minutes if provided
             if max_age_minutes is not None:
+                created_at_utc = None # Initialize for error handling
                 try:
-                    created_at = dt_util.parse_datetime(entry_info["created_at"])
-                    if created_at is None: # Handle potential parsing failure
-                         _LOGGER.warning("Could not parse created_at for cache key %s", key)
+                    created_at_str = entry_info.get("created_at")
+                    if not created_at_str:
+                         _LOGGER.warning("Cache entry %s missing 'created_at' metadata.", key)
                          continue
-                    age_seconds = (now - created_at).total_seconds()
+
+                    created_at = dt_util.parse_datetime(created_at_str)
+                    if created_at is None: # Handle potential parsing failure
+                         _LOGGER.warning("Could not parse created_at '%s' for cache key %s", created_at_str, key)
+                         continue
+
+                    # Ensure created_at is timezone-aware UTC
+                    if created_at.tzinfo is None:
+                         # Assume naive timestamps from cache are UTC
+                         _LOGGER.warning("Parsed 'created_at' for cache key %s is naive, assuming UTC.", key)
+                         created_at_utc = pytz.utc.localize(created_at) # Use pytz.utc.localize for naive
+                    else:
+                         created_at_utc = created_at.astimezone(pytz.utc) # Convert aware to UTC
+
+                    # Compare aware UTC timestamps
+                    age_seconds = (now_utc - created_at_utc).total_seconds()
+                    if age_seconds < 0:
+                        _LOGGER.warning("Cache entry %s has a future 'created_at' timestamp (%s). Skipping.", key, created_at_str)
+                        continue # Skip entries with future timestamps
+
                     if age_seconds > max_age_minutes * 60:
                         _LOGGER.debug("Cache entry %s is older (%s s) than max_age_minutes (%s min).", key, age_seconds, max_age_minutes)
                         continue # Skip entries older than max_age_minutes
+                except TypeError as e: # Catch specific error
+                    _LOGGER.error("TypeError during age check for cache key %s: %s. now_utc=%s, created_at_utc=%s", key, e, now_utc, created_at_utc)
+                    continue # Skip if age check fails due to type error
                 except Exception as e:
                     _LOGGER.warning("Error checking age for cache key %s: %s", key, e)
-                    continue # Skip if age check fails
+                    continue # Skip if age check fails for other reasons
 
             # If we reach here, the entry is valid
+            # Store the parsed and timezone-aware UTC timestamp for sorting
+            entry_info['_parsed_created_at_utc'] = created_at_utc if max_age_minutes is not None and created_at_utc else None
             valid_keys.append(key)
 
         if not valid_keys:
@@ -110,9 +147,10 @@ class CacheManager:
 
         # Get the most recently created entry among the valid ones
         try:
+            # Use the pre-parsed UTC timestamp stored in entry_info for sorting
             latest_key = max(
                 valid_keys,
-                key=lambda k: dt_util.parse_datetime(cache_info["entries"][k].get("created_at", "")) or dt_util.utc_from_timestamp(0) # Use created_at, handle missing/parse errors
+                key=lambda k: cache_info["entries"][k].get('_parsed_created_at_utc') or dt_util.utc_from_timestamp(0)
             )
             _LOGGER.debug("Selected latest valid cache key %s for area %s", latest_key, area)
         except Exception as e:

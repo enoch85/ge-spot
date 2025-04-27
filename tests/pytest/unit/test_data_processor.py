@@ -359,12 +359,13 @@ class TestDataProcessor:
             # Setup timezone converter mock to return expected normalized prices
             with patch('custom_components.ge_spot.utils.timezone_converter.TimezoneConverter', spec=True) as mock_tz_converter_cls:
                 mock_tz_converter = mock_tz_converter_cls.return_value
+                # FIX: Return datetime keys instead of string keys
                 mock_tz_converter.normalize_hourly_prices.return_value = {
-                    "10:00": 1.5,
-                    "11:00": 2.0
+                    datetime(2024, 1, 1, 10, 0, tzinfo=timezone.utc): 1.5,
+                    datetime(2024, 1, 1, 11, 0, tzinfo=timezone.utc): 2.0
                 }
                 processor._tz_converter = mock_tz_converter
-                
+
                 # Setup currency converter mock
                 mock_currency_converter = AsyncMock()
                 mock_currency_converter.convert_hourly_prices = AsyncMock(return_value=(

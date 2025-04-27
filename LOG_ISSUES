@@ -1,0 +1,232 @@
+[33m2025-04-27 21:48:23.620 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE4: Rate limited, no cache available[0m
+[36m2025-04-27 21:48:23.620 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE4 data in 0.000 seconds (success: True)[0m
+[32m2025-04-27 21:48:31.122 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE2. Next fetch allowed in 629.5 seconds. Using cached data if available.[0m
+[36m2025-04-27 21:48:31.122 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Cache entry SE2_entsoe is expired based on its TTL.[0m
+[36m2025-04-27 21:48:31.123 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] No valid (non-expired, within max_age) cache entries found for area SE2[0m
+[33m2025-04-27 21:48:31.123 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limited for SE2, but no cached data available.[0m
+[33m2025-04-27 21:48:31.123 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE2: Rate limited, no cache available[0m
+[36m2025-04-27 21:48:31.123 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE2 data in 0.000 seconds (success: True)[0m
+[32m2025-04-27 21:48:33.622 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE4. Next fetch allowed in 589.4 seconds. Using cached data if available.[0m
+[36m2025-04-27 21:48:33.622 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Cache entry SE4_entsoe is expired based on its TTL.[0m
+[36m2025-04-27 21:48:33.622 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] No valid (non-expired, within max_age) cache entries found for area SE4[0m
+[33m2025-04-27 21:48:33.622 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limited for SE4, but no cached data available.[0m
+[33m2025-04-27 21:48:33.623 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE4: Rate limited, no cache available[0m
+[36m2025-04-27 21:48:33.623 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE4 data in 0.000 seconds (success: True)[0m
+[32m2025-04-27 21:48:41.125 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE2. Next fetch allowed in 619.5 seconds. Using cached data if available.[0m
+[36m2025-04-27 21:48:41.125 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Cache entry SE2_entsoe is expired based on its TTL.[0m
+[36m2025-04-27 21:48:41.125 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] No valid (non-expired, within max_age) cache entries found for area SE2[0m
+[33m2025-04-27 21:48:41.125 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limited for SE2, but no cached data available.[0m
+[33m2025-04-27 21:48:41.125 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE2: Rate limited, no cache available[0m
+[36m2025-04-27 21:48:41.125 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE2 data in 0.000 seconds (success: True)[0m
+[32m2025-04-27 21:48:53.621 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE4. Next fetch allowed in 569.4 seconds. Using cached data if available.[0m
+[36m2025-04-27 21:48:53.622 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Cache entry SE4_entsoe is expired based on its TTL.[0m
+[36m2025-04-27 21:48:53.622 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] No valid (non-expired, within max_age) cache entries found for area SE4[0m
+[33m2025-04-27 21:48:53.622 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limited for SE4, but no cached data available.[0m
+[33m2025-04-27 21:48:53.622 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE4: Rate limited, no cache available[0m
+[36m2025-04-27 21:48:53.622 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE4 data in 0.000 seconds (success: True)[0m
+[32m2025-04-27 21:49:01.123 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE2. Next fetch allowed in 599.5 seconds. Using cached data if available.[0m
+[36m2025-04-27 21:49:01.123 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Cache entry SE2_entsoe is expired based on its TTL.[0m
+[36m2025-04-27 21:49:01.123 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] No valid (non-expired, within max_age) cache entries found for area SE2[0m
+[33m2025-04-27 21:49:01.123 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limited for SE2, but no cached data available.[0m
+[33m2025-04-27 21:49:01.123 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE2: Rate limited, no cache available[0m
+[36m2025-04-27 21:49:01.123 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE2 data in 0.000 seconds (success: True)[0m
+[32m2025-04-27 21:49:03.624 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE4. Next fetch allowed in 559.4 seconds. Using cached data if available.[0m
+[36m2025-04-27 21:49:03.624 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Cache entry SE4_entsoe is expired based on its TTL.[0m
+[36m2025-04-27 21:49:03.624 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] No valid (non-expired, within max_age) cache entries found for area SE4[0m
+[33m2025-04-27 21:49:03.624 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limited for SE4, but no cached data available.[0m
+[33m2025-04-27 21:49:03.624 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE4: Rate limited, no cache available[0m
+[36m2025-04-27 21:49:03.624 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE4 data in 0.000 seconds (success: True)[0m
+s6-rc: info: service legacy-services: stopping
+[32m2025-04-27 21:49:11.124 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE2. Next fetch allowed in 589.5 seconds. Using cached data if available.[0m
+[36m2025-04-27 21:49:11.125 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Cache entry SE2_entsoe is expired based on its TTL.[0m
+[36m2025-04-27 21:49:11.125 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] No valid (non-expired, within max_age) cache entries found for area SE2[0m
+[33m2025-04-27 21:49:11.125 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limited for SE2, but no cached data available.[0m
+[33m2025-04-27 21:49:11.125 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE2: Rate limited, no cache available[0m
+[36m2025-04-27 21:49:11.125 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE2 data in 0.000 seconds (success: True)[0m
+[19:49:12] INFO: [32mHome Assistant Core finish process exit code 0[0m
+[19:49:12] INFO: [32mHome Assistant Core service shutdown[0m
+s6-rc: info: service legacy-services successfully stopped
+s6-rc: info: service legacy-cont-init: stopping
+s6-rc: info: service legacy-cont-init successfully stopped
+s6-rc: info: service fix-attrs: stopping
+s6-rc: info: service fix-attrs successfully stopped
+s6-rc: info: service s6rc-oneshot-runner: stopping
+s6-rc: info: service s6rc-oneshot-runner successfully stopped
+s6-rc: info: service s6rc-oneshot-runner: starting
+s6-rc: info: service s6rc-oneshot-runner successfully started
+s6-rc: info: service fix-attrs: starting
+s6-rc: info: service fix-attrs successfully started
+s6-rc: info: service legacy-cont-init: starting
+s6-rc: info: service legacy-cont-init successfully started
+s6-rc: info: service legacy-services: starting
+services-up: info: copying legacy longrun home-assistant (no readiness notification)
+s6-rc: info: service legacy-services successfully started
+[33m2025-04-27 21:49:17.618 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration hacs which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant[0m
+[33m2025-04-27 21:49:17.618 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration ge_spot which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant[0m
+[32m2025-04-27 21:49:19.832 INFO (MainThread) [custom_components.ge_spot.utils.exchange_service] Loaded exchange rates from cache (age: 355.6s, currencies: 32)[0m
+[32m2025-04-27 21:49:19.832 INFO (MainThread) [custom_components.ge_spot.utils.exchange_service] Registered exchange rate update handlers[0m
+[36m2025-04-27 21:49:19.832 DEBUG (MainThread) [custom_components.ge_spot] Setting up integration for area: SE4, currency: SEK[0m
+[32m2025-04-27 21:49:19.832 INFO (MainThread) [custom_components.ge_spot] Using UnifiedPriceCoordinator for area SE4[0m
+[36m2025-04-27 21:49:19.832 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Effective target timezone set to HA timezone: Europe/Stockholm[0m
+[36m2025-04-27 21:49:19.832 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Initialized timezone service. System TZ: Europe/Stockholm, HA TZ: Europe/Stockholm, Target TZ: Europe/Stockholm, Reference Mode: local_area[0m
+[32m2025-04-27 21:49:19.832 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Configured sources for area SE4: ['NordpoolAPI', 'EntsoeAPI'][0m
+[32m2025-04-27 21:49:19.833 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Fetching price data for area SE4[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Effective target timezone set to HA timezone: Europe/Stockholm[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Initialized timezone service. System TZ: Europe/Stockholm, HA TZ: Europe/Stockholm, Target TZ: Europe/Stockholm, Reference Mode: local_area[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Effective target timezone set to HA timezone: Europe/Stockholm[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Initialized timezone service. System TZ: Europe/Stockholm, HA TZ: Europe/Stockholm, Target TZ: Europe/Stockholm, Reference Mode: local_area[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.coordinator.fallback_manager] Attempting to fetch data from source: NordpoolAPI for area SE4[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] nordpool: Fetching day-ahead prices for area SE4[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] No specific timezone found for area SE4, using UTC[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.api.nordpool] Fetching Nordpool data for area: SE4, delivery area: SE4[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Generated 5 date ranges for nordpool source[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 1: 2025-04-27T21:49:19.833028+02:00 to 2025-04-28T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 2: 2025-04-26T21:49:19.833028+02:00 to 2025-04-27T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 3: 2025-04-27T21:49:19.833028+02:00 to 2025-04-29T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 4: 2025-04-27T21:49:19.833028+02:00 to 2025-04-29T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.833 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 5: 2025-04-25T21:49:19.833028+02:00 to 2025-04-29T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot] Setting up integration for area: SE2, currency: SEK[0m
+[32m2025-04-27 21:49:19.834 INFO (MainThread) [custom_components.ge_spot] Using UnifiedPriceCoordinator for area SE2[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Effective target timezone set to HA timezone: Europe/Stockholm[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Initialized timezone service. System TZ: Europe/Stockholm, HA TZ: Europe/Stockholm, Target TZ: Europe/Stockholm, Reference Mode: local_area[0m
+[32m2025-04-27 21:49:19.834 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Configured sources for area SE2: ['NordpoolAPI', 'EntsoeAPI'][0m
+[32m2025-04-27 21:49:19.834 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Fetching price data for area SE2[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Effective target timezone set to HA timezone: Europe/Stockholm[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Initialized timezone service. System TZ: Europe/Stockholm, HA TZ: Europe/Stockholm, Target TZ: Europe/Stockholm, Reference Mode: local_area[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Effective target timezone set to HA timezone: Europe/Stockholm[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Initialized timezone service. System TZ: Europe/Stockholm, HA TZ: Europe/Stockholm, Target TZ: Europe/Stockholm, Reference Mode: local_area[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.coordinator.fallback_manager] Attempting to fetch data from source: NordpoolAPI for area SE2[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] nordpool: Fetching day-ahead prices for area SE2[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] No specific timezone found for area SE2, using UTC[0m
+[36m2025-04-27 21:49:19.834 DEBUG (MainThread) [custom_components.ge_spot.api.nordpool] Fetching Nordpool data for area: SE2, delivery area: SE2[0m
+[36m2025-04-27 21:49:19.835 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Generated 5 date ranges for nordpool source[0m
+[36m2025-04-27 21:49:19.835 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 1: 2025-04-27T21:49:19.834741+02:00 to 2025-04-28T21:49:19.834741+02:00[0m
+[36m2025-04-27 21:49:19.835 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 2: 2025-04-26T21:49:19.834741+02:00 to 2025-04-27T21:49:19.834741+02:00[0m
+[36m2025-04-27 21:49:19.835 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 3: 2025-04-27T21:49:19.834741+02:00 to 2025-04-29T21:49:19.834741+02:00[0m
+[36m2025-04-27 21:49:19.835 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 4: 2025-04-27T21:49:19.834741+02:00 to 2025-04-29T21:49:19.834741+02:00[0m
+[36m2025-04-27 21:49:19.835 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 5: 2025-04-25T21:49:19.834741+02:00 to 2025-04-29T21:49:19.834741+02:00[0m
+[31m2025-04-27 21:49:19.922 ERROR (MainThread) [custom_components.ge_spot.utils.api_client] API request failed with status 204: https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices[0m
+[36m2025-04-27 21:49:19.922 DEBUG (MainThread) [custom_components.ge_spot.api.parsers.nordpool_parser] [NordpoolPriceParser] Parsed hourly_prices keys: [][0m
+[36m2025-04-27 21:49:19.922 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] Returning minimally processed data from nordpool: dict_keys(['hourly_prices', 'currency', 'area', 'api_timezone', 'source'])[0m
+[33m2025-04-27 21:49:19.922 WARNING (MainThread) [custom_components.ge_spot.coordinator.fallback_manager] Source NordpoolAPI returned no data or empty hourly prices for area SE4.[0m
+[36m2025-04-27 21:49:19.922 DEBUG (MainThread) [custom_components.ge_spot.coordinator.fallback_manager] Attempting to fetch data from source: EntsoeAPI for area SE4[0m
+[36m2025-04-27 21:49:19.922 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] entsoe: Fetching day-ahead prices for area SE4[0m
+[36m2025-04-27 21:49:19.922 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] No specific timezone found for area SE4, using UTC[0m
+[36m2025-04-27 21:49:19.922 DEBUG (MainThread) [custom_components.ge_spot.api.entsoe] Using ENTSO-E area code 10Y1001A1001A47J for area SE4[0m
+[36m2025-04-27 21:49:19.922 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Generated 5 date ranges for entsoe source[0m
+[36m2025-04-27 21:49:19.922 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 1: 2025-04-27T21:49:19.833028+02:00 to 2025-04-28T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.923 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 2: 2025-04-26T21:49:19.833028+02:00 to 2025-04-27T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.923 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 3: 2025-04-27T21:49:19.833028+02:00 to 2025-04-29T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.923 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 4: 2025-04-27T21:49:19.833028+02:00 to 2025-04-29T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.923 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 5: 2025-04-25T21:49:19.833028+02:00 to 2025-04-29T21:49:19.833028+02:00[0m
+[36m2025-04-27 21:49:19.923 DEBUG (MainThread) [custom_components.ge_spot.api.entsoe] Attempting ENTSO-E fetch: doc type A44, range 202504272149-202504282149, params: {'securityToken': '990e****************************7748', 'documentType': 'A44', 'in_Domain': '10Y1001A1001A47J', 'out_Domain': '10Y1001A1001A47J', 'periodStart': '202504272149', 'periodEnd': '202504282149'}[0m
+[31m2025-04-27 21:49:19.932 ERROR (MainThread) [custom_components.ge_spot.utils.api_client] API request failed with status 204: https://dataportal-api.nordpoolgroup.com/api/DayAheadPrices[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.api.parsers.nordpool_parser] [NordpoolPriceParser] Parsed hourly_prices keys: [][0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] Returning minimally processed data from nordpool: dict_keys(['hourly_prices', 'currency', 'area', 'api_timezone', 'source'])[0m
+[33m2025-04-27 21:49:19.932 WARNING (MainThread) [custom_components.ge_spot.coordinator.fallback_manager] Source NordpoolAPI returned no data or empty hourly prices for area SE2.[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.coordinator.fallback_manager] Attempting to fetch data from source: EntsoeAPI for area SE2[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] entsoe: Fetching day-ahead prices for area SE2[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] No specific timezone found for area SE2, using UTC[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.api.entsoe] Using ENTSO-E area code 10Y1001A1001A45N for area SE2[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Generated 5 date ranges for entsoe source[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 1: 2025-04-27T21:49:19.834741+02:00 to 2025-04-28T21:49:19.834741+02:00[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 2: 2025-04-26T21:49:19.834741+02:00 to 2025-04-27T21:49:19.834741+02:00[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 3: 2025-04-27T21:49:19.834741+02:00 to 2025-04-29T21:49:19.834741+02:00[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 4: 2025-04-27T21:49:19.834741+02:00 to 2025-04-29T21:49:19.834741+02:00[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.utils.date_range] Range 5: 2025-04-25T21:49:19.834741+02:00 to 2025-04-29T21:49:19.834741+02:00[0m
+[36m2025-04-27 21:49:19.932 DEBUG (MainThread) [custom_components.ge_spot.api.entsoe] Attempting ENTSO-E fetch: doc type A44, range 202504272149-202504282149, params: {'securityToken': '990e****************************7748', 'documentType': 'A44', 'in_Domain': '10Y1001A1001A45N', 'out_Domain': '10Y1001A1001A45N', 'periodStart': '202504272149', 'periodEnd': '202504282149'}[0m
+[32m2025-04-27 21:49:20.251 INFO (MainThread) [custom_components.ge_spot.api.entsoe] Successfully fetched ENTSO-E XML data with doc type A44 for area SE4[0m
+[32m2025-04-27 21:49:20.251 INFO (MainThread) [custom_components.ge_spot.api.entsoe] Got valid ENTSO-E response(s) for date range 202504272149 to 202504282149, skipping remaining ranges[0m
+[36m2025-04-27 21:49:20.251 DEBUG (MainThread) [custom_components.ge_spot.api.parsers.entsoe_parser] Selected ENTSO-E time series with business type A62, 24 points[0m
+[36m2025-04-27 21:49:20.252 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] Returning minimally processed data from entsoe: dict_keys(['hourly_prices', 'currency', 'source', 'current_price', 'next_hour_price', 'metadata', 'area', 'api_timezone'])[0m
+[32m2025-04-27 21:49:20.252 INFO (MainThread) [custom_components.ge_spot.coordinator.fallback_manager] Successfully fetched data from source: EntsoeAPI for area SE4[0m
+[32m2025-04-27 21:49:20.252 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Successfully fetched data for area SE4 via FallbackManager.[0m
+[36m2025-04-27 21:49:20.252 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Processing data for area SE4 from source entsoe[0m
+[36m2025-04-27 21:49:20.252 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Normalizing all raw prices...[0m
+[36m2025-04-27 21:49:20.252 DEBUG (MainThread) [custom_components.ge_spot.utils.timezone_converter] Normalizing 24 hourly price timestamps using target timezone: Europe/Stockholm[0m
+[36m2025-04-27 21:49:20.252 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Normalizing 24 hourly price timestamps using target timezone: Europe/Stockholm (with source hint: UTC)[0m
+[36m2025-04-27 21:49:20.252 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Successfully normalized 24 timestamps.[0m
+[36m2025-04-27 21:49:20.252 DEBUG (MainThread) [custom_components.ge_spot.utils.timezone_converter] Normalization complete. Result keys: [datetime.datetime(2025, 4, 27, 0, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 1, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 2, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 3, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 4, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 5, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 6, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 7, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 8, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 9, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 10, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 11, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 12, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 13, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 14, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 15, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 16, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 17, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 18, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 19, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 20, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 21, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 22, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 23, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm'))][0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Total normalized prices: 24[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Split into: 24 today, 0 tomorrow[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Converting today's prices...[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.utils.currency_converter] Converting 24 prices from EUR/MWh to SEK/cents (VAT included: False, Rate: 0.00%)[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.utils.currency_converter] Using exchange rate EUR -> SEK: 11.001500[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.utils.currency_converter] Conversion complete. Example converted price for first hour: ('00:00', 71.597762)[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Processed 24 prices for today[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Current time - UTC: 19:49:20, HA: 21:49:20[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.timezone.hour_calculator] Current hour determined as 21:00 from datetime 2025-04-27T21:49:20.253693+02:00 (timezone: Europe/Stockholm)[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Using HA timezone Europe/Stockholm for hour key (Home Assistant Time mode)[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Current hour key from calculator: 21:00 (timezone: Europe/Stockholm, area: None)[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.timezone.hour_calculator] Using system timezone Europe/Stockholm for datetime 2025-04-27T22:49:20.253786+02:00[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.timezone.hour_calculator] Generated hour key 22:00 for datetime 2025-04-27T22:49:20.253786+02:00 in target timezone[0m
+[36m2025-04-27 21:49:20.253 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Calculated today's statistics for SE4[0m
+[32m2025-04-27 21:49:20.253 INFO (MainThread) [custom_components.ge_spot.coordinator.data_processor] Successfully processed data for area SE4. Source: entsoe, Today Prices: 24, Tomorrow Prices: 0, Cached: False[0m
+[36m2025-04-27 21:49:20.254 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE4 data in 0.421 seconds (success: True)[0m
+[32m2025-04-27 21:49:20.254 INFO (MainThread) [custom_components.ge_spot.api.entsoe] Successfully fetched ENTSO-E XML data with doc type A44 for area SE2[0m
+[32m2025-04-27 21:49:20.254 INFO (MainThread) [custom_components.ge_spot.api.entsoe] Got valid ENTSO-E response(s) for date range 202504272149 to 202504282149, skipping remaining ranges[0m
+[36m2025-04-27 21:49:20.255 DEBUG (MainThread) [custom_components.ge_spot.api.parsers.entsoe_parser] Selected ENTSO-E time series with business type A62, 24 points[0m
+[36m2025-04-27 21:49:20.255 DEBUG (MainThread) [custom_components.ge_spot.api.base.base_price_api] Returning minimally processed data from entsoe: dict_keys(['hourly_prices', 'currency', 'source', 'current_price', 'next_hour_price', 'metadata', 'area', 'api_timezone'])[0m
+[32m2025-04-27 21:49:20.255 INFO (MainThread) [custom_components.ge_spot.coordinator.fallback_manager] Successfully fetched data from source: EntsoeAPI for area SE2[0m
+[32m2025-04-27 21:49:20.255 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Successfully fetched data for area SE2 via FallbackManager.[0m
+[36m2025-04-27 21:49:20.255 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Processing data for area SE2 from source entsoe[0m
+[36m2025-04-27 21:49:20.255 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Normalizing all raw prices...[0m
+[36m2025-04-27 21:49:20.255 DEBUG (MainThread) [custom_components.ge_spot.utils.timezone_converter] Normalizing 24 hourly price timestamps using target timezone: Europe/Stockholm[0m
+[36m2025-04-27 21:49:20.255 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Normalizing 24 hourly price timestamps using target timezone: Europe/Stockholm (with source hint: UTC)[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Successfully normalized 24 timestamps.[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.utils.timezone_converter] Normalization complete. Result keys: [datetime.datetime(2025, 4, 27, 0, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 1, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 2, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 3, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 4, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 5, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 6, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 7, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 8, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 9, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 10, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 11, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 12, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 13, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 14, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 15, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 16, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 17, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 18, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 19, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 20, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 21, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 22, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm')), datetime.datetime(2025, 4, 27, 23, 0, tzinfo=zoneinfo.ZoneInfo(key='Europe/Stockholm'))][0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Total normalized prices: 24[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Split into: 24 today, 0 tomorrow[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Converting today's prices...[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.utils.currency_converter] Converting 24 prices from EUR/MWh to SEK/cents (VAT included: False, Rate: 0.00%)[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.utils.currency_converter] Using exchange rate EUR -> SEK: 11.001500[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.utils.currency_converter] Conversion complete. Example converted price for first hour: ('00:00', 6.2268490000000005)[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Processed 24 prices for today[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Current time - UTC: 19:49:20, HA: 21:49:20[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.timezone.hour_calculator] Current hour determined as 21:00 from datetime 2025-04-27T21:49:20.256522+02:00 (timezone: Europe/Stockholm)[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Using HA timezone Europe/Stockholm for hour key (Home Assistant Time mode)[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.timezone.service] Current hour key from calculator: 21:00 (timezone: Europe/Stockholm, area: None)[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.timezone.hour_calculator] Using system timezone Europe/Stockholm for datetime 2025-04-27T22:49:20.256603+02:00[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.timezone.hour_calculator] Generated hour key 22:00 for datetime 2025-04-27T22:49:20.256603+02:00 in target timezone[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Calculated today's statistics for SE2[0m
+[32m2025-04-27 21:49:20.256 INFO (MainThread) [custom_components.ge_spot.coordinator.data_processor] Successfully processed data for area SE2. Source: entsoe, Today Prices: 24, Tomorrow Prices: 0, Cached: False[0m
+[36m2025-04-27 21:49:20.256 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE2 data in 0.422 seconds (success: True)[0m
+[32m2025-04-27 21:49:20.460 INFO (MainThread) [custom_components.ge_spot.utils.exchange_service] Updating exchange rates on Home Assistant startup[0m
+[36m2025-04-27 21:49:20.461 DEBUG (MainThread) [custom_components.ge_spot.utils.exchange_service] Attempting to fetch fresh exchange rates from ECB.[0m
+[32m2025-04-27 21:49:20.841 INFO (MainThread) [custom_components.ge_spot.utils.exchange_service] Fetched 31 exchange rates[0m
+[32m2025-04-27 21:49:20.841 INFO (MainThread) [custom_components.ge_spot.utils.exchange_service] Successfully fetched fresh exchange rates.[0m
+[36m2025-04-27 21:49:20.912 DEBUG (MainThread) [custom_components.ge_spot.utils.exchange_service] Saved exchange rates to /root/.ge_spot_exchange_rates.json[0m
+[32m2025-04-27 21:49:50.267 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE4. Next fetch allowed in 869.6 seconds. Using cached data if available.[0m
+[33m2025-04-27 21:49:50.267 WARNING (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Parsed 'created_at' for cache key SE4_entsoe is naive, assuming UTC.[0m
+[36m2025-04-27 21:49:50.267 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Selected latest valid cache key SE4_entsoe for area SE4[0m
+[36m2025-04-27 21:49:50.267 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Returning rate-limited cached data for SE4[0m
+[36m2025-04-27 21:49:50.267 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Processing data for area SE4 from source entsoe[0m
+[31m2025-04-27 21:49:50.267 ERROR (MainThread) [custom_components.ge_spot.coordinator.data_processor] Missing source timezone for source entsoe. Cannot process.[0m
+[33m2025-04-27 21:49:50.267 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE4: Missing source timezone[0m
+[36m2025-04-27 21:49:50.267 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE4 data in 0.001 seconds (success: True)[0m
+[32m2025-04-27 21:49:50.268 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE2. Next fetch allowed in 869.6 seconds. Using cached data if available.[0m
+[33m2025-04-27 21:49:50.268 WARNING (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Parsed 'created_at' for cache key SE2_entsoe is naive, assuming UTC.[0m
+[36m2025-04-27 21:49:50.268 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Selected latest valid cache key SE2_entsoe for area SE2[0m
+[36m2025-04-27 21:49:50.268 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Returning rate-limited cached data for SE2[0m
+[36m2025-04-27 21:49:50.269 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Processing data for area SE2 from source entsoe[0m
+[31m2025-04-27 21:49:50.269 ERROR (MainThread) [custom_components.ge_spot.coordinator.data_processor] Missing source timezone for source entsoe. Cannot process.[0m
+[33m2025-04-27 21:49:50.269 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE2: Missing source timezone[0m
+[36m2025-04-27 21:49:50.269 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE2 data in 0.000 seconds (success: True)[0m
+[32m2025-04-27 21:50:00.269 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE4. Next fetch allowed in 859.6 seconds. Using cached data if available.[0m
+[33m2025-04-27 21:50:00.269 WARNING (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Parsed 'created_at' for cache key SE4_entsoe is naive, assuming UTC.[0m
+[36m2025-04-27 21:50:00.269 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Selected latest valid cache key SE4_entsoe for area SE4[0m
+[36m2025-04-27 21:50:00.269 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Returning rate-limited cached data for SE4[0m
+[36m2025-04-27 21:50:00.269 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Processing data for area SE4 from source entsoe[0m
+[31m2025-04-27 21:50:00.269 ERROR (MainThread) [custom_components.ge_spot.coordinator.data_processor] Missing source timezone for source entsoe. Cannot process.[0m
+[33m2025-04-27 21:50:00.270 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE4: Missing source timezone[0m
+[36m2025-04-27 21:50:00.270 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE4 data in 0.000 seconds (success: True)[0m
+[32m2025-04-27 21:50:00.270 INFO (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Rate limiting in effect for area SE2. Next fetch allowed in 859.6 seconds. Using cached data if available.[0m
+[33m2025-04-27 21:50:00.270 WARNING (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Parsed 'created_at' for cache key SE2_entsoe is naive, assuming UTC.[0m
+[36m2025-04-27 21:50:00.270 DEBUG (MainThread) [custom_components.ge_spot.coordinator.cache_manager] Selected latest valid cache key SE2_entsoe for area SE2[0m
+[36m2025-04-27 21:50:00.270 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Returning rate-limited cached data for SE2[0m
+[36m2025-04-27 21:50:00.270 DEBUG (MainThread) [custom_components.ge_spot.coordinator.data_processor] Processing data for area SE2 from source entsoe[0m
+[31m2025-04-27 21:50:00.270 ERROR (MainThread) [custom_components.ge_spot.coordinator.data_processor] Missing source timezone for source entsoe. Cannot process.[0m
+[33m2025-04-27 21:50:00.270 WARNING (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Update failed for area SE2: Missing source timezone[0m
+[36m2025-04-27 21:50:00.270 DEBUG (MainThread) [custom_components.ge_spot.coordinator.unified_price_manager] Finished fetching gespot_SE2 data in 0.000 seconds (success: True)[0m
+[33m2025-04-27 21:50:10.328 WARNING (Recorder) [homeassistant.components.sensor.recorder] The unit of sensor.gespot_se4_current_price_se4 (öre/kWh) cannot be converted to the unit of previously compiled statistics (SEK/kWh). Generation of long term statistics will be suppressed unless the unit changes back to SEK/kWh or a compatible unit. Go to https://my.home-assistant.io/redirect/developer_statistics to fix this[0m
+[33m2025-04-27 21:50:10.328 WARNING (Recorder) [homeassistant.components.sensor.recorder] The unit of sensor.gespot_se4_next_hour_price_se4 (öre/kWh) cannot be converted to the unit of previously compiled statistics (SEK/kWh). Generation of long term statistics will be suppressed unless the unit changes back to SEK/kWh or a compatible unit. Go to https://my.home-assistant.io/redirect/developer_statistics to fix this[0m

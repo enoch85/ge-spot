@@ -357,7 +357,8 @@ class EntsoeAPI(BasePriceAPI):
             currency=Currency.EUR,  # ENTSO-E returns prices in EUR by default
             hourly_prices=all_hourly_prices,
             reference_time=now,
-            api_timezone=api_timezone,
+            # FIX: Use the correct API timezone constant for ENTSO-E
+            api_timezone=EntsoE.TIMEZONE, # ENTSO-E data is in CET/CEST
             raw_data=raw_data,
             validate_complete=True,  # Enable validation to ensure we don't calculate stats for incomplete data
             has_tomorrow_prices=expect_tomorrow and tomorrow_complete,

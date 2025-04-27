@@ -212,8 +212,27 @@ class DataProcessor:
             today_keys = set(self._tz_service.get_today_range())
             tomorrow_keys = set(self._tz_service.get_tomorrow_range())
 
-            normalized_today = {k: v for k, v in all_normalized_prices.items() if k in today_keys}
-            normalized_tomorrow = {k: v for k, v in all_normalized_prices.items() if k in tomorrow_keys}
+            normalized_today = {}
+            normalized_tomorrow = {}
+            # FIX: Convert datetime keys to HH:00 strings before checking against today/tomorrow keys
+            for dt_key, price in all_normalized_prices.items():
+                # Ensure dt_key is timezone-aware (should be from converter)
+                if dt_key.tzinfo is None:
+                    _LOGGER.warning(f"Normalized price key {dt_key} is naive, skipping.")
+                    continue
+                # Convert to target timezone IF NEEDED (converter might already do this)
+                # dt_target = dt_key.astimezone(self._tz_service.target_timezone)
+                # Assuming converter already returns keys in target timezone based on previous logs
+                dt_target = dt_key
+                hour_str_key = f"{dt_target.hour:02d}:00"
+                if hour_str_key in today_keys:
+                    normalized_today[hour_str_key] = price
+                elif hour_str_key in tomorrow_keys:
+                    normalized_tomorrow[hour_str_key] = price
+
+            # Remove the old splitting logic
+            # normalized_today = {k: v for k, v in all_normalized_prices.items() if k in today_keys}
+            # normalized_tomorrow = {k: v for k, v in all_normalized_prices.items() if k in tomorrow_keys}
             _LOGGER.debug(f"Split into: {len(normalized_today)} today, {len(normalized_tomorrow)} tomorrow")
 
             # 2. Convert Currency, Units, Apply VAT using CurrencyConverter
