@@ -18,7 +18,7 @@ Usage:
 import sys
 import os
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import asyncio
 import pytz
 
@@ -29,11 +29,14 @@ from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
 
+# Danish price areas
+DANISH_AREAS = ['DK1', 'DK2']
+
 async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Test Energi Data Service API integration')
     parser.add_argument('area', nargs='?', default='DK1', 
-                        choices=['DK1', 'DK2'],
+                        choices=DANISH_AREAS,
                         help='Area code (DK1, DK2)')
     args = parser.parse_args()
     area = args.area
@@ -52,13 +55,17 @@ async def main():
             print("Error: Failed to fetch data from Energi Data Service API")
             return
             
-        print(f"Raw data keys: {list(raw_data.keys())}")
-        
         # Print a sample of the raw data (truncated for readability)
         raw_data_str = str(raw_data)
+        print(f"Raw data type: {type(raw_data)}")
         print(f"Raw data sample (truncated): {raw_data_str[:300]}...")
         
-        if 'records' in raw_data:
+        # Handle both list and dictionary formats
+        if isinstance(raw_data, list):
+            print(f"Number of records: {len(raw_data)}")
+            if raw_data:
+                print(f"First record sample: {raw_data[0]}")
+        elif isinstance(raw_data, dict) and 'records' in raw_data:
             print(f"Number of records: {len(raw_data['records'])}")
             if raw_data['records']:
                 print(f"First record sample: {raw_data['records'][0]}")
@@ -142,8 +149,26 @@ async def main():
                 print("✓ Complete set of 24 hourly prices for today")
             else:
                 print(f"⚠ Incomplete data: Found {len(today_prices)} hourly prices for today (expected 24)")
+                
+                # List missing hours for better debugging
+                all_hours = set(f"{h:02d}:00" for h in range(24))
+                found_hours = set(today_prices.keys())
+                missing_hours = all_hours - found_hours
+                if missing_hours:
+                    print(f"Missing hours: {', '.join(sorted(missing_hours))}")
         else:
             print(f"\nWarning: No prices found for today ({today})")
+        
+        # Check price variation (real markets have price variation)
+        if today in prices_by_date:
+            prices = [details['original'] for _, details in prices_by_date[today].items()]
+            if prices:
+                price_variation = max(prices) - min(prices)
+                print(f"\nPrice variation today: {price_variation:.2f} DKK/MWh")
+                if price_variation > 0:
+                    print("✓ Price variation detected (expected for real market data)")
+                else:
+                    print("⚠ No price variation detected - suspicious for real market data")
         
         print("\nTest completed successfully!")
         
@@ -151,7 +176,10 @@ async def main():
         print(f"Error during test: {e}")
         import traceback
         traceback.print_exc()
+        return 1
+    
+    return 0
 
 if __name__ == "__main__":
     print("Starting Energi Data Service API full chain test...")
-    asyncio.run(main())
+    sys.exit(asyncio.run(main()))

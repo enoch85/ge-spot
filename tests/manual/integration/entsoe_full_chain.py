@@ -21,7 +21,7 @@ import sys
 import os
 import argparse
 import getpass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import asyncio
 import pytz
 
@@ -166,7 +166,7 @@ async def main():
         
         # Validate that we have data for today and tomorrow
         today = datetime.now(local_tz).strftime('%Y-%m-%d')
-        tomorrow = (datetime.now(local_tz) + asyncio.timedelta(days=1)).strftime('%Y-%m-%d')
+        tomorrow = (datetime.now(local_tz) + timedelta(days=1)).strftime('%Y-%m-%d')
         
         # Check today's data
         if today in prices_by_date:

@@ -22,6 +22,8 @@ GE-Spot's testing approach is guided by these core principles:
 
 8. **Modularity**: Tests are organized to support the modular architecture, making it easy to add tests for new regions or data sources.
 
+9. **Pytests and Manual testing**: Pytesting should be done with mocks. Manual testing should be done with real API data.
+
 ## Directory Structure
 
 ```

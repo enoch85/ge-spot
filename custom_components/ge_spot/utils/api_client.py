@@ -100,10 +100,31 @@ class ApiClient:
 
     async def fetch(self, url: str, params: Optional[Dict[str, Any]] = None,
                   headers: Optional[Dict[str, str]] = None, timeout: Optional[int] = None,
-                  encoding: Optional[str] = None) -> Any:
-        """Fetch data with improved error handling."""
+                  encoding: Optional[str] = None, response_format: Optional[str] = None) -> Any:
+        """Fetch data with improved error handling.
+
+        Args:
+            url: The URL to request
+            params: Optional query parameters
+            headers: Optional request headers
+            timeout: Optional timeout in seconds
+            encoding: Optional encoding for text responses
+            response_format: Optional format to force ('json', 'text', 'xml')
+
+        Returns:
+            The response data as a dictionary, string, or error information
+        """
         merged_headers = {**self._headers, **(headers or {})}
         timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else self._timeout
+
+        # Adjust Accept header based on response_format
+        if response_format:
+            if response_format.lower() == 'json':
+                merged_headers['Accept'] = 'application/json'
+            elif response_format.lower() == 'xml':
+                merged_headers['Accept'] = 'application/xml, text/xml'
+            elif response_format.lower() == 'text' or response_format.lower() == 'csv':
+                merged_headers['Accept'] = 'text/plain, text/csv, */*'
 
         async with self._semaphore:
             try:
@@ -134,12 +155,23 @@ class ApiClient:
                                     "url": url
                                 }
 
-                        # Process successful response based on content type
+                        # Process successful response based on format parameter or content type
+                        if response_format:
+                            if response_format.lower() in ['text', 'csv']:
+                                return await response.text(encoding=encoding)
+                            elif response_format.lower() == 'json':
+                                return await response.json()
+                            elif response_format.lower() == 'xml':
+                                return await response.text(encoding=encoding)
+                        
+                        # If no specific format requested, check content type
                         content_type = response.headers.get('Content-Type', '').lower()
 
                         if 'application/json' in content_type:
                             return await response.json()
                         elif 'text/xml' in content_type or 'application/xml' in content_type:
+                            return await response.text(encoding=encoding)
+                        elif 'text/csv' in content_type or 'text/plain' in content_type:
                             return await response.text(encoding=encoding)
                         else:
                             # Try JSON first, fall back to text if that fails
@@ -172,10 +204,23 @@ class ApiClient:
                                         "url": url
                                     }
 
+                            # Process successful response based on format parameter or content type
+                            if response_format:
+                                if response_format.lower() in ['text', 'csv']:
+                                    return await response.text(encoding=encoding)
+                                elif response_format.lower() == 'json':
+                                    return await response.json()
+                                elif response_format.lower() == 'xml':
+                                    return await response.text(encoding=encoding)
+                            
+                            # If no specific format requested, check content type
                             content_type = response.headers.get('Content-Type', '').lower()
+
                             if 'application/json' in content_type:
                                 return await response.json()
                             elif 'text/xml' in content_type or 'application/xml' in content_type:
+                                return await response.text(encoding=encoding)
+                            elif 'text/csv' in content_type or 'text/plain' in content_type:
                                 return await response.text(encoding=encoding)
                             else:
                                 try:

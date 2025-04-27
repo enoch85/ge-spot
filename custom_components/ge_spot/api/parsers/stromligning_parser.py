@@ -96,20 +96,35 @@ class StromligningParser(BasePriceParser):
                 metadata["price_area"] = data["priceArea"]
                 metadata["area"] = data["priceArea"]
             
-            # Check for price components
+            # Check for price components and structure
             component_types = set()
-            if "prices" in data and isinstance(data["prices"], list):
-                for price_data in data["prices"]:
-                    if "price" in price_data and "components" in price_data["price"] and isinstance(price_data["price"]["components"], list):
-                        metadata["has_components"] = True
+            if "prices" in data and isinstance(data["prices"], list) and data["prices"]:
+                # Check the first price entry to determine the data structure
+                first_price = data["prices"][0]
+                
+                # Check if details are available
+                if "details" in first_price and isinstance(first_price["details"], dict):
+                    metadata["has_details"] = True
+                    
+                    # Extract component types from details
+                    for component_name in first_price["details"].keys():
+                        component_types.add(component_name)
                         
-                        # Extract component types
-                        for component in price_data["price"]["components"]:
-                            if "name" in component:
-                                component_types.add(component["name"])
+                        # Check for nested components (like transmission)
+                        component_data = first_price["details"][component_name]
+                        if isinstance(component_data, dict):
+                            for sub_name in component_data.keys():
+                                if sub_name not in ("value", "vat", "total", "unit"):
+                                    component_types.add(f"{component_name}.{sub_name}")
             
             if component_types:
                 metadata["component_types"] = list(component_types)
+                
+            # Extract additional supplier info if available
+            if "supplier" in data:
+                metadata["supplier"] = data["supplier"]
+            if "company" in data:
+                metadata["company"] = data["company"]
 
         return metadata
 
@@ -132,51 +147,54 @@ class StromligningParser(BasePriceParser):
                         # Create ISO formatted timestamp key
                         hour_key = dt.isoformat()
 
-                        # --- Refinement: Extract Spotpris component ---
-                        spot_price = None
-                        components = price_data["price"].get("components")
-                        if isinstance(components, list):
-                            for component in components:
-                                if component.get("name") == "Spotpris" and "value" in component:
+                        # Extract the electricity price
+                        # First try to get the electricity price from details.electricity.value
+                        price_value = None
+                        if "details" in price_data and isinstance(price_data["details"], dict):
+                            if "electricity" in price_data["details"] and isinstance(price_data["details"]["electricity"], dict):
+                                electricity = price_data["details"]["electricity"]
+                                if "value" in electricity:
                                     try:
-                                        spot_price = float(component["value"])
-                                        break # Found Spotpris, no need to check further components
+                                        # This is the raw electricity price without taxes and other costs
+                                        price_value = float(electricity["value"])
+                                        _LOGGER.debug(f"Using electricity.value as price for {hour_key}: {price_value}")
                                     except (ValueError, TypeError):
-                                        _LOGGER.warning(f"Could not parse Spotpris value: {component.get('value')} for {hour_key}")
-                        # --- End Refinement ---
+                                        _LOGGER.warning(f"Could not parse electricity value: {electricity.get('value')} for {hour_key}")
 
-                        # Use Spotpris if found, otherwise log warning (or fallback to total?)
-                        if spot_price is not None:
-                            result["hourly_prices"][hour_key] = spot_price
+                        # If electricity price not found in details, fall back to the main price value
+                        if price_value is None and "value" in price_data["price"]:
+                            try:
+                                price_value = float(price_data["price"]["value"])
+                                _LOGGER.debug(f"Using price.value as fallback price for {hour_key}: {price_value}")
+                            except (ValueError, TypeError):
+                                _LOGGER.warning(f"Could not parse price value: {price_data['price'].get('value')} for {hour_key}")
+
+                        # Store the price if we have a valid value
+                        if price_value is not None:
+                            result["hourly_prices"][hour_key] = price_value
                         else:
-                            # Log if components exist but Spotpris wasn't found/parsed
-                            if components:
-                                 _LOGGER.warning(f"Spotpris component not found or invalid in Stromligning data for hour {hour_key}. Components: {components}")
-                            # Optionally, fallback to total price if Spotpris is missing?
-                            # For consistency, we prefer *not* to fallback to total price here.
-                            # If Spotpris is missing, the hour will be missing, handled later.
-                            # else:
-                            #     # Fallback to total price if needed (less consistent)
-                            #     total_price = price_data["price"].get("value")
-                            #     if total_price is not None:
-                            #         try:
-                            #             result["hourly_prices"][hour_key] = float(total_price)
-                            #             _LOGGER.debug(f"Using total price as fallback for {hour_key} as Spotpris was missing.")
-                            #         except (ValueError, TypeError):
-                            #              _LOGGER.warning(f"Could not parse total price fallback value: {total_price} for {hour_key}")
+                            _LOGGER.warning(f"No valid price found in Stromligning data for hour {hour_key}")
 
-
-                        # Extract price components if available (for internal storage/debugging)
-                        if isinstance(components, list):
+                        # Extract price components from details for internal storage/debugging
+                        if "details" in price_data and isinstance(price_data["details"], dict):
                             self._price_components[hour_key] = {}
-                            for component in components:
-                                if "name" in component and "value" in component:
-                                    component_name = component["name"]
+                            for component_name, component_data in price_data["details"].items():
+                                if isinstance(component_data, dict) and "value" in component_data:
                                     try:
-                                        component_value = float(component["value"])
+                                        component_value = float(component_data["value"])
                                         self._price_components[hour_key][component_name] = component_value
                                     except (ValueError, TypeError):
-                                        _LOGGER.debug(f"Could not parse component '{component_name}' value: {component.get('value')} for {hour_key}")
+                                        _LOGGER.debug(f"Could not parse component '{component_name}' value: {component_data.get('value')} for {hour_key}")
+                                
+                                # Handle nested components like transmission
+                                elif isinstance(component_data, dict):
+                                    for sub_name, sub_data in component_data.items():
+                                        if isinstance(sub_data, dict) and "value" in sub_data:
+                                            try:
+                                                sub_value = float(sub_data["value"])
+                                                self._price_components[hour_key][f"{component_name}.{sub_name}"] = sub_value
+                                            except (ValueError, TypeError):
+                                                _LOGGER.debug(f"Could not parse nested component '{component_name}.{sub_name}' value: {sub_data.get('value')} for {hour_key}")
                     except (ValueError, TypeError) as e:
                         _LOGGER.debug(f"Failed to parse Stromligning timestamp: {timestamp_str} - {e}")
                 except Exception as e: # Catch broader errors during item processing

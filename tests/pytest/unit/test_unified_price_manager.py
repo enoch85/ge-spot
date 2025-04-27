@@ -111,7 +111,7 @@ def auto_mock_core_dependencies():
         # Configure default return values for mocks
         mock_get_sources.return_value = [Source.NORDPOOL, Source.ENTSOE]
         mock_fallback_manager.return_value.fetch_with_fallbacks = AsyncMock(return_value=MOCK_SUCCESS_RESULT)
-        mock_cache_manager.return_value.get_cached_data = MagicMock(return_value=None)
+        mock_cache_manager.return_value.get_data = MagicMock(return_value=None)
         mock_cache_manager.return_value.update_cache = MagicMock()
         mock_data_processor.return_value.process = AsyncMock(return_value=MOCK_PROCESSED_RESULT)
         mock_tz_service.return_value = MagicMock() # Basic mock for TimezoneService instance
@@ -737,7 +737,7 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_now = auto_mock_core_dependencies["now"]
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_cached_data
+        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
         
         # Configure for failure
         mock_fallback.return_value = MOCK_FAILURE_RESULT

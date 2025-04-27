@@ -93,8 +93,7 @@ class StromligningAPI(BasePriceAPI):
                 response = await client.fetch(
                     self._get_base_url(),
                     params=params,
-                    timeout=Network.Defaults.TIMEOUT,
-                    response_format='json'
+                    timeout=Network.Defaults.TIMEOUT
                 )
 
                 # Check if we got a valid response with prices

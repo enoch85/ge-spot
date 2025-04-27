@@ -22,8 +22,9 @@ from datetime import datetime, timezone, timedelta
 import asyncio
 import pytz
 
-# Add the root directory to the path so we can import the component modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+# Add the project root to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..')))
+
 from custom_components.ge_spot.api.omie import OmieAPI
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
@@ -54,10 +55,13 @@ async def main():
             return
             
         # Print a sample of the raw data (truncated for readability)
-        if isinstance(raw_data, list):
-            print(f"Received {len(raw_data)} data points")
-            if raw_data:
-                print(f"First data point sample: {raw_data[0]}")
+        if "raw_csv_by_date" in raw_data and isinstance(raw_data["raw_csv_by_date"], dict):
+            print(f"Received data for {len(raw_data['raw_csv_by_date'])} date(s)")
+            if raw_data["raw_csv_by_date"]:
+                # Display first date and sample of the CSV content
+                first_date = next(iter(raw_data["raw_csv_by_date"]))
+                csv_sample = raw_data["raw_csv_by_date"][first_date][:300] + "..." if len(raw_data["raw_csv_by_date"][first_date]) > 300 else raw_data["raw_csv_by_date"][first_date]
+                print(f"Data sample for {first_date}:\n{csv_sample}")
         else:
             print(f"Raw data type: {type(raw_data)}")
             raw_data_str = str(raw_data)
@@ -111,23 +115,32 @@ async def main():
         prices_by_date = {}
         
         for ts, price in hourly_prices.items():
-            # Parse the timestamp and convert to local timezone
-            dt = datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone(local_tz)
-            date_str = dt.strftime('%Y-%m-%d')
-            hour_str = dt.strftime('%H:%M')
-            
-            if date_str not in prices_by_date:
-                prices_by_date[date_str] = {}
+            try:
+                # Handle timestamps with and without timezone information
+                if 'Z' in ts or '+' in ts:
+                    # Parse the timestamp with timezone info
+                    dt = datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone(local_tz)
+                else:
+                    # For local timestamps, assume they're in the local timezone
+                    dt = pytz.timezone('UTC').localize(datetime.fromisoformat(ts)).astimezone(local_tz)
                 
-            prices_by_date[date_str][hour_str] = {
-                'original': price,
-                'converted': converted_prices.get(ts)
-            }
+                date_str = dt.strftime('%Y-%m-%d')
+                hour_str = dt.strftime('%H:%M')
+                
+                if date_str not in prices_by_date:
+                    prices_by_date[date_str] = {}
+                    
+                prices_by_date[date_str][hour_str] = {
+                    'original': price,
+                    'converted': converted_prices.get(ts)
+                }
+            except (ValueError, TypeError) as e:
+                print(f"Warning: Could not parse timestamp {ts}: {e}")
         
         # Print prices grouped by date
         for date, hours in sorted(prices_by_date.items()):
             print(f"\nPrices for {date}:")
-            print(f"{'Time':<10} {f'{parsed_data.get(\"currency\", Currency.EUR)}/MWh':<15} {f'{target_currency}/kWh':<15}")
+            print(f"{'Time':<10} {parsed_data.get('currency', Currency.EUR)}/MWh{'':<5} {target_currency}/kWh{'':<5}")
             print("-" * 40)
             
             for hour, prices in sorted(hours.items()):
@@ -167,6 +180,10 @@ async def main():
         print(f"Error during test: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        # Ensure the session is closed
+        if hasattr(api, 'session') and api.session:
+            await api.session.close()
 
 if __name__ == "__main__":
     print("Starting OMIE API full chain test...")
