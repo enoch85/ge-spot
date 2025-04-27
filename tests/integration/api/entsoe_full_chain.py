@@ -26,7 +26,7 @@ import asyncio
 import pytz
 
 # Add the root directory to the path so we can import the component modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 from custom_components.ge_spot.api.entsoe import EntsoeAPI
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
@@ -156,7 +156,9 @@ async def main():
         # Print prices grouped by date
         for date, hours in sorted(prices_by_date.items()):
             print(f"\nPrices for {date}:")
-            print(f"{'Time':<10} {f'{parsed_data.get(\"currency\", Currency.EUR)}/MWh':<15} {f'{target_currency}/kWh':<15}")
+            original_currency_header = f"{parsed_data.get('currency', Currency.EUR)}/MWh"
+            converted_currency_header = f"{target_currency}/kWh"
+            print(f"{'Time':<10} {original_currency_header:<15} {converted_currency_header:<15}")
             print("-" * 40)
             
             for hour, prices in sorted(hours.items()):

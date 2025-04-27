@@ -23,7 +23,7 @@ import asyncio
 import pytz
 
 # Add the root directory to the path so we can import the component modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 from custom_components.ge_spot.api.aemo import AemoAPI
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency

@@ -90,20 +90,21 @@ class DataProcessor:
     async def _ensure_exchange_service(self):
         """Ensure the exchange service is available from the manager."""
         if self._exchange_service is None:
-            # Access the exchange service instance from the manager
-            # This assumes the manager has an initialized _exchange_service attribute
-            if hasattr(self._manager, '_exchange_service') and self._manager._exchange_service is not None:
-                 self._exchange_service = self._manager._exchange_service
-            else:
-                # Attempt to initialize it via the manager if not already done
-                # This might be redundant if manager ensures init before calling process
+            # Check if the _manager is already an ExchangeRateService (for tests)
+            if hasattr(self._manager, 'get_rates'):
+                self._exchange_service = self._manager
+                await self._exchange_service.get_rates()  # Initialize the rates
+            # Manager with _exchange_service attribute (normal operation)
+            elif hasattr(self._manager, '_exchange_service') and self._manager._exchange_service is not None:
+                self._exchange_service = self._manager._exchange_service
+            # Manager with _ensure_exchange_service method (normal operation)
+            elif hasattr(self._manager, '_ensure_exchange_service'):
                 await self._manager._ensure_exchange_service()
                 self._exchange_service = self._manager._exchange_service
-
-            if self._exchange_service is None:
-                 _LOGGER.error("Exchange service not available in DataProcessor")
-                 # Handle error appropriately, maybe raise an exception
-                 raise RuntimeError("Exchange service could not be initialized or retrieved.")
+            else:
+                _LOGGER.error("Exchange service not available in DataProcessor")
+                raise RuntimeError("Exchange service could not be initialized or retrieved.")
+                
             # Instantiate CurrencyConverter once exchange service is ready
             if self._currency_converter is None:
                 self._currency_converter = CurrencyConverter(

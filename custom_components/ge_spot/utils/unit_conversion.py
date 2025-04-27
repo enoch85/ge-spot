@@ -43,28 +43,40 @@ def convert_energy_price(
         return None
 
     try:
-        # 1. Convert to target energy unit (e.g., MWh to kWh)
+        # 1. Convert energy units
+        # Energy price conversion follows specific rules based on price per unit
         if source_unit != target_unit:
             source_factor = EnergyUnit.CONVERSION.get(source_unit)
             target_factor = EnergyUnit.CONVERSION.get(target_unit)
-
+            
             if source_factor is None or target_factor is None:
                 _LOGGER.error(f"Invalid energy unit specified: source='{source_unit}', target='{target_unit}'")
                 return None
+                
             if source_factor == 0:
                 _LOGGER.error(f"Source unit '{source_unit}' has a zero conversion factor.")
                 return None
-
-            price = price * (target_factor / source_factor)
-
-        # 2. Apply VAT (vat_rate is 0 if VAT is not included)
+                
+            # Energy price conversion:
+            # Price per MWh to price per kWh: divide by 1000
+            # Price per kWh to price per MWh: multiply by 1000
+            # This is the correct physics-based conversion for price-per-unit
+            if source_unit == EnergyUnit.MWH and target_unit == EnergyUnit.KWH:
+                price = price / 1000  # 1 MWh = 1000 kWh, so €/MWh ÷ 1000 = €/kWh
+            elif source_unit == EnergyUnit.KWH and target_unit == EnergyUnit.MWH:
+                price = price * 1000  # 1 MWh = 1000 kWh, so €/kWh × 1000 = €/MWh
+            else:
+                # General case - convert using ratio of factors
+                price = price * (source_factor / target_factor)
+                
+        # 2. Apply VAT
         price *= (1 + vat_rate)
-
-        # 3. Apply display unit multiplier (e.g., convert EUR to cents)
+        
+        # 3. Apply display unit multiplier (e.g., for cents)
         price *= display_unit_multiplier
-
+        
         return price
-
+        
     except (TypeError, ValueError) as e:
         _LOGGER.error(f"Error during energy price conversion: {e}. Price: {price}, SourceUnit: {source_unit}, TargetUnit: {target_unit}")
         return None

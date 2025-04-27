@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Manual full chain test for Energi Data Service API (Denmark).
+Manual full chain test for EPEX (European Power Exchange) API.
 
-This script performs an end-to-end test of the Energi Data Service API integration:
-1. Fetches real data from the Energi Data Service API
+This script performs an end-to-end test of the EPEX API integration:
+1. Fetches real data from the EPEX API
 2. Parses the raw data
 3. Applies currency conversion
 4. Validates and displays the results
 
 Usage:
-    python energi_data_full_chain.py [area]
+    python epex_full_chain.py [area]
     
-    area: Optional area code (DK1, DK2)
-          Defaults to DK1 if not provided
+    area: Optional area code (FR, DE-LU, AT, BE, CH, GB, NL)
+          Defaults to DE-LU if not provided
 """
 
 import sys
@@ -23,45 +23,44 @@ import asyncio
 import pytz
 
 # Add the root directory to the path so we can import the component modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from custom_components.ge_spot.api.energi_data import EnergiDataAPI
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+from custom_components.ge_spot.api.epex import EpexAPI
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
 
+VALID_AREAS = ['FR', 'DE-LU', 'AT', 'BE', 'CH', 'GB', 'NL']
+
 async def main():
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Test Energi Data Service API integration')
-    parser.add_argument('area', nargs='?', default='DK1', 
-                        choices=['DK1', 'DK2'],
-                        help='Area code (DK1, DK2)')
+    parser = argparse.ArgumentParser(description='Test EPEX API integration')
+    parser.add_argument('area', nargs='?', default='DE-LU', 
+                        choices=VALID_AREAS,
+                        help='Area code (FR, DE-LU, AT, BE, CH, GB, NL)')
     args = parser.parse_args()
     area = args.area
     
-    print(f"\n===== Energi Data Service API Full Chain Test for {area} =====\n")
+    print(f"\n===== EPEX API Full Chain Test for {area} =====\n")
     
     # Initialize the API client
-    api = EnergiDataAPI()
+    api = EpexAPI()
     
     try:
         # Step 1: Fetch raw data
-        print(f"Fetching Energi Data Service data for area: {area}")
+        print(f"Fetching EPEX data for area: {area}")
         raw_data = await api.fetch_raw_data(area=area)
         
         if not raw_data:
-            print("Error: Failed to fetch data from Energi Data Service API")
+            print("Error: Failed to fetch data from EPEX API")
             return
-            
-        print(f"Raw data keys: {list(raw_data.keys())}")
         
-        # Print a sample of the raw data (truncated for readability)
-        raw_data_str = str(raw_data)
-        print(f"Raw data sample (truncated): {raw_data_str[:300]}...")
-        
-        if 'records' in raw_data:
-            print(f"Number of records: {len(raw_data['records'])}")
-            if raw_data['records']:
-                print(f"First record sample: {raw_data['records'][0]}")
+        if isinstance(raw_data, list):
+            print(f"Received {len(raw_data)} data points")
+            if raw_data:
+                print(f"First data point sample: {raw_data[0]}")
+        else:
+            print(f"Raw data type: {type(raw_data)}")
+            print(f"Raw data sample (truncated): {str(raw_data)[:300]}...")
         
         # Step 2: Parse raw data
         print("\nParsing raw data...")
@@ -81,36 +80,37 @@ async def main():
             
         print(f"Found {len(hourly_prices)} hourly prices")
         
-        # Step 3: Currency conversion (DKK -> EUR)
-        print("\nConverting prices from DKK to EUR...")
+        # Step 3: Currency conversion (EUR -> GBP or EUR -> local currency)
+        target_currency = Currency.GBP
+        print(f"\nConverting prices from {parsed_data.get('currency', Currency.EUR)} to {target_currency}...")
         exchange_service = ExchangeRateService()
         await exchange_service.get_rates(force_refresh=True)
         
-        # Convert prices from DKK to EUR and from MWh to kWh
+        # Convert prices from EUR to target currency and from MWh to kWh
         converted_prices = {}
         for ts, price in hourly_prices.items():
-            # Convert from DKK to EUR
-            price_eur = await exchange_service.convert(
+            # Convert from EUR to target currency
+            price_converted = await exchange_service.convert(
                 price, 
-                parsed_data.get("currency", Currency.DKK), 
-                Currency.EUR
+                parsed_data.get("currency", Currency.EUR), 
+                target_currency
             )
             # Convert from MWh to kWh
-            price_eur_kwh = price_eur / 1000
-            converted_prices[ts] = price_eur_kwh
+            price_kwh = price_converted / 1000
+            converted_prices[ts] = price_kwh
         
         # Step 4: Display results
         print("\nPrice Information:")
-        print(f"Original Currency: {parsed_data.get('currency', Currency.DKK)}/MWh")
-        print(f"Converted Currency: {Currency.EUR}/kWh")
+        print(f"Original Currency: {parsed_data.get('currency', Currency.EUR)}/MWh")
+        print(f"Converted Currency: {target_currency}/kWh")
         
         # Group prices by date
-        dk_tz = pytz.timezone(parsed_data.get('api_timezone', 'Europe/Copenhagen'))
+        local_tz = pytz.timezone(parsed_data.get('api_timezone', 'Europe/Paris'))
         prices_by_date = {}
         
         for ts, price in hourly_prices.items():
             # Parse the timestamp and convert to local timezone
-            dt = datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone(dk_tz)
+            dt = datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone(local_tz)
             date_str = dt.strftime('%Y-%m-%d')
             hour_str = dt.strftime('%H:%M')
             
@@ -125,14 +125,14 @@ async def main():
         # Print prices grouped by date
         for date, hours in sorted(prices_by_date.items()):
             print(f"\nPrices for {date}:")
-            print(f"{'Time':<10} {'DKK/MWh':<15} {'EUR/kWh':<15}")
+            print(f"{'Time':<10} {f'{parsed_data.get(\"currency\", Currency.EUR)}/MWh':<15} {f'{target_currency}/kWh':<15}")
             print("-" * 40)
             
             for hour, prices in sorted(hours.items()):
                 print(f"{hour:<10} {prices['original']:<15.4f} {prices['converted']:<15.6f}")
         
         # Validate that we have data for the current day
-        today = datetime.now(dk_tz).strftime('%Y-%m-%d')
+        today = datetime.now(local_tz).strftime('%Y-%m-%d')
         if today in prices_by_date:
             today_prices = prices_by_date[today]
             print(f"\nFound {len(today_prices)} price points for today ({today})")
@@ -153,5 +153,5 @@ async def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    print("Starting Energi Data Service API full chain test...")
+    print("Starting EPEX API full chain test...")
     asyncio.run(main())
