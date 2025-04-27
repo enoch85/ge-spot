@@ -104,16 +104,21 @@ class DataProcessor:
             else:
                 _LOGGER.error("Exchange service not available in DataProcessor")
                 raise RuntimeError("Exchange service could not be initialized or retrieved.")
-                
-            # Instantiate CurrencyConverter once exchange service is ready
-            if self._currency_converter is None:
-                self._currency_converter = CurrencyConverter(
-                    exchange_service=self._exchange_service,
-                    target_currency=self.target_currency,
-                    display_unit=self.display_unit,
-                    include_vat=self.include_vat,
-                    vat_rate=self.vat_rate
-                )
+        
+        # Instantiate CurrencyConverter once exchange service is ready
+        if self._currency_converter is None and self._exchange_service is not None:
+            self._currency_converter = CurrencyConverter(
+                exchange_service=self._exchange_service,
+                target_currency=self.target_currency,
+                display_unit=self.display_unit,
+                include_vat=self.include_vat,
+                vat_rate=self.vat_rate
+            )
+        
+        # Ensure we have a valid currency converter
+        if self._currency_converter is None:
+            _LOGGER.error("Failed to initialize currency converter")
+            raise RuntimeError("Currency converter could not be initialized.")
 
 
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
