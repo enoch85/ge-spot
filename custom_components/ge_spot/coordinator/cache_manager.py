@@ -4,6 +4,7 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone # Ensure timezone is imported
 from typing import Any, Dict, Optional
+import pytz
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util

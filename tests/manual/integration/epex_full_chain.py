@@ -124,10 +124,13 @@ async def main():
         
         # Print prices grouped by date
         for date, hours in sorted(prices_by_date.items()):
-            print(f"\nPrices for {date}:")
-            print(f"{'Time':<10} {f'{parsed_data.get(\"currency\", Currency.EUR)}/MWh':<15} {f'{target_currency}/kWh':<15}")
+            print(f"\nPrices for {date}:") # CORRECTED: Use \n instead of \\n
+            # Construct header strings separately to avoid nested f-strings
+            original_currency_header = f"{parsed_data.get('currency', Currency.EUR)}/MWh"
+            target_currency_header = f"{target_currency}/kWh"
+            print(f"{'Time':<10} {original_currency_header:<15} {target_currency_header:<15}") # FIXED: Avoid nested f-strings
             print("-" * 40)
-            
+
             for hour, prices in sorted(hours.items()):
                 print(f"{hour:<10} {prices['original']:<15.4f} {prices['converted']:<15.6f}")
         
