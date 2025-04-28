@@ -263,7 +263,7 @@ class UnifiedPriceManager:
             )
 
             # Check if fetch was successful
-            if result and result.get("hourly_prices") and not result.get("error"):
+            if result and result.get("hourly_raw") and not result.get("error"):
                 _LOGGER.info(f"Successfully fetched data for area {self.area} via FallbackManager.")
                 self._consecutive_failures = 0
                 self._active_source = result.get("data_source", "unknown")
@@ -410,7 +410,7 @@ class UnifiedPriceManager:
             "target_currency": self.currency,
             "hourly_prices": {},
             "raw_data": None,
-            "api_timezone": None,
+            "source_timezone": None,
             "attempted_sources": self._attempted_sources,
             "fallback_sources": self._fallback_sources,
             "using_cached_data": self._using_cached_data or (error == "Rate limited, no cache available"),

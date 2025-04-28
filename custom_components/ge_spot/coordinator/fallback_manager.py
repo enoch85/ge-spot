@@ -52,42 +52,34 @@ class FallbackManager:
                 area,
             )
             try:
-                # Assuming fetch_day_ahead_prices exists and follows a standard signature
-                # This signature might need adjustment based on the actual base class/interface
-                data = await api_instance.fetch_day_ahead_prices(
+                data = await api_instance.fetch_raw_data(
                     area=area,
-                    currency=currency, # Pass currency, but conversion might happen later
-                    reference_time=reference_time,
-                    hass=hass,
                     session=session,
+                    reference_time=reference_time,
                 )
-                if data and data.get("hourly_prices"): # Basic validation: ensure we got some hourly data
+                if data and data.get("hourly_raw"): # Check for raw format
                     _LOGGER.info(
                         "Successfully fetched data from source: %s for area %s",
                         source_name,
                         area,
                     )
-                    # Add metadata about which source succeeded and which were tried
                     data["data_source"] = source_name
                     data["attempted_sources"] = attempted_sources
                     return data
                 else:
                     _LOGGER.warning(
-                        "Source %s returned no data or empty hourly prices for area %s.",
+                        "Source %s returned no data or empty hourly_raw for area %s.",
                         source_name,
                         area
                     )
-                    # Treat empty data as a failure for fallback purposes
                     last_exception = PriceFetchError(f"Source {source_name} returned no data.")
-
-
             except Exception as e:
                 _LOGGER.warning(
                     "Failed to fetch data from source: %s for area %s. Error: %s",
                     source_name,
                     area,
                     e,
-                    exc_info=True, # Log traceback for debugging
+                    exc_info=True,
                 )
                 last_exception = e
 
@@ -96,5 +88,4 @@ class FallbackManager:
             area,
             last_exception,
         )
-        # Optionally return metadata about failed attempts even if all fail
-        return {"attempted_sources": attempted_sources, "error": last_exception} # Or just return None
+        return {"attempted_sources": attempted_sources, "error": last_exception}

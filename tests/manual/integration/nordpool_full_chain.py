@@ -28,6 +28,7 @@ import logging
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # Ensure debug logs are shown
 
 # Add the root directory to the path so we can import the component modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
@@ -81,47 +82,32 @@ async def main():
         # Step 1: Fetch raw data
         logger.info(f"Fetching Nordpool data for area: {area}")
         raw_data = await api.fetch_raw_data(area=area, reference_time=reference_time)
-        
         if not raw_data:
             logger.error("Error: Failed to fetch data from Nordpool API")
             return 1
-            
         logger.info(f"Raw data keys: {list(raw_data.keys())}")
-        
         # Print a sample of the raw data (truncated for readability)
-        if "today" in raw_data and raw_data["today"]:
-            sample_data = str(raw_data["today"])[:300]
-            logger.info(f"Today's data sample (truncated): {sample_data}...")
+        if "raw_data" in raw_data and raw_data["raw_data"]:
+            sample_data = str(raw_data["raw_data"])[:300]
+            logger.info(f"Raw data sample (truncated): {sample_data}...")
         else:
-            logger.warning("No 'today' data found in API response")
-            
-        # Check if we have tomorrow's data
-        if "tomorrow" in raw_data and raw_data["tomorrow"]:
-            sample_data = str(raw_data["tomorrow"])[:300]
-            logger.info(f"Tomorrow's data sample (truncated): {sample_data}...")
-        else:
-            logger.warning("No 'tomorrow' data found in API response")
+            logger.warning("No 'raw_data' found in API response")
         
-        # Step 2: Parse raw data
-        logger.info("\nParsing raw data...")
-        parsed_data = await api.parse_raw_data(raw_data)
-        
-        logger.info(f"Parsed data keys: {list(parsed_data.keys())}")
-        logger.info(f"Source: {parsed_data.get('source')}")
-        logger.info(f"Area: {parsed_data.get('area')}")
-        logger.info(f"Currency: {parsed_data.get('currency')}")
-        logger.info(f"API Timezone: {parsed_data.get('api_timezone')}")
-        
-        # Check if hourly prices are available
-        hourly_prices = parsed_data.get("hourly_prices", {})
+        # Step 2: Use hourly_raw directly (no parse_raw_data)
+        logger.info("\nProcessing raw data...")
+        hourly_prices = raw_data.get("hourly_raw", {})
+        logger.info(f"Source: {raw_data.get('source_name')}")
+        logger.info(f"Area: {area}")
+        logger.info(f"Currency: {raw_data.get('currency')}")
+        logger.info(f"API Timezone: {raw_data.get('timezone')}")
         if not hourly_prices:
-            logger.error("Error: No hourly prices found in the parsed data")
+            logger.error("Error: No hourly prices found in the raw data")
             return 1
             
         logger.info(f"Found {len(hourly_prices)} hourly prices")
         
         # Step 3: Currency conversion (local currency -> EUR if needed)
-        original_currency = parsed_data.get('currency', Currency.EUR)
+        original_currency = raw_data.get('currency', Currency.EUR)
         target_currency = Currency.SEK if area.startswith('SE') else Currency.EUR
         
         logger.info(f"\nConverting prices from {original_currency} to {target_currency}...")
@@ -214,8 +200,8 @@ async def main():
                 logger.warning(f"⚠ Incomplete data: Found only {len(today_prices)} hourly prices for today (expected at least 22)")
                 
                 # If we have coverage information, log it
-                if "today_coverage" in parsed_data:
-                    logger.info(f"Today's coverage: {parsed_data['today_coverage']:.1f}%")
+                if "today_coverage" in raw_data:
+                    logger.info(f"Today's coverage: {raw_data['today_coverage']:.1f}%")
                 
                 # List missing hours for better debugging
                 all_hours = set(f"{h:02d}:00" for h in range(24))
@@ -245,8 +231,8 @@ async def main():
                 logger.warning(f"⚠ Incomplete data: Found only {len(tomorrow_prices)} hourly prices for tomorrow (expected 24)")
                 
                 # If we have coverage information, log it
-                if "tomorrow_coverage" in parsed_data:
-                    logger.info(f"Tomorrow's coverage: {parsed_data['tomorrow_coverage']:.1f}%")
+                if "tomorrow_coverage" in raw_data:
+                    logger.info(f"Tomorrow's coverage: {raw_data['tomorrow_coverage']:.1f}%")
                 
                 # List missing hours for better debugging
                 all_hours = set(f"{h:02d}:00" for h in range(24))

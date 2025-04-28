@@ -34,7 +34,7 @@ class AmberAPI(BasePriceAPI):
 
     @retry_with_backoff(max_attempts=Network.Defaults.RETRY_COUNT,
                        base_delay=Network.Defaults.RETRY_BASE_DELAY)
-    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> List[Dict[str, Any]]:
+    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
         """Fetch raw data from Amber API.
 
         Args:
@@ -48,86 +48,44 @@ class AmberAPI(BasePriceAPI):
         reference_time = kwargs.get('reference_time')
         if not reference_time:
             reference_time = datetime.now(timezone.utc)
-
-        # Calculate dates for the query (past 24h and next 24h)
         today = reference_time.date()
         yesterday = today - timedelta(days=1)
         tomorrow = today + timedelta(days=1)
-
         start_date = yesterday.isoformat()
         end_date = tomorrow.isoformat()
-
-        # Get API key from config
-        api_key = self.config.get(Config.API_KEY) # Use Config constant
+        api_key = self.config.get(Config.API_KEY)
         if not api_key:
             _LOGGER.error("No API key provided for Amber API in configuration")
             raise ValueError("Missing Amber API key in configuration")
-
-        # Use ApiClient for fetching
         client = ApiClient(session=session or self.session)
         url = f"{self._get_base_url()}/prices?site_id={area}&start_date={start_date}&end_date={end_date}"
         headers = {"Authorization": f"Bearer {api_key}"}
-
         try:
-            # Fetch using ApiClient instance
             data = await client.fetch(
                 url,
                 headers=headers,
                 timeout=Network.Defaults.TIMEOUT,
-                response_format='json' # Specify expected format
+                response_format='json'
             )
-
             if not data or not isinstance(data, list):
                 _LOGGER.warning(f"Unexpected or empty Amber data format received for area {area}")
-                return []
-
-            # Return the raw list of dictionaries
-            return data
+                return {}
+            parser = self.get_parser_for_area(None)
+            parsed = parser.parse(data) if data else {}
+            hourly_raw = parsed.get("hourly_prices", {})
+            return {
+                "hourly_raw": hourly_raw,
+                "timezone": self.get_timezone_for_area(None),
+                "currency": Currency.AUD,
+                "source_name": "amber",
+                "raw_data": data,
+            }
         except Exception as e:
             _LOGGER.error(f"Error during Amber API request for area {area}: {e}", exc_info=True)
-            raise e
+            return {}
         finally:
             if session is None and client:
                 await client.close()
-
-    async def parse_raw_data(self, raw_data: Any) -> Dict[str, Any]:
-        """Parse raw Amber data into standardized format.
-
-        Args:
-            raw_data: Raw API response data (expected List[Dict[str, Any]])
-
-        Returns:
-            Parsed data in standardized format (dict with hourly_prices, currency, etc.)
-        """
-        if not raw_data or not isinstance(raw_data, list):
-             _LOGGER.warning("Cannot parse Amber data: Input is empty or not a list.")
-             return {
-                 "hourly_prices": {},
-                 "currency": Currency.AUD,
-                 "api_timezone": self.get_timezone_for_area(None),
-                 "source": self._get_source_type()
-             }
-
-        parser = self.get_parser_for_area(None) # Get parser instance
-        try:
-            parsed = parser.parse(raw_data) # Pass the raw list
-
-            result = {
-                "hourly_prices": parsed.get("hourly_prices", {}),
-                "currency": parsed.get("currency", Currency.AUD),
-                "api_timezone": self.get_timezone_for_area(None),
-                "source": self._get_source_type(),
-            }
-            return result
-        except Exception as e:
-            _LOGGER.error(f"Error parsing Amber data: {e}", exc_info=True)
-            return {
-                 "hourly_prices": {},
-                 "currency": Currency.AUD,
-                 "api_timezone": self.get_timezone_for_area(None),
-                 "source": self._get_source_type(),
-                 "error": str(e)
-             }
 
     def get_timezone_for_area(self, area: str) -> str:
         """Get timezone for the area. Amber operates across Australia."""

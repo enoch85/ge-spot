@@ -123,185 +123,107 @@ class DataProcessor:
 
 
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process the selected source data: Normalize timezone, convert currency, calculate stats."""
-        # Ensure exchange service and currency converter are ready
+        # Accepts raw data from API adapter (e.g., entsoe.py)
+        # Expects keys: 'hourly_raw', 'timezone', 'currency', 'source_name', ...
         await self._ensure_exchange_service()
 
-        # Check if currency converter was initialized (should be by _ensure_exchange_service)
-        if self._currency_converter is None:
-             _LOGGER.error("Currency converter not initialized. Cannot process.")
-             # Return an empty result with error
-             return self._generate_empty_processed_result(data, error="Currency converter failed to initialize")
-
-
-        _LOGGER.debug(f"Processing data for area {self.area} from source {data.get('source')}")
-
-        # Basic validation
-        if not data or not isinstance(data, dict) or not data.get("hourly_prices"):
-            _LOGGER.warning(f"Invalid or empty data received for processing in area {self.area}. Data keys: {data.keys() if isinstance(data, dict) else 'N/A'}")
+        # Validate input
+        if not data or not isinstance(data, dict) or not data.get("hourly_raw"):
+            _LOGGER.warning(f"Invalid or empty raw data received for processing in area {self.area}. Data keys: {data.keys() if isinstance(data, dict) else 'N/A'}")
             return self._generate_empty_processed_result(data)
 
-        # Extract key info from input data (result of fetch_with_fallback)
-        raw_hourly_prices = data.get("hourly_prices", {})
-        # Assume API adapters provide *all* hourly prices in one dict now
-        # raw_today_prices = data.get("hourly_prices", {}) # Adapt based on actual API output structure
-        # raw_tomorrow_prices = data.get("tomorrow_hourly_prices", {}) # Adapt based on actual API output structure
-        
-        # FIX: Strictly use 'source_timezone' key
-        source_timezone = data.get("source_timezone")
-        
-        # Check both 'currency' (from raw API data) and 'source_currency' (from cached data)
-        source_currency = data.get("currency") or data.get("source_currency")
-        # Use EnergyUnit.MWH instead of EnergyUnit.MEGA_WATT_HOUR
-        source_unit = data.get("unit", EnergyUnit.MWH) # Get source unit, default MWh
-        # Define source variable
-        source = data.get("source", "unknown")
-        # Define raw_api_data variable
+        raw_hourly_prices = data["hourly_raw"]
+        source_timezone = data.get("timezone")
+        source_currency = data.get("currency")
+        source = data.get("source_name", "unknown")
         raw_api_data = data.get("raw_data")
 
-        # 1. Timezone Normalization
-        normalized_prices = {}
-
         if not source_timezone:
-            _LOGGER.error(f"Missing 'source_timezone' key in input data for source {source}. Cannot process.")
-            return self._generate_empty_processed_result(data, error="Missing source_timezone key in input data")
-
+            _LOGGER.error(f"Missing 'timezone' key in raw data for source {source}. Cannot process.")
+            return self._generate_empty_processed_result(data, error="Missing timezone key in raw data")
         if not source_currency:
-            _LOGGER.error(f"Missing source currency for source {source}. Cannot process.")
-            return self._generate_empty_processed_result(data, error="Missing source currency")
+            _LOGGER.error(f"Missing currency for source {source}. Cannot process.")
+            return self._generate_empty_processed_result(data, error="Missing currency in raw data")
 
+        # 1. Normalize timezones (convert all keys to target timezone, e.g., HA local)
+        all_normalized_prices = self._tz_converter.normalize_hourly_prices(
+            raw_hourly_prices,
+            source_timezone_str=source_timezone
+        )
+
+        # 2. Split into today/tomorrow based on target timezone
+        today_keys = set(self._tz_service.get_today_range())
+        tomorrow_keys = set(self._tz_service.get_tomorrow_range())
+        normalized_today = {}
+        normalized_tomorrow = {}
+        for dt_key, price in all_normalized_prices.items():
+            if dt_key.tzinfo is None:
+                continue
+            dt_target = dt_key
+            hour_str_key = f"{dt_target.hour:02d}:00"
+            if hour_str_key in today_keys:
+                normalized_today[hour_str_key] = price
+            elif hour_str_key in tomorrow_keys:
+                normalized_tomorrow[hour_str_key] = price
+
+        # 3. Currency/unit conversion (one time, after normalization)
+        ecb_rate = None
+        ecb_updated = None
+        final_today_prices = {}
+        if normalized_today:
+            converted_today, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
+                hourly_prices=normalized_today,
+                source_currency=source_currency,
+                source_unit=EnergyUnit.MWH
+            )
+            final_today_prices = converted_today
+            if rate is not None:
+                ecb_rate = rate
+                ecb_updated = rate_ts
+        final_tomorrow_prices = {}
+        if normalized_tomorrow:
+            converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
+                hourly_prices=normalized_tomorrow,
+                source_currency=source_currency,
+                source_unit=EnergyUnit.MWH
+            )
+            final_tomorrow_prices = converted_tomorrow
+            if ecb_rate is None and rate is not None:
+                ecb_rate = rate
+                ecb_updated = rate_ts
+
+        # 4. Build result
         processed_result = {
             "source": source,
             "area": self.area,
             "source_currency": source_currency,
             "target_currency": self.target_currency,
-            "source_timezone": source_timezone, # Store the validated source_timezone
-            "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None, # Use target_timezone attribute
-            "hourly_prices": {}, # Today's FINAL prices (HH:00 keys)
-            "tomorrow_hourly_prices": {}, # Tomorrow's FINAL prices (HH:00 keys)
-            # Keep raw original prices for debugging if needed
+            "source_timezone": source_timezone,
+            "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None,
+            "hourly_prices": final_today_prices,
+            "tomorrow_hourly_prices": final_tomorrow_prices,
             "raw_hourly_prices_original": raw_hourly_prices,
             "current_price": None,
             "next_hour_price": None,
             "current_hour_key": None,
             "next_hour_key": None,
-            "statistics": PriceStatistics(complete_data=False).to_dict(), # Today's stats
-            "tomorrow_statistics": PriceStatistics(complete_data=False).to_dict(), # Tomorrow's stats
+            "statistics": PriceStatistics(complete_data=False).to_dict(),
+            "tomorrow_statistics": PriceStatistics(complete_data=False).to_dict(),
             "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,
             "raw_data": raw_api_data,
-            "ecb_rate": None,
-            "ecb_updated": None,
-            "has_tomorrow_prices": False, # This will be set based on processed tomorrow data
-            # Pass through tracking info from fetch_with_fallback
+            "ecb_rate": ecb_rate,
+            "ecb_updated": ecb_updated,
+            "has_tomorrow_prices": bool(final_tomorrow_prices),
             "attempted_sources": data.get("attempted_sources", []),
             "fallback_sources": data.get("fallback_sources", []),
             "using_cached_data": data.get("using_cached_data", False),
-            "fetched_at": data.get("fetched_at") # Or use dt_util.now() here?
+            "fetched_at": data.get("fetched_at")
         }
 
+        # Calculate statistics and current/next hour prices as before...
         try:
-            # 1. Normalize Timezones using TimezoneConverter
-            # This assumes the converter uses the tz_service internally as needed
-            # And returns prices keyed by 'HH:00' in the target timezone
-            # We need to split today/tomorrow AFTER normalization based on the target TZ date
-            _LOGGER.debug("Normalizing all raw prices...")
-            all_normalized_prices = self._tz_converter.normalize_hourly_prices(
-                raw_hourly_prices,
-                source_timezone_str=source_timezone
-            )
-            _LOGGER.debug(f"Total normalized prices: {len(all_normalized_prices)}")
-
-            # Split normalized prices into today and tomorrow based on target timezone date
-            today_keys = set(self._tz_service.get_today_range())
-            tomorrow_keys = set(self._tz_service.get_tomorrow_range())
-
-            normalized_today = {}
-            normalized_tomorrow = {}
-            for dt_key, price in all_normalized_prices.items():
-                # Ensure dt_key is timezone-aware (should be from converter)
-                if dt_key.tzinfo is None:
-                    _LOGGER.warning(f"Normalized price key {dt_key} is naive, skipping.")
-                    continue
-                # Convert to target timezone IF NEEDED (converter might already do this)
-                # dt_target = dt_key.astimezone(self._tz_service.target_timezone)
-                # Assuming converter already returns keys in target timezone based on previous logs
-                dt_target = dt_key
-                hour_str_key = f"{dt_target.hour:02d}:00"
-                if hour_str_key in today_keys:
-                    normalized_today[hour_str_key] = price
-                elif hour_str_key in tomorrow_keys:
-                    normalized_tomorrow[hour_str_key] = price
-
-            # --- Add target_date logic for cache ---
-            # Use the date in the target timezone for which 'hourly_prices' (today) are valid
-            if normalized_today:
-                # Get the current date in the target timezone
-                tz = self._tz_service.target_timezone
-                if isinstance(tz, str):
-                    tz = get_timezone_object(tz)
-                target_date = dt_util.now(tz).date()
-            elif normalized_tomorrow:
-                # If only tomorrow's prices, use tomorrow's date
-                tz = self._tz_service.target_timezone
-                if isinstance(tz, str):
-                    tz = get_timezone_object(tz)
-                target_date = (dt_util.now(tz) + timedelta(days=1)).date()
-            else:
-                tz = self._tz_service.target_timezone
-                if isinstance(tz, str):
-                    tz = get_timezone_object(tz)
-                target_date = dt_util.now(tz).date()
-            processed_result["target_date"] = target_date
-            # --- End target_date logic ---
-
-            # 2. Convert Currency, Units, Apply VAT using CurrencyConverter
-            ecb_rate = None
-            ecb_updated = None
-
-            # 2a. Process Today's Prices
-            final_today_prices = {}
-            if normalized_today:
-                _LOGGER.debug("Converting today's prices...")
-                converted_today, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
-                    hourly_prices=normalized_today,
-                    source_currency=source_currency,
-                    source_unit=source_unit
-                )
-                final_today_prices = converted_today
-                # Store ECB rate info if conversion happened
-                if rate is not None:
-                    ecb_rate = rate
-                    ecb_updated = rate_ts
-                processed_result["hourly_prices"] = final_today_prices
-                _LOGGER.debug(f"Processed {len(final_today_prices)} prices for today")
-
-            # 2b. Process Tomorrow's Prices
-            final_tomorrow_prices = {}
-            if normalized_tomorrow:
-                _LOGGER.debug("Converting tomorrow's prices...")
-                converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
-                    hourly_prices=normalized_tomorrow,
-                    source_currency=source_currency,
-                    source_unit=source_unit
-                )
-                final_tomorrow_prices = converted_tomorrow
-                # Store ECB rate info if not already stored from today's conversion
-                if ecb_rate is None and rate is not None:
-                    ecb_rate = rate
-                    ecb_updated = rate_ts
-                processed_result["tomorrow_hourly_prices"] = final_tomorrow_prices
-                processed_result["has_tomorrow_prices"] = True # Set flag based on processed data
-                _LOGGER.debug(f"Processed {len(final_tomorrow_prices)} prices for tomorrow")
-            else:
-                processed_result["has_tomorrow_prices"] = False
-
-            # Store ECB info in the result
-            processed_result["ecb_rate"] = ecb_rate
-            processed_result["ecb_updated"] = ecb_updated
-
-
             # 3a. Calculate Today's Statistics and Current/Next Prices
             if final_today_prices:
                 current_hour_key = self._tz_service.get_current_hour_key()
@@ -359,14 +281,10 @@ class DataProcessor:
             error_result["raw_hourly_prices_original"] = raw_hourly_prices # Keep original raw input
             return error_result
 
-        # Ensure api_timezone is always set in processed_result - REMOVED HARDCODED FALLBACK
+        # Ensure source_timezone is always set in processed_result
         if not processed_result.get("source_timezone"):
-             _LOGGER.error(f"Source timezone ('source_timezone' or 'api_timezone') is missing in the processed result for area {self.area} after processing. This indicates an issue.")
-             # Update the error field if possible, or return a modified error result
+             _LOGGER.error(f"Source timezone ('source_timezone') is missing in the processed result for area {self.area} after processing. This indicates an issue.")
              processed_result["error"] = processed_result.get("error", "") + " Missing source timezone after processing."
-             # Optionally, return an entirely new empty result if this is critical
-             # return self._generate_empty_processed_result(data, error="Missing source timezone after processing")
-
 
         _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source}, Today Prices: {len(processed_result['hourly_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_hourly_prices'])}, Cached: {processed_result['using_cached_data']}")
         return processed_result
@@ -405,7 +323,7 @@ class DataProcessor:
             "area": self.area,
             "source_currency": data.get("currency"),
             "target_currency": self.target_currency,
-            "source_timezone": data.get("api_timezone"),
+            "source_timezone": data.get("source_timezone"),
             "target_timezone": str(self._tz_service.area_timezone) if self._tz_service else None, # Use area_timezone as suggested by error
             "hourly_prices": {},
             "tomorrow_hourly_prices": {},

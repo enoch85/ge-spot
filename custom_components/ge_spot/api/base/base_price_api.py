@@ -63,17 +63,9 @@ class BasePriceAPI(ABC):
         """
         pass
     
-    @abstractmethod
     async def parse_raw_data(self, raw_data: Any) -> Dict[str, Any]:
-        """Parse raw data into standardized format.
-        
-        Args:
-            raw_data: Raw data from API
-            
-        Returns:
-            Parsed data in standardized format
-        """
-        pass
+        """Default parse_raw_data implementation (not used in new adapters)."""
+        raise NotImplementedError("parse_raw_data is not implemented in this adapter.")
     
     async def fetch_day_ahead_prices(self, area=None, **kwargs):
         try:

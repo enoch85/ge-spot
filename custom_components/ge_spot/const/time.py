@@ -7,6 +7,9 @@ class TimezoneName:
     EUROPE_COPENHAGEN = "Europe/Copenhagen"
     EUROPE_PARIS = "Europe/Paris"
     EUROPE_MADRID = "Europe/Madrid"
+    EUROPE_OSLO = "Europe/Oslo"
+    EUROPE_BERLIN = "Europe/Berlin"
+    EUROPE_LISBON = "Europe/Lisbon"
     AUSTRALIA_SYDNEY = "Australia/Sydney"
     AMERICA_CHICAGO = "America/Chicago"
 

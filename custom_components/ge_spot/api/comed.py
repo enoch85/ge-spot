@@ -37,63 +37,26 @@ class ComedAPI(BasePriceAPI):
         """
         return ComEd.BASE_URL
         
-    async def fetch_raw_data(self, area: str, reference_time: Optional[datetime] = None, session=None, **kwargs) -> List[Dict[str, Any]]:
-        """Fetch raw price data for the given area.
-        
-        Args:
-            area: Area code
-            reference_time: Optional reference time
-            session: Optional session for API requests
-            **kwargs: Additional parameters
-            
-        Returns:
-            List of standardized price data dictionaries
-        """
+    async def fetch_raw_data(self, area: str, reference_time: Optional[datetime] = None, session=None, **kwargs) -> Dict[str, Any]:
         client = ApiClient(session=session or self.session)
         try:
-            # Fetch raw data
             raw_data = await self._fetch_data(client, area, reference_time)
             if not raw_data:
-                _LOGGER.warning(f"No data received from ComEd API for area {area}")
-                return []
-                
-            return [raw_data]
+                return {}
+            parser = self.get_parser_for_area(area)
+            parsed = parser.parse(raw_data)
+            hourly_raw = parsed.get("hourly_prices", {})
+            metadata = parser.extract_metadata(raw_data)
+            return {
+                "hourly_raw": hourly_raw,
+                "timezone": metadata.get("timezone", "America/Chicago"),
+                "currency": metadata.get("currency", "cents"),
+                "source_name": "comed",
+                "raw_data": raw_data,
+            }
         finally:
             if session is None and client:
                 await client.close()
-    
-    async def parse_raw_data(self, raw_data: Any) -> Dict[str, Any]:
-        """Parse raw data into standardized format.
-        
-        Args:
-            raw_data: Raw data from API
-            
-        Returns:
-            Parsed data in standardized format
-        """
-        if not raw_data or not isinstance(raw_data, list) or len(raw_data) == 0:
-            return {}
-            
-        data = raw_data[0]  # Get first item from list
-        
-        # Use the parser to extract standardized data
-        parser = ComedParser()
-        parsed = parser.parse(data)
-        metadata = parser.extract_metadata(data)
-
-        # Build standardized result
-        result = {
-            "hourly_prices": parsed.get("hourly_prices", {}),  # keys: HH:00 or ISO, values: price in cents/kWh
-            "currency": metadata.get("currency", "cents"),
-            "timezone": metadata.get("timezone", "America/Chicago"),
-            "area": metadata.get("area", "5minutefeed"),
-            "raw_data": data,  # keep original for debugging/fallback
-            "source": Source.COMED,
-            "metadata": metadata,
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-        }
-        
-        return result
     
     def get_timezone_for_area(self, area: str) -> str:
         """Get timezone for the area.
