@@ -13,6 +13,7 @@ import asyncio
 import logging
 from unittest.mock import MagicMock, patch, AsyncMock, call
 from datetime import datetime, timedelta, timezone
+import zoneinfo # Add zoneinfo import
 import pytest
 import json
 
@@ -334,7 +335,7 @@ class TestDataProcessor:
         # Arrange: Create a manager
         mock_manager = MagicMock()
         mock_manager._exchange_service = mock_exchange_service
-        
+
         # Create processor with the mock manager
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
@@ -344,7 +345,7 @@ class TestDataProcessor:
             tz_service=processor_dependencies["tz_service"],
             manager=mock_manager
         )
-        
+
         # Create mock statistics that's properly set up
         mock_statistics = PriceStatistics(
             min=1.5,
@@ -353,16 +354,19 @@ class TestDataProcessor:
             median=1.75,
             complete_data=True  # Mark as complete
         )
-        
+
+        # Define the target timezone for the test
+        target_tz = zoneinfo.ZoneInfo("Europe/Stockholm")
+
         # Patch _ensure_exchange_service to bypass it
         with patch.object(processor, '_ensure_exchange_service', AsyncMock()):
             # Setup timezone converter mock to return expected normalized prices
             with patch('custom_components.ge_spot.utils.timezone_converter.TimezoneConverter', spec=True) as mock_tz_converter_cls:
                 mock_tz_converter = mock_tz_converter_cls.return_value
-                # FIX: Return datetime keys instead of string keys
+                # FIX: Return datetime keys localized to the target timezone
                 mock_tz_converter.normalize_hourly_prices.return_value = {
-                    datetime(2024, 1, 1, 10, 0, tzinfo=timezone.utc): 1.5,
-                    datetime(2024, 1, 1, 11, 0, tzinfo=timezone.utc): 2.0
+                    datetime(2024, 1, 1, 10, 0, tzinfo=target_tz): 1.5,
+                    datetime(2024, 1, 1, 11, 0, tzinfo=target_tz): 2.0
                 }
                 processor._tz_converter = mock_tz_converter
 
@@ -375,25 +379,19 @@ class TestDataProcessor:
                 ))
                 processor._currency_converter = mock_currency_converter
                 processor._exchange_service = mock_exchange_service
-                
+
                 # Patch the statistics calculation
                 with patch.object(processor, '_calculate_statistics', return_value=mock_statistics):
                     # Act
                     result = await processor.process(SAMPLE_RAW_DATA)
-                    
+
                     # Assert
                     assert result is not None, "Process should return a result"
                     assert "error" not in result, f"Result should not contain an error, got: {result.get('error')}"
-                    assert result.get("hourly_prices") == {"10:00": 1.5, "11:00": 2.0}, \
-                        f"Result should have correctly processed hourly_prices, got: {result.get('hourly_prices')}"
-                    assert result.get("current_price") == 1.5, \
-                        f"Current price should be correctly set, got: {result.get('current_price')}"
-                    assert result.get("next_hour_price") == 2.0, \
-                        f"Next hour price should be correctly set, got: {result.get('next_hour_price')}"
-                    assert result.get("source_currency") == "SEK", \
-                        f"Source currency should be set, got: {result.get('source_currency')}"
-                    assert result.get("target_currency") == "SEK", \
-                        f"Target currency should be set, got: {result.get('target_currency')}"
+                    assert result.get("hourly_prices") == {"10:00": 1.5, "11:00": 2.0}, f"Result should have correctly processed hourly_prices, got: {result.get('hourly_prices')}"
+                    assert result.get("current_price") == 1.5, f"Current price should be correctly set, got: {result.get('current_price')}"
+                    assert result.get("next_hour_price") == 2.0, f"Next hour price should be correctly set, got: {result.get('next_hour_price')}"
+                    assert result.get("source_currency") == "SEK", f"Source currency should be set, got: {result.get('source_currency')}"
+                    assert result.get("target_currency") == "SEK", f"Target currency should be set, got: {result.get('target_currency')}"
                     assert "statistics" in result, "Result should include statistics"
-                    assert result["statistics"]["complete_data"] is True, \
-                        f"Statistics should be marked as complete, got: {result['statistics']['complete_data']}"
+                    assert result["statistics"]["complete_data"] is True, f"Statistics should be marked as complete, got: {result['statistics']['complete_data']}"

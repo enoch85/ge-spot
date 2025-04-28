@@ -448,14 +448,14 @@ class UnifiedPriceManager:
         # Delegate to CacheManager
         return self._cache_manager.get_cache_stats()
 
-    async def clear_cache(self, target_date: Optional[date] = None) -> bool:
-        """Clear the data cache, optionally for a specific date."""
-        # Delegate to CacheManager, passing the optional date
-        cleared = self._cache_manager.clear(area=self.area, target_date=target_date)
+    async def clear_cache(self, target_date: Optional[date] = None):
+        """Clear the price cache via the manager, optionally for a specific date, and force a fresh fetch."""
+        # Cache manager's clear_cache returns a bool, don't await it
+        cleared = self._cache_manager.clear_cache(target_date=target_date)
         if cleared:
-            _LOGGER.info("Cache cleared for area %s" + (f" and date {target_date.isoformat()}" if target_date else ""), self.area)
-        else:
-            _LOGGER.info("No cache found to clear for area %s" + (f" and date {target_date.isoformat()}" if target_date else ""), self.area)
+            _LOGGER.info("Cache cleared for area %s. Forcing fresh fetch.", self.area)
+            # We need to force a new fetch
+            await self.fetch_data(force=True)
         return cleared
 
     async def async_close(self):
@@ -561,12 +561,12 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
 
 
     async def clear_cache(self, target_date: Optional[date] = None):
-        """Clear the price cache via the manager, optionally for a specific date."""
-        # Pass the date down to the manager's clear method
+        """Clear the price cache via the manager, optionally for a specific date, and force a fresh fetch."""
+        # Call the manager's clear_cache method with await since it's an async method
         cleared = await self.price_manager.clear_cache(target_date=target_date)
-        # Logging is handled within the manager's clear method now
-        # Optionally trigger a refresh after clearing cache
-        # await self.async_request_refresh()
+        if cleared:
+            _LOGGER.info("Cache cleared for area %s. Forcing fresh fetch.", self.area)
+            await self.force_update()  # This will call fetch_data(force=True)
         return cleared
 
     async def async_close(self):

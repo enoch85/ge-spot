@@ -111,9 +111,21 @@ class GSpotOptionsFlow(OptionsFlow):
                     # Get the coordinator from hass data
                     coordinator = self.hass.data[DOMAIN].get(self.entry_id)
                     if coordinator and hasattr(coordinator, "clear_cache"):
-                        await coordinator.clear_cache()
-                        self._errors["base"] = "cache_cleared"
-                        return await self._show_form()
+                        try:
+                            # Check if the clear_cache method is a coroutine function
+                            import inspect
+                            if inspect.iscoroutinefunction(coordinator.clear_cache):
+                                await coordinator.clear_cache()
+                            else:
+                                # Call without await if it's not async
+                                coordinator.clear_cache()
+                                
+                            self._errors["base"] = "cache_cleared"
+                            return await self._show_form()
+                        except Exception as e:
+                            _LOGGER.error(f"Error clearing cache: {e}")
+                            self._errors["base"] = "cache_clear_failed"
+                            return await self._show_form()
                     else:
                         self._errors["base"] = "cache_clear_failed"
                         return await self._show_form()

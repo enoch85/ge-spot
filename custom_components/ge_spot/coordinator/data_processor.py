@@ -147,7 +147,8 @@ class DataProcessor:
         # raw_today_prices = data.get("hourly_prices", {}) # Adapt based on actual API output structure
         # raw_tomorrow_prices = data.get("tomorrow_hourly_prices", {}) # Adapt based on actual API output structure
         source_timezone = data.get("api_timezone")
-        source_currency = data.get("currency")
+        # Check both 'currency' (from raw API data) and 'source_currency' (from cached data)
+        source_currency = data.get("currency") or data.get("source_currency")
         # Use EnergyUnit.MWH instead of EnergyUnit.MEGA_WATT_HOUR
         source_unit = data.get("unit", EnergyUnit.MWH) # Get source unit, default MWh
         # Define source variable
@@ -355,14 +356,14 @@ class DataProcessor:
             error_result["raw_hourly_prices_original"] = raw_hourly_prices # Keep original raw input
             return error_result
 
-        # Ensure api_timezone is always set in processed_result
-        if not processed_result.get("api_timezone"):
-            if self._tz_service and hasattr(self._tz_service, "target_timezone"):
-                processed_result["api_timezone"] = str(self._tz_service.target_timezone)
-                _LOGGER.warning(f"Patched missing api_timezone in processed result for area {self.area}: set to {processed_result['api_timezone']}")
-            else:
-                processed_result["api_timezone"] = "Europe/Stockholm"  # Fallback default
-                _LOGGER.warning(f"Patched missing api_timezone in processed result for area {self.area}: set to fallback Europe/Stockholm")
+        # Ensure api_timezone is always set in processed_result - REMOVED HARDCODED FALLBACK
+        if not processed_result.get("source_timezone"):
+             _LOGGER.error(f"Source timezone ('source_timezone' or 'api_timezone') is missing in the processed result for area {self.area} after processing. This indicates an issue.")
+             # Update the error field if possible, or return a modified error result
+             processed_result["error"] = processed_result.get("error", "") + " Missing source timezone after processing."
+             # Optionally, return an entirely new empty result if this is critical
+             # return self._generate_empty_processed_result(data, error="Missing source timezone after processing")
+
 
         _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source}, Today Prices: {len(processed_result['hourly_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_hourly_prices'])}, Cached: {processed_result['using_cached_data']}")
         return processed_result

@@ -2,9 +2,9 @@
 import json
 import logging
 import os
-# Ensure date is imported from datetime
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
+from datetime import tzinfo
 import pytz
 
 from homeassistant.core import HomeAssistant
@@ -12,6 +12,7 @@ from homeassistant.util import dt as dt_util
 
 from ..price.advanced_cache import AdvancedCache
 from ..const.defaults import Defaults # Import Defaults for CACHE_TTL
+from ..timezone.timezone_utils import get_timezone_object # Import the missing function
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,49 +39,43 @@ class CacheManager:
         self._price_cache = AdvancedCache(hass, config_with_ttl_seconds)
 
 
-    def store(
-        self,
-        data: Dict[str, Any],
-        area: str,
-        source: str,
-        target_date: date, # Added target_date
-        timestamp: Optional[datetime] = None
-    ) -> None:
-        """Store data in cache for a specific date.
+    def store(self, area: str, source: str, data: Dict[str, Any], timestamp: Optional[datetime] = None) -> None:
+        """Store data in the cache.""" # Corrected docstring quotes
+        if not timestamp:
+            timestamp = dt_util.utcnow() # Use aware UTC timestamp by default if none provided
+        elif timestamp.tzinfo is None:
+            # Do not assume UTC for naive timestamps. This indicates an issue.
+            _LOGGER.error(f"Attempted to store data for {area} from {source} with a naive timestamp: {timestamp}. Timezone information is required.")
+            # Option 1: Raise an error
+            # raise ValueError("Naive timestamp provided to cache store. Timezone-aware timestamp is required.")
+            # Option 2: Log error and skip caching this entry (safer for now)
+            return
 
-        Args:
-            data: Data to store
-            area: Area code
-            source: Source identifier
-            target_date: The primary date this data pertains to (e.g., today's date)
-            timestamp: Optional timestamp (will be converted to UTC)
-        """
-        key = self._generate_cache_key(area, source, target_date) # Pass date to key gen
+        # Ensure timestamp is UTC for internal consistency if needed, or keep original aware TZ
+        # timestamp = timestamp.astimezone(timezone.utc) # Example if UTC storage is desired
 
-        # Ensure timestamp is aware and UTC before storing as ISO string
-        # Use datetime.now(timezone.utc) for robust UTC timestamping
-        store_time = timestamp or datetime.now(timezone.utc)
-        if store_time.tzinfo is None:
-             _LOGGER.warning("Naive timestamp provided for caching, assuming UTC.")
-             store_time = store_time.replace(tzinfo=timezone.utc)
-        else:
-             store_time = store_time.astimezone(timezone.utc)
-
+        cache_key = self._get_cache_key(area, source, timestamp.date())
+        entry = {
+            "timestamp": timestamp.isoformat(),
+            "data": data,
+            "source": source, # Store the original source
+            "area": area # Store the area
+        }
         # Extract api_timezone for metadata
         api_timezone = data.get("api_timezone") or data.get("timezone")
         if not api_timezone:
-            _LOGGER.warning(f"No api_timezone or timezone found in data for area {area}, source {source}, target_date {target_date}. Cache entry may not be processable from cache.")
+            _LOGGER.warning(f"No api_timezone or timezone found in data for area {area}, source {source}. Cache entry may not be processable from cache.")
         metadata = {
             "area": area,
             "source": source,
-            "target_date": target_date.isoformat(), # Store target date in metadata
-            "timestamp": store_time.isoformat(), # Store as UTC ISO string
+            "target_date": timestamp.date().isoformat(), # Store target date in metadata
+            "timestamp": timestamp.isoformat(), # Store as UTC ISO string
             "api_timezone": api_timezone
         }
 
         # Use AdvancedCache.set() - TTL is handled by AdvancedCache based on its config
-        self._price_cache.set(key, data, metadata=metadata)
-        _LOGGER.debug(f"Stored cache entry for key: {key} with api_timezone: {api_timezone}")
+        self._price_cache.set(cache_key, data, metadata=metadata)
+        _LOGGER.debug(f"Stored cache entry for key: {cache_key} with api_timezone: {api_timezone}")
 
 
     def _generate_cache_key(self, area: str, source: str, target_date: date) -> str:
@@ -149,10 +144,7 @@ class CacheManager:
                                      created_at = created_at.replace(tzinfo=timezone.utc)
                                  valid_entries_with_timestamp.append((created_at, entry_data))
                              except Exception as e:
-                                  _LOGGER.warning(f"Error parsing created_at for sorting cache key {key}: {e}")
-                     else:
-                          _LOGGER.debug(f"Cache entry {key} is older than max_age_minutes ({max_age_minutes}).")
-
+                                 _LOGGER.warning(f"Error parsing created_at for sorting cache key {key}: {e}")
 
         if not valid_entries_with_timestamp:
             _LOGGER.debug(f"No valid (non-expired, within max_age) cache entries found for area {area} and date {target_date_str}")
@@ -195,58 +187,57 @@ class CacheManager:
             return False
 
 
-    def get_current_hour_price(self, area: str, target_timezone=None) -> Optional[Dict[str, Any]]:
-        """Get current hour price from cache for today's date in the target timezone."""
-        # Use the correct date in the target timezone for cache lookup
-        tz = target_timezone
-        if tz is None:
-            from custom_components.ge_spot.timezone.timezone_utils import get_timezone_object
-            tz = get_timezone_object("Europe/Stockholm")  # Fallback, should be passed in
-        today = dt_util.now(tz).date()
-        data = self.get_data(area, target_date=today, max_age_minutes=Defaults.CACHE_TTL)
-        if not data:
+    def get_current_hour_price(self, area: str, target_timezone: Optional[Union[str, tzinfo]] = None) -> Optional[Dict[str, Any]]:
+        """Get the current hour's price details from the latest valid cache entry for the area.""" # Corrected docstring quotes
+        if target_timezone is None:
+            _LOGGER.error(f"Target timezone must be provided to get_current_hour_price for area {area}.")
+            return None # Cannot determine current hour without target timezone
+
+        if isinstance(target_timezone, str):
+            target_tz_obj = get_timezone_object(target_timezone)
+            if target_tz_obj is None:
+                _LOGGER.error(f"Invalid target timezone string provided: {target_timezone}")
+                return None
+        else:
+            target_tz_obj = target_timezone
+
+        now_in_target_tz = dt_util.now(target_tz_obj)
+        current_hour_key = f"{now_in_target_tz.hour:02d}:00" # Corrected f-string quotes
+        target_date = now_in_target_tz.date()
+
+        latest_entry = self.get_data(area, target_date=target_date) # Use get_data to find newest valid entry
+
+        if not latest_entry:
+            _LOGGER.debug(f"No valid cache entry found for area {area} and date {target_date} to get current hour price.")
             return None
 
-        # Extract current hour price if available
-        try:
-            # Ensure we use the correct timezone for the current hour key
-            # Attempt to get timezone from metadata of any cache entry for the area
-            area_tz_str = None
-            all_entries_info = self._price_cache.get_info().get("entries", {})
-            for key, entry_info in all_entries_info.items():
-                 metadata = entry_info.get("metadata", {})
-                 if metadata.get("area") == area and metadata.get("target_date") == today.isoformat(): # Check for today's date
-                    # Try to get timezone from metadata (assuming it might be stored there)
-                    # This part is speculative, adjust if timezone is stored differently
-                    if "timezone" in metadata: # Assuming timezone might be stored in data, not metadata directly
-                        cached_data_for_tz = self._price_cache.get(key)
-                        if cached_data_for_tz and "api_timezone" in cached_data_for_tz:
-                             area_tz_str = cached_data_for_tz["api_timezone"]
-                             break
-                        elif cached_data_for_tz and "timezone" in cached_data_for_tz: # Fallback key
-                             area_tz_str = cached_data_for_tz["timezone"]
-                             break
+        cached_data = latest_entry.get("data", {})
+        hourly_prices = cached_data.get("hourly_prices", {})
+        current_price = hourly_prices.get(current_hour_key)
 
-            # If not found in cache metadata, fallback to HA default
-            local_tz = pytz.timezone(area_tz_str) if area_tz_str else dt_util.get_default_home_assistant_timezone()
-            current_hour_key = dt_util.now(local_tz).strftime("%H:00")
-        except Exception as e:
-             # Fallback to system time if timezone lookup fails
-             _LOGGER.warning(f"Could not determine area timezone for current hour key, using system time. Error: {e}")
-             current_hour_key = dt_util.now().strftime("%H:00")
+        if current_price is None:
+            _LOGGER.debug(f"Current hour key '{current_hour_key}' not found in cached hourly prices for {area}.")
+            return None
 
-        hourly_prices = data.get("hourly_prices", {})
+        # Determine the timezone of the *cached data* itself if needed for context
+        # This relies on the data processor correctly storing timezone info
+        area_tz_str = cached_data.get("target_timezone") or cached_data.get("source_timezone") # Prefer target, fallback to source TZ stored in data
 
-        if current_hour_key in hourly_prices:
-            return {
-                "price": hourly_prices[current_hour_key],
-                "hour": current_hour_key,
-                "source": data.get("data_source", data.get("source", "unknown")) # Prefer data_source
-            }
+        if not area_tz_str:
+            _LOGGER.warning(f"Could not determine the original timezone of the cached data for area {area}. Proceeding without it.")
+            # Do not fall back to HA default or any hardcoded value.
+            # area_tz_obj = None # Or handle as needed if area_tz_obj is critical later
 
-        _LOGGER.debug(f"Current hour key '{current_hour_key}' not found in cached hourly prices for {area} on {today.isoformat()}.")
-        return None
+        # Fallback for source name if 'data_source' is missing
+        data_source = cached_data.get("data_source") or cached_data.get("source", "unknown")
 
+        return {
+            "price": current_price,
+            "hour_key": current_hour_key,
+            "timestamp": latest_entry.get("timestamp"),
+            "source": data_source, # Use determined source name
+            "area_timezone": area_tz_str # Include the determined timezone string if found
+        }
 
     def has_current_hour_price(self, area: str) -> bool:
         """Check if cache has current hour price for today."""
