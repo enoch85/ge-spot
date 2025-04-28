@@ -54,28 +54,28 @@ class CacheManager:
         # Ensure timestamp is UTC for internal consistency if needed, or keep original aware TZ
         # timestamp = timestamp.astimezone(timezone.utc) # Example if UTC storage is desired
 
-        cache_key = self._get_cache_key(area, source, timestamp.date())
-        entry = {
-            "timestamp": timestamp.isoformat(),
-            "data": data,
-            "source": source, # Store the original source
-            "area": area # Store the area
-        }
-        # Extract api_timezone for metadata
-        api_timezone = data.get("api_timezone") or data.get("timezone")
-        if not api_timezone:
-            _LOGGER.warning(f"No api_timezone or timezone found in data for area {area}, source {source}. Cache entry may not be processable from cache.")
+        cache_key = self._generate_cache_key(area, source, timestamp.date())
+        
+        # FIX: Ensure the data dictionary itself contains source_timezone before storing
+        source_timezone = data.get("source_timezone")
+        if not source_timezone:
+            _LOGGER.warning(f"No source_timezone found in processed data for area {area}, source {source}. Cache entry may not be processable from cache.")
+            # Optionally, add a default or raise an error if this should never happen
+        else:
+            # Ensure the key is present in the data dictionary being stored
+            data["source_timezone"] = source_timezone 
+
         metadata = {
             "area": area,
             "source": source,
             "target_date": timestamp.date().isoformat(), # Store target date in metadata
             "timestamp": timestamp.isoformat(), # Store as UTC ISO string
-            "api_timezone": api_timezone
+            "source_timezone": source_timezone # Store in metadata as well
         }
 
         # Use AdvancedCache.set() - TTL is handled by AdvancedCache based on its config
         self._price_cache.set(cache_key, data, metadata=metadata)
-        _LOGGER.debug(f"Stored cache entry for key: {cache_key} with api_timezone: {api_timezone}")
+        _LOGGER.debug(f"Stored cache entry for key: {cache_key} with source_timezone: {source_timezone}")
 
 
     def _generate_cache_key(self, area: str, source: str, target_date: date) -> str:

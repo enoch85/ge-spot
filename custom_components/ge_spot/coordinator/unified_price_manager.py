@@ -277,14 +277,12 @@ class UnifiedPriceManager:
                 processed_data = await self._process_result(result)
 
                 # Cache the successfully processed data
-                # We need the target_date from processed_data (to be added in DataProcessor)
-                # For now, assume it's today, will refine after DataProcessor update
-                cache_target_date = processed_data.get("target_date", today_date) # Get date from processor
+                # Pass the 'now' timestamp, store will derive the date for the key
                 self._cache_manager.store(
                     data=processed_data,
                     area=self.area,
                     source=processed_data.get("data_source", "unknown"),
-                    target_date=cache_target_date
+                    timestamp=now # Pass the timestamp used for the fetch cycle
                 )
                 # Note: update_cache is removed as we now call store directly with the date
                 # self._cache_manager.update_cache(processed_data)

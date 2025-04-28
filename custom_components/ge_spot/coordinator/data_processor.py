@@ -146,7 +146,10 @@ class DataProcessor:
         # Assume API adapters provide *all* hourly prices in one dict now
         # raw_today_prices = data.get("hourly_prices", {}) # Adapt based on actual API output structure
         # raw_tomorrow_prices = data.get("tomorrow_hourly_prices", {}) # Adapt based on actual API output structure
-        source_timezone = data.get("api_timezone")
+        
+        # FIX: Strictly use 'source_timezone' key
+        source_timezone = data.get("source_timezone")
+        
         # Check both 'currency' (from raw API data) and 'source_currency' (from cached data)
         source_currency = data.get("currency") or data.get("source_currency")
         # Use EnergyUnit.MWH instead of EnergyUnit.MEGA_WATT_HOUR
@@ -160,8 +163,8 @@ class DataProcessor:
         normalized_prices = {}
 
         if not source_timezone:
-            _LOGGER.error(f"Missing source timezone for source {source}. Cannot process.")
-            return self._generate_empty_processed_result(data, error="Missing source timezone")
+            _LOGGER.error(f"Missing 'source_timezone' key in input data for source {source}. Cannot process.")
+            return self._generate_empty_processed_result(data, error="Missing source_timezone key in input data")
 
         if not source_currency:
             _LOGGER.error(f"Missing source currency for source {source}. Cannot process.")
@@ -172,7 +175,7 @@ class DataProcessor:
             "area": self.area,
             "source_currency": source_currency,
             "target_currency": self.target_currency,
-            "source_timezone": source_timezone,
+            "source_timezone": source_timezone, # Store the validated source_timezone
             "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None, # Use target_timezone attribute
             "hourly_prices": {}, # Today's FINAL prices (HH:00 keys)
             "tomorrow_hourly_prices": {}, # Tomorrow's FINAL prices (HH:00 keys)

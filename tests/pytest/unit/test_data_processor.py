@@ -42,7 +42,8 @@ SAMPLE_RAW_DATA = {
     "source": "nordpool",
     "area": "SE4",
     "currency": "SEK",
-    "api_timezone": "Europe/Stockholm",
+    # FIX: Use source_timezone key
+    "source_timezone": "Europe/Stockholm",
     "hourly_prices": {
         "2025-04-26T10:00:00+02:00": 1.5,
         "2025-04-26T11:00:00+02:00": 2.0

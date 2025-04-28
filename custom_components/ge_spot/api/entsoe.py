@@ -202,7 +202,9 @@ class EntsoeAPI(BasePriceAPI):
             raise ValueError(f"ENTSOE parse_raw_data expected dict, got {type(raw_data).__name__}: {raw_data}")
         
         area = raw_data.get("area")
-        api_timezone = raw_data.get("api_timezone", "Europe/Brussels")
+        # FIX: Use correct fallback (UTC) if key is missing, and use 'source_timezone' key
+        # Although fetch_raw_data should always add api_timezone, which we rename here.
+        raw_api_timezone = raw_data.get("api_timezone", SourceTimezone.API_TIMEZONES[Source.ENTSOE])
         entsoe_area = raw_data.get("entsoe_area", area)  # Use the mapped ENTSO-E area if available
         
         _LOGGER.debug(f"Parsing ENTSO-E data for area {area} (ENTSO-E area: {entsoe_area})")
@@ -359,15 +361,22 @@ class EntsoeAPI(BasePriceAPI):
             currency=Currency.EUR,  # ENTSO-E returns prices in EUR by default
             hourly_prices=all_hourly_prices,
             reference_time=now,
-            # FIX: Use the correct UTC timezone constant for ENTSO-E
-            api_timezone=SourceTimezone.API_TIMEZONES[Source.ENTSOE], # ENTSO-E data is in UTC
+            # Use the correct UTC timezone constant for ENTSO-E
+            api_timezone=SourceTimezone.API_TIMEZONES[Source.ENTSOE], # Pass the known correct TZ
             raw_data=raw_data,
             validate_complete=True,  # Enable validation to ensure we don't calculate stats for incomplete data
             has_tomorrow_prices=expect_tomorrow and tomorrow_complete,
             tomorrow_prices_expected=expect_tomorrow
         )
         # Convert to dictionary
-        return result.to_dict()
+        result_dict = result.to_dict()
+
+        # FIX: Explicitly ensure the 'source_timezone' key is in the final dictionary
+        # and remove the old 'api_timezone' key if present.
+        result_dict["source_timezone"] = SourceTimezone.API_TIMEZONES[Source.ENTSOE]
+        result_dict.pop("api_timezone", None)
+        
+        return result_dict
 
 async def validate_api_key(api_key, area, session=None):
     """Validate an API key by making a test request.
