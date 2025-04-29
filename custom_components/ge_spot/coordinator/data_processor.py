@@ -146,25 +146,37 @@ class DataProcessor:
             return self._generate_empty_processed_result(data, error="Missing currency in raw data")
 
         # 1. Normalize timezones (convert all keys to target timezone, e.g., HA local)
-        all_normalized_prices = self._tz_converter.normalize_hourly_prices(
-            raw_hourly_prices,
-            source_timezone_str=source_timezone
-        )
+        # Support new structure: each value is a dict with 'price' and 'api_price_date'
+        all_normalized_prices = {}
+        for iso_key, value in raw_hourly_prices.items():
+            if isinstance(value, dict) and "price" in value and "api_price_date" in value:
+                # Parse ISO key to datetime in source timezone
+                dt = self._tz_converter.parse_datetime_with_tz(iso_key, source_timezone)
+                if dt is None:
+                    continue
+                # Attach price and date
+                all_normalized_prices[dt] = {
+                    "price": value["price"],
+                    "api_price_date": value["api_price_date"]
+                }
+            else:
+                # Fallback: treat as float
+                dt = self._tz_converter.parse_datetime_with_tz(iso_key, source_timezone)
+                if dt is None:
+                    continue
+                all_normalized_prices[dt] = {"price": value, "api_price_date": dt.date().isoformat()}
 
-        # 2. Split into today/tomorrow based on target timezone
-        today_keys = set(self._tz_service.get_today_range())
-        tomorrow_keys = set(self._tz_service.get_tomorrow_range())
+        # 2. Split into today/tomorrow using api_price_date
+        today_str = dt_util.now().date().isoformat()
+        tomorrow_str = (dt_util.now().date() + timedelta(days=1)).isoformat()
         normalized_today = {}
         normalized_tomorrow = {}
-        for dt_key, price in all_normalized_prices.items():
-            if dt_key.tzinfo is None:
-                continue
-            dt_target = dt_key
-            hour_str_key = f"{dt_target.hour:02d}:00"
-            if hour_str_key in today_keys:
-                normalized_today[hour_str_key] = price
-            elif hour_str_key in tomorrow_keys:
-                normalized_tomorrow[hour_str_key] = price
+        for dt_key, val in all_normalized_prices.items():
+            hour_str_key = f"{dt_key.hour:02d}:00"
+            if val["api_price_date"] == today_str:
+                normalized_today[hour_str_key] = val["price"]
+            elif val["api_price_date"] == tomorrow_str:
+                normalized_tomorrow[hour_str_key] = val["price"]
 
         # 3. Currency/unit conversion (one time, after normalization)
         ecb_rate = None

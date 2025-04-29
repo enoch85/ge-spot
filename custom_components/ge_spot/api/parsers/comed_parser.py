@@ -166,26 +166,24 @@ class ComedParser(BasePriceParser):
                         millis = int(item["millisUTC"])
                         timestamp = datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
                         price = float(item["price"])
-                        
                         # Create ISO timestamp for hourly price
                         hour_dt = timestamp.replace(minute=0, second=0, microsecond=0)
                         hour_key = hour_dt.isoformat()
-                        
+                        price_date = hour_dt.date().isoformat()
                         # Add to hour prices
                         hour_prices[hour_key].append(price)
-                        
                         # Extract current price from first item if it's the most recent
                         if item == data[0]:
                             result["current_price"] = price
                     except (ValueError, TypeError) as e:
                         _LOGGER.debug(f"Skipping invalid data point: {e}")
                         continue
-            
             # Calculate average price for each hour
             for hour_key, prices in hour_prices.items():
                 if prices:
                     # Simple average
-                    hourly_prices[hour_key] = sum(prices) / len(prices)
+                    avg_price = sum(prices) / len(prices)
+                    result["hourly_prices"][hour_key] = {"price": avg_price, "api_price_date": hour_dt.date().isoformat()}
         
         # For current hour average, just use the current price
         else:
@@ -193,19 +191,15 @@ class ComedParser(BasePriceParser):
                 try:
                     current_price = float(data[0]["price"])
                     result["current_price"] = current_price
-                    
-                    # Use timestamp if available, otherwise use current time
                     if "millisUTC" in data[0]:
                         millis = int(data[0]["millisUTC"])
                         timestamp = datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
                     else:
                         timestamp = datetime.now(timezone.utc)
-                    
-                    # Create ISO timestamp for hourly price
                     hour_dt = timestamp.replace(minute=0, second=0, microsecond=0)
                     hour_key = hour_dt.isoformat()
-                    
-                    hourly_prices[hour_key] = current_price
+                    price_date = hour_dt.date().isoformat()
+                    result["hourly_prices"][hour_key] = {"price": current_price, "api_price_date": price_date}
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning(f"Failed to parse current hour price: {e}")
         

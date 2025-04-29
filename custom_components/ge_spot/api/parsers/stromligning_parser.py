@@ -146,32 +146,26 @@ class StromligningParser(BasePriceParser):
                         dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                         # Create ISO formatted timestamp key
                         hour_key = dt.isoformat()
-
+                        price_date = dt.date().isoformat()
                         # Extract the electricity price
-                        # First try to get the electricity price from details.electricity.value
                         price_value = None
                         if "details" in price_data and isinstance(price_data["details"], dict):
                             if "electricity" in price_data["details"] and isinstance(price_data["details"]["electricity"], dict):
                                 electricity = price_data["details"]["electricity"]
                                 if "value" in electricity:
                                     try:
-                                        # This is the raw electricity price without taxes and other costs
                                         price_value = float(electricity["value"])
                                         _LOGGER.debug(f"Using electricity.value as price for {hour_key}: {price_value}")
                                     except (ValueError, TypeError):
                                         _LOGGER.warning(f"Could not parse electricity value: {electricity.get('value')} for {hour_key}")
-
-                        # If electricity price not found in details, fall back to the main price value
                         if price_value is None and "value" in price_data["price"]:
                             try:
                                 price_value = float(price_data["price"]["value"])
                                 _LOGGER.debug(f"Using price.value as fallback price for {hour_key}: {price_value}")
                             except (ValueError, TypeError):
                                 _LOGGER.warning(f"Could not parse price value: {price_data['price'].get('value')} for {hour_key}")
-
-                        # Store the price if we have a valid value
                         if price_value is not None:
-                            result["hourly_prices"][hour_key] = price_value
+                            result["hourly_prices"][hour_key] = {"price": price_value, "api_price_date": price_date}
                         else:
                             _LOGGER.warning(f"No valid price found in Stromligning data for hour {hour_key}")
 

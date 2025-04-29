@@ -90,13 +90,12 @@ async def main():
         parsed_data = await api.parse_raw_data(raw_data)
         
         print(f"Parsed data keys: {list(parsed_data.keys())}")
-        print(f"Source: {parsed_data.get('source')}")
+        print(f"Source: {parsed_data.get('source_name', parsed_data.get('source'))}")
         print(f"Area: {parsed_data.get('area')}")
         print(f"Currency: {parsed_data.get('currency')}")
-        print(f"API Timezone: {parsed_data.get('api_timezone')}")
-        
+        print(f"API Timezone: {parsed_data.get('api_timezone', parsed_data.get('timezone'))}")
         # Check if hourly prices are available
-        hourly_prices = parsed_data.get("hourly_prices", {})
+        hourly_prices = parsed_data.get("hourly_prices") or parsed_data.get("hourly_raw", {})
         if not hourly_prices:
             print("Warning: No hourly prices found in the parsed data")
             return
@@ -111,14 +110,13 @@ async def main():
         
         # Convert prices from EUR to target currency and from MWh to kWh
         converted_prices = {}
-        for ts, price in hourly_prices.items():
-            # Convert from EUR to target currency
+        for ts, price_info in hourly_prices.items():
+            price_val = price_info["price"] if isinstance(price_info, dict) else price_info
             price_converted = await exchange_service.convert(
-                price, 
+                price_val, 
                 parsed_data.get("currency", Currency.EUR), 
                 target_currency
             )
-            # Convert from MWh to kWh
             price_kwh = price_converted / 1000
             converted_prices[ts] = price_kwh
         
@@ -162,7 +160,8 @@ async def main():
             print("-" * 40)
             
             for hour, prices in sorted(hours.items()):
-                print(f"{hour:<10} {prices['original']:<15.4f} {prices['converted']:<15.6f}")
+                original_val = prices['original']['price'] if isinstance(prices['original'], dict) else prices['original']
+                print(f"{hour:<10} {original_val:<15.4f} {prices['converted']:<15.6f}")
         
         # Validate that we have data for today and tomorrow
         today = datetime.now(local_tz).strftime('%Y-%m-%d')

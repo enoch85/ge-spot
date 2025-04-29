@@ -56,12 +56,11 @@ class EnergiDataParser(BasePriceParser):
                     timestamp_str = record["HourDK"]
                     dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                     hour_key = dt.isoformat()
-                    
+                    price_date = dt.date().isoformat()
                     # Parse price
                     price = float(record["SpotPriceDKK"])
-                    
                     # Add to hourly prices
-                    result["hourly_prices"][hour_key] = price
+                    result["hourly_prices"][hour_key] = {"price": price, "api_price_date": price_date}
             except (ValueError, TypeError) as e:
                 _LOGGER.debug(f"Failed to parse Energi Data Service record: {e}")
 
@@ -103,7 +102,7 @@ class EnergiDataParser(BasePriceParser):
 
         return metadata
 
-    def parse_hourly_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
+    def parse_hourly_prices(self, data: Dict[str, Any], area: str) -> Dict[str, Any]:
         """Parse hourly prices from Energi Data Service API response.
 
         Args:
@@ -120,18 +119,13 @@ class EnergiDataParser(BasePriceParser):
             for record in data["records"]:
                 if "HourDK" in record and "SpotPriceDKK" in record:
                     try:
-                        # Parse timestamp
                         timestamp = self._parse_timestamp(record["HourDK"])
                         if timestamp:
-                            # Format as hour string (HH:00)
                             normalized_hour, adjusted_date = normalize_hour_value(timestamp.hour, timestamp.date())
                             hour_key = f"{normalized_hour:02d}:00"
-
-                            # Parse price
                             price = float(record["SpotPriceDKK"])
-
-                            # Add to hourly prices
-                            hourly_prices[hour_key] = price
+                            price_date = timestamp.date().isoformat()
+                            hourly_prices[hour_key] = {"price": price, "api_price_date": price_date}
                     except (ValueError, TypeError) as e:
                         _LOGGER.warning(f"Failed to parse record: {e}")
 

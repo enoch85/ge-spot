@@ -126,12 +126,11 @@ class AemoParser(BasePriceParser):
                         try:
                             # AEMO timestamps are typically in ISO format
                             dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                            # Format as hour key 
                             hour_key = dt.isoformat()
-                            
+                            price_date = dt.date().isoformat()
                             # Parse price
                             price = float(entry[Aemo.PRICE_FIELD])
-                            hourly_prices[hour_key] = price
+                            hourly_prices[hour_key] = {"price": price, "api_price_date": price_date}
                         except (ValueError, TypeError):
                             _LOGGER.debug(f"Failed to parse AEMO timestamp: {timestamp_str}")
                     except (KeyError, TypeError):
@@ -162,14 +161,11 @@ class AemoParser(BasePriceParser):
                         # Parse timestamp
                         timestamp_str = row["SETTLEMENTDATE"]
                         try:
-                            # AEMO CSV timestamps are typically in ISO format
                             dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                            # Format as hour key
                             hour_key = dt.isoformat()
-                            
-                            # Parse price
+                            price_date = dt.date().isoformat()
                             price = float(row["RRP"])
-                            hourly_prices[hour_key] = price
+                            hourly_prices[hour_key] = {"price": price, "api_price_date": price_date}
                         except (ValueError, TypeError):
                             _LOGGER.debug(f"Failed to parse AEMO CSV timestamp: {timestamp_str}")
                     except (KeyError, TypeError):
@@ -180,7 +176,7 @@ class AemoParser(BasePriceParser):
         # Update result with parsed hourly prices
         result["hourly_prices"].update(hourly_prices)
 
-    def parse_hourly_prices(self, data: Any, area: str) -> Dict[str, float]:
+    def parse_hourly_prices(self, data: Any, area: str) -> Dict[str, Any]:
         """Parse hourly prices from AEMO API response.
 
         Args:
@@ -213,13 +209,14 @@ class AemoParser(BasePriceParser):
 
                                     # Parse price
                                     price = float(entry[Aemo.PRICE_FIELD])
+                                    price_date = timestamp.date().isoformat()
 
                                     # Store with full timestamp as key for granular data
                                     minute_key = f"{timestamp.hour:02d}:{timestamp.minute:02d}"
                                     _LOGGER.debug(f"AEMO data point at {minute_key} with price {price}")
 
                                     # Add to hourly prices - intentionally overwrite as we want the latest price for each hour
-                                    hourly_prices[hour_key] = price
+                                    hourly_prices[hour_key] = {"price": price, "api_price_date": price_date}
                             except (ValueError, TypeError) as e:
                                 _LOGGER.warning(f"Failed to parse AEMO price: {e}")
 

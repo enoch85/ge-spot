@@ -179,7 +179,8 @@ class OmieParser(BasePriceParser):
                         timestamp = utc_dt.isoformat()
                         
                         # Store the price
-                        hourly_prices[timestamp] = price
+                        # Add api_price_date to each entry
+                        hourly_prices[timestamp] = {"price": price, "api_price_date": dt.date().isoformat()}
                         
                     except (ValueError, KeyError, IndexError) as e:
                         _LOGGER.warning(f"Error parsing PVPC entry: {e}")
@@ -404,7 +405,7 @@ class OmieParser(BasePriceParser):
                     timestamp = utc_dt.isoformat()
                     
                     # Store the price
-                    hourly_prices[timestamp] = price
+                    hourly_prices[timestamp] = {"price": price, "api_price_date": dt.date().isoformat()}
                     
                 except (ValueError, KeyError, IndexError) as e:
                     _LOGGER.warning(f"Error parsing CSV row: {e}")
@@ -492,7 +493,7 @@ class OmieParser(BasePriceParser):
                 timestamp = utc_dt.isoformat()
                 
                 # Store the price
-                hourly_prices[timestamp] = price
+                hourly_prices[timestamp] = {"price": price, "api_price_date": dt.date().isoformat()}
                 
             except (ValueError, IndexError) as e:
                 _LOGGER.warning(f"Error parsing CSV row: {e}")

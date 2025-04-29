@@ -26,37 +26,7 @@ class AmberParser(BasePriceParser):
             _LOGGER.warning("No data to parse")
             return {}
             
-        hourly_prices = {}
-        
-        # Parse each entry and organize by hour
-        for entry in data:
-            try:
-                # Get the timestamp
-                timestamp_str = entry.get('date')
-                if not timestamp_str:
-                    continue
-                    
-                # Parse timestamp (format: ISO format)
-                dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                
-                # Get the price value
-                price = entry.get('perKwh')
-                if price is None:
-                    continue
-                    
-                # Convert to float if needed
-                if isinstance(price, str):
-                    try:
-                        price = float(price)
-                    except ValueError:
-                        continue
-                
-                # Add to hourly prices - we use ISO format to preserve date information
-                hourly_prices[dt.isoformat()] = price
-                
-            except Exception as e:
-                _LOGGER.error(f"Error parsing Amber price entry: {e}")
-                continue
+        hourly_prices = self.parse_hourly_prices(data)
         
         # Create standardized data structure
         result = StandardizedPriceData.create(
@@ -68,3 +38,26 @@ class AmberParser(BasePriceParser):
         ).to_dict()
         
         return result
+    
+    def parse_hourly_prices(self, data: Any, area: str) -> Dict[str, Any]:
+        hourly_prices = {}
+        if isinstance(data, list):
+            for entry in data:
+                try:
+                    timestamp_str = entry.get('date')
+                    if not timestamp_str:
+                        continue
+                    dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    price_date = dt.date().isoformat()
+                    price = entry.get('perKwh')
+                    if price is None:
+                        continue
+                    if isinstance(price, str):
+                        try:
+                            price = float(price)
+                        except ValueError:
+                            continue
+                    hourly_prices[dt.isoformat()] = {"price": price, "api_price_date": price_date}
+                except Exception:
+                    continue
+        return hourly_prices

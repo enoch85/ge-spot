@@ -324,8 +324,8 @@ class EntsoeParser(BasePriceParser):
                             hour_key = point_time.isoformat()
                             
                             # Add to hourly prices
-                            result["hourly_prices"][hour_key] = price_val
-                            
+                            result["hourly_prices"][hour_key] = {"price": price_val, "api_price_date": point_time.date().isoformat()}
+
                         except (ValueError, TypeError) as e:
                             _LOGGER.warning(f"Failed to parse point {position.text}: {e}")
                 
@@ -337,7 +337,7 @@ class EntsoeParser(BasePriceParser):
             
         return result
 
-    def parse_hourly_prices(self, data: Any, area: str) -> Dict[str, float]:
+    def parse_hourly_prices(self, data: Any, area: str) -> Dict[str, Any]:
         """Parse hourly prices from ENTSO-E API response.
 
         Args:
@@ -354,21 +354,13 @@ class EntsoeParser(BasePriceParser):
             try:
                 # Parse XML
                 root = ET.fromstring(data)
-
-                # ENTSO-E uses a specific namespace
                 ns = {"ns": "urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3"}
-
-                # Find time series elements
                 time_series = root.findall(".//ns:TimeSeries", ns)
-
                 for ts in time_series:
                     # Check if this is a day-ahead price time series
                     business_type = ts.find(".//ns:businessType", ns)
-                    if business_type is None or business_type.text != "A62":
-                        # If not A62 (Day-ahead allocation), try A44 (Day-ahead)
-                        if business_type is None or business_type.text != "A44":
-                            # If neither A62 nor A44, skip this time series
-                            continue
+                    if business_type is None or business_type.text not in ["A62", "A44"]:
+                        continue
 
                     # Get period start time
                     period = ts.find(".//ns:Period", ns)
@@ -398,25 +390,14 @@ class EntsoeParser(BasePriceParser):
 
                                     # Calculate hour
                                     hour_time = start_time + timedelta(hours=pos-1)
+                                    price_date = hour_time.date().isoformat()
 
-                                    # Use the utility function to normalize the hour value if needed
-                                    try:
-                                        # Use relative import to avoid module not found error
-                                        from ...timezone.timezone_utils import normalize_hour_value
-                                        normalized_hour, adjusted_date = normalize_hour_value(hour_time.hour, hour_time.date())
-
-                                        # Create normalized hour key
-                                        hour_key = f"{normalized_hour:02d}:00"
-                                    except ValueError as e:
-                                        # Skip invalid hours
-                                        _LOGGER.warning(f"Skipping invalid hour value in ENTSOE data: {hour_time.hour}:00 - {e}")
-                                        continue
-                                    except ImportError as e:
-                                        _LOGGER.warning(f"Import error for timezone utils: {e}, using original hour")
-                                        hour_key = f"{hour_time.hour:02d}:00"
+                                    # Format as ISO 8601
+                                    hour_key = hour_time.isoformat()
 
                                     # Add to hourly prices
-                                    hourly_prices[hour_key] = price_val
+                                    hourly_prices[hour_key] = {"price": price_val, "api_price_date": price_date}
+
                                 except (ValueError, TypeError) as e:
                                     _LOGGER.warning(f"Failed to parse point: {e}")
 

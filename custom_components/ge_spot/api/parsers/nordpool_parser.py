@@ -37,7 +37,11 @@ class NordpoolPriceParser(BasePriceParser):
                 try:
                     dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
                     hour_key = dt.isoformat()
-                    result["hourly_prices"][hour_key] = float(price)
+                    price_date = dt.date().isoformat()
+                    result["hourly_prices"][hour_key] = {
+                        "price": float(price),
+                        "api_price_date": price_date
+                    }
                 except Exception as e:
                     _LOGGER.error(f"Failed to parse timestamp {ts}: {e}")
                     continue
@@ -157,7 +161,7 @@ class NordpoolPriceParser(BasePriceParser):
             _LOGGER.debug(f"Error parsing price '{price_str}': {str(e)}")
         return None
 
-    def parse_hourly_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
+    def parse_hourly_prices(self, data: Dict[str, Any], area: str) -> Dict[str, Any]:
         """Parse hourly prices from Nordpool data.
 
         Args:
@@ -172,27 +176,21 @@ class NordpoolPriceParser(BasePriceParser):
         # Process today's data
         if "today" in data and data["today"]:
             today_data = data["today"]
-
             if "multiAreaEntries" in today_data:
                 for entry in today_data["multiAreaEntries"]:
                     if not isinstance(entry, dict) or "entryPerArea" not in entry:
                         continue
-
                     if area not in entry["entryPerArea"]:
                         continue
-
-                    # Extract values
                     start_time = entry.get("deliveryStart")
                     raw_price = entry["entryPerArea"][area]
-
                     if start_time and raw_price is not None:
-                        # Parse timestamp
                         dt = self._parse_timestamp(start_time)
                         if dt:
-                            # Format as hour key
                             normalized_hour, adjusted_date = normalize_hour_value(dt.hour, dt.date())
                             hour_key = f"{normalized_hour:02d}:00"
-                            hourly_prices[hour_key] = float(raw_price)
+                            price_date = dt.date().isoformat()
+                            hourly_prices[hour_key] = {"price": float(raw_price), "api_price_date": price_date}
 
         return hourly_prices
 

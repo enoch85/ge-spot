@@ -144,7 +144,7 @@ class EpexParser(BasePriceParser):
                                     hour_key = hour_dt.isoformat()
                                     
                                     # Add to hourly prices
-                                    result["hourly_prices"][hour_key] = price_value
+                                    result["hourly_prices"][hour_key] = {"price": price_value, "api_price_date": date_obj.isoformat()}
                                 except (ValueError, TypeError) as e:
                                     _LOGGER.debug(f"Failed to parse EPEX price: {price_text} - {e}")
             except Exception as e:
