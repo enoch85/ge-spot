@@ -6,7 +6,7 @@ import json
 from typing import Dict, Any, Optional
 
 from ..timezone import TimezoneService
-from ..utils.api_client import ApiClient
+from .base.api_client import ApiClient
 from ..const.sources import Source
 from ..const.config import Config
 from ..const.display import DisplayUnit

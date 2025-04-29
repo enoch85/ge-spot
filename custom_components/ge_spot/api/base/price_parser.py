@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone, date
 from typing import Dict, Any, Optional, List, Tuple
 
-from ...utils.timezone_service import TimezoneService
+from ...timezone.service import TimezoneService
 from ...const.sources import Source
 from ...timezone.timezone_utils import get_timezone_object # Import helper
 import pytz # Import pytz for robust timezone handling

@@ -6,7 +6,7 @@ import asyncio
 import json
 import re
 
-from ..utils.api_client import ApiClient
+from .base.api_client import ApiClient
 from ..timezone import TimezoneService
 from ..const.sources import Source
 from ..const.config import Config

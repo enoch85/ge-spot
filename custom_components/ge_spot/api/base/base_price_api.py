@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, List, Union
 
 from homeassistant.core import HomeAssistant
 
-from ...utils.api_client import ApiClient
+from .api_client import ApiClient
 from ...const.sources import Source
 from ...const.time import TimeFormat
 from ...utils.date_range import generate_date_ranges

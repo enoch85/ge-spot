@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone, timedelta, time
 from typing import Dict, Any, Optional
 
-from ..utils.api_client import ApiClient
+from .base.api_client import ApiClient
 from ..const.sources import Source
 from ..const.currencies import Currency
 from ..const.areas import AreaMapping

@@ -8,7 +8,7 @@ from .base.base_price_api import BasePriceAPI
 from .parsers.omie_parser import OmieParser
 from ..const.sources import Source
 from ..const.api import Omie
-from ..utils.api_client import ApiClient
+from .base.api_client import ApiClient
 from ..const.network import Network
 from ..const.currencies import Currency
 from ..const.time import TimezoneName

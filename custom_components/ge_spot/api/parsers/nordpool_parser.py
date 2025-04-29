@@ -37,10 +37,8 @@ class NordpoolPriceParser(BasePriceParser):
                 try:
                     dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
                     hour_key = dt.isoformat()
-                    price_date = dt.date().isoformat()
                     result["hourly_prices"][hour_key] = {
-                        "price": float(price),
-                        "api_price_date": price_date
+                        "price": float(price)
                     }
                 except Exception as e:
                     _LOGGER.error(f"Failed to parse timestamp {ts}: {e}")
@@ -189,8 +187,7 @@ class NordpoolPriceParser(BasePriceParser):
                         if dt:
                             normalized_hour, adjusted_date = normalize_hour_value(dt.hour, dt.date())
                             hour_key = f"{normalized_hour:02d}:00"
-                            price_date = dt.date().isoformat()
-                            hourly_prices[hour_key] = {"price": float(raw_price), "api_price_date": price_date}
+                            hourly_prices[hour_key] = {"price": float(raw_price)}
 
         return hourly_prices
 

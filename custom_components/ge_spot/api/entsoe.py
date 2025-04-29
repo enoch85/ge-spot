@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta, time
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, Optional
 
-from ..utils.api_client import ApiClient
+from .base.api_client import ApiClient
 from ..utils.debug_utils import sanitize_sensitive_data
 from ..utils.date_range import generate_date_ranges # Re-add this import
 from ..timezone import TimezoneService

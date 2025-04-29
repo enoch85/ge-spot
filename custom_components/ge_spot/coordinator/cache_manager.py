@@ -10,7 +10,7 @@ import pytz
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from ..price.advanced_cache import AdvancedCache
+from ..utils.advanced_cache import AdvancedCache
 from ..const.defaults import Defaults # Import Defaults for CACHE_TTL
 from ..timezone.timezone_utils import get_timezone_object # Import the missing function
 
@@ -39,8 +39,16 @@ class CacheManager:
         self._price_cache = AdvancedCache(hass, config_with_ttl_seconds)
 
 
-    def store(self, area: str, source: str, data: Dict[str, Any], timestamp: Optional[datetime] = None) -> None:
-        """Store data in the cache.""" # Corrected docstring quotes
+    def store(self, area: str, source: str, data: Dict[str, Any], timestamp: Optional[datetime] = None, target_date: Optional[date] = None) -> None:
+        """Store data in the cache.
+        
+        Args:
+            area: The area code
+            source: The source identifier
+            data: The data to store
+            timestamp: Optional timestamp of when the data was fetched (defaults to now)
+            target_date: Optional specific date the data is for (defaults to timestamp's date)
+        """
         if not timestamp:
             timestamp = dt_util.utcnow() # Use aware UTC timestamp by default if none provided
         elif timestamp.tzinfo is None:
@@ -51,10 +59,10 @@ class CacheManager:
             # Option 2: Log error and skip caching this entry (safer for now)
             return
 
-        # Ensure timestamp is UTC for internal consistency if needed, or keep original aware TZ
-        # timestamp = timestamp.astimezone(timezone.utc) # Example if UTC storage is desired
+        # Use provided target_date if available, otherwise use timestamp's date
+        actual_target_date = target_date if target_date is not None else timestamp.date()
 
-        cache_key = self._generate_cache_key(area, source, timestamp.date())
+        cache_key = self._generate_cache_key(area, source, actual_target_date)
         
         # FIX: Ensure the data dictionary itself contains source_timezone before storing
         source_timezone = data.get("source_timezone")
@@ -68,7 +76,7 @@ class CacheManager:
         metadata = {
             "area": area,
             "source": source,
-            "target_date": timestamp.date().isoformat(), # Store target date in metadata
+            "target_date": actual_target_date.isoformat(), # Store target date in metadata
             "timestamp": timestamp.isoformat(), # Store as UTC ISO string
             "source_timezone": source_timezone # Store in metadata as well
         }
@@ -324,7 +332,7 @@ class CacheManager:
         _LOGGER.debug(f"Updating cache for area {area}, source {source}, date {target_date.isoformat()} via store method.")
         # Delegate saving to the store method which correctly uses AdvancedCache.set
         # Pass the processed data itself as the value to store
-        self.store(data=processed_data, area=area, source=source, target_date=target_date) # Pass target_date
+        self.store(area=area, source=source, data=processed_data, target_date=target_date) # Corrected parameter order
 
     def get_cache_stats(self) -> Dict[str, Any]:
          """Get statistics about the cache."""

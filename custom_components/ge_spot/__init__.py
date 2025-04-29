@@ -15,10 +15,10 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 from .const.config import Config
 from .const.defaults import Defaults
 from .const.network import Network
-from .utils.currency_service import get_default_currency
 from .coordinator import UnifiedPriceCoordinator  # Import only the new coordinator
 from .api.base.session_manager import register_shutdown_task
 from .utils.exchange_service import get_exchange_service
+from .price.currency_service import get_default_currency
 
 PLATFORMS = [Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)

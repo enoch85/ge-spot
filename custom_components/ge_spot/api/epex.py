@@ -5,7 +5,7 @@ from datetime import timezone, timedelta, time
 from bs4 import BeautifulSoup
 from typing import Dict, Any, Optional, List
 
-from ..utils.api_client import ApiClient
+from .base.api_client import ApiClient
 from ..const.sources import Source
 from ..const.config import Config
 from ..const.display import DisplayUnit

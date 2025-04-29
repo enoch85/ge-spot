@@ -41,7 +41,7 @@ from custom_components.ge_spot.api.amber import AmberAPI
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
-from custom_components.ge_spot.price.advanced_cache import AdvancedCache
+from custom_components.ge_spot.utils.advanced_cache import AdvancedCache
 from custom_components.ge_spot.coordinator.cache_manager import CacheManager
 from custom_components.ge_spot.const.defaults import Defaults
 

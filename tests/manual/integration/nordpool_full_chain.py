@@ -5,9 +5,10 @@ Manual full chain test for Nordpool API.
 This script performs an end-to-end test of the Nordpool API integration:
 1. Fetches real data from the Nordpool API
 2. Parses the raw data
-3. Applies currency conversion
-4. Validates and displays the results
-5. Tests caching functionality (production-like behavior)
+3. Applies timezone conversion
+4. Applies currency conversion
+5. Validates and displays the results
+6. Tests caching functionality (production-like behavior)
 
 Usage:
     python nordpool_full_chain.py [area] [date]
@@ -44,9 +45,11 @@ from custom_components.ge_spot.api.nordpool import NordpoolAPI
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
-from custom_components.ge_spot.price.advanced_cache import AdvancedCache
+from custom_components.ge_spot.utils.advanced_cache import AdvancedCache
 from custom_components.ge_spot.coordinator.cache_manager import CacheManager
 from custom_components.ge_spot.const.defaults import Defaults
+from custom_components.ge_spot.timezone.service import TimezoneService
+from custom_components.ge_spot.timezone.timezone_converter import TimezoneConverter
 
 # Common Nordpool areas
 COMMON_AREAS = [
@@ -286,6 +289,36 @@ async def main():
     
     logger.info(f"\n===== Nordpool API Full Chain Test for {area} =====\n")
     
+    # Initialize timezone service
+    logger.info("Setting up timezone service...")
+    # Determine the local timezone based on the area for the timezone service
+    local_tz_name = 'Europe/Stockholm'  # Default for Swedish areas
+    if area.startswith('FI'):
+        local_tz_name = 'Europe/Helsinki'
+    elif area.startswith('DK'):
+        local_tz_name = 'Europe/Copenhagen'
+    elif area.startswith('NO') or area in ['Oslo', 'Kr.sand', 'Bergen', 'Molde', 'Tr.heim', 'Tromsø']:
+        local_tz_name = 'Europe/Oslo'
+    elif area in ['EE']:
+        local_tz_name = 'Europe/Tallinn'
+    elif area in ['LV']:
+        local_tz_name = 'Europe/Riga'
+    elif area in ['LT']:
+        local_tz_name = 'Europe/Vilnius'
+    
+    local_tz = pytz.timezone(local_tz_name)
+    
+    # Create a timezone service object that will be passed to our TimezoneConverter
+    tz_config = {
+        "timezone_reference": "area"  # Use area timezone as reference
+    }
+    tz_service = TimezoneService(area=area, config=tz_config)
+    logger.info(f"Timezone service initialized for area: {area} using {local_tz_name}")
+    
+    # Create the TimezoneConverter that will be used for normalization
+    tz_converter = TimezoneConverter(tz_service)
+    logger.info("TimezoneConverter initialized")
+    
     # Setup cache with production-like behavior
     logger.info("Setting up cache manager (production-like behavior)...")
     mock_hass = MockHass()
@@ -339,18 +372,31 @@ async def main():
             else:
                 logger.warning("No 'raw_data' found in API response")
             
-            # Step 2: Use hourly_raw directly (no parse_raw_data)
-            logger.info("\nProcessing raw data...")
-            hourly_prices = raw_data.get("hourly_raw", {})
+            # Step 2: Process raw data and normalize timezones using the centralized converter
+            logger.info("\nProcessing raw data and normalizing timezones...")
+            hourly_raw = raw_data.get("hourly_raw", {})
+            source_timezone = raw_data.get('timezone')
             logger.info(f"Source: {raw_data.get('source_name')}")
             logger.info(f"Area: {area}")
             logger.info(f"Currency: {raw_data.get('currency')}")
-            logger.info(f"API Timezone: {raw_data.get('timezone')}")
-            if not hourly_prices:
+            logger.info(f"API Timezone: {source_timezone}")
+            if not hourly_raw:
                 logger.error("Error: No hourly prices found in the raw data")
                 return 1
                 
-            logger.info(f"Found {len(hourly_prices)} hourly prices")
+            logger.info(f"Found {len(hourly_raw)} hourly prices")
+            
+            # Apply the timezone conversion using the new TimezoneConverter API
+            logger.info(f"Normalizing timestamps from {source_timezone} to {local_tz_name}...")
+            
+            # Use the normalize_hourly_prices method from the TimezoneConverter class
+            normalized_prices = tz_converter.normalize_hourly_prices(
+                hourly_prices=hourly_raw,
+                source_timezone_str=source_timezone,
+                preserve_date=True  # Important: preserve date to differentiate today/tomorrow
+            )
+            
+            logger.info(f"After normalization: {len(normalized_prices)} price points")
             
             # Step 3: Currency conversion (local currency -> EUR if needed)
             original_currency = raw_data.get('currency', Currency.EUR)
@@ -362,8 +408,8 @@ async def main():
             
             # Convert prices and from MWh to kWh
             converted_prices = {}
-            for ts, price_info in hourly_prices.items():
-                # Support new dict structure from parser
+            for hour_key, price_info in normalized_prices.items():
+                # Extract price from dict structure
                 price = price_info["price"] if isinstance(price_info, dict) else price_info
                 price_converted = price
                 if original_currency != target_currency:
@@ -374,7 +420,11 @@ async def main():
                     )
                 # Convert from MWh to kWh
                 price_kwh = price_converted / 1000
-                converted_prices[ts] = price_kwh
+                converted_prices[hour_key] = price_kwh
+            
+            # Use the split_into_today_tomorrow method from TimezoneConverter
+            today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(normalized_prices)
+            logger.info(f"Split into today ({len(today_prices)} hours) and tomorrow ({len(tomorrow_prices)} hours)")
             
             # Prepare processed data for caching (similar to what DataProcessor would do)
             timestamp = datetime.now(timezone.utc)
@@ -383,10 +433,11 @@ async def main():
                 "area": area,
                 "currency": original_currency, 
                 "target_currency": target_currency,
-                "hourly_prices": hourly_prices,
+                "hourly_prices": today_prices,
+                "tomorrow_hourly_prices": tomorrow_prices,
                 "converted_prices": converted_prices,
                 "source_timezone": raw_data.get('timezone'),
-                "api_timezone": raw_data.get('timezone'),
+                "target_timezone": local_tz_name,
                 "last_updated": timestamp.isoformat(),
                 "using_cached_data": False
             }
@@ -410,12 +461,21 @@ async def main():
         if using_cached:
             logger.info("\n=== Using cached data ===")
             hourly_prices = processed_data.get('hourly_prices', {})
+            tomorrow_prices = processed_data.get('tomorrow_hourly_prices', {})
             original_currency = processed_data.get('currency', Currency.EUR)
             target_currency = processed_data.get('target_currency', original_currency)
             converted_prices = processed_data.get('converted_prices', {})
             # If no converted prices in cache, use hourly prices
             if not converted_prices:
-                converted_prices = {k: v/1000 for k, v in hourly_prices.items()}
+                converted_prices = {}
+                # Convert hourly prices from today
+                for hour, value in hourly_prices.items():
+                    price = value["price"] if isinstance(value, dict) else value
+                    converted_prices[hour] = price / 1000  # Simple MWh to kWh conversion
+                # Convert hourly prices from tomorrow
+                for hour, value in tomorrow_prices.items():
+                    price = value["price"] if isinstance(value, dict) else value
+                    converted_prices[hour] = price / 1000  # Simple MWh to kWh conversion
         
         # Step 4: Display results (whether from cache or fresh fetch)
         logger.info("\nPrice Information:")
@@ -423,120 +483,49 @@ async def main():
         logger.info(f"Converted Currency: {target_currency}/kWh")
         logger.info(f"Data source: {'Cache' if using_cached else 'Live API'}")
         
-        # Determine the local timezone based on the area
-        local_tz_name = 'Europe/Stockholm'  # Default for Swedish areas
-        if area.startswith('FI'):
-            local_tz_name = 'Europe/Helsinki'
-        elif area.startswith('DK'):
-            local_tz_name = 'Europe/Copenhagen'
-        elif area.startswith('NO') or area in ['Oslo', 'Kr.sand', 'Bergen', 'Molde', 'Tr.heim', 'Tromsø']:
-            local_tz_name = 'Europe/Oslo'
-        elif area in ['EE']:
-            local_tz_name = 'Europe/Tallinn'
-        elif area in ['LV']:
-            local_tz_name = 'Europe/Riga'
-        elif area in ['LT']:
-            local_tz_name = 'Europe/Vilnius'
+        # Combine today and tomorrow prices for display
+        all_hourly_prices = {**processed_data.get('hourly_prices', {}), **processed_data.get('tomorrow_hourly_prices', {})}
         
-        local_tz = pytz.timezone(local_tz_name)
-        prices_by_date = {}
+        # Create a nice display of prices by hour
+        logger.info("\nHourly Prices (formatted as HH:00 in target timezone):")
+        logger.info(f"{'Hour':<10} {f'{original_currency}/MWh':<15} {f'{target_currency}/kWh':<15}")
+        logger.info("-" * 40)
         
-        for ts, price in hourly_prices.items():
-            try:
-                # Parse the timestamp and convert to local timezone
-                dt = datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone(local_tz)
-                date_str = dt.strftime('%Y-%m-%d')
-                hour_str = dt.strftime('%H:%M')
-                
-                if date_str not in prices_by_date:
-                    prices_by_date[date_str] = {}
-                    
-                prices_by_date[date_str][hour_str] = {
-                    'original': price,
-                    'converted': converted_prices.get(ts)
-                }
-            except ValueError as e:
-                logger.warning(f"Could not parse timestamp: {ts}, error: {e}")
-        
-        # Print prices grouped by date
-        for date, hours in sorted(prices_by_date.items()):
-            logger.info(f"\nPrices for {date}:")
-            logger.info(f"{'Time':<10} {f'{original_currency}/MWh':<15} {f'{target_currency}/kWh':<15}")
-            logger.info("-" * 40)
-            
-            for hour, prices in sorted(hours.items()):
-                original_val = prices['original']['price'] if isinstance(prices['original'], dict) else prices['original']
-                logger.info(f"{hour:<10} {original_val:<15.4f} {prices['converted']:<15.6f}")
+        for hour_key, price in sorted(all_hourly_prices.items()):
+            price_value = price["price"] if isinstance(price, dict) else price
+            converted_value = converted_prices.get(hour_key, price_value / 1000)
+            logger.info(f"{hour_key:<10} {price_value:<15.4f} {converted_value:<15.6f}")
         
         # Validate that we have data for today and tomorrow
-        today = datetime.now(local_tz).strftime('%Y-%m-%d')
-        tomorrow = (datetime.now(local_tz) + timedelta(days=1)).strftime('%Y-%m-%d')
+        today_hour_range = tz_service.get_today_range()
+        tomorrow_hour_range = tz_service.get_tomorrow_range()
         
-        # If reference_date is provided, adjust today/tomorrow expectations
-        if reference_date:
-            ref_date_obj = datetime.strptime(reference_date, '%Y-%m-%d')
-            today = ref_date_obj.strftime('%Y-%m-%d')
-            tomorrow = (ref_date_obj + timedelta(days=1)).strftime('%Y-%m-%d')
-            logger.info(f"Using reference dates: today={today}, tomorrow={tomorrow}")
+        today_hours = set(processed_data.get('hourly_prices', {}).keys())
+        tomorrow_hours = set(processed_data.get('tomorrow_hourly_prices', {}).keys())
         
-        # Check today's data - be more flexible with the requirements
-        if today in prices_by_date:
-            today_prices = prices_by_date[today]
-            logger.info(f"\nFound {len(today_prices)} price points for today ({today})")
+        # Check today's data completeness
+        today_complete = today_hours.issuperset(today_hour_range)
+        tomorrow_complete = tomorrow_hours.issuperset(tomorrow_hour_range)
+        
+        logger.info(f"\nData completeness:")
+        logger.info(f"Today: {len(today_hours)}/{len(today_hour_range)} hours {'✓' if today_complete else '⚠'}")
+        logger.info(f"Tomorrow: {len(tomorrow_hours)}/{len(tomorrow_hour_range)} hours {'✓' if tomorrow_complete else '⚠'}")
+        
+        if not today_complete:
+            missing_today = set(today_hour_range) - today_hours
+            logger.warning(f"Missing today hours: {', '.join(sorted(missing_today))}")
             
-            if len(today_prices) >= 22:  # Allow for some missing hours
-                logger.info(f"✓ Found {len(today_prices)}/24 hourly prices for today")
-            else:
-                logger.warning(f"⚠ Incomplete data: Found only {len(today_prices)} hourly prices for today (expected at least 22)")
-                
-                # If we have coverage information, log it
-                if "today_coverage" in raw_data:
-                    logger.info(f"Today's coverage: {raw_data['today_coverage']:.1f}%")
-                
-                # List missing hours for better debugging
-                all_hours = set(f"{h:02d}:00" for h in range(24))
-                found_hours = set(today_prices.keys())
-                missing_hours = all_hours - found_hours
-                if missing_hours:
-                    logger.warning(f"Missing hours today: {', '.join(sorted(missing_hours))}")
-        else:
-            logger.warning(f"\nWarning: No prices found for today ({today})")
-        
-        # Check tomorrow's data - be more lenient as tomorrow's data may not be available yet
-        now_local = datetime.now(local_tz)
-        expect_tomorrow_data = now_local.hour >= 13  # Nordpool usually publishes next day prices at ~13:00 CET
-        
-        # If we specifically requested a date, we should expect tomorrow's data
-        if reference_date:
-            expect_tomorrow_data = True
-            logger.info("Reference date provided - expecting tomorrow's data to be available")
-        
-        if tomorrow in prices_by_date:
-            tomorrow_prices = prices_by_date[tomorrow]
-            logger.info(f"\nFound {len(tomorrow_prices)} price points for tomorrow ({tomorrow})")
+        if not tomorrow_complete:
+            # Only warn about missing tomorrow hours after 13:00 CET when they should be available
+            now_utc = datetime.now(timezone.utc)
+            now_cet = now_utc.astimezone(pytz.timezone('Europe/Oslo'))
             
-            if len(tomorrow_prices) >= 22:  # Allow for some missing hours
-                logger.info(f"✓ Found {len(tomorrow_prices)}/24 hourly prices for tomorrow")
-            else:
-                logger.warning(f"⚠ Incomplete data: Found only {len(tomorrow_prices)} hourly prices for tomorrow (expected 24)")
-                
-                # If we have coverage information, log it
-                if "tomorrow_coverage" in raw_data:
-                    logger.info(f"Tomorrow's coverage: {raw_data['tomorrow_coverage']:.1f}%")
-                
-                # List missing hours for better debugging
-                all_hours = set(f"{h:02d}:00" for h in range(24))
-                found_hours = set(tomorrow_prices.keys())
-                missing_hours = all_hours - found_hours
-                if missing_hours:
-                    logger.warning(f"Missing hours tomorrow: {', '.join(sorted(missing_hours))}")
-        elif expect_tomorrow_data:
-            logger.warning(f"\nWarning: No prices found for tomorrow ({tomorrow}) even though it's expected")
-        else:
-            logger.info(f"\nNote: No prices found for tomorrow ({tomorrow}), but that's expected before 13:00 local time")
+            if now_cet.hour >= 13 or reference_date:
+                missing_tomorrow = set(tomorrow_hour_range) - tomorrow_hours
+                logger.warning(f"Missing tomorrow hours: {', '.join(sorted(missing_tomorrow))}")
         
         # Final validation - check if we have enough data overall to consider the test successful
-        total_prices = len(hourly_prices)
+        total_prices = len(today_hours) + len(tomorrow_hours)
         if total_prices >= 22:  # At minimum, we should have most of today's hours
             logger.info("\nTest completed successfully!")
             return 0

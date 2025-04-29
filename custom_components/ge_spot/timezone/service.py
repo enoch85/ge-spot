@@ -13,7 +13,7 @@ from homeassistant.util import dt as dt_util
 from ..const.areas import Area, Timezone
 from ..const.config import Config
 from ..const.time import TimezoneConstants, TimezoneReference
-from .converter import TimezoneConverter
+from .timezone_converter import TimezoneConverter
 from .dst_handler import DSTHandler
 from .hour_calculator import HourCalculator
 from .parser import TimestampParser

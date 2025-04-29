@@ -11,7 +11,7 @@ from homeassistant.const import ATTR_ATTRIBUTION
 
 from ..const import DOMAIN
 from ..const.config import Config
-from ..utils.formatter import format_price, format_price_value, format_relative_price
+from ..price.formatter import format_price, format_price_value, format_relative_price
 from ..coordinator import UnifiedPriceCoordinator
 from .price import (
     PriceValueSensor,

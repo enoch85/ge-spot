@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from custom_components.ge_spot.coordinator.data_processor import DataProcessor
-from custom_components.ge_spot.utils.currency_converter import CurrencyConverter
+from custom_components.ge_spot.price.currency_converter import CurrencyConverter
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
 from custom_components.ge_spot.const.config import Config
 from custom_components.ge_spot.const.defaults import Defaults

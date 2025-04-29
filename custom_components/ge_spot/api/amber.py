@@ -12,7 +12,7 @@ from ..const.sources import Source
 from ..const.currencies import Currency
 from ..const.network import Network
 from ..const.api import Amber
-from ..utils.api_client import ApiClient
+from .base.api_client import ApiClient
 from ..const.config import Config
 
 _LOGGER = logging.getLogger(__name__)

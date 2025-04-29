@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, Any, Optional, List, Callable, Awaitable
 import aiohttp
 
-from ..const.attributes import Attributes
+from ...const.attributes import Attributes
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@
 # Re-export the core classes
 from .service import TimezoneService
 from .parser import TimestampParser
-from .converter import TimezoneConverter
+from .timezone_converter import TimezoneConverter
 from .dst_handler import DSTHandler
 from .hour_calculator import HourCalculator
 

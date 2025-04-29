@@ -9,8 +9,8 @@ from ..api.base.error_handler import ErrorHandler, retry_with_backoff
 _LOGGER = logging.getLogger(__name__)
 
 # API client and validation
-from .api_client import ApiFallbackManager
-from .api_validator import ApiValidator
+from ..api.base.api_client import ApiFallbackManager
+from ..api.base.api_validator import ApiValidator
 # Import DataValidator from the local file
 from .data_validator import DataValidator
 
