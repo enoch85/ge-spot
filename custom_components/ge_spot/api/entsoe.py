@@ -147,37 +147,67 @@ class EntsoeAPI(BasePriceAPI):
                         headers=headers,
                         timeout=Network.Defaults.TIMEOUT
                     )
-                    
+
+                    # --- Refined Error Handling ---
+                    # Explicitly check for the error dictionary format first
+                    if isinstance(response, dict) and response.get("error"):
+                        status_code = response.get("status_code")
+                        message = response.get('message', 'Unknown API error')
+                        _LOGGER.error(f"ENTSO-E API error (status {status_code}) for doc_type={doc_type}, range={period_start}-{period_end}: {message}")
+                        if status_code == 401:
+                            # Raise specific error for auth failure, including message from API if available
+                            raise ValueError(f"ENTSO-E API authentication failed (401 Unauthorized). Check your API key. Message: {message}")
+                        else:
+                            # For other HTTP errors (e.g., 400, 500), log and continue to the next attempt
+                            continue # Go to next doc_type/date_range
+
+                    # --- Handle Non-Error Responses ---
+                    # If it wasn't an error dict, proceed with normal checks
                     if not response:
                         _LOGGER.debug(f"ENTSO-E empty response for doc_type={doc_type}, range={period_start}-{period_end}")
                         continue
-                        
+
                     if isinstance(response, str):
+                        # Check for specific error strings in text/xml response (redundant for 401 now, but good practice)
                         if "Not authorized" in response:
-                            _LOGGER.error("ENTSO-E API authentication failed: Not authorized. Check your API key.")
-                            raise ValueError("ENTSO-E API authentication failed: Not authorized")
+                            _LOGGER.error("ENTSO-E API authentication failed: 'Not authorized' string found in response.")
+                            raise ValueError("ENTSO-E API authentication failed: 'Not authorized' string found.")
                         elif "No matching data found" in response:
                             _LOGGER.debug(f"ENTSO-E 'No matching data found' for doc_type={doc_type}, range={period_start}-{period_end}")
                             continue
                         elif "Publication_MarketDocument" in response:
                             _LOGGER.info(f"Fetched ENTSO-E XML data with doc_type={doc_type} for area {area}")
                             xml_responses.append(response)
-                            break
+                            break # Got XML data, break inner loop (doc_types)
                         else:
-                            _LOGGER.error(f"Unexpected string response from ENTSO-E for doc_type={doc_type}: {response[:200]}...")
-                            raise ValueError(f"Unexpected string response from ENTSO-E: {response}")
-                    elif isinstance(response, dict) and response:
+                            _LOGGER.warning(f"Unexpected string response content from ENTSO-E for doc_type={doc_type}: {response[:200]}...")
+                            # Treat as potentially recoverable, continue to next attempt
+                            continue
+                    elif isinstance(response, dict) and response: # Now this should only catch *valid* dict responses
                         _LOGGER.info(f"Fetched ENTSO-E dict data with doc_type={doc_type} for area {area}")
                         if not dict_response_found:
                             dict_response_found = response
                             found_doc_type = doc_type
-                        break
+                        break # Got dict data, break inner loop (doc_types)
+                    else:
+                        # Handle unexpected response types if necessary
+                        _LOGGER.warning(f"Unexpected response type from ENTSO-E: {type(response).__name__}")
+                        continue
+
                 except asyncio.TimeoutError:
                     _LOGGER.warning(f"ENTSO-E request timed out for doc_type={doc_type}, range={period_start}-{period_end}")
+                    continue # Go to next doc_type/date_range
+                except ValueError as e:
+                    # Catch specific ValueErrors raised above (like auth error) or potentially from parsing
+                    _LOGGER.error(f"ValueError during ENTSO-E fetch processing for doc_type={doc_type}: {e}")
+                    if "authentication failed" in str(e):
+                        raise e # Re-raise auth error to be caught by caller (validate_api_key or error_handler)
+                    # For other ValueErrors, treat as failure for this attempt and continue
                     continue
                 except Exception as e:
-                    _LOGGER.error(f"Error fetching ENTSO-E data with doc_type={doc_type}: {e}")
-                    continue
+                    # Catch other unexpected exceptions during fetch/processing for this attempt
+                    _LOGGER.error(f"Unexpected error during ENTSO-E fetch for doc_type={doc_type}: {e}", exc_info=True)
+                    continue # Go to next doc_type/date_range
                     
             if xml_responses or dict_response_found:
                 _LOGGER.info(f"Got valid ENTSO-E response(s) for date range {period_start} to {period_end}, skipping remaining ranges")
@@ -296,7 +326,8 @@ async def validate_api_key(api_key, area, session=None):
             _LOGGER.info(f"API key validation successful for area {area}")
             return True
         except ValueError as e:
-            if "Not authorized" in str(e) or "authentication failed" in str(e):
+            # Check specifically for the auth failure string raised in _fetch_data
+            if "ENTSO-E API authentication failed" in str(e):
                 _LOGGER.warning(f"API key validation failed: {e}")
                 return False
             elif "No matching data found" in str(e):
@@ -304,7 +335,7 @@ async def validate_api_key(api_key, area, session=None):
                 _LOGGER.info(f"API key is valid but no data found for area {area}")
                 return True
             else:
-                # Try alternative areas if this one failed for non-auth reasons
+                # Try alternative areas if this one failed for non-auth, non-'no data' reasons
                 _LOGGER.warning(f"API key validation encountered an error with area {area}: {e}")
                 
                 # Try alternative areas that are known to have good data availability
@@ -319,26 +350,27 @@ async def validate_api_key(api_key, area, session=None):
                 for alt_area in alternative_areas:
                     _LOGGER.info(f"Trying alternative area {alt_area} for API key validation")
                     try:
-                        # Reuse the client but with different area
-                        await api.fetch_raw_data(alt_area, session)
+                        # Create a new config and API instance for the alternative area
+                        alt_config = {"area": alt_area, "api_key": api_key}
+                        alt_api = EntsoeAPI(alt_config, session)
+                        await alt_api.fetch_raw_data(alt_area, session)
                         _LOGGER.info(f"API key validation successful with alternative area {alt_area}")
                         return True
                     except ValueError as alt_e:
-                        if "Not authorized" in str(alt_e) or "authentication failed" in str(alt_e):
+                        # Check specifically for auth failure with the alternative area
+                        if "ENTSO-E API authentication failed" in str(alt_e):
                             _LOGGER.warning(f"API key validation failed with alternative area {alt_area}: {alt_e}")
                             return False
                         elif "No matching data found" in str(alt_e):
-                            # This is a valid key even if there's no data
                             _LOGGER.info(f"API key is valid but no data found for alternative area {alt_area}")
                             return True
                         else:
                             _LOGGER.warning(f"Error with alternative area {alt_area}: {alt_e}")
-                            # Continue to the next alternative area
-                            continue
+                            continue # Continue to the next alternative area
                 
                 # If we get here, all attempts failed but not due to auth issues
                 # Assume key is valid if the error is not clearly an auth error
-                _LOGGER.info("API key seems valid but encountered data retrieval issues with all areas")
+                _LOGGER.info("API key seems valid but encountered data retrieval issues with all tested areas")
                 return True
     except Exception as e:
         _LOGGER.error(f"Error validating ENTSO-E API key: {e}")

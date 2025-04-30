@@ -70,7 +70,8 @@ class NordpoolAPI(BasePriceAPI):
                 area=area,
                 reference_time=kwargs.get('reference_time')
             )
-            if not data or not isinstance(data, dict) or not data.get('today'):
+            # Check if 'today' data exists within 'raw_data'
+            if not data or not isinstance(data, dict) or not data.get('raw_data', {}).get('today'):
                 _LOGGER.error(f"Nordpool API returned empty or invalid data for area {area}: {data}")
             return data
         finally:
