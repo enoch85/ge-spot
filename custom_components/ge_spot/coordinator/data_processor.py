@@ -24,8 +24,10 @@ from .cache_manager import CacheManager
 from ..timezone.timezone_converter import TimezoneConverter # Import TimezoneConverter
 from ..price.currency_converter import CurrencyConverter # Import CurrencyConverter
 from ..price.statistics import calculate_statistics
-from custom_components.ge_spot.timezone.timezone_utils import get_timezone_object
-from ..const.sources import Source
+# Use relative import for timezone_utils
+from ..timezone.timezone_utils import get_timezone_object
+# Use absolute component path for sources
+from custom_components.ge_spot.const.sources import Source
 from ..const.attributes import Attributes
 
 _LOGGER = logging.getLogger(__name__)
