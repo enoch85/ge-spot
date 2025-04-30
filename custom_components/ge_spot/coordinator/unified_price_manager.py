@@ -202,13 +202,38 @@ class UnifiedPriceManager:
                     )
                     if cached_data:
                         _LOGGER.debug("Returning rate-limited cached data for %s", self.area)
-                        # Ensure the cached data is marked correctly before processing
+                        # Ensure the cached data is marked correctly
                         cached_data["using_cached_data"] = True
-                        # Re-process to ensure stats etc. are up-to-date relative to 'now'
-                        processed_cached_data = await self._process_result(cached_data, is_cached=True)
-                        # Explicitly set the flag again after processing, as _process_result might reset it based on input
-                        processed_cached_data["using_cached_data"] = True
-                        return processed_cached_data
+                        
+                        # Check if the cached data is already processed
+                        # (processed data has hourly_prices but not hourly_raw)
+                        if ("hourly_prices" in cached_data and 
+                            not cached_data.get("hourly_raw") and 
+                            cached_data.get("has_data", False)):
+                            
+                            # Update timestamps to ensure current/next hour prices are correct
+                            if cached_data.get("current_hour_key") or cached_data.get("next_hour_key"):
+                                current_hour_key = self._tz_service.get_current_hour_key()
+                                next_hour_key = self._tz_service.get_next_hour_key()
+                                
+                                cached_data["current_hour_key"] = current_hour_key
+                                cached_data["next_hour_key"] = next_hour_key
+                                
+                                # Update current and next prices based on new hour keys
+                                hourly_prices = cached_data.get("hourly_prices", {})
+                                cached_data["current_price"] = hourly_prices.get(current_hour_key)
+                                cached_data["next_hour_price"] = hourly_prices.get(next_hour_key)
+                                
+                                cached_data["last_update"] = dt_util.now().isoformat()
+                            
+                            # Return already processed data without reprocessing
+                            return cached_data
+                        else:
+                            # Re-process to ensure stats etc. are up-to-date relative to 'now'
+                            processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                            # Explicitly set the flag again after processing, as _process_result might reset it based on input
+                            processed_cached_data["using_cached_data"] = True
+                            return processed_cached_data
                     else:
                         _LOGGER.warning("Rate limited for %s, but no cached data available for today (%s).", self.area, today_date)
                         # Pass the specific rate limit error message
