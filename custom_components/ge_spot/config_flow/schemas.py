@@ -98,44 +98,35 @@ def get_api_keys_schema(area, existing_api_key=None):
 def get_options_schema(defaults, supported_sources, area):
     """Return schema for options."""
     schema = {
-            vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0) * 100): vol.All(
-                vol.Coerce(float),
-                vol.Range(min=0, max=100),
-            ),
-                vol.Optional(Config.DISPLAY_UNIT, default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        {"value": key, "label": value}
-                        for key, value in DisplayUnit.OPTIONS.items()
-                    ],
-                    mode=selector.SelectSelectorMode.LIST,
-                )
-            ),
-            vol.Optional(Config.TIMEZONE_REFERENCE, default=defaults.get(Config.TIMEZONE_REFERENCE, TimezoneReference.DEFAULT)): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        {"value": key, "label": value}
-                        for key, value in TimezoneReference.OPTIONS.items()
-                    ],
-                    mode=selector.SelectSelectorMode.LIST,
-                )
-            ),
+        vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0) * 100): vol.All(
+            vol.Coerce(float),
+            vol.Range(min=0, max=100),
+        ),
+        vol.Optional(Config.DISPLAY_UNIT, default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    {"value": key, "label": value}
+                    for key, value in DisplayUnit.OPTIONS.items()
+                ],
+                mode=selector.SelectSelectorMode.LIST,
+            )
+        ),
+        vol.Optional(Config.TIMEZONE_REFERENCE, default=defaults.get(Config.TIMEZONE_REFERENCE, TimezoneReference.DEFAULT)): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    {"value": key, "label": value}
+                    for key, value in TimezoneReference.OPTIONS.items()
+                ],
+                mode=selector.SelectSelectorMode.LIST,
+            )
+        ),
     }
 
-    # Add Stromligning Supplier Field Conditionally
-    if area in ["DK1", "DK2"]:
-        supplier_description = (
-            "Required for Stromligning source. Enter your supplier name (e.g., EWII). "
-            "Full list: https://stromligning.dk/"
-        )
-        schema[vol.Optional(
-            Config.CONF_STROMLIGNING_SUPPLIER,
-            description=supplier_description,
-            default=defaults.get(Config.CONF_STROMLIGNING_SUPPLIER, "")
-        )] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
-
-    # Add source priority selection with description
+    # Add source priority selection with header
     current_priority = defaults.get(Config.SOURCE_PRIORITY, supported_sources)
+    schema[vol.Optional(
+        "header_source_priority"
+    )] = str
     schema[vol.Optional(
         Config.SOURCE_PRIORITY,
         default=current_priority,
@@ -153,14 +144,20 @@ def get_options_schema(defaults, supported_sources, area):
 
     # Add API key fields for sources that require it
     if Source.ENTSOE in supported_sources:
-        # Show current API key status
         current_api_key = defaults.get(Config.API_KEY, "")
         api_key_status = "API key configured" if current_api_key else "No API key configured"
-        # Add field for ENTSO-E API key with the current status shown
         schema[vol.Optional(
             f"{Source.ENTSOE}_api_key",
             description=f"Current status: {api_key_status}"
         )] = FormHelper.create_api_key_selector()
+
+    # Add Stromligning Supplier Field Conditionally, after ENTSO-E API key
+    selected_sources = defaults.get(Config.SOURCE_PRIORITY, [])
+    if Source.STROMLIGNING in selected_sources:
+        schema[vol.Optional(
+            Config.CONF_STROMLIGNING_SUPPLIER,
+            default=defaults.get(Config.CONF_STROMLIGNING_SUPPLIER, "")
+        )] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
 
     # Add Clear Cache button
     schema[vol.Optional("clear_cache", default=False)] = selector.BooleanSelector(
