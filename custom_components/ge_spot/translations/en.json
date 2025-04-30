@@ -56,7 +56,8 @@
           "display_unit": "Price Display Format",
           "timezone_reference": "Time Reference",
           "entsoe_api_key": "ENTSO-E API Key",
-          "clear_cache": "Clear Price Cache"
+          "clear_cache": "Clear Price Cache",
+          "stromligning_supplier": "Stromligning Supplier ID (Required for DK1/DK2)"
         },
         "data_description": {
           "source_priority": "Select which sources to use in order of priority (first = highest priority)",
