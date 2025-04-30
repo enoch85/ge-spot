@@ -92,8 +92,11 @@ class GSpotOptionsFlow(OptionsFlow):
                         user_input.pop(Config.SOURCE_PRIORITY)
 
                     if Config.TIMEZONE_REFERENCE in user_input:
+                        # Ensure the timezone reference is saved both to data and kept in options
+                        # This is crucial for proper initialization
+                        _LOGGER.debug(f"Saving timezone reference setting: {user_input[Config.TIMEZONE_REFERENCE]}")
                         updated_data[Config.TIMEZONE_REFERENCE] = user_input[Config.TIMEZONE_REFERENCE]
-                        # Keep it in options as well since it's a valid option
+                        # Don't remove from options - we want it in both places
 
                 # Update the config entry data if needed
                 if updated_data:

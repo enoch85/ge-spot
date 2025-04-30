@@ -78,7 +78,7 @@ class UnifiedPriceManager:
         self._using_cached_data = False
 
         # Services and utilities
-        self._tz_service = TimezoneService(hass) # Instantiate TimezoneService
+        self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
         self._fallback_manager = FallbackManager()
         self._cache_manager = CacheManager(hass=hass, config=config) # Instantiate CacheManager
         self._exchange_service = None # Initialize exchange service attribute

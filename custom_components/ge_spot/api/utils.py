@@ -3,11 +3,18 @@ import asyncio
 import logging
 import datetime
 from typing import Dict, Any, List
+from functools import lru_cache
 
 from ..timezone import TimezoneService
 import pytz
 
 _LOGGER = logging.getLogger(__name__)
+
+# Cache timezone objects to avoid repeated file I/O
+@lru_cache(maxsize=32)
+def get_timezone(tz_name):
+    """Get timezone object with caching to avoid repeated file I/O."""
+    return pytz.timezone(tz_name)
 
 async def fetch_with_retry(fetch_func, is_data_available, retry_interval=1800, end_time=None, local_tz_name=None, *args, **kwargs):
     """
@@ -18,6 +25,15 @@ async def fetch_with_retry(fetch_func, is_data_available, retry_interval=1800, e
     """
     import datetime
     attempts = 0
+    
+    # Create the timezone object outside the loop
+    local_tz = None
+    if local_tz_name:
+        # Run the blocking call in an executor to avoid blocking the event loop
+        local_tz = await asyncio.get_event_loop().run_in_executor(
+            None, get_timezone, local_tz_name
+        )
+    
     while True:
         result = await fetch_func(*args, **kwargs)
         if is_data_available(result):
@@ -27,9 +43,8 @@ async def fetch_with_retry(fetch_func, is_data_available, retry_interval=1800, e
             _LOGGER.info(f"Data not available yet (first attempt). Will retry every {retry_interval//60} minutes until {end_time}.")
         attempts += 1
         # Check if we should stop
-        if end_time and local_tz_name:
+        if end_time and local_tz:
             now_utc = datetime.datetime.now(datetime.timezone.utc)
-            local_tz = pytz.timezone(local_tz_name)
             now_local = now_utc.astimezone(local_tz)
             cutoff_dt = now_local.replace(hour=end_time.hour, minute=end_time.minute, second=0, microsecond=0)
             if now_local >= cutoff_dt:
