@@ -97,15 +97,17 @@ For a complete list of supported areas and their currency mappings, see the [Con
 - Seamless timezone handling to ensure correct hourly price display regardless of API source
 - Currency conversion with dynamic exchange rates from the European Central Bank
 - Timestamps in ISO format for compatibility with other systems
-- Eight sensor types for each configured region:
-  - Current hour price
-  - Next hour price
-  - Day average price
-  - Peak price (highest of the day)
-  - Off-peak price (lowest of the day)
-  - Tomorrow average price
-  - Tomorrow peak price (highest of tomorrow)
-  - Tomorrow off-peak price (lowest of tomorrow)
+- Provides the following sensors for each configured region:
+  - **Current Price:** The electricity spot price for the current hour in your chosen display unit (e.g., cents/kWh).
+  - **Next Hour Price:** The electricity spot price for the upcoming hour.
+  - **Average Price:** The average electricity spot price calculated across all hours of the current day (today).
+  - **Peak Price:** The highest hourly electricity spot price encountered during the current day (today).
+  - **Off-Peak Price:** The lowest hourly electricity spot price encountered during the current day (today).
+  - **Price Difference:** The absolute difference between the *Current Price* and the *Average Price* for today. A negative value indicates the current price is below the daily average.
+  - **Price Percentage:** The relative difference between the *Current Price* and the *Average Price* for today, expressed as a percentage of the average price. A negative percentage indicates the current price is below the daily average.
+  - **Tomorrow Average Price:** The average electricity spot price calculated across all hours of the *next* day (tomorrow). This sensor becomes available once tomorrow's prices are published by the source (typically around 13:00-14:00 CET).
+  - **Tomorrow Peak Price:** The highest hourly electricity spot price forecast for the *next* day (tomorrow). Becomes available when tomorrow's prices are published.
+  - **Tomorrow Off-Peak Price:** The lowest hourly electricity spot price forecast for the *next* day (tomorrow). Becomes available when tomorrow's prices are published.
 
 ## Configuration
 

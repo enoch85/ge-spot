@@ -36,7 +36,12 @@ class PriceValueSensor(BaseElectricityPriceSensor):
         """Return the native value of the sensor."""
         if not self.coordinator.data:
             return None
-        return self._value_fn(self.coordinator.data)
+        
+        # Return the value directly from the coordinator data via the value function.
+        # The DataProcessor/CurrencyConverter already handles subunit conversion.
+        value = self._value_fn(self.coordinator.data)
+        
+        return value
 
     def _format_timestamp_display(self, timestamp_prices):
         """Format timestamp prices for clean display in attributes."""
@@ -123,23 +128,26 @@ class ExtremaPriceSensor(PriceValueSensor):
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix, day_offset=0, extrema_type="min"):
         """Initialize the extrema price sensor."""
-        self._day_offset = day_offset  # 0 for today, 1 for tomorrow
-        self._extrema_type = extrema_type  # "min" or "max"
-        self._stats_key = "today_stats" if day_offset == 0 else "tomorrow_stats"
+        self._day_offset = day_offset
+        self._extrema_type = extrema_type
+        # Use the correct keys used by DataProcessor
+        self._stats_key = "statistics" if day_offset == 0 else "tomorrow_statistics"
 
         # Create value extraction function
         def extract_value(data):
-            if self._stats_key not in data:
-                return None
+            if self._stats_key not in data or not data[self._stats_key]: # Check if stats dict exists and is not empty
+                 _LOGGER.debug(f"Stats key '{self._stats_key}' not found or empty in data for {self.entity_id}")
+                 return None
+            stats_dict = data[self._stats_key]
             key = "min" if self._extrema_type == "min" else "max"
-            return data[self._stats_key].get(key)
+            value = stats_dict.get(key)
+            # Add specific logging for this sensor type
+            _LOGGER.debug(f"ExtremaSensor {self.entity_id}: Reading '{key}' from '{self._stats_key}'. Found value: {value}. Stats dict: {stats_dict}")
+            return value
 
         def get_timestamp(data):
             from homeassistant.util import dt as dt_util
-            if self._stats_key not in data:
-                return {}
-
-            stats = data[self._stats_key]
+            stats = data.get(self._stats_key, {}) # Use .get() for safety
             timestamp_key = f"{self._extrema_type}_timestamp"
             price_key = "min" if self._extrema_type == "min" else "max"
             price_value = stats.get(price_key)
@@ -199,31 +207,34 @@ class PriceStatisticSensor(PriceValueSensor):
     device_class    = SensorDeviceClass.MONETARY
     state_class     = SensorStateClass.TOTAL  # Changed from MEASUREMENT to TOTAL for HA compliance
 
-    def __init__(self, coordinator, entity_id, name, stat_type, include_vat=False, vat=0, price_in_cents=False):
+    def __init__(self, coordinator, config_data, sensor_type, name_suffix, stat_type):
         """Initialize the price statistic sensor."""
         # Create value extraction function
         def extract_value(data):
-            if "today_stats" not in data:
+            # Use .get() for safety and the correct key "statistics"
+            stats = data.get("statistics", {}) 
+            if not stats:
+                _LOGGER.debug(f"PriceStatisticSensor {self.entity_id}: 'statistics' dictionary not found or empty in data.")
                 return None
-            return data["today_stats"].get(stat_type)
+            value = stats.get(stat_type)
+            _LOGGER.debug(f"PriceStatisticSensor {self.entity_id}: Reading '{stat_type}' from 'statistics'. Found value: {value}. Stats dict: {stats}")
+            return value
 
-        # Initialize parent class
+        # Initialize parent class, passing the full config_data
         super().__init__(
             coordinator,
-            {
-                "area": coordinator.area,
-                "currency": coordinator.currency,
-                "vat": vat,
-                "precision": 3
-            },
-            f"{stat_type}_price",
-            name,
+            config_data, # Pass the full config_data
+            sensor_type,
+            name_suffix,
             extract_value,
             None
         )
         self._stat_type = stat_type
-        self._include_vat = include_vat
-        self._price_in_cents = price_in_cents
+
+    # Add this property to inherit unit logic from base class
+    @property
+    def native_unit_of_measurement(self):
+        return super().native_unit_of_measurement
 
 
 class PriceDifferenceSensor(PriceValueSensor):
@@ -231,51 +242,46 @@ class PriceDifferenceSensor(PriceValueSensor):
     device_class    = SensorDeviceClass.MONETARY
     state_class     = SensorStateClass.TOTAL  # Changed from MEASUREMENT to TOTAL for HA compliance
 
-    def __init__(self, coordinator, entity_id, name, value1_key, value2_key, 
-                include_vat=False, vat=0, price_in_cents=False):
+    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value1_key, value2_key):
         """Initialize the price difference sensor."""
         # Create value extraction function
         def extract_value(data):
-            if value1_key not in data or value2_key not in data:
-                return None
-                
             value1 = data.get(value1_key)
             if value1_key == "current_price" and value1 is None:
-                # Try to get from today_stats
-                if "today_stats" in data:
-                    value1 = data["today_stats"].get("current")
+                # Try to get from statistics
+                stats = data.get("statistics", {})
+                value1 = stats.get("current") # Assuming 'current' might exist in stats, otherwise this needs adjustment
+                _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Fallback for current_price from statistics: {value1}")
                     
             value2 = None
             if value2_key == "average":
-                # Get from today_stats
-                if "today_stats" in data:
-                    value2 = data["today_stats"].get("average")
+                # Get from statistics
+                stats = data.get("statistics", {})
+                value2 = stats.get("average")
+                _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Reading average from statistics: {value2}")
             else:
                 value2 = data.get(value2_key)
+                _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Reading {value2_key} directly: {value2}")
                 
             if value1 is None or value2 is None:
+                _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Calculation failed. value1={value1}, value2={value2}")
                 return None
                 
-            return value1 - value2
+            result = value1 - value2
+            _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Calculated difference: {result} (value1={value1}, value2={value2})")
+            return result
 
-        # Initialize parent class
+        # Initialize parent class, passing the full config_data
         super().__init__(
             coordinator,
-            {
-                "area": coordinator.area,
-                "currency": coordinator.currency,
-                "vat": vat,
-                "precision": 3
-            },
-            "price_difference",
-            name,
+            config_data, # Pass the full config_data
+            sensor_type,
+            name_suffix,
             extract_value,
             None
         )
         self._value1_key = value1_key
         self._value2_key = value2_key
-        self._include_vat = include_vat
-        self._price_in_cents = price_in_cents
 
 
 class PricePercentSensor(PriceValueSensor):
@@ -283,130 +289,48 @@ class PricePercentSensor(PriceValueSensor):
     device_class    = SensorDeviceClass.MONETARY
     state_class     = None  # Percent is not a monetary total, so set to None
 
-    def __init__(self, coordinator, entity_id, name, value_key, reference_key, 
-                include_vat=False, vat=0):
+    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value_key, reference_key):
         """Initialize the price percentage sensor."""
         # Create value extraction function
         def extract_value(data):
-            if value_key not in data:
-                return None
-                
             value = data.get(value_key)
             if value_key == "current_price" and value is None:
-                # Try to get from today_stats
-                if "today_stats" in data:
-                    value = data["today_stats"].get("current")
+                # Try to get from statistics
+                stats = data.get("statistics", {})
+                value = stats.get("current") # Assuming 'current' might exist in stats
+                _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Fallback for current_price from statistics: {value}")
                     
             reference = None
             if reference_key == "average":
-                # Get from today_stats
-                if "today_stats" in data:
-                    reference = data["today_stats"].get("average")
+                # Get from statistics
+                stats = data.get("statistics", {})
+                reference = stats.get("average")
+                _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Reading average from statistics: {reference}")
             else:
                 reference = data.get(reference_key)
+                _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Reading {reference_key} directly: {reference}")
                 
             if value is None or reference is None or reference == 0:
+                _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Calculation failed. value={value}, reference={reference}")
                 return None
                 
-            return (value / reference - 1) * 100
+            result = (value / reference - 1) * 100
+            _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Calculated percentage: {result} (value={value}, reference={reference})")
+            return result
 
-        # Initialize parent class
+        # Initialize parent class, passing the full config_data
         super().__init__(
             coordinator,
-            {
-                "area": coordinator.area,
-                "currency": coordinator.currency,
-                "vat": vat,
-                "precision": 1
-            },
-            "price_percentage",
-            name,
+            config_data, # Pass the full config_data
+            sensor_type,
+            name_suffix,
             extract_value,
             None
         )
         self._value_key = value_key
         self._reference_key = reference_key
-        self._include_vat = include_vat
         
     @property
     def native_unit_of_measurement(self):
         """Return the unit of measurement."""
         return "%"
-
-
-class OffPeakPeakSensor(PriceValueSensor):
-    """Sensor for off-peak and peak price periods."""
-    device_class    = None
-    state_class     = SensorStateClass.MEASUREMENT
-
-    def __init__(self, coordinator, entity_id, name, include_vat=False, vat=0, price_in_cents=False):
-        """Initialize the off-peak/peak sensor."""
-        # Create value extraction function that returns a string representation
-        def extract_value(data):
-            if "today_stats" not in data:
-                return None
-                
-            stats = data["today_stats"]
-            if "peak" not in stats or "off_peak" not in stats:
-                return None
-                
-            peak = stats["peak"]
-            off_peak = stats["off_peak"]
-            
-            if not peak or not off_peak:
-                return None
-                
-            peak_avg = peak.get("average")
-            off_peak_avg = off_peak.get("average")
-            
-            if peak_avg is None or off_peak_avg is None:
-                return None
-                
-            # Return the ratio between peak and off-peak
-            return peak_avg / off_peak_avg if off_peak_avg != 0 else None
-
-        # Initialize parent class
-        super().__init__(
-            coordinator,
-            {
-                "area": coordinator.area,
-                "currency": coordinator.currency,
-                "vat": vat,
-                "precision": 2
-            },
-            "peak_offpeak",
-            name,
-            extract_value,
-            self._get_additional_attrs
-        )
-        self._include_vat = include_vat
-        self._price_in_cents = price_in_cents
-        
-    def _get_additional_attrs(self, data):
-        """Get additional attributes specific to off-peak/peak sensor."""
-        if "hour_stats" not in data or not data["hour_stats"]:
-            return {}
-
-        stats = data["hour_stats"]
-        peak_avg = stats.get("peak_avg")
-        off_peak_avg = stats.get("off_peak_avg")
-        ratio = None
-        if peak_avg is not None and off_peak_avg is not None and off_peak_avg != 0:
-             ratio = peak_avg / off_peak_avg
-
-        return {
-            "peak_average": peak_avg,
-            "peak_min": stats.get("peak_min"),
-            "peak_max": stats.get("peak_max"),
-            "peak_hours": stats.get("peak_hours", []),
-            "off_peak_average": off_peak_avg,
-            "off_peak_min": stats.get("off_peak_min"),
-            "off_peak_max": stats.get("off_peak_max"),
-            "off_peak_hours": stats.get("off_peak_hours", []),
-            "ratio": ratio,
-        }
-        
-    @property
-    def native_unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return "ratio"

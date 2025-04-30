@@ -19,7 +19,8 @@ from .price import (
     ExtremaPriceSensor,
     PriceDifferenceSensor,
     PricePercentSensor,
-    OffPeakPeakSensor
+    TomorrowAveragePriceSensor,  # Added
+    TomorrowExtremaPriceSensor   # Added
 )
 
 from ..const.attributes import Attributes
@@ -91,12 +92,10 @@ async def async_setup_entry(
     entities.append(
         PriceStatisticSensor(
             coordinator,
+            config_data, # Pass config_data
             f"{coordinator.area}_average_price",
             "Average Price",
-            "average",
-            include_vat,
-            vat,
-            price_in_cents
+            "average"
         )
     )
 
@@ -122,29 +121,15 @@ async def async_setup_entry(
         )
     )
 
-    # Off-peak/peak periods
-    entities.append(
-        OffPeakPeakSensor(
-            coordinator,
-            f"{coordinator.area}_peak_offpeak_prices",
-            "Peak/Off-Peak Prices",
-            include_vat,
-            vat,
-            price_in_cents
-        )
-    )
-
     # Price difference (current vs average)
     entities.append(
         PriceDifferenceSensor(
             coordinator,
+            config_data, # Pass config_data
             f"{coordinator.area}_price_difference",
             "Price Difference",
             "current_price",
-            "average",
-            include_vat,
-            vat,
-            price_in_cents
+            "average"
         )
     )
 
@@ -152,14 +137,54 @@ async def async_setup_entry(
     entities.append(
         PricePercentSensor(
             coordinator,
+            config_data, # Pass config_data
             f"{coordinator.area}_price_percentage",
             "Price Percentage",
             "current_price",
-            "average",
-            include_vat,
-            vat
+            "average"
         )
     )
+
+    # --- Add Tomorrow Sensors --- 
+
+    # Tomorrow Average price sensor
+    # Define value extraction function for tomorrow average
+    get_tomorrow_avg_price = lambda data: data.get("tomorrow_statistics", {}).get("average")
+    entities.append(
+        TomorrowAveragePriceSensor(
+            coordinator,
+            config_data, # Pass the correctly populated config_data
+            f"{coordinator.area}_tomorrow_average_price",
+            "Tomorrow Average Price",
+            get_tomorrow_avg_price, # Pass the function
+            None # No specific additional attributes needed here yet
+        )
+    )
+
+    # Tomorrow Peak price sensor
+    entities.append(
+        TomorrowExtremaPriceSensor(
+            coordinator,
+            config_data, # Pass the correctly populated config_data
+            f"{coordinator.area}_tomorrow_peak_price",
+            "Tomorrow Peak Price",
+            day_offset=1,       # Specify tomorrow
+            extrema_type="max"  # Specify peak
+        )
+    )
+
+    # Tomorrow Off-Peak price sensor
+    entities.append(
+        TomorrowExtremaPriceSensor(
+            coordinator,
+            config_data, # Pass the correctly populated config_data
+            f"{coordinator.area}_tomorrow_off_peak_price",
+            "Tomorrow Off-Peak Price",
+            day_offset=1,       # Specify tomorrow
+            extrema_type="min"  # Specify off-peak
+        )
+    )
+    # --- End Tomorrow Sensors ---
 
     # Add all entities
     async_add_entities(entities)

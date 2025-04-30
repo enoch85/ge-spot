@@ -219,6 +219,9 @@ class DataProcessor:
             "fetched_at": data.get("fetched_at")
         }
 
+        # Initialize tomorrow_valid flag
+        processed_result["tomorrow_valid"] = False
+
         # Calculate statistics and current/next hour prices as before...
         try:
             # 3a. Calculate Today's Statistics and Current/Next Prices
@@ -238,7 +241,7 @@ class DataProcessor:
                     stats = self._calculate_statistics(final_today_prices)
                     stats.complete_data = True
                     processed_result["statistics"] = stats.to_dict()
-                    _LOGGER.debug(f"Calculated today's statistics for {self.area}")
+                    _LOGGER.debug(f"Calculated today's statistics for {self.area}: {processed_result['statistics']}") # Log today's stats
                 else:
                     missing_keys = sorted(list(today_keys - found_keys))
                     _LOGGER.warning(f"Incomplete data for today ({len(found_keys)}/{len(today_keys)} keys found, missing: {missing_keys}), skipping statistics calculation for {self.area}.")
@@ -257,7 +260,8 @@ class DataProcessor:
                     stats = self._calculate_statistics(final_tomorrow_prices)
                     stats.complete_data = True
                     processed_result["tomorrow_statistics"] = stats.to_dict()
-                    _LOGGER.debug(f"Calculated tomorrow's statistics for {self.area}")
+                    processed_result["tomorrow_valid"] = True # Set flag to True when stats are calculated
+                    _LOGGER.debug(f"Calculated tomorrow's statistics for {self.area}: {processed_result['tomorrow_statistics']}") # Log tomorrow's stats
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
                     _LOGGER.warning(f"Incomplete data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, missing: {missing_keys}), skipping statistics calculation for {self.area}.")
