@@ -56,7 +56,8 @@
           "display_unit": "Price Display Format",
           "timezone_reference": "Time Reference",
           "entsoe_api_key": "ENTSO-E API Key",
-          "clear_cache": "Clear Price Cache"
+          "clear_cache": "Clear Price Cache",
+          "stromligning_supplier": "Stromligning Supplier ID"
         },
         "data_description": {
           "source_priority": "Select which sources to use in order of priority (first = highest priority)",
@@ -65,7 +66,8 @@
           "display_unit": "Choose how prices should be displayed",
           "timezone_reference": "Choose which timezone to use for displaying hourly prices",
           "entsoe_api_key": "Required for using ENTSO-E as a data source",
-          "clear_cache": "Clear the price cache to force a fresh data fetch"
+          "clear_cache": "Clear the price cache to force a fresh data fetch",
+          "stromligning_supplier": "Complete list: list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
         }
       }
     },
