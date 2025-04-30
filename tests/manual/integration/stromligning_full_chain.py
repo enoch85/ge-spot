@@ -9,10 +9,11 @@ This script performs an end-to-end test of the Strømlikning API integration:
 4. Validates and displays the results
 
 Usage:
-    python stromligning_full_chain.py [area]
+    python stromligning_full_chain.py [area] --supplier [supplier]
     
     area: Optional area code (DK1, DK2)
           Defaults to DK1 if not provided
+    supplier: Required supplier name (e.g., EWII, AndelEnergi)
 """
 
 import sys
@@ -33,6 +34,8 @@ from custom_components.ge_spot.api.stromligning import StromligningAPI
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
+# Import Config constant
+from custom_components.ge_spot.const.config import Config
 
 # Danish price areas
 DANISH_AREAS = ['DK1', 'DK2']
@@ -43,18 +46,28 @@ async def main():
     parser.add_argument('area', nargs='?', default='DK1', 
                         choices=DANISH_AREAS,
                         help='Area code (DK1, DK2)')
+    # Add supplier argument
+    parser.add_argument('--supplier', required=True,
+                        help='Supplier name (e.g., EWII, AndelEnergi)')
     args = parser.parse_args()
     
     area = args.area
+    supplier = args.supplier # Get supplier from args
     
-    logger.info(f"\n===== Strømlikning API Full Chain Test for {area} =====\n")
+    logger.info(f"\n===== Strømlikning API Full Chain Test for {area} with Supplier {supplier} =====\n")
     
-    # Initialize the API client
-    api = StromligningAPI()
+    # Create config dictionary using the correct constant
+    config = {
+        Config.CONF_STROMLIGNING_SUPPLIER: supplier
+    }
+
+    # Initialize the API client with config
+    api = StromligningAPI(config=config)
     
     try:
         # Step 1: Fetch raw data
-        logger.info(f"Fetching Strømlikning data for area: {area}")
+        logger.info(f"Fetching Strømlikning data for area: {area}, supplier: {supplier}")
+        # Pass config to fetch_raw_data if needed by underlying methods (though __init__ should handle it now)
         raw_data = await api.fetch_raw_data(area=area)
         
         if not raw_data:
@@ -218,4 +231,6 @@ async def main():
 
 if __name__ == "__main__":
     logger.info("Starting Strømlikning API full chain test...")
+    # Note: User needs to provide --supplier argument now
+    # Example: python3 tests/manual/integration/stromligning_full_chain.py DK2 --supplier EWII
     sys.exit(asyncio.run(main()))

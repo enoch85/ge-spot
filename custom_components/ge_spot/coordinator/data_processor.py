@@ -219,6 +219,11 @@ class DataProcessor:
             "fetched_at": data.get("fetched_at")
         }
 
+        # --- Add Stromligning Attribution ---
+        if source == Source.STROMLIGNING:
+            processed_result[Attributes.DATA_SOURCE_ATTRIBUTION] = "Data provided by Strømligning. https://stromligning.dk"
+        # --- End Attribution ---
+
         # Initialize tomorrow_valid flag
         processed_result["tomorrow_valid"] = False
 

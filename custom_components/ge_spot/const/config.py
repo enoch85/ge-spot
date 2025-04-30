@@ -22,6 +22,9 @@ class Config:
     API_KEY = "api_key"
     PRICE_IN_CENTS = "price_in_cents"
 
+    # Stromligning specific
+    CONF_STROMLIGNING_SUPPLIER = "stromligning_supplier"
+
     # Cache configuration
     CACHE_COMPRESSION_THRESHOLD = "cache_compression_threshold"  # Size threshold for compression
     CACHE_CLEANUP_THRESHOLD = "cache_cleanup_threshold"  # Number of stores before auto cleanup

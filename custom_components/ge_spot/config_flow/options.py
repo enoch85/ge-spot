@@ -81,22 +81,31 @@ class GSpotOptionsFlow(OptionsFlow):
                 if Config.VAT in user_input:
                     user_input[Config.VAT] = user_input[Config.VAT] / 100
 
-                # Handle source priority and timezone reference updates if present
+                # Handle source priority, timezone reference, and Stromligning supplier updates if present
                 updated_data = None
-                if Config.SOURCE_PRIORITY in user_input or Config.TIMEZONE_REFERENCE in user_input:
+                if (
+                    Config.SOURCE_PRIORITY in user_input or 
+                    Config.TIMEZONE_REFERENCE in user_input or
+                    Config.CONF_STROMLIGNING_SUPPLIER in user_input
+                ):
                     updated_data = dict(self._data)
 
                     if Config.SOURCE_PRIORITY in user_input:
                         updated_data[Config.SOURCE_PRIORITY] = user_input[Config.SOURCE_PRIORITY]
-                        # Remove it from options to avoid duplication
                         user_input.pop(Config.SOURCE_PRIORITY)
 
                     if Config.TIMEZONE_REFERENCE in user_input:
-                        # Ensure the timezone reference is saved both to data and kept in options
-                        # This is crucial for proper initialization
                         _LOGGER.debug(f"Saving timezone reference setting: {user_input[Config.TIMEZONE_REFERENCE]}")
                         updated_data[Config.TIMEZONE_REFERENCE] = user_input[Config.TIMEZONE_REFERENCE]
-                        # Don't remove from options - we want it in both places
+                        # Keep in options as well
+
+                    # Handle Stromligning supplier update
+                    if Config.CONF_STROMLIGNING_SUPPLIER in user_input:
+                        supplier_value = user_input[Config.CONF_STROMLIGNING_SUPPLIER]
+                        _LOGGER.debug(f"Saving Stromligning supplier: {supplier_value}")
+                        updated_data[Config.CONF_STROMLIGNING_SUPPLIER] = supplier_value
+                        # Remove from options dict before saving options
+                        user_input.pop(Config.CONF_STROMLIGNING_SUPPLIER)
 
                 # Update the config entry data if needed
                 if updated_data:
@@ -104,10 +113,6 @@ class GSpotOptionsFlow(OptionsFlow):
                         self.hass.config_entries.async_get_entry(self.entry_id),
                         data=updated_data
                     )
-
-                # Remove non-option fields
-                if "priority_info" in user_input:
-                    user_input.pop("priority_info")
 
                 # Handle clear cache action if present
                 if "clear_cache" in user_input and user_input["clear_cache"]:
@@ -153,8 +158,8 @@ class GSpotOptionsFlow(OptionsFlow):
             # Get default values from existing data
             defaults = get_default_values(self._options, self._data)
 
-            # Build schema for options form
-            schema = get_options_schema(defaults, self._supported_sources)
+            # Build schema for options form, passing the area
+            schema = get_options_schema(defaults, self._supported_sources, self._area)
 
             # Show options form
             return self.async_show_form(

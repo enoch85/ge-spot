@@ -95,7 +95,7 @@ def get_api_keys_schema(area, existing_api_key=None):
 
     return vol.Schema(schema_dict)
 
-def get_options_schema(defaults, supported_sources):
+def get_options_schema(defaults, supported_sources, area):
     """Return schema for options."""
     schema = {
             vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0) * 100): vol.All(
@@ -121,6 +121,18 @@ def get_options_schema(defaults, supported_sources):
                 )
             ),
     }
+
+    # Add Stromligning Supplier Field Conditionally
+    if area in ["DK1", "DK2"]:
+        supplier_description = (
+            "Required for Stromligning source. Enter your supplier name (e.g., EWII). "
+            "Full list: https://stromligning.dk/"
+        )
+        schema[vol.Optional(
+            Config.CONF_STROMLIGNING_SUPPLIER,
+            description=supplier_description,
+            default=defaults.get(Config.CONF_STROMLIGNING_SUPPLIER, "")
+        )] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
 
     # Add source priority selection with description
     current_priority = defaults.get(Config.SOURCE_PRIORITY, supported_sources)
@@ -186,6 +198,10 @@ def get_default_values(options, data):
         # API key (if present)
         if Config.API_KEY in options or Config.API_KEY in data:
             defaults[Config.API_KEY] = options.get(Config.API_KEY, data.get(Config.API_KEY, ""))
+
+        # Stromligning Supplier (from data, not options)
+        if Config.CONF_STROMLIGNING_SUPPLIER in data:
+            defaults[Config.CONF_STROMLIGNING_SUPPLIER] = data.get(Config.CONF_STROMLIGNING_SUPPLIER, "")
 
         return defaults
     except Exception as e:

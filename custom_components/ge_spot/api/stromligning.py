@@ -12,6 +12,7 @@ from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
 from ..const.api import Stromligning
 from ..const.network import Network
+from ..const.config import Config
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +29,8 @@ class StromligningAPI(BasePriceAPI):
             timezone_service: Timezone service instance
         """
         super().__init__(config, session, timezone_service)
+        # Store config to access supplier later
+        self.config = config or {}
 
     def _get_source_type(self) -> str:
         """Get the source type identifier.
@@ -74,7 +77,7 @@ class StromligningAPI(BasePriceAPI):
         
         Args:
             client: API client
-            area: Area code
+            area: Area code (e.g., DK1, DK2)
             reference_time: Optional reference time
             
         Returns:
@@ -82,34 +85,72 @@ class StromligningAPI(BasePriceAPI):
         """
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
+
+        # Retrieve supplier from configuration using the constant
+        supplier = self.config.get(Config.CONF_STROMLIGNING_SUPPLIER)
+        if not supplier:
+            _LOGGER.error(f"Stromligning supplier ({Config.CONF_STROMLIGNING_SUPPLIER}) is not configured. Please update the integration options.")
+            return {}
             
         # Generate date ranges for today (Stromligning only provides current day data)
         date_ranges = generate_date_ranges(reference_time, Source.STROMLIGNING)
         today_start, today_end = date_ranges[0]
         
-        _LOGGER.debug(f"Fetching Stromligning data for area: {area}, date range: {today_start} to {today_end}")
+        _LOGGER.debug(f"Fetching Stromligning data for area: {area}, supplier: {supplier}, date range: {today_start} to {today_end}")
         
-        # Convert area to format expected by the API if needed
-        # For Stromligning, we use the original area code
-        
-        # Fetch from the API
+        # Fetch from the API - Use priceArea and add supplier
         try:
-            url = f"{self._get_base_url()}?area={area}"
+            url = f"{self._get_base_url()}?priceArea={area}&supplier={supplier}"
             response = await client.fetch(
                 url,
                 timeout=Network.Defaults.TIMEOUT,
                 response_format='json'
             )
             
+            # Check for API-level errors reported in the JSON response
+            if isinstance(response, dict) and response.get("error"):
+                 _LOGGER.error(f"Stromligning API returned an error for area {area}, supplier {supplier}: {response.get('message', 'Unknown error')}")
+                 return {}
+
             if not response or not isinstance(response, dict):
-                _LOGGER.warning(f"Unexpected or empty Stromligning data format received for area {area}")
+                _LOGGER.warning(f"Unexpected or empty Stromligning data format received for area {area}, supplier {supplier}")
                 return {}
                 
-            _LOGGER.debug(f"Successfully fetched Stromligning data for area {area}")
+            _LOGGER.debug(f"Successfully fetched Stromligning data for area {area}, supplier {supplier}")
             return response
             
         except Exception as e:
-            _LOGGER.error(f"Error fetching data from Stromligning for area {area}: {e}")
+            _LOGGER.error(f"Error fetching data from Stromligning for area {area}, supplier {supplier}: {e}")
+            return {}
+
+    async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse the raw data fetched from the API.
+
+        Args:
+            raw_data: The raw data dictionary from fetch_raw_data.
+
+        Returns:
+            Parsed data dictionary.
+        """
+        if not raw_data or "raw_data" not in raw_data:
+            _LOGGER.warning("No raw_data found in input for parsing.")
+            return {}
+
+        # Assuming raw_data["raw_data"] holds the actual API response
+        api_response = raw_data["raw_data"]
+        area = self.config.get(Config.AREA, "DK1") # Get area from config or default
+        
+        parser = self.get_parser_for_area(area)
+        try:
+            parsed = parser.parse(api_response)
+            metadata = parser.extract_metadata(api_response) # Extract metadata from the actual response
+            # Add metadata that might be in the wrapper dict or from parser
+            parsed["timezone"] = raw_data.get("timezone", metadata.get("timezone", "Europe/Copenhagen"))
+            parsed["currency"] = raw_data.get("currency", metadata.get("currency", Currency.DKK))
+            parsed["source_name"] = raw_data.get("source_name", "stromligning")
+            return parsed
+        except Exception as e:
+            _LOGGER.error(f"Error parsing Stromligning data: {e}", exc_info=True)
             return {}
 
     def get_timezone_for_area(self, area: str) -> str:

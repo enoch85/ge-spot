@@ -37,3 +37,4 @@ class Attributes:
     EXCHANGE_RATE = "exchange_rate"
     EXCHANGE_RATE_FORMATTED = "exchange_rate_formatted"
     EXCHANGE_RATE_TIMESTAMP = "exchange_rate_timestamp"
+    DATA_SOURCE_ATTRIBUTION = "data_source_attribution"  # Added for Stromligning

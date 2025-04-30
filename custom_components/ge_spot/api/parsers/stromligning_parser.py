@@ -147,23 +147,29 @@ class StromligningParser(BasePriceParser):
                         # Create ISO formatted timestamp key
                         hour_key = dt.isoformat()
                         price_date = dt.date().isoformat()
-                        # Extract the electricity price
+                        
+                        # --- Price Extraction Logic Change ---
+                        # Prioritize the main price.value, similar to the old parser
                         price_value = None
-                        if "details" in price_data and isinstance(price_data["details"], dict):
+                        if "value" in price_data["price"]:
+                            try:
+                                price_value = float(price_data["price"]["value"])
+                                _LOGGER.debug(f"Using primary price.value for {hour_key}: {price_value}")
+                            except (ValueError, TypeError):
+                                _LOGGER.warning(f"Could not parse primary price value: {price_data['price'].get('value')} for {hour_key}")
+                        
+                        # Fallback to details.electricity.value if primary fails (less likely now)
+                        if price_value is None and "details" in price_data and isinstance(price_data["details"], dict):
                             if "electricity" in price_data["details"] and isinstance(price_data["details"]["electricity"], dict):
                                 electricity = price_data["details"]["electricity"]
                                 if "value" in electricity:
                                     try:
                                         price_value = float(electricity["value"])
-                                        _LOGGER.debug(f"Using electricity.value as price for {hour_key}: {price_value}")
+                                        _LOGGER.debug(f"Using fallback electricity.value as price for {hour_key}: {price_value}")
                                     except (ValueError, TypeError):
-                                        _LOGGER.warning(f"Could not parse electricity value: {electricity.get('value')} for {hour_key}")
-                        if price_value is None and "value" in price_data["price"]:
-                            try:
-                                price_value = float(price_data["price"]["value"])
-                                _LOGGER.debug(f"Using price.value as fallback price for {hour_key}: {price_value}")
-                            except (ValueError, TypeError):
-                                _LOGGER.warning(f"Could not parse price value: {price_data['price'].get('value')} for {hour_key}")
+                                        _LOGGER.warning(f"Could not parse fallback electricity value: {electricity.get('value')} for {hour_key}")
+                        # --- End Price Extraction Logic Change ---
+
                         if price_value is not None:
                             result["hourly_prices"][hour_key] = price_value
                         else:
