@@ -69,6 +69,49 @@ class StromligningAPI(BasePriceAPI):
             if session is None and client:
                 await client.close()
 
+    async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
+        """Fetch data from Stromligning.dk.
+        
+        Args:
+            client: API client
+            area: Area code
+            reference_time: Optional reference time
+            
+        Returns:
+            Raw data from API
+        """
+        if reference_time is None:
+            reference_time = datetime.now(timezone.utc)
+            
+        # Generate date ranges for today (Stromligning only provides current day data)
+        date_ranges = generate_date_ranges(reference_time, Source.STROMLIGNING)
+        today_start, today_end = date_ranges[0]
+        
+        _LOGGER.debug(f"Fetching Stromligning data for area: {area}, date range: {today_start} to {today_end}")
+        
+        # Convert area to format expected by the API if needed
+        # For Stromligning, we use the original area code
+        
+        # Fetch from the API
+        try:
+            url = f"{self._get_base_url()}?area={area}"
+            response = await client.fetch(
+                url,
+                timeout=Network.Defaults.TIMEOUT,
+                response_format='json'
+            )
+            
+            if not response or not isinstance(response, dict):
+                _LOGGER.warning(f"Unexpected or empty Stromligning data format received for area {area}")
+                return {}
+                
+            _LOGGER.debug(f"Successfully fetched Stromligning data for area {area}")
+            return response
+            
+        except Exception as e:
+            _LOGGER.error(f"Error fetching data from Stromligning for area {area}: {e}")
+            return {}
+
     def get_timezone_for_area(self, area: str) -> str:
         """Get timezone for the area.
 

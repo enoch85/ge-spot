@@ -83,27 +83,51 @@ class EntsoeAPI(BasePriceAPI):
                 await client.close()
 
     async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
+        """Fetch data from ENTSO-E API.
+        
+        Args:
+            client: API client
+            area: Area code
+            reference_time: Optional reference time
+            
+        Returns:
+            Raw data dictionary
+        """
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
         if not api_key:
             _LOGGER.debug("No API key provided for ENTSO-E, skipping")
             raise ValueError("No API key provided for ENTSO-E")
+            
+        # Use the provided reference time or current UTC time
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
+            
+        # Get the mapped ENTSO-E area code
         entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area, area)
+        
+        # Set up headers for XML request
         headers = {
             "User-Agent": Network.Defaults.USER_AGENT,
             "Accept": ContentType.XML,
             "Content-Type": ContentType.XML
         }
+        
+        # Generate date ranges based on the reference time
         date_ranges = generate_date_ranges(reference_time, Source.ENTSOE)
+        
+        # Initialize storage for responses
         xml_responses = []
         dict_response_found = None
         found_doc_type = None
+        
         # Try fetching data for each date range
         for start_date, end_date in date_ranges:
             period_start = start_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
             period_end = end_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
+            
+            # Try different document types (A44: day-ahead prices, A65: week-ahead prices)
             doc_types = ["A44", "A65"]
+            
             for doc_type in doc_types:
                 params = {
                     "securityToken": api_key,
@@ -113,7 +137,9 @@ class EntsoeAPI(BasePriceAPI):
                     "periodStart": period_start,
                     "periodEnd": period_end,
                 }
-                _LOGGER.debug(f"ENTSO-E fetch: doc_type={doc_type}, range={period_start}-{period_end}, params={params}")
+                
+                _LOGGER.debug(f"ENTSO-E fetch: doc_type={doc_type}, range={period_start}-{period_end}, params={sanitize_sensitive_data(params)}")
+                
                 try:
                     response = await client.fetch(
                         self.base_url,
@@ -121,9 +147,11 @@ class EntsoeAPI(BasePriceAPI):
                         headers=headers,
                         timeout=Network.Defaults.TIMEOUT
                     )
+                    
                     if not response:
                         _LOGGER.debug(f"ENTSO-E empty response for doc_type={doc_type}, range={period_start}-{period_end}")
                         continue
+                        
                     if isinstance(response, str):
                         if "Not authorized" in response:
                             _LOGGER.error("ENTSO-E API authentication failed: Not authorized. Check your API key.")
@@ -150,17 +178,21 @@ class EntsoeAPI(BasePriceAPI):
                 except Exception as e:
                     _LOGGER.error(f"Error fetching ENTSO-E data with doc_type={doc_type}: {e}")
                     continue
+                    
             if xml_responses or dict_response_found:
                 _LOGGER.info(f"Got valid ENTSO-E response(s) for date range {period_start} to {period_end}, skipping remaining ranges")
                 break
+        
         # Tomorrow's data retry logic
         tomorrow_xml = None
         now_utc = datetime.now(timezone.utc)
         now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
+        
         if now_cet.hour >= 13:
             tomorrow = (reference_time + timedelta(days=1))
             period_start = tomorrow.strftime(TimeFormat.ENTSOE_DATE_HOUR)
             period_end = (tomorrow + timedelta(hours=23)).strftime(TimeFormat.ENTSOE_DATE_HOUR)
+            
             params_tomorrow = {
                 "securityToken": api_key,
                 "documentType": "A44",
@@ -169,10 +201,13 @@ class EntsoeAPI(BasePriceAPI):
                 "periodStart": period_start,
                 "periodEnd": period_end,
             }
+            
             async def fetch_tomorrow():
                 return await client.fetch(self.base_url, params=params_tomorrow, headers=headers, timeout=Network.Defaults.TIMEOUT)
+                
             def is_data_available(data):
                 return data and "Publication_MarketDocument" in str(data)
+                
             tomorrow_xml = await fetch_with_retry(
                 fetch_tomorrow,
                 is_data_available,
@@ -180,8 +215,11 @@ class EntsoeAPI(BasePriceAPI):
                 end_time=time(23, 50),
                 local_tz_name=TimezoneName.EUROPE_PARIS
             )
+            
             if tomorrow_xml:
                 xml_responses.append(tomorrow_xml)
+        
+        # Prepare the final result
         final_result = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "api_timezone": SourceTimezone.API_TIMEZONES[Source.ENTSOE],
@@ -189,6 +227,7 @@ class EntsoeAPI(BasePriceAPI):
             "area": area,
             "entsoe_area": entsoe_area
         }
+        
         if dict_response_found:
             final_result["dict_response"] = dict_response_found
             final_result["document_type"] = found_doc_type

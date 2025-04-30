@@ -165,7 +165,7 @@ class StromligningParser(BasePriceParser):
                             except (ValueError, TypeError):
                                 _LOGGER.warning(f"Could not parse price value: {price_data['price'].get('value')} for {hour_key}")
                         if price_value is not None:
-                            result["hourly_prices"][hour_key] = {"price": price_value, "api_price_date": price_date}
+                            result["hourly_prices"][hour_key] = price_value
                         else:
                             _LOGGER.warning(f"No valid price found in Stromligning data for hour {hour_key}")
 

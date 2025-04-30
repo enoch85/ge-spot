@@ -48,7 +48,6 @@ class AmberParser(BasePriceParser):
                     if not timestamp_str:
                         continue
                     dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                    price_date = dt.date().isoformat()
                     price = entry.get('perKwh')
                     if price is None:
                         continue
@@ -57,7 +56,7 @@ class AmberParser(BasePriceParser):
                             price = float(price)
                         except ValueError:
                             continue
-                    hourly_prices[dt.isoformat()] = {"price": price, "api_price_date": price_date}
+                    hourly_prices[dt.isoformat()] = price
                 except Exception:
                     continue
         return hourly_prices

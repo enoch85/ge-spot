@@ -145,38 +145,23 @@ class DataProcessor:
             _LOGGER.error(f"Missing currency for source {source}. Cannot process.")
             return self._generate_empty_processed_result(data, error="Missing currency in raw data")
 
-        # 1. Normalize timezones (convert all keys to target timezone, e.g., HA local)
-        # Support new structure: each value is a dict with 'price' and 'api_price_date'
-        all_normalized_prices = {}
-        for iso_key, value in raw_hourly_prices.items():
-            if isinstance(value, dict) and "price" in value and "api_price_date" in value:
-                # Parse ISO key to datetime in source timezone
-                dt = self._tz_converter.parse_datetime_with_tz(iso_key, source_timezone)
-                if dt is None:
-                    continue
-                # Attach price and date
-                all_normalized_prices[dt] = {
-                    "price": value["price"],
-                    "api_price_date": value["api_price_date"]
-                }
-            else:
-                # Fallback: treat as float
-                dt = self._tz_converter.parse_datetime_with_tz(iso_key, source_timezone)
-                if dt is None:
-                    continue
-                all_normalized_prices[dt] = {"price": value, "api_price_date": dt.date().isoformat()}
+        # 1. Normalize timezones (convert all ISO keys to target timezone with preserved date info)
+        try:
+            # This will convert ISO timestamp keys to 'YYYY-MM-DD HH:00' format in target timezone
+            normalized_prices = self._tz_converter.normalize_hourly_prices(
+                raw_hourly_prices,
+                source_timezone,
+                preserve_date=True  # Keep date part for today/tomorrow split
+            )
 
-        # 2. Split into today/tomorrow using api_price_date
-        today_str = dt_util.now().date().isoformat()
-        tomorrow_str = (dt_util.now().date() + timedelta(days=1)).isoformat()
-        normalized_today = {}
-        normalized_tomorrow = {}
-        for dt_key, val in all_normalized_prices.items():
-            hour_str_key = f"{dt_key.hour:02d}:00"
-            if val["api_price_date"] == today_str:
-                normalized_today[hour_str_key] = val["price"]
-            elif val["api_price_date"] == tomorrow_str:
-                normalized_tomorrow[hour_str_key] = val["price"]
+            # 2. Split into today/tomorrow using the normalized keys with dates
+            normalized_today, normalized_tomorrow = self._tz_converter.split_into_today_tomorrow(normalized_prices)
+            
+            # Log the results of normalization and splitting
+            _LOGGER.debug(f"Normalized {len(raw_hourly_prices)} timestamps into: today({len(normalized_today)}), tomorrow({len(normalized_tomorrow)})")
+        except Exception as e:
+            _LOGGER.error(f"Error during timestamp normalization for {self.area}: {e}", exc_info=True)
+            return self._generate_empty_processed_result(data, error=f"Timestamp normalization error: {e}")
 
         # 3. Currency/unit conversion (one time, after normalization)
         ecb_rate = None

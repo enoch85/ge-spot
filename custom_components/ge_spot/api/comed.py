@@ -37,22 +37,44 @@ class ComedAPI(BasePriceAPI):
         """
         return ComEd.BASE_URL
         
-    async def fetch_raw_data(self, area: str, reference_time: Optional[datetime] = None, session=None, **kwargs) -> Dict[str, Any]:
+    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
+        """Fetch raw price data for the given area.
+        
+        Args:
+            area: Area code
+            session: Optional session for API requests
+            **kwargs: Additional parameters
+            
+        Returns:
+            Raw data from API
+        """
         client = ApiClient(session=session or self.session)
         try:
-            raw_data = await self._fetch_data(client, area, reference_time)
+            # Use current UTC time as reference
+            now_utc = datetime.now(timezone.utc)
+            
+            # Fetch data from ComEd API
+            raw_data = await self._fetch_data(client, area, now_utc)
             if not raw_data:
                 return {}
+                
+            # Parse the data
             parser = self.get_parser_for_area(area)
             parsed = parser.parse(raw_data)
             hourly_raw = parsed.get("hourly_prices", {})
             metadata = parser.extract_metadata(raw_data)
+            
+            # Return standardized data structure with ISO timestamps
             return {
                 "hourly_raw": hourly_raw,
                 "timezone": metadata.get("timezone", "America/Chicago"),
                 "currency": metadata.get("currency", "cents"),
                 "source_name": "comed",
-                "raw_data": raw_data,
+                "raw_data": {
+                    "data": raw_data,
+                    "timestamp": now_utc.isoformat(),
+                    "area": area
+                },
             }
         finally:
             if session is None and client:
@@ -81,7 +103,16 @@ class ComedAPI(BasePriceAPI):
         return ComedParser()
 
     async def _fetch_data(self, client, area, reference_time):
-        """Fetch data from ComEd Hourly Pricing API."""
+        """Fetch data from ComEd Hourly Pricing API.
+        
+        Args:
+            client: API client
+            area: Area code
+            reference_time: Reference time for the request
+            
+        Returns:
+            Raw response data
+        """
         try:
             # Map area to endpoint if it's a valid ComEd area
             if area in ComEd.AREAS:
@@ -92,9 +123,7 @@ class ComedAPI(BasePriceAPI):
                 endpoint = ComEd.FIVE_MINUTE_FEED
 
             # Generate date ranges to try - ComEd uses 5-minute intervals
-            # Ensure reference_time is not None to avoid TypeError
-            current_time = reference_time if reference_time is not None else datetime.now(timezone.utc)
-            date_ranges = generate_date_ranges(current_time, Source.COMED)
+            date_ranges = generate_date_ranges(reference_time, Source.COMED)
 
             # Try each date range until we get a valid response
             for start_date, end_date in date_ranges:

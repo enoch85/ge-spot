@@ -47,28 +47,44 @@ class OmieAPI(BasePriceAPI):
         return getattr(Omie, 'BASE_URL', "https://api.esios.ree.es/archives/70/download?date=")
 
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
-        reference_time = kwargs.get('reference_time')
-        if not reference_time:
-            reference_time = datetime.now(timezone.utc)
+        """Fetch raw price data for the given area.
+        
+        Args:
+            area: Area code (e.g., ES or PT)
+            session: Optional session for API requests
+            **kwargs: Additional parameters
+            
+        Returns:
+            Raw data from API
+        """
+        # Use current UTC time as reference
+        now_utc = datetime.now(timezone.utc)
+        
         client = ApiClient(session=session or self.session)
         try:
             # Always compute today and tomorrow
-            today = reference_time.strftime("%Y-%m-%d")
-            tomorrow = (reference_time + timedelta(days=1)).strftime("%Y-%m-%d")
+            today = now_utc.strftime("%Y-%m-%d")
+            tomorrow = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
+            
             # Fetch today's data
             url_today = f"{self._get_base_url()}{today}"
             csv_today = await client.fetch(url_today, timeout=Network.Defaults.TIMEOUT, response_format='text')
+            
             # Fetch tomorrow's data after 13:00 CET, with retry logic
-            now_utc = datetime.now(timezone.utc)
-            now_cet = now_tcet.astimezone(timezone(timedelta(hours=1)))
+            now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
             csv_tomorrow = None
+            
             if now_cet.hour >= 13:
                 url_tomorrow = f"{self._get_base_url()}{tomorrow}"
+                
                 async def fetch_tomorrow():
                     return await client.fetch(url_tomorrow, timeout=Network.Defaults.TIMEOUT, response_format='text')
+                
                 def is_data_available(data):
                     return data and isinstance(data, str) and data.strip()
+                
                 local_tz = TimezoneName.EUROPE_LISBON if area and area.upper() == "PT" else TimezoneName.EUROPE_MADRID
+                
                 csv_tomorrow = await fetch_with_retry(
                     fetch_tomorrow,
                     is_data_available,
@@ -76,16 +92,22 @@ class OmieAPI(BasePriceAPI):
                     end_time=time(23, 50),
                     local_tz_name=local_tz
                 )
+            
+            # Parse the data from both today and tomorrow
             parser = self.get_parser_for_area(area)
             combined_hourly_prices = {}
+            
             if csv_today and isinstance(csv_today, str) and csv_today.strip():
                 parsed_today = parser.parse({"raw_data": csv_today, "target_date": today})
                 if parsed_today and "hourly_prices" in parsed_today:
                     combined_hourly_prices.update(parsed_today["hourly_prices"])
+            
             if csv_tomorrow and isinstance(csv_tomorrow, str) and csv_tomorrow.strip():
                 parsed_tomorrow = parser.parse({"raw_data": csv_tomorrow, "target_date": tomorrow})
                 if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
                     combined_hourly_prices.update(parsed_tomorrow["hourly_prices"])
+            
+            # Return standardized data structure with ISO timestamps
             return {
                 "hourly_raw": combined_hourly_prices,
                 "timezone": self.get_timezone_for_area(area),
@@ -94,7 +116,7 @@ class OmieAPI(BasePriceAPI):
                 "raw_data": {
                     "today": csv_today,
                     "tomorrow": csv_tomorrow,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": now_utc.isoformat(),
                     "area": area
                 },
             }

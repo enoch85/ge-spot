@@ -38,27 +38,41 @@ class EpexAPI(BasePriceAPI):
         """
         return BASE_URL
         
-    async def fetch_raw_data(self, area: str, reference_time: Optional[datetime] = None, session=None, **kwargs) -> Dict[str, Any]:
+    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
+        """Fetch raw data from EPEX SPOT API.
+        
+        Args:
+            area: Area code
+            session: Optional aiohttp session
+            
+        Returns:
+            Dictionary with raw data
+        """
         client = ApiClient(session=session or self.session)
         try:
-            if not reference_time:
-                reference_time = datetime.now(timezone.utc)
+            # Use UTC for all reference times
+            now_utc = datetime.datetime.now(timezone.utc)
+            
             # Always compute today and tomorrow
-            today = reference_time.strftime("%Y-%m-%d")
-            tomorrow = (reference_time + timedelta(days=1)).strftime("%Y-%m-%d")
+            today = now_utc.strftime("%Y-%m-%d")
+            tomorrow = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
+            
             # Fetch today's data
             raw_today = await self._fetch_data(client, area, today)
+            
             # Fetch tomorrow's data after 13:00 CET, with retry logic
-            now_utc = datetime.now(timezone.utc)
             now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
             raw_tomorrow = None
+            
             if now_cet.hour >= 13:
                 async def fetch_tomorrow():
                     return await self._fetch_data(client, area, tomorrow)
+                
                 def is_data_available(data):
                     parser = self.get_parser_for_area(area)
                     parsed = parser.parse(data) if data else None
                     return parsed and parsed.get("hourly_prices")
+                
                 raw_tomorrow = await fetch_with_retry(
                     fetch_tomorrow,
                     is_data_available,
@@ -66,19 +80,27 @@ class EpexAPI(BasePriceAPI):
                     end_time=time(23, 50),
                     local_tz_name=TimezoneName.EUROPE_BERLIN
                 )
+                
                 if not raw_tomorrow:
                     _LOGGER.warning(f"Failed to fetch EPEX tomorrow's data. Proceeding without it.")
+            
+            # Parse data using appropriate parser
             parser = self.get_parser_for_area(area)
             hourly_raw = {}
+            
             if raw_today:
                 parsed_today = parser.parse(raw_today)
                 if parsed_today and "hourly_prices" in parsed_today:
                     hourly_raw.update(parsed_today["hourly_prices"])
+            
             if raw_tomorrow:
                 parsed_tomorrow = parser.parse(raw_tomorrow)
                 if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
                     hourly_raw.update(parsed_tomorrow["hourly_prices"])
+            
+            # Extract metadata
             metadata = parser.extract_metadata(raw_today if raw_today else raw_tomorrow)
+            
             return {
                 "hourly_raw": hourly_raw,
                 "timezone": metadata.get("timezone", "Europe/Berlin"),
@@ -87,7 +109,7 @@ class EpexAPI(BasePriceAPI):
                 "raw_data": {
                     "today": raw_today,
                     "tomorrow": raw_tomorrow,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
                     "area": area
                 },
             }
@@ -117,22 +139,31 @@ class EpexAPI(BasePriceAPI):
         """
         return EpexParser()
 
-    async def _fetch_data(self, client, area, reference_time):
-        """Fetch data from EPEX SPOT."""
-        if reference_time is None:
-            reference_time = datetime.now(timezone.utc)
-
+    async def _fetch_data(self, client, area, date_str):
+        """Fetch data from EPEX SPOT.
+        
+        Args:
+            client: API client
+            area: Area code
+            date_str: Date string in YYYY-MM-DD format
+            
+        Returns:
+            Raw response
+        """
+        # Parse the provided date string
+        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        
         # Generate date ranges to try
-        date_ranges = generate_date_ranges(reference_time, Source.EPEX)
-
+        date_ranges = generate_date_ranges(date_obj, Source.EPEX)
+        
         # EPEX uses trading_date and delivery_date
         # We'll use the first range (today to tomorrow) as our primary range
         today_start, tomorrow_end = date_ranges[0]
-
+        
         # Format dates for the query
         trading_date = today_start.strftime("%Y-%m-%d")
         delivery_date = tomorrow_end.strftime("%Y-%m-%d")
-
+        
         params = {
             "market_area": area,
             "auction": "MRC",
@@ -142,9 +173,9 @@ class EpexAPI(BasePriceAPI):
             "sub_modality": "DayAhead",
             "data_mode": "table"
         }
-
+        
         _LOGGER.debug(f"Fetching EPEX with params: {params}")
-
+        
         response = await client.fetch(BASE_URL, params=params)
-
+        
         return response

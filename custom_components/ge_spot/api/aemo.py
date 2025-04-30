@@ -72,34 +72,47 @@ class AemoAPI(BasePriceAPI):
         Args:
             area: Area code (e.g., NSW1, QLD1, etc.)
             session: Optional session for API requests
-            **kwargs: Additional parameters (expects 'reference_time')
+            **kwargs: Additional parameters
 
         Returns:
             Raw API response data as a dictionary, or None if fetch fails.
         """
-        reference_time = kwargs.get('reference_time')
-        if reference_time is None:
-            reference_time = datetime.now(timezone.utc)
+        # Use current UTC time as reference - AEMO provides real-time spot prices 
+        # so we don't need a specific reference date
+        now_utc = datetime.now(timezone.utc)
+        
         client = ApiClient(session=session or self.session)
         try:
+            # Validate the area code
             if area not in Aemo.REGIONS:
                 _LOGGER.error(f"Invalid AEMO region: {area}. Must be one of {Aemo.REGIONS}")
                 raise ValueError(f"Invalid AEMO region: {area}")
+            
+            # Fetch data from the AEMO API
             response = await client.fetch(
                 self._get_base_url(),
                 timeout=Network.Defaults.TIMEOUT,
                 response_format='json'
             )
+            
+            # Process the response if valid
             if response and isinstance(response, dict) and Aemo.SUMMARY_ARRAY in response:
+                # Parse the response using the appropriate parser
                 parser = self.get_parser_for_area(area)
                 parsed = parser.parse(response, area=area)
                 hourly_raw = parsed.get("hourly_prices", {})
+                
+                # Return standardized data structure with ISO timestamps
                 return {
                     "hourly_raw": hourly_raw,
                     "timezone": self.get_timezone_for_area(area),
                     "currency": Currency.AUD,
                     "source_name": "aemo",
-                    "raw_data": response,
+                    "raw_data": {
+                        "data": response,
+                        "timestamp": now_utc.isoformat(),
+                        "area": area
+                    },
                 }
             else:
                 _LOGGER.warning(f"Invalid or empty response from AEMO for area {area}. Response: {response}")

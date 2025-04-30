@@ -183,7 +183,7 @@ class ComedParser(BasePriceParser):
                 if prices:
                     # Simple average
                     avg_price = sum(prices) / len(prices)
-                    result["hourly_prices"][hour_key] = {"price": avg_price, "api_price_date": hour_dt.date().isoformat()}
+                    result["hourly_prices"][hour_key] = avg_price
         
         # For current hour average, just use the current price
         else:
@@ -198,8 +198,7 @@ class ComedParser(BasePriceParser):
                         timestamp = datetime.now(timezone.utc)
                     hour_dt = timestamp.replace(minute=0, second=0, microsecond=0)
                     hour_key = hour_dt.isoformat()
-                    price_date = hour_dt.date().isoformat()
-                    result["hourly_prices"][hour_key] = {"price": current_price, "api_price_date": price_date}
+                    result["hourly_prices"][hour_key] = current_price
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning(f"Failed to parse current hour price: {e}")
         

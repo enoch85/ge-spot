@@ -1,6 +1,6 @@
 import logging
 from typing import Any, Dict, Optional
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 import pytz
 
 # Importing timezone_utils directly instead of from ..timezone to avoid circular import
@@ -145,7 +145,8 @@ class TimezoneConverter:
         # Get today's and tomorrow's date in the target timezone
         now = datetime.now(self._tz_service.target_timezone)
         today_date = now.date()
-        tomorrow_date = today_date.replace(day=today_date.day + 1)
+        # Use timedelta to properly handle month/year boundaries
+        tomorrow_date = (now + timedelta(days=1)).date()
         
         today_date_str = today_date.isoformat()
         tomorrow_date_str = tomorrow_date.isoformat()

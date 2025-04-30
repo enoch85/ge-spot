@@ -324,7 +324,7 @@ class EntsoeParser(BasePriceParser):
                             hour_key = point_time.isoformat()
                             
                             # Add to hourly prices
-                            result["hourly_prices"][hour_key] = {"price": price_val, "api_price_date": point_time.date().isoformat()}
+                            result["hourly_prices"][hour_key] = price_val
 
                         except (ValueError, TypeError) as e:
                             _LOGGER.warning(f"Failed to parse point {position.text}: {e}")
@@ -390,13 +390,11 @@ class EntsoeParser(BasePriceParser):
 
                                     # Calculate hour
                                     hour_time = start_time + timedelta(hours=pos-1)
-                                    price_date = hour_time.date().isoformat()
-
                                     # Format as ISO 8601
                                     hour_key = hour_time.isoformat()
 
                                     # Add to hourly prices
-                                    hourly_prices[hour_key] = {"price": price_val, "api_price_date": price_date}
+                                    hourly_prices[hour_key] = price_val
 
                                 except (ValueError, TypeError) as e:
                                     _LOGGER.warning(f"Failed to parse point: {e}")

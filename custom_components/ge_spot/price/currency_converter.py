@@ -108,6 +108,10 @@ class CurrencyConverter:
                 continue
 
             try:
+                # Handle price if it's a dictionary (e.g., {'price': 8.06})
+                if isinstance(price, dict) and 'price' in price:
+                    price = price['price']
+                    
                 # Apply currency conversion if needed
                 converted_value = price
                 if needs_currency_conversion and exchange_rate is not None:

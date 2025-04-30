@@ -178,9 +178,8 @@ class OmieParser(BasePriceParser):
                         # Create ISO format timestamp
                         timestamp = utc_dt.isoformat()
                         
-                        # Store the price
-                        # Add api_price_date to each entry
-                        hourly_prices[timestamp] = {"price": price, "api_price_date": dt.date().isoformat()}
+                        # Store the price - using direct price assignment without api_price_date
+                        hourly_prices[timestamp] = price
                         
                     except (ValueError, KeyError, IndexError) as e:
                         _LOGGER.warning(f"Error parsing PVPC entry: {e}")
@@ -404,101 +403,13 @@ class OmieParser(BasePriceParser):
                     # Create ISO format timestamp
                     timestamp = utc_dt.isoformat()
                     
-                    # Store the price
-                    hourly_prices[timestamp] = {"price": price, "api_price_date": dt.date().isoformat()}
+                    # Store the price directly without api_price_date
+                    hourly_prices[timestamp] = price
                     
                 except (ValueError, KeyError, IndexError) as e:
                     _LOGGER.warning(f"Error parsing CSV row: {e}")
                     continue
     
-    def _parse_csv_without_header(self, csv_reader, hourly_prices: Dict[str, float], area: str, local_tz) -> None:
-        """Parse CSV data without headers, trying to guess the format.
-
-        Args:
-            csv_reader: CSV reader without headers
-            hourly_prices: Dict to update with hourly prices
-            area: Area code
-            local_tz: Local timezone for the area
-        """
-        for row in csv_reader:
-            try:
-                # Skip empty rows
-                if not row or len(row) < 3:
-                    continue
-                    
-                # Guess format based on row structure
-                if len(row) == 3:
-                    # Simple format: [date, hour, price]
-                    date_str = row[0].strip()
-                    hour_str = row[1].strip()
-                    price_str = row[2].strip()
-                elif len(row) >= 4:
-                    # Format with area info: [date, hour, price_es, price_pt]
-                    date_str = row[0].strip()
-                    hour_str = row[1].strip()
-                    
-                    # Select price based on area
-                    if area.upper() == "PT" and len(row) > 3:
-                        price_str = row[3].strip()  # Portuguese price is 4th column
-                    else:
-                        price_str = row[2].strip()  # Spanish price is 3rd column
-                else:
-                    # Unknown format - skip
-                    continue
-                
-                # Parse hour (OMIE uses 1-24 format)
-                hour = int(hour_str)
-                
-                # Parse price
-                price_str = price_str.replace(',', '.')
-                # Remove any non-numeric characters except decimal point
-                price_str = ''.join(c for c in price_str if c.isdigit() or c == '.')
-                if not price_str:
-                    continue
-                price = float(price_str)
-                
-                # Get date object
-                date_obj = self._parse_date(date_str)
-                if not date_obj:
-                    _LOGGER.warning(f"Could not parse date: {date_str}")
-                    continue
-                    
-                # Adjust hour (OMIE uses 1-24, we need 0-23)
-                next_day = False
-                if hour == 24:
-                    hour = 0
-                    next_day = True
-                    
-                # Create datetime object in local timezone
-                dt = datetime(
-                    date_obj.year, 
-                    date_obj.month, 
-                    date_obj.day, 
-                    hour, 
-                    0, 
-                    0
-                )
-                
-                # Add a day if hour was 24
-                if next_day:
-                    dt = dt + timedelta(days=1)
-                    
-                # Create localized datetime
-                local_dt = local_tz.localize(dt)
-                
-                # Convert to UTC
-                utc_dt = local_dt.astimezone(timezone.utc)
-                
-                # Create ISO format timestamp
-                timestamp = utc_dt.isoformat()
-                
-                # Store the price
-                hourly_prices[timestamp] = {"price": price, "api_price_date": dt.date().isoformat()}
-                
-            except (ValueError, IndexError) as e:
-                _LOGGER.warning(f"Error parsing CSV row: {e}")
-                continue
-                
     def _parse_date(self, date_str: str) -> Optional[datetime.date]:
         """Parse date string in various formats.
 
