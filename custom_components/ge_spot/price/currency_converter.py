@@ -61,7 +61,7 @@ class CurrencyConverter:
             source_currency,
             source_unit,
             self.target_currency,
-            "cents" if self.use_subunit else "decimal",
+            f"{'cents' if self.use_subunit else 'units'} per {EnergyUnit.KWH}", # Clarify target unit
             self.include_vat,
             self.vat_rate * 100,
             self.use_subunit
