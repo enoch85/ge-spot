@@ -32,7 +32,7 @@ class ComedParser(BasePriceParser):
             Parsed data with hourly prices
         """
         result = {
-            "hourly_prices": {},
+            "hourly_raw": {},  # Changed from hourly_prices
             "currency": Currency.CENTS  # ComEd API returns prices in cents/kWh, not USD/kWh
         }
 
@@ -49,8 +49,8 @@ class ComedParser(BasePriceParser):
                 self._parse_price_data(json_data, endpoint, result)
         # Handle pre-processed data
         elif isinstance(raw_data, dict):
-            if "hourly_prices" in raw_data and isinstance(raw_data["hourly_prices"], dict):
-                result["hourly_prices"] = raw_data["hourly_prices"]
+            if "hourly_raw" in raw_data and isinstance(raw_data["hourly_raw"], dict):  # Changed from hourly_prices
+                result["hourly_raw"] = raw_data["hourly_raw"]  # Changed from hourly_prices
             elif "raw_data" in raw_data:
                 json_data = self._fix_and_parse_json(raw_data["raw_data"])
                 if json_data:
@@ -59,10 +59,10 @@ class ComedParser(BasePriceParser):
 
         # Calculate current and next hour prices
         if not result.get("current_price"):
-            result["current_price"] = self._get_current_price(result["hourly_prices"])
+            result["current_price"] = self._get_current_price(result["hourly_raw"])  # Changed from hourly_prices
         
         if not result.get("next_hour_price"):
-            result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
+            result["next_hour_price"] = self._get_next_hour_price(result["hourly_raw"])  # Changed from hourly_prices
 
         return result
 
@@ -183,7 +183,7 @@ class ComedParser(BasePriceParser):
                 if prices:
                     # Simple average
                     avg_price = sum(prices) / len(prices)
-                    result["hourly_prices"][hour_key] = avg_price
+                    result["hourly_raw"][hour_key] = avg_price  # Changed from hourly_prices
         
         # For current hour average, just use the current price
         else:
@@ -198,45 +198,45 @@ class ComedParser(BasePriceParser):
                         timestamp = datetime.now(timezone.utc)
                     hour_dt = timestamp.replace(minute=0, second=0, microsecond=0)
                     hour_key = hour_dt.isoformat()
-                    result["hourly_prices"][hour_key] = current_price
+                    result["hourly_raw"][hour_key] = current_price  # Changed from hourly_prices
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning(f"Failed to parse current hour price: {e}")
         
         # Update result with hourly prices
-        result["hourly_prices"].update(hourly_prices)
+        result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
 
-    def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
+    def _get_current_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:  # Changed from hourly_prices
         """Get current hour price.
         
         Args:
-            hourly_prices: Dictionary of hourly prices
+            hourly_raw: Dictionary of hourly prices
             
         Returns:
             Current hour price or None if not available
         """
-        if not hourly_prices:
+        if not hourly_raw:
             return None
             
         now = datetime.now(timezone.utc)
         current_hour = now.replace(minute=0, second=0, microsecond=0)
         current_hour_key = current_hour.isoformat()
         
-        return hourly_prices.get(current_hour_key)
+        return hourly_raw.get(current_hour_key)  # Changed from hourly_prices
         
-    def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
+    def _get_next_hour_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:  # Changed from hourly_prices
         """Get next hour price.
         
         Args:
-            hourly_prices: Dictionary of hourly prices
+            hourly_raw: Dictionary of hourly prices
             
         Returns:
             Next hour price or None if not available
         """
-        if not hourly_prices:
+        if not hourly_raw:
             return None
             
         now = datetime.now(timezone.utc)
         next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
         next_hour_key = next_hour.isoformat()
         
-        return hourly_prices.get(next_hour_key)
+        return hourly_raw.get(next_hour_key)  # Changed from hourly_prices

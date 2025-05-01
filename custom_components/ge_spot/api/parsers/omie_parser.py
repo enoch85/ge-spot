@@ -32,7 +32,7 @@ class OmieParser(BasePriceParser):
             Parsed data with hourly prices
         """
         result = {
-            "hourly_prices": {},
+            "hourly_raw": {},  # Changed from hourly_prices
             "currency": Currency.EUR,
             "source": Source.OMIE,
             "api_timezone": "Europe/Madrid"  # Default timezone for OMIE
@@ -70,9 +70,9 @@ class OmieParser(BasePriceParser):
                     _LOGGER.warning(f"Failed to parse OMIE CSV: {e}")
         # Handle pre-processed data
         elif isinstance(raw_data, dict):
-            # Case 1: Direct hourly_prices dict
-            if "hourly_prices" in raw_data and isinstance(raw_data["hourly_prices"], dict):
-                result["hourly_prices"] = raw_data["hourly_prices"]
+            # Case 1: Direct hourly_raw dict
+            if "hourly_raw" in raw_data and isinstance(raw_data["hourly_raw"], dict):  # Changed from hourly_prices
+                result["hourly_raw"] = raw_data["hourly_raw"]  # Changed from hourly_prices
             # Case 2: Single raw_data CSV or JSON string
             elif "raw_data" in raw_data and isinstance(raw_data["raw_data"], str):
                 try:
@@ -104,15 +104,15 @@ class OmieParser(BasePriceParser):
                                 self._parse_csv(content, date_result)
                                 
                             # Merge hourly prices into the main result
-                            result["hourly_prices"].update(date_result["hourly_prices"])
+                            result["hourly_raw"].update(date_result["hourly_raw"])  # Changed from hourly_prices
                         except Exception as e:
                             _LOGGER.warning(f"Failed to parse OMIE data for date {date_str}: {e}")
 
         # Calculate current and next hour prices
-        result["current_price"] = self._get_current_price(result["hourly_prices"])
-        result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
+        result["current_price"] = self._get_current_price(result["hourly_raw"])  # Changed from hourly_prices
+        result["next_hour_price"] = self._get_next_hour_price(result["hourly_raw"])  # Changed from hourly_prices
 
-        _LOGGER.debug(f"OMIE parser found {len(result['hourly_prices'])} hourly prices")
+        _LOGGER.debug(f"OMIE parser found {len(result['hourly_raw'])} hourly prices")  # Changed from hourly_prices
         return result
         
     def _parse_json(self, json_data: str, result: Dict[str, Any]) -> None:
@@ -186,7 +186,7 @@ class OmieParser(BasePriceParser):
                         continue
             
             # Update result with parsed hourly prices
-            result["hourly_prices"].update(hourly_prices)
+            result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
             
             # Add debug log with count of prices extracted
             _LOGGER.debug(f"Parsed {len(hourly_prices)} hourly prices from OMIE JSON data")
@@ -232,6 +232,16 @@ class OmieParser(BasePriceParser):
             if "target_date" in data:
                 metadata["target_date"] = data["target_date"]
 
+        metadata.update({
+            "source": self.source,
+            "price_count": len(data.get("hourly_raw", {})),  # Changed from hourly_prices
+            "currency": data.get("currency", "EUR"),  # Changed default
+            "has_current_price": "current_price" in data and data["current_price"] is not None,
+            "has_next_hour_price": "next_hour_price" in data and data["next_hour_price"] is not None,
+            "parser_version": "2.1",  # Updated version
+            "parsed_at": datetime.now(timezone.utc).isoformat()
+        })
+
         return metadata
 
     def _parse_csv(self, csv_data: str, result: Dict[str, Any]) -> None:
@@ -272,7 +282,7 @@ class OmieParser(BasePriceParser):
             raise e  # Re-raise to provide better error reporting
         
         # Update result with parsed hourly prices
-        result["hourly_prices"].update(hourly_prices)
+        result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
 
     def _parse_csv_with_header(self, csv_reader, hourly_prices: Dict[str, float], area: str, local_tz) -> None:
         """Parse CSV data with headers.

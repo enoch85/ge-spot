@@ -31,7 +31,7 @@ class AemoParser(BasePriceParser):
             Parsed data with hourly prices
         """
         result = {
-            "hourly_prices": {},
+            "hourly_raw": {},  # Changed from hourly_prices
             "currency": Currency.AUD,
         }
 
@@ -55,18 +55,18 @@ class AemoParser(BasePriceParser):
         # If raw_data is a dictionary, extract data directly
         elif isinstance(raw_data, dict):
             # If hourly prices were already processed
-            if "hourly_prices" in raw_data and isinstance(raw_data["hourly_prices"], dict):
-                result["hourly_prices"] = raw_data["hourly_prices"]
+            if "hourly_raw" in raw_data and isinstance(raw_data["hourly_raw"], dict):  # Changed from hourly_prices
+                result["hourly_raw"] = raw_data["hourly_raw"]  # Changed from hourly_prices
             elif "raw_data" in raw_data:
                 # Try to parse raw_data entry
                 self._parse_json(raw_data, result)
 
         # Calculate current and next hour prices if not provided
         if not result.get("current_price"):
-            result["current_price"] = self._get_current_price(result["hourly_prices"])
+            result["current_price"] = self._get_current_price(result["hourly_raw"])  # Changed from hourly_prices
         
         if not result.get("next_hour_price"):
-            result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
+            result["next_hour_price"] = self._get_next_hour_price(result["hourly_raw"])  # Changed from hourly_prices
 
         return result
 
@@ -103,6 +103,16 @@ class AemoParser(BasePriceParser):
                     if Aemo.REGION_FIELD in first_entry:
                         metadata["area"] = first_entry[Aemo.REGION_FIELD]
 
+        metadata.update({
+            "source": self.source,
+            "price_count": len(data.get("hourly_raw", {})),  # Changed from hourly_prices
+            "currency": data.get("currency", "AUD"),  # Changed default
+            "has_current_price": "current_price" in data and data["current_price"] is not None,
+            "has_next_hour_price": "next_hour_price" in data and data["next_hour_price"] is not None,
+            "parser_version": "2.1",  # Updated version
+            "parsed_at": datetime.now(timezone.utc).isoformat()
+        })
+
         return metadata
 
     def _parse_json(self, json_data: Dict[str, Any], result: Dict[str, Any]) -> None:
@@ -136,7 +146,7 @@ class AemoParser(BasePriceParser):
                         continue
 
         # Update result with parsed hourly prices
-        result["hourly_prices"].update(hourly_prices)
+        result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
 
     def _parse_csv(self, csv_data: str, result: Dict[str, Any]) -> None:
         """Parse CSV formatted data from AEMO.
@@ -172,7 +182,7 @@ class AemoParser(BasePriceParser):
             _LOGGER.warning(f"Error parsing AEMO CSV data: {e}")
         
         # Update result with parsed hourly prices
-        result["hourly_prices"].update(hourly_prices)
+        result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
 
     def _parse_timestamp(self, timestamp_str: str) -> Optional[datetime]:
         """Parse timestamp from AEMO format.
