@@ -102,9 +102,19 @@ class UnifiedPriceManager:
         # self._last_data = None # Replaced by CacheManager
         self._consecutive_failures = 0
 
-        # Display settings
-        self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
+        # Display settings - explicitly ensure display_unit is set from config with strong default
+        # This is crucial for proper operation with selected display units
+        if Config.DISPLAY_UNIT in config:
+            self.display_unit = config[Config.DISPLAY_UNIT]
+            _LOGGER.debug(f"Using explicitly configured display_unit from config: {self.display_unit}")
+        else:
+            self.display_unit = Defaults.DISPLAY_UNIT
+            _LOGGER.warning(f"No display_unit in config for {area}, using default: {self.display_unit}")
+            
+        # Set use_subunit based on display_unit - crucial for proper unit conversion
         self.use_subunit = self.display_unit == DisplayUnit.CENTS
+        _LOGGER.debug(f"UnifiedPriceManager initialized for {area} with display_unit={self.display_unit}, use_subunit={self.use_subunit}")
+        
         self.vat_rate = config.get(Config.VAT, Defaults.VAT_RATE) / 100  # Convert from percentage to rate
         self.include_vat = config.get(Config.INCLUDE_VAT, Defaults.INCLUDE_VAT)
 

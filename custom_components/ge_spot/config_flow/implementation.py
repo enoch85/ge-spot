@@ -23,6 +23,7 @@ from .utils import (
 from .schemas import (
     get_source_priority_schema,
     get_api_keys_schema,
+    get_stromligning_config_schema,  # Import new schema
     get_user_schema,
     get_default_values,
 )
@@ -40,6 +41,8 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         self._data = {}
         self._supported_sources = []
         self._errors = {}
+        self._requires_api_key = False  # Track if API key is needed
+        self._requires_stromligning_config = False  # Track if Stromligning config is needed
 
     async def async_step_user(self, user_input=None) -> FlowResult:
         """Handle a flow initialized by the user."""
@@ -116,16 +119,28 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                         # Convert VAT from percentage to decimal
                         if key == Config.VAT:
                             value = value / 100
+                        # Ensure display_unit is explicitly saved
                         self._data[key] = value
+                
+                # Log the display unit being saved
+                _LOGGER.debug(f"Saving display_unit: {self._data.get(Config.DISPLAY_UNIT)}")
+
+                selected_sources = self._data.get(Config.SOURCE_PRIORITY, [])
 
                 # Check if ENTSOE requires an API key for this area
-                requires_api_key = (
-                    Source.ENTSOE in self._data.get(Config.SOURCE_PRIORITY, []) and
+                self._requires_api_key = (
+                    Source.ENTSOE in selected_sources and
                     self._data.get(Config.AREA) in AreaMapping.ENTSOE_MAPPING
                 )
 
-                if requires_api_key:
+                # Check if Stromligning requires config
+                self._requires_stromligning_config = Source.STROMLIGNING in selected_sources
+
+                # Determine next step
+                if self._requires_api_key:
                     return await self.async_step_api_keys()
+                elif self._requires_stromligning_config:
+                    return await self.async_step_stromligning_config()
                 else:
                     return self._create_entry()
 
@@ -159,8 +174,16 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                     else:
                         self._errors[f"{Source.ENTSOE}_api_key"] = "invalid_api_key"
                         return await self._show_api_keys_form()
+                else:
+                    # Handle case where key is required but not provided (shouldn't happen with schema, but good practice)
+                    self._errors[f"{Source.ENTSOE}_api_key"] = "api_key_required"
+                    return await self._show_api_keys_form()
 
-                return self._create_entry()
+                # Check if Stromligning config is needed next
+                if self._requires_stromligning_config:
+                    return await self.async_step_stromligning_config()
+                else:
+                    return self._create_entry()
 
             except Exception as e:
                 _LOGGER.error(f"Error in async_step_api_keys: {e}")
@@ -177,6 +200,36 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={"data_description": "data_description"}
         )
 
+    async def async_step_stromligning_config(self, user_input=None) -> FlowResult:
+        """Handle Stromligning supplier ID entry."""
+        self._errors = {}
+
+        if user_input is not None:
+            try:
+                supplier_id = user_input.get(Config.CONF_STROMLIGNING_SUPPLIER)
+                if supplier_id:
+                    self._data[Config.CONF_STROMLIGNING_SUPPLIER] = supplier_id
+                    return self._create_entry()
+                else:
+                    # Handle case where supplier ID is required but not provided
+                    self._errors[Config.CONF_STROMLIGNING_SUPPLIER] = "supplier_id_required"
+                    return await self._show_stromligning_config_form()
+
+            except Exception as e:
+                _LOGGER.error(f"Error in async_step_stromligning_config: {e}")
+                self._errors["base"] = "unknown"
+
+        return await self._show_stromligning_config_form()
+
+    async def _show_stromligning_config_form(self):
+        """Show the Stromligning config form."""
+        return self.async_show_form(
+            step_id="stromligning_config",
+            data_schema=get_stromligning_config_schema(),
+            errors=self._errors,
+            description_placeholders={"data_description": "data_description"}
+        )
+
     def _create_entry(self) -> FlowResult:
         """Create the config entry."""
         # Determine region display name
@@ -188,10 +241,16 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
             self._data[Config.VAT] = Defaults.VAT
         if Config.UPDATE_INTERVAL not in self._data:
             self._data[Config.UPDATE_INTERVAL] = Defaults.UPDATE_INTERVAL
-        if Config.DISPLAY_UNIT not in self._data:
-            self._data[Config.DISPLAY_UNIT] = Defaults.DISPLAY_UNIT
+        # Display unit is now required in schema
         if Config.TIMEZONE_REFERENCE not in self._data:
             self._data[Config.TIMEZONE_REFERENCE] = Defaults.TIMEZONE_REFERENCE
+
+        # Ensure that any supplier_id settings are properly saved
+        # This is crucial for Stromligning operation
+        if self._requires_stromligning_config and Config.CONF_STROMLIGNING_SUPPLIER in self._data:
+            _LOGGER.debug(f"Saving Stromligning supplier ID: {self._data[Config.CONF_STROMLIGNING_SUPPLIER]}")
+        else:
+            _LOGGER.debug(f"No Stromligning supplier needed or provided")
 
         return self.async_create_entry(
             title=f"GE-Spot - {region_name}",

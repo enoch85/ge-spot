@@ -6,6 +6,7 @@ from ..const.currencies import Currency
 from ..const.energy import EnergyUnit
 from ..const.defaults import Defaults
 from ..const.config import Config
+from ..const.display import DisplayUnit
 from ..utils.exchange_service import ExchangeRateService
 from ..utils.unit_conversion import convert_energy_price, get_display_unit_multiplier
 
@@ -28,7 +29,9 @@ class CurrencyConverter:
         self.display_unit = display_unit
         self.include_vat = include_vat
         self.vat_rate = vat_rate
-        self.use_subunit = display_unit == Defaults.CURRENCY_SUBUNIT # Check if using cents/øre
+        # Use cents display format when explicitly set to DisplayUnit.CENTS
+        self.use_subunit = display_unit == DisplayUnit.CENTS
+        _LOGGER.debug("CurrencyConverter initialized with display_unit=%s, use_subunit=%s", display_unit, self.use_subunit)
 
     async def convert_hourly_prices(
         self,
@@ -53,14 +56,15 @@ class CurrencyConverter:
             return {}, None, None
 
         _LOGGER.debug(
-            "Converting %d prices from %s/%s to %s/%s (VAT included: %s, Rate: %.2f%%)",
+            "Converting %d prices from %s/%s to %s/%s (VAT included: %s, Rate: %.2f%%, Use Subunit/Cents: %s)",
             len(hourly_prices),
             source_currency,
             source_unit,
             self.target_currency,
-            self.display_unit,
+            "cents" if self.use_subunit else "decimal",
             self.include_vat,
-            self.vat_rate * 100
+            self.vat_rate * 100,
+            self.use_subunit
         )
 
         converted_prices = {}

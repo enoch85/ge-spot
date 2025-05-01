@@ -171,7 +171,9 @@ class StromligningParser(BasePriceParser):
                         # --- End Price Extraction Logic Change ---
 
                         if price_value is not None:
-                            result["hourly_prices"][hour_key] = price_value
+                            # Store original price value in DKK/kWh
+                            result["hourly_prices"][hour_key] = price_value * 100  # Convert from DKK/kWh to øre/kWh
+                            _LOGGER.debug(f"Adjusted price for {hour_key}: {price_value} DKK/kWh -> {price_value * 100} øre/kWh")
                         else:
                             _LOGGER.warning(f"No valid price found in Stromligning data for hour {hour_key}")
 

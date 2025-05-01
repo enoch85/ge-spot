@@ -52,7 +52,8 @@ def get_source_priority_schema(supported_sources):
                 vol.Coerce(float),
                 vol.Range(min=0, max=100),
             ),
-            vol.Optional(Config.DISPLAY_UNIT, default=DisplayUnit.DECIMAL): selector.SelectSelector(
+            # Make DISPLAY_UNIT required
+            vol.Required(Config.DISPLAY_UNIT, default=DisplayUnit.DECIMAL): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": key, "label": value}
@@ -92,6 +93,20 @@ def get_api_keys_schema(area, existing_api_key=None):
 
     # Use the FormHelper to create the API key selector
     schema_dict[field] = FormHelper.create_api_key_selector()
+
+    return vol.Schema(schema_dict)
+
+# Add schema for Stromligning config step
+def get_stromligning_config_schema(existing_supplier=None):
+    """Return schema for Stromligning config step."""
+    schema_dict = {}
+    description = "Required for Strømligning data source. Complete list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
+    
+    # Create field - required for new setups
+    field = vol.Required(Config.CONF_STROMLIGNING_SUPPLIER,
+                        description=description)
+
+    schema_dict[field] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
 
     return vol.Schema(schema_dict)
 

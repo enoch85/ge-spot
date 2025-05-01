@@ -66,6 +66,7 @@ class StromligningAPI(BasePriceAPI):
                 "timezone": metadata.get("timezone", "Europe/Copenhagen"),
                 "currency": metadata.get("currency", Currency.DKK),
                 "source_name": "stromligning",
+                "source_unit": "kWh",  # Specify that Stromligning API returns values in kWh
                 "raw_data": raw_data,
             }
         finally:
@@ -148,6 +149,7 @@ class StromligningAPI(BasePriceAPI):
             parsed["timezone"] = raw_data.get("timezone", metadata.get("timezone", "Europe/Copenhagen"))
             parsed["currency"] = raw_data.get("currency", metadata.get("currency", Currency.DKK))
             parsed["source_name"] = raw_data.get("source_name", "stromligning")
+            parsed["source_unit"] = raw_data.get("source_unit", "kWh")  # Propagate source unit
             return parsed
         except Exception as e:
             _LOGGER.error(f"Error parsing Stromligning data: {e}", exc_info=True)

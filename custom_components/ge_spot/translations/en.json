@@ -30,6 +30,16 @@
         "data": {
           "entsoe_api_key": "ENTSO-E API Key"
         }
+      },
+      "stromligning_config": {
+        "title": "Strømligning Configuration",
+        "description": "Enter your Strømligning supplier ID",
+        "data": {
+          "stromligning_supplier": "Strømligning Supplier ID"
+        },
+        "data_description": {
+          "stromligning_supplier": "Enter your supplier ID (e.g. rah_c). View available suppliers in the documentation."
+        }
       }
     },
     "error": {
@@ -37,6 +47,7 @@
       "error_sources_for_region": "Error retrieving sources for region",
       "api_key_required": "API key is required",
       "invalid_api_key": "Invalid API key. Please check the key or try again later.",
+      "supplier_id_required": "Supplier ID is required for Strømligning",
       "api_creation_failed": "Failed to create API connection. Please try again.",
       "unknown": "Unexpected error occurred"
     },
