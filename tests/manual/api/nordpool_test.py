@@ -54,69 +54,92 @@ async def main():
             logger.info("Fetching data from Nordpool API...")
             
             # Call the fetch_raw_data method with the area code
-            raw_data = await api.fetch_raw_data(area_code)
+            raw_data_response = await api.fetch_raw_data(area_code) # Renamed variable for clarity
             
             # Debug: Print raw data keys
-            logger.info(f"Raw data keys: {list(raw_data.keys()) if raw_data else 'None'}")
-            
-            # Check more detailed content of raw_data
-            if raw_data and "raw_data" in raw_data:
-                if "today" in raw_data["raw_data"]:
-                    logger.info("Today's data found in response")
-                else:
-                    logger.info("Today's data NOT found in response")
-                    
-                if "tomorrow" in raw_data["raw_data"]:
-                    logger.info("Tomorrow's data found in response")
-                else:
-                    logger.info("Tomorrow's data NOT found in response")
-                    
-                # Print a snippet of the raw data for debugging
-                logger.info("\nRaw data sample (first 500 chars):")
-                logger.info(str(raw_data)[:500] + "...")
-            
-            # Check if we have data - more flexible check
-            if not raw_data:
-                logger.error("Failed to fetch any data from Nordpool API")
+            logger.info(f"Raw data keys: {list(raw_data_response.keys()) if raw_data_response else 'None'}")
+
+            if not raw_data_response or "raw_data" not in raw_data_response:
+                logger.error("Failed to fetch valid raw data structure from Nordpool API")
                 return 1
+
+            # Check for pre-processed hourly data first
+            hourly_prices = raw_data_response.get('hourly_raw', {})
+
+            # If hourly_raw is empty, try to extract from the nested raw_data
+            if not hourly_prices and 'raw_data' in raw_data_response:
+                logger.info("`hourly_raw` not found or empty, attempting to parse from `raw_data` directly.")
+                nested_raw_data = raw_data_response['raw_data']
+                temp_hourly_prices = {}
                 
-            if "hourly_raw" in raw_data and raw_data["hourly_raw"]:
-                logger.info(f"Successfully fetched {len(raw_data['hourly_raw'])} hourly price points")
-            elif not raw_data.get("raw_data", {}).get("today"):
-                logger.error("Failed to fetch today's data from Nordpool API")
-                return 1
-            else:
-                logger.info("Found raw data but no hourly prices extracted")
+                # Process today's data if available
+                if 'today' in nested_raw_data and 'multiAreaEntries' in nested_raw_data['today']:
+                    logger.info("Extracting today's prices from nested raw_data.")
+                    for entry in nested_raw_data['today']['multiAreaEntries']:
+                        timestamp_utc = entry['deliveryStart'] 
+                        price = entry['entryPerArea'].get(area_code)
+                        if price is not None:
+                            # Store with timestamp as key, price as value (or dict if needed later)
+                            temp_hourly_prices[timestamp_utc] = {'price': price} 
                 
-            logger.info("Successfully fetched raw data")
-            
-            # Instead of using parse_raw_data, we'll work with the hourly_raw data directly
-            logger.info("Processing raw data...")
-            hourly_prices = raw_data.get('hourly_raw', {})
-            
+                # Process tomorrow's data if available
+                if 'tomorrow' in nested_raw_data and 'multiAreaEntries' in nested_raw_data['tomorrow']:
+                    logger.info("Extracting tomorrow's prices from nested raw_data.")
+                    for entry in nested_raw_data['tomorrow']['multiAreaEntries']:
+                        timestamp_utc = entry['deliveryStart']
+                        price = entry['entryPerArea'].get(area_code)
+                        if price is not None:
+                            temp_hourly_prices[timestamp_utc] = {'price': price}
+                             
+                hourly_prices = temp_hourly_prices # Assign the extracted prices
+
+            # Now check if we have any hourly prices, either from hourly_raw or extracted
             if not hourly_prices:
-                logger.error("No hourly prices available in the raw data")
+                logger.error("Could not find or extract any hourly prices from the Nordpool response.")
+                # Optionally print more details about the raw_data_response here for debugging
+                logger.info("\nRaw data sample (first 500 chars):")
+                logger.info(str(raw_data_response)[:500] + "...")
                 return 1
+
+            logger.info(f"Successfully obtained {len(hourly_prices)} hourly price points for processing.")
             
+            # --- Rest of the processing logic remains the same ---
+            
+            logger.info("Processing raw data...")
+
             # Convert prices from EUR to SEK
             logger.info("Converting prices from EUR to SEK...")
             exchange_service = ExchangeRateService(session=session)
-            # Use get_rates instead of update
             await exchange_service.get_rates(force_refresh=True)
             
             # Format data for display
             formatted_prices = {}
             for timestamp_utc, price_data in hourly_prices.items():
                 # Convert UTC timestamp to local time (Europe/Stockholm for SE areas)
-                utc_dt = datetime.fromisoformat(timestamp_utc.replace('+00:00', ''))
+                # Ensure timestamp is parsed correctly, handling potential 'Z' for UTC
+                if timestamp_utc.endswith('Z'):
+                    timestamp_utc = timestamp_utc[:-1] + '+00:00'
+                
+                try:
+                    # Use fromisoformat which handles timezone info
+                    utc_dt = datetime.fromisoformat(timestamp_utc) 
+                except ValueError:
+                    logger.error(f"Could not parse timestamp: {timestamp_utc}")
+                    continue # Skip this entry if timestamp is invalid
+
                 local_dt = utc_dt.astimezone(timezone_service.area_timezone)
                 local_time_str = local_dt.strftime('%Y-%m-%d %H:%M')
                 
+                # Handle price data being a dict or just a number
                 if isinstance(price_data, dict):
-                    price_eur = price_data.get('price', 0)
+                    price_eur = price_data.get('price') # Get price from dict
                 else:
-                    price_eur = price_data
-                
+                    price_eur = price_data # Assume it's the price directly
+
+                if price_eur is None:
+                    logger.warning(f"Missing price for timestamp {timestamp_utc}, skipping.")
+                    continue
+
                 # Convert EUR/MWh to SEK/kWh
                 price_sek = await exchange_service.convert(price_eur, 'EUR', 'SEK') 
                 price_sek_kwh = price_sek / 1000  # Convert from MWh to kWh
@@ -129,6 +152,13 @@ async def main():
                 }
             
             num_hourly_prices = len(formatted_prices)
+            if num_hourly_prices == 0 and len(hourly_prices) > 0:
+                logger.error("Extracted hourly prices but failed to format them.")
+                return 1
+            elif num_hourly_prices == 0:
+                logger.error("No hourly prices could be formatted.")
+                return 1 # Should have been caught earlier, but double-check
+
             logger.info(f"Successfully processed {num_hourly_prices} hourly prices.")
             
             # Group by date
@@ -145,7 +175,7 @@ async def main():
             logger.info(f"Source: nordpool")
             logger.info(f"Area: {area_code}")
             logger.info(f"Currency: EUR (original), SEK (converted)")
-            logger.info(f"API Timezone: {raw_data.get('timezone', 'Unknown')}")
+            logger.info(f"API Timezone: {raw_data_response.get('timezone', 'Unknown')}") 
             logger.info(f"Local Timezone: {timezone_service.area_timezone}")
             
             # Format hourly prices into a table
