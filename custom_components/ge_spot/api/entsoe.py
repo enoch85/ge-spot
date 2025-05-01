@@ -272,30 +272,35 @@ class EntsoeAPI(BasePriceAPI):
             raise ValueError(f"No matching data found for area {area} after trying multiple date ranges and document types")
 
     async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
-        if not isinstance(raw_data, dict):
-            _LOGGER.error(f"ENTSOE parse_raw_data expected dict, got {type(raw_data).__name__}: {raw_data}")
-            raise ValueError(f"ENTSOE parse_raw_data expected dict, got {type(raw_data).__name__}: {raw_data}")
-        xml_responses = raw_data.get("xml_responses", [])
-        dict_response = raw_data.get("dict_response")
-        all_hourly_prices = {}
-        # Parse XML responses if available
-        if xml_responses:
-            for xml_response in xml_responses:
-                parsed = self.parser.parse({"raw_data": xml_response})
-                if parsed and "hourly_prices" in parsed:
-                    all_hourly_prices.update(parsed["hourly_prices"])
-        # Parse dictionary response if available
-        if dict_response:
-            parsed = self.parser.parse(dict_response)
-            if parsed and "hourly_prices" in parsed:
-                all_hourly_prices.update(parsed["hourly_prices"])
-        return {
-            "hourly_raw": all_hourly_prices,
-            "timezone": raw_data.get("api_timezone", "Etc/UTC"),
-            "currency": "EUR",
-            "source_name": "entsoe",
-            "raw_data": raw_data,
-        }
+        """Parse the raw data dictionary fetched by fetch_raw_data."""
+        _LOGGER.debug(f"ENTSOE API: Starting parse_raw_data with input keys: {list(raw_data.keys())}")
+        
+        # The parser expects the dictionary containing 'xml_responses' or 'raw_data'
+        # No need to loop here, the parser handles the list internally.
+        try:
+            # Pass the entire raw_data dictionary directly to the parser instance
+            parsed_data = self.parser.parse(raw_data) 
+            
+            if not parsed_data or not parsed_data.get("hourly_raw"):
+                 _LOGGER.warning("ENTSOE API: Parser returned no hourly_raw data.")
+                 # Optionally log the raw_data again if parsing failed unexpectedly
+                 # _LOGGER.debug(f"Raw data passed to parser: {raw_data}")
+                 return {} # Return empty if parsing failed to produce hourly data
+
+            _LOGGER.debug(f"ENTSOE API: Parser returned keys: {list(parsed_data.keys())}")
+            
+            # Add source name for consistency if not already present
+            if "source_name" not in parsed_data:
+                parsed_data["source_name"] = Source.ENTSOE.value
+
+            # Include the original raw data for potential debugging/caching
+            parsed_data["raw_data"] = raw_data # Keep original raw data if needed downstream
+
+            return parsed_data
+
+        except Exception as e:
+            _LOGGER.error(f"ENTSOE API: Error during parsing: {e}", exc_info=True)
+            return {} # Return empty dict on error
 
 async def validate_api_key(api_key, area, session=None):
     """Validate an API key by making a test request.
