@@ -66,36 +66,39 @@ class BasePriceParser(ABC):
         Returns:
             True if data is valid, False otherwise
         """
-        # Check if hourly prices exist and are valid
-        if "hourly_prices" not in data or not isinstance(data["hourly_prices"], dict):
-            _LOGGER.warning(f"{self.source}: Missing or invalid hourly_prices")
+        # Check if hourly_raw exists and is a dict
+        if "hourly_raw" not in data or not isinstance(data["hourly_raw"], dict):
+            _LOGGER.warning(f"{self.source}: Missing or invalid hourly_raw")
             return False
 
         # Check if there are any prices
-        if not data["hourly_prices"]:
-            _LOGGER.warning(f"{self.source}: No hourly prices found")
+        if not data["hourly_raw"]:
+            _LOGGER.warning(f"{self.source}: No hourly prices found in hourly_raw")
             return False
 
         # Check if current hour price is available when expected
-        current_price = self._get_current_price(data["hourly_prices"])
+        current_price = self._get_current_price(data["hourly_raw"])
         if current_price is None:
-            _LOGGER.warning(f"{self.source}: Current hour price not found in hourly_prices")
+            _LOGGER.warning(f"{self.source}: Current hour price not found in hourly_raw")
             # Allow validation to pass even if current hour is missing (e.g., data for future only)
             # return False # Temporarily commented out to allow future data validation
 
         # Check if next hour price is available when it should be (within the same target timezone day)
         target_tz = self.timezone_service.target_timezone # FIX: Access attribute directly
-        now_target = datetime.now(target_tz)
-        next_hour_start_target = (now_target + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        if target_tz:
+            now_target = datetime.now(target_tz)
+            next_hour_start_target = (now_target + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
 
-        # Check if the *start* of the next hour in the target timezone is still on the same *calendar day* as *now* in the target timezone.
-        # This determines if we *expect* the next hour's price to be part of the current day's data fetch.
-        if next_hour_start_target.date() == now_target.date():
-            next_price = self._get_next_hour_price(data["hourly_prices"])
-            if next_price is None:
-                _LOGGER.warning(f"{self.source}: Next hour price expected within the same day ({now_target.date()}) but not found")
-                # Allow validation to pass if next hour is missing, might be end of day data
-                # return False # Temporarily commented out
+            # Check if the *start* of the next hour in the target timezone is still on the same *calendar day* as *now* in the target timezone.
+            # This determines if we *expect* the next hour's price to be part of the current day's data fetch.
+            if next_hour_start_target.date() == now_target.date():
+                next_price = self._get_next_hour_price(data["hourly_raw"])
+                if next_price is None:
+                    _LOGGER.warning(f"{self.source}: Next hour price expected within the same day ({now_target.date()}) but not found in hourly_raw")
+                    # Allow validation to pass if next hour is missing, might be end of day data
+                    # return False # Temporarily commented out
+        else:
+            _LOGGER.warning(f"{self.source}: Target timezone not available in TimezoneService, skipping next hour price validation.")
 
         return True
 

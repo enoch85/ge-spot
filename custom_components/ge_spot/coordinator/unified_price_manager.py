@@ -297,61 +297,80 @@ class UnifiedPriceManager:
                 session=session, # Pass session
             )
 
-            # Check if fetch was successful
-            if result and result.get("hourly_raw") and not result.get("error"):
-                _LOGGER.info(f"Successfully fetched data for area {self.area} via FallbackManager.")
-                self._consecutive_failures = 0
-                self._active_source = result.get("data_source", "unknown")
-                self._attempted_sources = result.get("attempted_sources", [])
-                # Determine fallback sources (attempted minus the successful one)
-                self._fallback_sources = [s for s in self._attempted_sources if s != self._active_source]
-                self._using_cached_data = False # Fresh data fetched
-                result["using_cached_data"] = False # Ensure flag is set correctly
+            # --- DEBUG LOGGING START ---
+            if result:
+                _LOGGER.debug(f"[{self.area}] Result from FallbackManager: Keys={list(result.keys())}, ErrorKeyPresent={result.get('error') is not None}")
+                # Log the raw data content if small enough or relevant parts
+                raw_content_preview = str(result.get('xml_responses') or result.get('dict_response'))[:200] # Check both possible raw data keys
+                _LOGGER.debug(f"[{self.area}] Raw data preview: {raw_content_preview}...")
+            else:
+                _LOGGER.debug(f"[{self.area}] Result from FallbackManager is None or empty.")
+            # --- DEBUG LOGGING END ---
 
-                # Process the successful result
+            # Check if FallbackManager returned a result dictionary AND it doesn't contain the 'error' key added by FallbackManager on total failure.
+            if isinstance(result, dict) and "error" not in result:
+                _LOGGER.info(f"[{self.area}] Successfully received raw data structure from FallbackManager. Source: {result.get('data_source', 'unknown')}")
+
+                # Process the raw result (this is where parsing happens)
                 processed_data = await self._process_result(result)
 
-                # Cache the successfully processed data
-                # Pass the 'now' timestamp, store will derive the date for the key
-                self._cache_manager.store(
-                    data=processed_data,
-                    area=self.area,
-                    source=processed_data.get("data_source", "unknown"),
-                    timestamp=now # Pass the timestamp used for the fetch cycle
-                )
-                # Note: update_cache is removed as we now call store directly with the date
-                # self._cache_manager.update_cache(processed_data)
+                # NOW check if processing yielded hourly_prices data and has_data flag is true
+                if processed_data and processed_data.get("has_data") and processed_data.get("hourly_prices"): # Check for hourly_prices *after* processing
+                    _LOGGER.info(f"[{self.area}] Successfully processed data, found 'hourly_prices'.")
+                    self._consecutive_failures = 0
+                    self._active_source = processed_data.get("data_source", "unknown") # Use source from processed data
+                    self._attempted_sources = processed_data.get("attempted_sources", [])
+                    self._fallback_sources = [s for s in self._attempted_sources if s != self._active_source]
+                    self._using_cached_data = False
+                    processed_data["using_cached_data"] = False
 
-                return processed_data
-
-            else:
-                # Handle fetch failure from all sources
-                error_info = result.get("error", "Unknown fetch error") if result else "No result from FallbackManager"
-                _LOGGER.error(f"Failed to fetch data for area {self.area} from all sources. Error: {error_info}")
-                self._consecutive_failures += 1
-                self._attempted_sources = result.get("attempted_sources", []) if result else []
-                self._active_source = "None"
-                self._fallback_sources = self._attempted_sources # All attempted sources failed
-
-                # Try to use cached data as a last resort - specify today's date
-                cached_data = self._cache_manager.get_data(
-                    area=self.area,
-                    target_date=today_date, # Specify today
-                    max_age_minutes=Defaults.CACHE_TTL
-                )
-                if cached_data:
-                    _LOGGER.warning("Using cached data for %s due to fetch failure.", self.area)
-                    self._using_cached_data = True
-                    cached_data["using_cached_data"] = True # Mark as cached
-                    # Re-process cached data
-                    processed_cached_data = await self._process_result(cached_data, is_cached=True)
-                    processed_cached_data["using_cached_data"] = True # Ensure flag is set
-                    return processed_cached_data
+                    # Cache the successfully processed data
+                    self._cache_manager.store(
+                        data=processed_data,
+                        area=self.area,
+                        source=processed_data.get("data_source", "unknown"),
+                        timestamp=now
+                    )
+                    return processed_data
                 else:
-                    _LOGGER.error("All sources failed for %s and no usable cache available for today (%s).", self.area, today_date)
-                    self._using_cached_data = True # Indicate we intended to use cache but failed
-                    # Generate empty result if fetch and cache fail
-                    return await self._generate_empty_result(error=f"All sources failed: {error_info}")
+                    # Processing failed to produce hourly_raw or marked as no data
+                    error_info = processed_data.get("error", "Processing failed to produce valid data") if processed_data else "Processing returned None or empty"
+                    _LOGGER.error(f"[{self.area}] Failed to process fetched data. Error: {error_info}")
+                    # Fall through to failure handling (try cache)
+
+            # Handle fetch failure (result is None or the error dict from FallbackManager) OR processing failure
+            error_info = "Unknown fetch/processing error" # Default error
+            if result and "error" in result and isinstance(result.get("error"), Exception): # Check if error key exists and is an Exception
+                 error_info = str(result.get("error", "Unknown fetch error")) # Error from FallbackManager
+            elif not result:
+                 error_info = "No result from FallbackManager"
+            # If processing failed, error_info might have been set in the 'else' block above
+
+            _LOGGER.error(f"Failed to get valid processed data for area {self.area}. Error: {error_info}")
+            self._consecutive_failures += 1
+            self._attempted_sources = result.get("attempted_sources", []) if result else []
+            self._active_source = "None"
+            self._fallback_sources = self._attempted_sources # All attempted sources failed or processing failed
+
+            # Try to use cached data as a last resort - specify today's date
+            cached_data = self._cache_manager.get_data(
+                area=self.area,
+                target_date=today_date, # Specify today
+                max_age_minutes=Defaults.CACHE_TTL
+            )
+            if cached_data:
+                _LOGGER.warning("Using cached data for %s due to fetch/processing failure.", self.area)
+                self._using_cached_data = True
+                cached_data["using_cached_data"] = True # Mark as cached
+                # Re-process cached data
+                processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                processed_cached_data["using_cached_data"] = True # Ensure flag is set
+                return processed_cached_data
+            else:
+                _LOGGER.error("All sources/processing failed for %s and no usable cache available for today (%s).", self.area, today_date)
+                self._using_cached_data = True # Indicate we intended to use cache but failed
+                # Generate empty result if fetch and cache fail
+                return await self._generate_empty_result(error=f"Fetch/Processing failed: {error_info}")
 
         except Exception as e:
             _LOGGER.error(f"Unexpected error during fetch_data for area {self.area}: {e}", exc_info=True)

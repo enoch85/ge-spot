@@ -49,25 +49,47 @@ class StromligningAPI(BasePriceAPI):
         return getattr(Stromligning, 'BASE_URL', "https://stromligning.dk/api/prices")
 
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
-        reference_time = kwargs.get('reference_time')
-        if reference_time is None:
-            reference_time = datetime.now(timezone.utc)
+        """Fetch raw data from Stromligning.dk API.
+
+        Args:
+            area: Area code (e.g., DK1, DK2)
+            session: Optional aiohttp session
+            **kwargs: Additional keyword arguments (e.g., reference_time)
+
+        Returns:
+            Dictionary containing raw data and metadata for the parser.
+        """
+        reference_time = kwargs.get('reference_time', datetime.now(timezone.utc))
         client = ApiClient(session=session or self.session)
         try:
-            raw_data = await self._fetch_data(client, area, reference_time)
-            if not raw_data:
-                return {}
-            parser = self.get_parser_for_area(area)
-            parsed = parser.parse(raw_data)
-            hourly_raw = parsed.get("hourly_prices", {})
-            metadata = parser.extract_metadata(raw_data)
+            # Fetch the raw JSON response from the API
+            raw_api_response = await self._fetch_data(client, area, reference_time)
+            
+            if not raw_api_response:
+                _LOGGER.warning(f"StromligningAPI._fetch_data returned empty for area {area}")
+                # Return an empty structure but include essential keys for downstream checks
+                return {
+                    "raw_data": None,
+                    "timezone": self.get_timezone_for_area(area),
+                    "currency": Currency.DKK,
+                    "area": area,
+                    "source": self.source_type,
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "source_unit": "kWh",
+                }
+
+            # --- No Parsing Here --- 
+            # The parser will be called later by DataProcessor
+
+            # Return the raw data along with necessary metadata for the parser
             return {
-                "hourly_raw": hourly_raw,
-                "timezone": metadata.get("timezone", "Europe/Copenhagen"),
-                "currency": metadata.get("currency", Currency.DKK),
-                "source_name": "stromligning",
+                "raw_data": raw_api_response, # Pass the actual API response
+                "timezone": self.get_timezone_for_area(area), # Get timezone based on area
+                "currency": Currency.DKK, # Stromligning uses DKK
+                "area": area,
+                "source": self.source_type,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
                 "source_unit": "kWh",  # Specify that Stromligning API returns values in kWh
-                "raw_data": raw_data,
             }
         finally:
             if session is None and client:

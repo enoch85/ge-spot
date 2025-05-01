@@ -44,71 +44,60 @@ class EnergiDataAPI(BasePriceAPI):
         Args:
             area: Area code
             session: Optional aiohttp session
+            **kwargs: Additional keyword arguments (e.g., reference_time)
             
         Returns:
-            Dictionary with raw data
+            Dictionary containing raw data and metadata for the parser.
         """
         client = ApiClient(session=session or self.session)
         try:
             # Use UTC for all reference times
-            now_utc = datetime.datetime.now(timezone.utc)
+            reference_time = kwargs.get('reference_time', datetime.datetime.now(timezone.utc))
             
-            # Always compute today and tomorrow
-            today = now_utc.strftime("%Y-%m-%d")
-            tomorrow = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
+            # Always compute today and tomorrow based on reference time
+            today = reference_time.strftime("%Y-%m-%d")
+            tomorrow = (reference_time + timedelta(days=1)).strftime("%Y-%m-%d")
             
             # Fetch today's data
             raw_today = await self._fetch_data(client, area, today)
             
             # Fetch tomorrow's data after 13:00 CET, with retry logic
-            now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
+            now_utc = datetime.datetime.now(timezone.utc)
+            now_cet = now_utc.astimezone(timezone(timedelta(hours=1))) # CET is UTC+1
             raw_tomorrow = None
             
             if now_cet.hour >= 13:
-                async def fetch_tomorrow():
+                async def fetch_tomorrow_task(): # Renamed to avoid conflict
                     return await self._fetch_data(client, area, tomorrow)
                 
-                def is_data_available(data):
-                    parser = self.get_parser_for_area(area)
-                    parsed = parser.parse(data) if data else None
-                    return parsed and parsed.get("hourly_prices")
+                # The is_data_available check should ideally happen *after* parsing,
+                # but for retry logic, we might need a basic check on raw data.
+                # Let's check if records exist and are not empty.
+                def is_tomorrow_data_present(data):
+                    return data and isinstance(data, dict) and data.get("records")
                 
                 raw_tomorrow = await fetch_with_retry(
-                    fetch_tomorrow,
-                    is_data_available,
+                    fetch_tomorrow_task,
+                    is_tomorrow_data_present, # Basic check on raw data presence
                     retry_interval=1800,
                     end_time=time(23, 50),
                     local_tz_name=TimezoneName.EUROPE_COPENHAGEN
                 )
             
-            # Parse data using appropriate parser
-            parser = self.get_parser_for_area(area)
-            hourly_raw = {}
+            # --- No Parsing Here --- 
+            # The parser will be called later by DataProcessor
             
-            if raw_today:
-                parsed_today = parser.parse(raw_today)
-                if parsed_today and "hourly_prices" in parsed_today:
-                    hourly_raw.update(parsed_today["hourly_prices"])
-            
-            if raw_tomorrow:
-                parsed_tomorrow = parser.parse(raw_tomorrow)
-                if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
-                    hourly_raw.update(parsed_tomorrow["hourly_prices"])
-            
-            # Extract metadata
-            metadata = parser.extract_metadata(raw_today if raw_today else raw_tomorrow)
-            
+            # Return the raw data along with necessary metadata for the parser
             return {
-                "hourly_raw": hourly_raw,
-                "timezone": metadata.get("timezone", "Europe/Copenhagen"),
-                "currency": metadata.get("currency", "DKK"),
-                "source_name": "energi_data",
                 "raw_data": {
                     "today": raw_today,
                     "tomorrow": raw_tomorrow,
-                    "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
-                    "area": area
                 },
+                "timezone": "Europe/Copenhagen", # EnergiDataService API timezone context
+                "currency": "DKK", # Default currency, parser might override
+                "area": area,
+                "source": self.source_type,
+                "fetched_at": datetime.datetime.now(timezone.utc).isoformat(),
             }
         finally:
             if session is None and client:

@@ -87,7 +87,7 @@ class NordpoolAPI(BasePriceAPI):
             reference_time: Optional reference time
             
         Returns:
-            Raw data from API
+            Dictionary containing raw data and metadata for the parser.
         """
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
@@ -140,26 +140,18 @@ class NordpoolAPI(BasePriceAPI):
                 local_tz_name=TimezoneName.EUROPE_OSLO
             )
 
-        # Parse today's and tomorrow's data to get hourly prices (ISO keys, no normalization)
-        hourly_raw = {}
-        if today_data:
-            parsed_today = self.parser.parse(today_data, area=area)
-            if parsed_today and "hourly_prices" in parsed_today:
-                hourly_raw.update(parsed_today["hourly_prices"])
-        if tomorrow_data:
-            parsed_tomorrow = self.parser.parse(tomorrow_data, area=area)
-            if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
-                hourly_raw.update(parsed_tomorrow["hourly_prices"])
+        # Construct the dictionary to be returned to FallbackManager/DataProcessor
+        # This dictionary should contain everything the parser needs.
         return {
-            "hourly_raw": hourly_raw,
-            "timezone": "Europe/Oslo",
-            "currency": "EUR",
-            "source_name": "nordpool",
+            # No pre-parsing here, just pass the raw responses
             "raw_data": {
                 "today": today_data,
                 "tomorrow": tomorrow_data,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "area": area,
-                "delivery_area": delivery_area
             },
+            "timezone": "Europe/Oslo", # Nordpool API timezone
+            "currency": "EUR", # Nordpool API currency
+            "area": area, # Pass the area to the parser via this dict
+            "source": self.source_type, # Let the parser know the source
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            # Add any other metadata the parser might need from the API adapter context
         }

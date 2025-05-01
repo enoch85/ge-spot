@@ -29,6 +29,8 @@ from ..timezone.timezone_utils import get_timezone_object
 # Use absolute component path for sources
 from custom_components.ge_spot.const.sources import Source
 from ..const.attributes import Attributes
+# Import BasePriceParser for type hinting
+from ..api.base.price_parser import BasePriceParser
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,25 +133,45 @@ class DataProcessor:
         # Expects keys: 'hourly_raw', 'timezone', 'currency', 'source_name', ...
         await self._ensure_exchange_service()
 
-        # Validate input
-        if not data or not isinstance(data, dict) or not data.get("hourly_raw"):
-            _LOGGER.warning(f"Invalid or empty raw data received for processing in area {self.area}. Data keys: {data.keys() if isinstance(data, dict) else 'N/A'}")
-            return self._generate_empty_processed_result(data)
+        # --- Step 0: Identify Source and Get Parser ---
+        source_name = data.get("data_source") or data.get("source") # Get source name
+        if not source_name:
+            _LOGGER.error(f"Missing 'data_source' or 'source' key in input data for area {self.area}. Cannot determine parser.")
+            return self._generate_empty_processed_result(data, error="Missing source identifier")
 
-        raw_hourly_prices = data["hourly_raw"]
-        source_timezone = data.get("timezone")
-        source_currency = data.get("currency")
-        source = data.get("source_name", "unknown")
-        raw_api_data = data.get("raw_data")
+        parser = self._get_parser(source_name)
+        if not parser:
+            _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area}.")
+            return self._generate_empty_processed_result(data, error=f"No parser for source {source_name}")
+
+        # --- Step 1: Parse Raw Data ---
+        try:
+            # Pass the entire raw dictionary from FallbackManager to the parser
+            parsed_data = parser.parse(data)
+            _LOGGER.debug(f"[{self.area}] Parser {parser.__class__.__name__} output keys: {list(parsed_data.keys())}")
+        except Exception as parse_err:
+            _LOGGER.error(f"[{self.area}] Error parsing data from source '{source_name}': {parse_err}", exc_info=True)
+            return self._generate_empty_processed_result(data, error=f"Parsing error: {parse_err}")
+
+        # Validate parser output
+        if not parsed_data or not isinstance(parsed_data, dict) or not parsed_data.get("hourly_raw"):
+            _LOGGER.warning(f"[{self.area}] Parser for source '{source_name}' returned invalid or empty data. Parsed keys: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'N/A'}")
+            return self._generate_empty_processed_result(data, error=f"Parser {source_name} returned invalid data")
+
+        raw_hourly_prices = parsed_data["hourly_raw"]
+        source_timezone = parsed_data.get("timezone")
+        source_currency = parsed_data.get("currency")
+        # Keep original raw API data if available in the input `data`
+        raw_api_data = data.get("raw_data") or data.get("xml_responses") or data.get("dict_response")
 
         if not source_timezone:
-            _LOGGER.error(f"Missing 'timezone' key in raw data for source {source}. Cannot process.")
-            return self._generate_empty_processed_result(data, error="Missing timezone key in raw data")
+            _LOGGER.error(f"Missing 'timezone' key in parsed data for source {source_name}. Cannot process.")
+            return self._generate_empty_processed_result(data, error="Missing timezone key after parsing")
         if not source_currency:
-            _LOGGER.error(f"Missing currency for source {source}. Cannot process.")
-            return self._generate_empty_processed_result(data, error="Missing currency in raw data")
+            _LOGGER.error(f"Missing currency for source {source_name} after parsing. Cannot process.")
+            return self._generate_empty_processed_result(data, error="Missing currency after parsing")
 
-        # 1. Normalize timezones (convert all ISO keys to target timezone with preserved date info)
+        # --- Step 2: Normalize Timezones ---
         try:
             # This will convert ISO timestamp keys to 'YYYY-MM-DD HH:00' format in target timezone
             normalized_prices = self._tz_converter.normalize_hourly_prices(
@@ -158,7 +180,7 @@ class DataProcessor:
                 preserve_date=True  # Keep date part for today/tomorrow split
             )
 
-            # 2. Split into today/tomorrow using the normalized keys with dates
+            # Split into today/tomorrow using the normalized keys with dates
             normalized_today, normalized_tomorrow = self._tz_converter.split_into_today_tomorrow(normalized_prices)
             
             # Log the results of normalization and splitting
@@ -167,7 +189,7 @@ class DataProcessor:
             _LOGGER.error(f"Error during timestamp normalization for {self.area}: {e}", exc_info=True)
             return self._generate_empty_processed_result(data, error=f"Timestamp normalization error: {e}")
 
-        # 3. Currency/unit conversion (one time, after normalization)
+        # --- Step 3: Currency/Unit Conversion ---
         ecb_rate = None
         ecb_updated = None
         final_today_prices = {}
@@ -175,7 +197,7 @@ class DataProcessor:
             converted_today, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
                 hourly_prices=normalized_today,
                 source_currency=source_currency,
-                source_unit=EnergyUnit.MWH
+                source_unit=EnergyUnit.MWH # Assume MWh from parsers for now
             )
             final_today_prices = converted_today
             if rate is not None:
@@ -186,16 +208,16 @@ class DataProcessor:
             converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
                 hourly_prices=normalized_tomorrow,
                 source_currency=source_currency,
-                source_unit=EnergyUnit.MWH
+                source_unit=EnergyUnit.MWH # Assume MWh from parsers for now
             )
             final_tomorrow_prices = converted_tomorrow
             if ecb_rate is None and rate is not None:
                 ecb_rate = rate
                 ecb_updated = rate_ts
 
-        # 4. Build result
+        # --- Step 4: Build Result ---
         processed_result = {
-            "source": source,
+            "source": source_name, # Use source_name identified earlier
             "area": self.area,
             "source_currency": source_currency,
             "target_currency": self.target_currency,
@@ -203,7 +225,7 @@ class DataProcessor:
             "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None,
             "hourly_prices": final_today_prices,
             "tomorrow_hourly_prices": final_tomorrow_prices,
-            "raw_hourly_prices_original": raw_hourly_prices,
+            "raw_hourly_prices_original": raw_hourly_prices, # Store the output from the parser
             "current_price": None,
             "next_hour_price": None,
             "current_hour_key": None,
@@ -213,7 +235,7 @@ class DataProcessor:
             "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,
-            "raw_data": raw_api_data,
+            "raw_data": raw_api_data, # Store original raw API data
             "ecb_rate": ecb_rate,
             "ecb_updated": ecb_updated,
             "has_tomorrow_prices": bool(final_tomorrow_prices),
@@ -224,16 +246,16 @@ class DataProcessor:
         }
 
         # --- Add Stromligning Attribution ---
-        if source == Source.STROMLIGNING:
+        if source_name == Source.STROMLIGNING:
             processed_result[Attributes.DATA_SOURCE_ATTRIBUTION] = "Data provided by Strømligning. https://stromligning.dk"
         # --- End Attribution ---
 
         # Initialize tomorrow_valid flag
         processed_result["tomorrow_valid"] = False
 
-        # Calculate statistics and current/next hour prices as before...
+        # --- Step 5: Calculate Statistics and Current/Next Prices ---
         try:
-            # 3a. Calculate Today's Statistics and Current/Next Prices
+            # Calculate Today's Statistics and Current/Next Prices
             if final_today_prices:
                 current_hour_key = self._tz_service.get_current_hour_key()
                 next_hour_key = self._tz_service.get_next_hour_key()
@@ -259,7 +281,7 @@ class DataProcessor:
                 _LOGGER.warning(f"No final prices for today available after processing for area {self.area}, skipping stats.")
                 processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
 
-            # 3b. Calculate Tomorrow's Statistics
+            # Calculate Tomorrow's Statistics
             if final_tomorrow_prices:
                 tomorrow_keys = set(self._tz_service.get_tomorrow_range())
                 found_keys = set(final_tomorrow_prices.keys())
@@ -296,8 +318,31 @@ class DataProcessor:
              _LOGGER.error(f"Source timezone ('source_timezone') is missing in the processed result for area {self.area} after processing. This indicates an issue.")
              processed_result["error"] = processed_result.get("error", "") + " Missing source timezone after processing."
 
-        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source}, Today Prices: {len(processed_result['hourly_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_hourly_prices'])}, Cached: {processed_result['using_cached_data']}")
+        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['hourly_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_hourly_prices'])}, Cached: {processed_result['using_cached_data']}")
         return processed_result
+
+    def _get_parser(self, source_name: str) -> Optional[BasePriceParser]:
+        """Get the appropriate parser instance based on the source name."""
+        # Import parsers here to avoid circular dependencies
+        from ..api.parsers.entsoe_parser import EntsoeParser
+        from ..api.parsers.nordpool_parser import NordpoolPriceParser
+        # Add other parsers as needed
+        # from ..api.parsers.aemo_parser import AemoParser
+        # ...
+
+        parser_map = {
+            # Use API Class names as keys, matching what FallbackManager provides
+            "EntsoeAPI": EntsoeParser,
+            "NordpoolAPI": NordpoolPriceParser,
+            # "AemoAPI": AemoParser,
+            # ... add mappings for other sources using their API class name ...
+        }
+
+        parser_class = parser_map.get(source_name)
+        if parser_class:
+            # Pass timezone_service if needed by the parser's base class
+            return parser_class(timezone_service=self._tz_service)
+        return None
 
     def _calculate_statistics(self, hourly_prices: Dict[str, float]) -> PriceStatistics:
         """Calculate price statistics from a dictionary of hourly prices (HH:00 keys)."""

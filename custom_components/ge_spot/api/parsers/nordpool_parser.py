@@ -1,12 +1,11 @@
 """Parser for Nordpool API responses."""
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Optional, List, Tuple
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional
 
+from ..base.price_parser import BasePriceParser
 from ...const.sources import Source
 from ...timezone.timezone_utils import normalize_hour_value
-from ...utils.validation import validate_data
-from ..base.price_parser import BasePriceParser
 from ...const.currencies import Currency
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,214 +17,143 @@ class NordpoolPriceParser(BasePriceParser):
         """Initialize the parser."""
         super().__init__(Source.NORDPOOL, timezone_service)
 
-    def parse(self, raw_data: Dict[str, Any], area: str = None) -> Dict[str, Any]:
-        # Accept both full API response or just a day dict (with multiAreaEntries)
-        result = {"hourly_prices": {}, "currency": Currency.EUR}
-        area_arg = area
-        # If this is just a day dict, wrap it for uniform handling
-        if raw_data and "multiAreaEntries" in raw_data:
-            day_data = raw_data
-            for entry in day_data["multiAreaEntries"]:
-                if not isinstance(entry, dict):
-                    continue
-                ts = entry.get("deliveryStart")
-                if not ts:
-                    continue
-                if not area_arg or "entryPerArea" not in entry or area_arg not in entry["entryPerArea"]:
-                    continue
-                price = entry["entryPerArea"][area_arg]
-                try:
-                    dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
-                    hour_key = dt.isoformat()
-                    result["hourly_prices"][hour_key] = {
-                        "price": float(price)
-                    }
-                except Exception as e:
-                    _LOGGER.error(f"Failed to parse timestamp {ts}: {e}")
-                    continue
-            return result
+    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse the raw data dictionary from NordpoolAPI.
 
-        # Fallback to super for legacy/other cases
-        if not result["hourly_prices"]:
-            legacy = super().parse(raw_data)
-            if legacy:
-                result = legacy
-        _LOGGER.debug(f"[NordpoolPriceParser] Parsed hourly_prices keys: {list(result.get('hourly_prices', {}).keys())}")
-        return result
-
-    def _parse_response(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract hourly prices from Nordpool response.
-
-        Args:
-            raw_data: Raw API response
-
-        Returns:
-            Dict with hourly prices and currency
+        Expects input `data` to be the dictionary returned by NordpoolAPI.fetch_raw_data,
+        which includes keys like 'hourly_raw', 'timezone', 'currency', 'raw_data', etc.
+        The actual Nordpool JSON response is expected under the 'raw_data' key.
         """
+        _LOGGER.debug(f"[NordpoolPriceParser] Input data keys: {list(data.keys())}")
+
+        # The actual Nordpool JSON response is nested under 'raw_data'
+        raw_api_response = data.get("raw_data")
+        if not raw_api_response or not isinstance(raw_api_response, dict):
+            _LOGGER.warning("[NordpoolPriceParser] 'raw_data' key missing or not a dictionary in input.")
+            return self._create_empty_result(data) # Return empty structure
+
+        # Extract metadata provided by the API adapter
+        source_timezone = data.get("timezone", "UTC") # Default to UTC if missing
+        source_currency = data.get("currency", Currency.EUR) # Default to EUR if missing
+        area = data.get("area") # Get area if provided by API adapter
+
+        hourly_raw = {}
+
+        # Nordpool data often comes in days (today, tomorrow)
+        days_to_process = []
+        if isinstance(raw_api_response.get("today"), dict):
+            days_to_process.append(raw_api_response["today"])
+        if isinstance(raw_api_response.get("tomorrow"), dict):
+            days_to_process.append(raw_api_response["tomorrow"])
+
+        # If not today/tomorrow structure, maybe it's the direct list structure?
+        if not days_to_process and isinstance(raw_api_response.get("multiAreaEntries"), list):
+            days_to_process.append(raw_api_response) # Process the root dict
+
+        if not days_to_process:
+            _LOGGER.warning("[NordpoolPriceParser] Could not find 'today'/'tomorrow' dicts or 'multiAreaEntries' list in raw_api_response.")
+            return self._create_empty_result(data, source_timezone, source_currency)
+
+        for day_data in days_to_process:
+            multi_area_entries = day_data.get("multiAreaEntries")
+            if not isinstance(multi_area_entries, list):
+                _LOGGER.debug(f"[NordpoolPriceParser] Skipping day_data, 'multiAreaEntries' is not a list: {day_data.keys()}")
+                continue
+
+            for entry in multi_area_entries:
+                if not isinstance(entry, dict):
+                    _LOGGER.debug("[NordpoolPriceParser] Skipping entry, not a dictionary.")
+                    continue
+
+                ts_str = entry.get("deliveryStart")
+                if not ts_str:
+                    _LOGGER.debug("[NordpoolPriceParser] Skipping entry, missing 'deliveryStart'.")
+                    continue
+
+                # Ensure area is available
+                if not area:
+                    _LOGGER.warning("[NordpoolPriceParser] Area not specified, cannot extract price.")
+                    continue # Cannot proceed without area
+
+                entry_per_area = entry.get("entryPerArea")
+                if not isinstance(entry_per_area, dict) or area not in entry_per_area:
+                    _LOGGER.debug(f"[NordpoolPriceParser] Skipping entry for ts {ts_str}, area '{area}' not found in 'entryPerArea'. Keys: {list(entry_per_area.keys()) if isinstance(entry_per_area, dict) else 'N/A'}")
+                    continue
+
+                price_str = entry_per_area[area]
+
+                try:
+                    # Parse timestamp (assuming UTC from Nordpool)
+                    dt_utc = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                    hour_key_iso = dt_utc.isoformat() # Use ISO format with UTC offset
+
+                    # Parse price
+                    price = float(str(price_str).replace(',', '.')) # Handle comma decimal separator
+
+                    hourly_raw[hour_key_iso] = price
+                except (ValueError, TypeError) as e:
+                    _LOGGER.error(f"[NordpoolPriceParser] Failed to parse timestamp '{ts_str}' or price '{price_str}': {e}")
+                    continue
+
+        _LOGGER.debug(f"[NordpoolPriceParser] Parsed {len(hourly_raw)} prices. Keys example: {list(hourly_raw.keys())[:3]}")
+
+        # Construct the final result dictionary expected by DataProcessor
         result = {
-            "hourly_prices": {},
-            "currency": self._get_currency(raw_data)
+            "hourly_raw": hourly_raw,
+            "currency": source_currency,
+            "timezone": source_timezone, # Pass through the timezone from the API adapter
+            "source": Source.NORDPOOL # Add source identifier
         }
 
-        # Extract data series
-        data = raw_data.get("data", {})
-        
-        # Process the graph series data, which contains the hourly prices
-        rows = data.get("Rows", [])
-        
-        # Each row represents an hour
-        for row in rows:
-            # Get timestamp from row
-            start_time = self._parse_datetime(row.get("StartTime"))
-            if not start_time:
-                continue
-                
-            # Get price values for this hour
-            columns = row.get("Columns", [])
-            if not columns or len(columns) == 0:
-                continue
-                
-            # Typically, the first column contains the price
-            price_column = columns[0]
-            price_value = self._parse_price(price_column.get("Value"))
-            
-            if price_value is not None:
-                # Format hour as ISO string for consistent key format
-                hour_key = start_time.isoformat()
-                result["hourly_prices"][hour_key] = price_value
+        # Validate the result before returning
+        if not self.validate(result):
+            _LOGGER.warning(f"[NordpoolPriceParser] Validation failed for parsed data. Result: {result}")
+            return self._create_empty_result(data, source_timezone, source_currency)
 
         return result
 
-    def _get_currency(self, raw_data: Dict[str, Any]) -> str:
-        """Extract currency from Nordpool response.
-
-        Args:
-            raw_data: Raw API response
-
-        Returns:
-            Currency code as string
-        """
-        # Try to get currency from response
-        data = raw_data.get("data", {})
-        currency = data.get("Currency", Currency.EUR)
-        return currency
-
-    def _parse_datetime(self, date_str: Optional[str]) -> Optional[datetime]:
-        """Parse datetime string from Nordpool.
-
-        Args:
-            date_str: Datetime string from API response
-
-        Returns:
-            Datetime object or None if parsing fails
-        """
-        if not date_str:
-            return None
-
-        try:
-            # Nordpool uses format like "/Date(1625097600000)/" 
-            # or sometimes ISO format
-            if date_str.startswith("/Date(") and date_str.endswith(")/"):
-                # Extract timestamp from /Date(1625097600000)/
-                timestamp_ms = int(date_str.replace("/Date(", "").replace(")/", ""))
-                return datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
-            else:
-                # Try ISO format
-                return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-        except (ValueError, TypeError) as e:
-            _LOGGER.debug(f"Error parsing datetime '{date_str}': {str(e)}")
-            return None
-
-    def _parse_price(self, price_str: Optional[str]) -> Optional[float]:
-        """Parse price string from Nordpool.
-
-        Args:
-            price_str: Price string from API response
-
-        Returns:
-            Float price or None if parsing fails
-        """
-        if not price_str:
-            return None
-
-        try:
-            # Nordpool returns prices with currency symbols and possibly commas
-            # Replace commas with dots and strip non-numeric characters
-            price_str = price_str.replace(',', '.')
-            # Extract numeric part, handling cases like "10.45 €/MWh"
-            numeric_part = ''.join(c for c in price_str if c.isdigit() or c == '.')
-            return float(numeric_part)
-        except (ValueError, TypeError) as e:
-            _LOGGER.debug(f"Error parsing price '{price_str}': {str(e)}")
-        return None
+    def _create_empty_result(self, original_data: Dict[str, Any], timezone: str = "UTC", currency: str = Currency.EUR) -> Dict[str, Any]:
+        """Helper to create a standard empty result structure."""
+        return {
+            "hourly_raw": {},
+            "currency": original_data.get("currency", currency),
+            "timezone": original_data.get("timezone", timezone),
+            "source": Source.NORDPOOL,
+        }
 
     def parse_hourly_prices(self, data: Dict[str, Any], area: str) -> Dict[str, Any]:
-        """Parse hourly prices from Nordpool data.
-
-        Args:
-            data: Raw API response data
-            area: Area code
-
-        Returns:
-            Dictionary of hourly prices
-        """
-        hourly_prices = {}
-
-        # Process today's data
-        if "today" in data and data["today"]:
-            today_data = data["today"]
-            if "multiAreaEntries" in today_data:
-                for entry in today_data["multiAreaEntries"]:
-                    if not isinstance(entry, dict) or "entryPerArea" not in entry:
-                        continue
-                    if area not in entry["entryPerArea"]:
-                        continue
-                    start_time = entry.get("deliveryStart")
-                    raw_price = entry["entryPerArea"][area]
-                    if start_time and raw_price is not None:
-                        dt = self._parse_timestamp(start_time)
-                        if dt:
-                            normalized_hour, adjusted_date = normalize_hour_value(dt.hour, dt.date())
-                            hour_key = f"{normalized_hour:02d}:00"
-                            hourly_prices[hour_key] = {"price": float(raw_price)}
-
-        return hourly_prices
+        """Parse hourly prices from Nordpool data."""
+        _LOGGER.warning("[NordpoolPriceParser] parse_hourly_prices might be outdated.")
+        parsed_data = self.parse({"raw_data": data, "area": area}) # Simulate input
+        return parsed_data.get("hourly_raw", {})
 
     def parse_tomorrow_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
-        """Parse tomorrow's hourly prices from Nordpool data.
+        """Parse tomorrow's hourly prices from Nordpool data."""
+        _LOGGER.warning("[NordpoolPriceParser] parse_tomorrow_prices might be outdated.")
+        parsed_data = self.parse({"raw_data": data, "area": area}) # Simulate input
+        return parsed_data.get("hourly_raw", {})
 
-        Args:
-            data: Raw API response data
-            area: Area code
-
-        Returns:
-            Dictionary of hourly prices
-        """
-        hourly_prices = {}
-
-        # Process tomorrow's data
-        if "tomorrow" in data and data["tomorrow"]:
-            tomorrow_data = data["tomorrow"]
-
-            if "multiAreaEntries" in tomorrow_data:
-                for entry in tomorrow_data["multiAreaEntries"]:
-                    if not isinstance(entry, dict) or "entryPerArea" not in entry:
-                        continue
-
-                    if area not in entry["entryPerArea"]:
-                        continue
-
-                    # Extract values
-                    start_time = entry.get("deliveryStart")
-                    raw_price = entry["entryPerArea"][area]
-
-                    if start_time and raw_price is not None:
-                        # Parse timestamp
-                        dt = self._parse_timestamp(start_time)
-                        if dt:
-                            # Format as hour key
-                            normalized_hour, adjusted_date = normalize_hour_value(dt.hour, dt.date())
-                            hour_key = f"{normalized_hour:02d}:00"
-                            hourly_prices[hour_key] = float(raw_price)
-
-        return hourly_prices
+    def validate(self, data: Dict[str, Any]) -> bool:
+        """Validate the parsed data structure."""
+        if not isinstance(data, dict): return False
+        if "hourly_raw" not in data or not isinstance(data["hourly_raw"], dict):
+            _LOGGER.warning(f"[{self.source_id}] Validation failed: Missing or invalid 'hourly_raw'")
+            return False
+        if "currency" not in data or not data["currency"]:
+            _LOGGER.warning(f"[{self.source_id}] Validation failed: Missing or invalid 'currency'")
+            return False
+        if "timezone" not in data or not data["timezone"]:
+            _LOGGER.warning(f"[{self.source_id}] Validation failed: Missing or invalid 'timezone'")
+            return False
+        if not data["hourly_raw"]:
+            _LOGGER.debug(f"[{self.source_id}] Validation warning: 'hourly_raw' is empty.")
+        for key, value in data["hourly_raw"].items():
+            try:
+                datetime.fromisoformat(key.replace('Z', '+00:00'))
+            except ValueError:
+                _LOGGER.warning(f"[{self.source_id}] Validation failed: Invalid ISO timestamp key '{key}' in 'hourly_raw'")
+                return False
+            if not isinstance(value, (float, int)):
+                _LOGGER.warning(f"[{self.source_id}] Validation failed: Non-numeric price value '{value}' for key '{key}' in 'hourly_raw'")
+                return False
+        return True
