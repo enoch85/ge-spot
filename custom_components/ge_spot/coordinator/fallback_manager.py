@@ -57,9 +57,11 @@ class FallbackManager:
                     session=session,
                     reference_time=reference_time,
                 )
-                if data and data.get("hourly_raw"): # Check for raw format
+                # Corrected Check: Only verify if *any* data was returned by fetch_raw_data.
+                # The check for hourly_raw happens after parsing in UnifiedPriceManager.
+                if data:
                     _LOGGER.info(
-                        "Successfully fetched data from source: %s for area %s",
+                        "Successfully fetched raw data from source: %s for area %s",
                         source_name,
                         area,
                     )
@@ -67,12 +69,13 @@ class FallbackManager:
                     data["attempted_sources"] = attempted_sources
                     return data
                 else:
+                    # This path is now less likely unless fetch_raw_data explicitly returns None/empty
                     _LOGGER.warning(
-                        "Source %s returned no data or empty hourly_raw for area %s.",
+                        "Source %s returned no raw data for area %s.",
                         source_name,
                         area
                     )
-                    last_exception = PriceFetchError(f"Source {source_name} returned no data.")
+                    last_exception = PriceFetchError(f"Source {source_name} returned no raw data.")
             except Exception as e:
                 _LOGGER.warning(
                     "Failed to fetch data from source: %s for area %s. Error: %s",

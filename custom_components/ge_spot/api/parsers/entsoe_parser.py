@@ -70,9 +70,11 @@ class EntsoeParser(BasePriceParser):
             xml_list = data["xml_responses"]
             _LOGGER.debug(f"ENTSOE Parser: Parsing list of {len(xml_list)} XML responses")
             for i, xml_response in enumerate(xml_list):
+                _LOGGER.debug(f"ENTSOE Parser: XML content #{i+1} to parse:\n{xml_response[:1000]}...") # Log start of XML
                 _LOGGER.debug(f"Parsing XML response #{i+1}")
                 try:
                     parsed = self._parse_xml(xml_response)
+                    _LOGGER.debug(f"ENTSOE Parser: _parse_xml result for XML #{i+1}: {parsed}")
                     if parsed and "hourly_prices" in parsed:
                         _LOGGER.debug(f"XML #{i+1} yielded {len(parsed['hourly_prices'])} price points")
                         all_hourly_prices.update(parsed["hourly_prices"])
@@ -93,6 +95,7 @@ class EntsoeParser(BasePriceParser):
         # Final assembly
         result["hourly_raw"] = all_hourly_prices
         _LOGGER.debug(f"ENTSOE Parser: Final aggregated hourly_raw size: {len(all_hourly_prices)}")
+        _LOGGER.debug(f"ENTSOE Parser: Final hourly_raw content: {all_hourly_prices}")
 
         # Add current and next hour prices
         result["current_price"] = self._get_current_price(result["hourly_raw"])
