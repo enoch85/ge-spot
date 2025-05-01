@@ -47,13 +47,23 @@ class EnergiDataParser(BasePriceParser):
         if "raw_data" in raw_data and isinstance(raw_data["raw_data"], dict):
             _LOGGER.debug("Found nested 'raw_data' key, attempting to extract today/tomorrow records.")
             api_content = raw_data["raw_data"]
-            today_records = api_content.get("today", {}).get("records", [])
-            tomorrow_records = api_content.get("tomorrow", {}).get("records", [])
-            records = today_records + tomorrow_records
-            if records:
-                _LOGGER.debug(f"Extracted {len(today_records)} today and {len(tomorrow_records)} tomorrow records from nested structure.")
+            # Add check for api_content being None
+            if api_content is not None:
+                # Safely get today's records
+                today_data = api_content.get("today")
+                today_records = today_data.get("records", []) if isinstance(today_data, dict) else []
+
+                # Safely get tomorrow's records
+                tomorrow_data = api_content.get("tomorrow")
+                tomorrow_records = tomorrow_data.get("records", []) if isinstance(tomorrow_data, dict) else []
+                
+                records = today_records + tomorrow_records
+                if records:
+                    _LOGGER.debug(f"Extracted {len(today_records)} today and {len(tomorrow_records)} tomorrow records from nested structure.")
+                else:
+                    _LOGGER.debug("Nested 'raw_data' found, but no 'records' within today/tomorrow.")
             else:
-                 _LOGGER.debug("Nested 'raw_data' found, but no 'records' within today/tomorrow.")
+                _LOGGER.warning("Nested 'raw_data' key found, but its value is None.")
         
         # Fallback: Check for top-level 'records' key (e.g., from direct test data)
         if not records and "records" in raw_data and isinstance(raw_data["records"], list):
