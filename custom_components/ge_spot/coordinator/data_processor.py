@@ -156,6 +156,8 @@ class DataProcessor:
         # Validate parser output
         if not parsed_data or not isinstance(parsed_data, dict) or not parsed_data.get("hourly_raw"):
             _LOGGER.warning(f"[{self.area}] Parser for source '{source_name}' returned invalid or empty data. Parsed keys: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'N/A'}")
+            # Include the structure passed to the parser in the warning for better debugging
+            _LOGGER.debug(f"[{self.area}] Data passed to parser {parser.__class__.__name__}: {data}") # Log the data passed
             return self._generate_empty_processed_result(data, error=f"Parser {source_name} returned invalid data")
 
         raw_hourly_prices = parsed_data["hourly_raw"]

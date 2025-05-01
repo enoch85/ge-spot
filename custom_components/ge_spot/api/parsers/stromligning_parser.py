@@ -9,6 +9,7 @@ from ...const.currencies import Currency
 from ...timezone.timezone_utils import normalize_hour_value
 from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
+from ...const.energy import EnergyUnit # Add this import
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +33,8 @@ class StromligningParser(BasePriceParser):
         result = {
             "hourly_raw": {},
             "currency": Currency.DKK,
-            "timezone": "Europe/Copenhagen"
+            "timezone": "Europe/Copenhagen",
+            "source_unit": EnergyUnit.KWH # Stromligning provides prices in kWh
         }
 
         # Reset price components
@@ -43,30 +45,44 @@ class StromligningParser(BasePriceParser):
             _LOGGER.warning("Empty Stromligning data received")
             return result
 
-        # Handle pre-processed data
+        # --- Find the list of prices --- 
+        prices_list = None
         if isinstance(raw_data, dict):
-            # If hourly prices were already processed
-            if "hourly_raw" in raw_data and isinstance(raw_data["hourly_raw"], dict):
-                result["hourly_raw"] = raw_data["hourly_raw"]
-            # Parse prices from Stromligning
-            elif "prices" in raw_data and isinstance(raw_data["prices"], list):
-                self._parse_price_list(raw_data["prices"], result)
-            # Try to parse raw data as JSON
+            # Direct 'prices' key (most common case from API adapter)
+            if "prices" in raw_data and isinstance(raw_data["prices"], list):
+                prices_list = raw_data["prices"]
+                _LOGGER.debug("Using top-level 'prices' list.")
+            # Check if raw_data itself contains the list (less likely)
+            elif "raw_data" in raw_data and isinstance(raw_data["raw_data"], dict) and "prices" in raw_data["raw_data"] and isinstance(raw_data["raw_data"]["prices"], list):
+                 prices_list = raw_data["raw_data"]["prices"]
+                 _LOGGER.debug("Using 'prices' list nested under 'raw_data'.")
+            # Check if raw_data contains a JSON string to decode
             elif "raw_data" in raw_data and isinstance(raw_data["raw_data"], str):
                 try:
                     json_data = json.loads(raw_data["raw_data"])
                     if "prices" in json_data and isinstance(json_data["prices"], list):
-                        self._parse_price_list(json_data["prices"], result)
+                        prices_list = json_data["prices"]
+                        _LOGGER.debug("Using 'prices' list decoded from JSON string in 'raw_data'.")
                 except json.JSONDecodeError as e:
-                    _LOGGER.warning(f"Failed to parse Stromligning raw data as JSON: {e}")
-        # Try to parse string as JSON
+                    _LOGGER.warning(f"Failed to parse Stromligning raw data string as JSON: {e}")
+        # Check if the input is a JSON string itself
         elif isinstance(raw_data, str):
             try:
                 json_data = json.loads(raw_data)
                 if "prices" in json_data and isinstance(json_data["prices"], list):
-                    self._parse_price_list(json_data["prices"], result)
+                    prices_list = json_data["prices"]
+                    _LOGGER.debug("Using 'prices' list decoded from direct JSON string input.")
             except json.JSONDecodeError as e:
-                _LOGGER.warning(f"Failed to parse Stromligning string as JSON: {e}")
+                _LOGGER.warning(f"Failed to parse Stromligning direct string input as JSON: {e}")
+        
+        # --- Validate extracted prices list ---
+        if not prices_list:
+            _LOGGER.warning("No valid 'prices' list found in Stromligning data after checking various structures.")
+            _LOGGER.debug(f"Data received by Stromligning parser: {raw_data}")
+            return result
+        
+        # --- Parse the list ---
+        self._parse_price_list(prices_list, result)
 
         return result
 

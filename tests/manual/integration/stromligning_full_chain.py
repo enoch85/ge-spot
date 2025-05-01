@@ -23,9 +23,10 @@ from datetime import datetime, timezone, timedelta
 import asyncio
 import pytz
 import logging
+import json  # Ensure json is imported if needed for pretty printing
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Add the root directory to the path so we can import the component modules
@@ -69,6 +70,7 @@ async def main():
         logger.info(f"Fetching Strømlikning data for area: {area}, supplier: {supplier}")
         # Pass config to fetch_raw_data if needed by underlying methods (though __init__ should handle it now)
         raw_data = await api.fetch_raw_data(area=area)
+        logger.debug(f"[Stromligning RAW DATA - {area}] Full raw_data object: {json.dumps(raw_data, indent=2)}")  # Log the raw data structure
         
         if not raw_data:
             logger.error("Error: Failed to fetch data from Strømlikning API")
@@ -100,7 +102,7 @@ async def main():
         logger.info(f"API Timezone: {parsed_data.get('api_timezone')}")
         
         # Check if hourly prices are available
-        hourly_prices = parsed_data.get("hourly_prices", {})
+        hourly_prices = parsed_data.get("hourly_raw", {}) # Corrected key from hourly_prices to hourly_raw
         if not hourly_prices:
             logger.error("Error: No hourly prices found in the parsed data")
             return 1
@@ -224,7 +226,7 @@ async def main():
             return 1
         
     except Exception as e:
-        logger.error(f"Error during test: {e}")
+        logger.error(f"Error during test: {e}", exc_info=True)
         import traceback
         traceback.print_exc()
         return 1

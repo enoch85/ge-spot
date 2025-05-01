@@ -9,6 +9,7 @@ from ...const.currencies import Currency
 from ...utils.validation import validate_data
 from ...timezone.timezone_utils import normalize_hour_value
 from ..base.price_parser import BasePriceParser
+from ...const.energy import EnergyUnit # Add this import
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class EnergiDataParser(BasePriceParser):
         """Parse Energi Data Service API response.
 
         Args:
-            raw_data: Raw API response data
+            raw_data: Raw API response data (potentially nested)
 
         Returns:
             Parsed data with hourly prices
@@ -31,24 +32,41 @@ class EnergiDataParser(BasePriceParser):
         result = {
             "hourly_raw": {},
             "currency": Currency.DKK,
-            "timezone": "Europe/Copenhagen"
+            "timezone": "Europe/Copenhagen", # Default for EDS
+            "source_unit": EnergyUnit.MWH # Default for EDS
         }
 
         # Check for valid data
-        if not raw_data:
-            _LOGGER.warning("Empty Energi Data Service data received")
+        if not raw_data or not isinstance(raw_data, dict):
+            _LOGGER.warning("Empty or invalid Energi Data Service data received")
             return result
 
-        # Extract records from response
-        records = None
-        if isinstance(raw_data, dict) and "records" in raw_data:
-            records = raw_data["records"]
+        # --- Extract records --- 
+        records = []
+        # Check for the nested structure from EnergiDataAPI adapter
+        if "raw_data" in raw_data and isinstance(raw_data["raw_data"], dict):
+            _LOGGER.debug("Found nested 'raw_data' key, attempting to extract today/tomorrow records.")
+            api_content = raw_data["raw_data"]
+            today_records = api_content.get("today", {}).get("records", [])
+            tomorrow_records = api_content.get("tomorrow", {}).get("records", [])
+            records = today_records + tomorrow_records
+            if records:
+                _LOGGER.debug(f"Extracted {len(today_records)} today and {len(tomorrow_records)} tomorrow records from nested structure.")
+            else:
+                 _LOGGER.debug("Nested 'raw_data' found, but no 'records' within today/tomorrow.")
         
-        if not records or not isinstance(records, list):
-            _LOGGER.warning("No valid records found in Energi Data Service data")
+        # Fallback: Check for top-level 'records' key (e.g., from direct test data)
+        if not records and "records" in raw_data and isinstance(raw_data["records"], list):
+             _LOGGER.debug("Using top-level 'records' key.")
+             records = raw_data["records"]
+
+        # --- Validate extracted records ---
+        if not records:
+            _LOGGER.warning("No valid records found in Energi Data Service data after checking nested and top-level structures.")
+            _LOGGER.debug(f"Data received by parser: {raw_data}") # Log the structure received
             return result
 
-        # Parse hourly prices from records
+        # --- Parse hourly prices from records ---
         for record in records:
             try:
                 # Extract timestamp and price
