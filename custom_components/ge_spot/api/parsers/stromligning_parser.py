@@ -30,8 +30,9 @@ class StromligningParser(BasePriceParser):
             Parsed data with hourly prices
         """
         result = {
-            "hourly_prices": {},
-            "currency": Currency.DKK
+            "hourly_raw": {},
+            "currency": Currency.DKK,
+            "timezone": "Europe/Copenhagen"
         }
 
         # Reset price components
@@ -45,8 +46,8 @@ class StromligningParser(BasePriceParser):
         # Handle pre-processed data
         if isinstance(raw_data, dict):
             # If hourly prices were already processed
-            if "hourly_prices" in raw_data and isinstance(raw_data["hourly_prices"], dict):
-                result["hourly_prices"] = raw_data["hourly_prices"]
+            if "hourly_raw" in raw_data and isinstance(raw_data["hourly_raw"], dict):
+                result["hourly_raw"] = raw_data["hourly_raw"]
             # Parse prices from Stromligning
             elif "prices" in raw_data and isinstance(raw_data["prices"], list):
                 self._parse_price_list(raw_data["prices"], result)
@@ -66,10 +67,6 @@ class StromligningParser(BasePriceParser):
                     self._parse_price_list(json_data["prices"], result)
             except json.JSONDecodeError as e:
                 _LOGGER.warning(f"Failed to parse Stromligning string as JSON: {e}")
-
-        # Calculate current and next hour prices
-        result["current_price"] = self._get_current_price(result["hourly_prices"])
-        result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
 
         return result
 
@@ -172,8 +169,8 @@ class StromligningParser(BasePriceParser):
 
                         if price_value is not None:
                             # Store original price value in DKK/kWh
-                            result["hourly_prices"][hour_key] = price_value * 100  # Convert from DKK/kWh to øre/kWh
-                            _LOGGER.debug(f"Adjusted price for {hour_key}: {price_value} DKK/kWh -> {price_value * 100} øre/kWh")
+                            result["hourly_raw"][hour_key] = price_value  # Store raw price in DKK/kWh
+                            _LOGGER.debug(f"Storing raw price for {hour_key}: {price_value} DKK/kWh")
                         else:
                             _LOGGER.warning(f"No valid price found in Stromligning data for hour {hour_key}")
 

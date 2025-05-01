@@ -29,8 +29,9 @@ class EnergiDataParser(BasePriceParser):
             Parsed data with hourly prices
         """
         result = {
-            "hourly_prices": {},
-            "currency": Currency.DKK
+            "hourly_raw": {},
+            "currency": Currency.DKK,
+            "timezone": "Europe/Copenhagen"
         }
 
         # Check for valid data
@@ -56,17 +57,12 @@ class EnergiDataParser(BasePriceParser):
                     timestamp_str = record["HourDK"]
                     dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                     hour_key = dt.isoformat()
-                    price_date = dt.date().isoformat()
-                    # Parse price
                     price = float(record["SpotPriceDKK"])
-                    # Add to hourly prices
-                    result["hourly_prices"][hour_key] = {"price": price, "api_price_date": price_date}
+                    # Add to hourly_raw
+                    result["hourly_raw"][hour_key] = price
+                    _LOGGER.debug(f"Storing raw price for {hour_key}: {price} DKK/MWh")
             except (ValueError, TypeError) as e:
                 _LOGGER.debug(f"Failed to parse Energi Data Service record: {e}")
-
-        # Calculate current and next hour prices
-        result["current_price"] = self._get_current_price(result["hourly_prices"])
-        result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
 
         return result
 
@@ -101,35 +97,6 @@ class EnergiDataParser(BasePriceParser):
                     metadata["area"] = data["records"][0]["PriceArea"]
 
         return metadata
-
-    def parse_hourly_prices(self, data: Dict[str, Any], area: str) -> Dict[str, Any]:
-        """Parse hourly prices from Energi Data Service API response.
-
-        Args:
-            data: Raw API response data
-            area: Area code
-
-        Returns:
-            Dictionary of hourly prices with hour string keys (HH:00)
-        """
-        hourly_prices = {}
-
-        # Check if we have records
-        if "records" in data and isinstance(data["records"], list):
-            for record in data["records"]:
-                if "HourDK" in record and "SpotPriceDKK" in record:
-                    try:
-                        timestamp = self._parse_timestamp(record["HourDK"])
-                        if timestamp:
-                            normalized_hour, adjusted_date = normalize_hour_value(timestamp.hour, timestamp.date())
-                            hour_key = f"{normalized_hour:02d}:00"
-                            price = float(record["SpotPriceDKK"])
-                            price_date = timestamp.date().isoformat()
-                            hourly_prices[hour_key] = {"price": price, "api_price_date": price_date}
-                    except (ValueError, TypeError) as e:
-                        _LOGGER.warning(f"Failed to parse record: {e}")
-
-        return hourly_prices
 
     def _parse_timestamp(self, timestamp_str: str) -> Optional[datetime]:
         """Parse timestamp from Energi Data Service format.

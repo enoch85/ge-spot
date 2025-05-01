@@ -193,11 +193,16 @@ class DataProcessor:
         ecb_rate = None
         ecb_updated = None
         final_today_prices = {}
+        # Get source unit from the input data, default to MWh if not present
+        source_unit = data.get("source_unit", EnergyUnit.MWH)
+        _LOGGER.debug(f"[{self.area}] Using source unit '{source_unit}' for currency conversion.")
+
         if normalized_today:
             converted_today, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
                 hourly_prices=normalized_today,
                 source_currency=source_currency,
-                source_unit=EnergyUnit.MWH # Assume MWh from parsers for now
+                # Pass the determined source_unit
+                source_unit=source_unit
             )
             final_today_prices = converted_today
             if rate is not None:
@@ -208,7 +213,8 @@ class DataProcessor:
             converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
                 hourly_prices=normalized_tomorrow,
                 source_currency=source_currency,
-                source_unit=EnergyUnit.MWH # Assume MWh from parsers for now
+                # Pass the determined source_unit
+                source_unit=source_unit
             )
             final_tomorrow_prices = converted_tomorrow
             if ecb_rate is None and rate is not None:
@@ -326,6 +332,8 @@ class DataProcessor:
         # Import parsers here to avoid circular dependencies
         from ..api.parsers.entsoe_parser import EntsoeParser
         from ..api.parsers.nordpool_parser import NordpoolPriceParser
+        from ..api.parsers.stromligning_parser import StromligningParser
+        from ..api.parsers.energi_data_parser import EnergiDataParser
         # Add other parsers as needed
         # from ..api.parsers.aemo_parser import AemoParser
         # ...
@@ -334,6 +342,10 @@ class DataProcessor:
             # Use API Class names as keys, matching what FallbackManager provides
             "EntsoeAPI": EntsoeParser,
             "NordpoolAPI": NordpoolPriceParser,
+            # Add mapping for Stromligning
+            "StromligningAPI": StromligningParser,
+            # Add mapping for EnergiDataService
+            "EnergiDataAPI": EnergiDataParser,
             # "AemoAPI": AemoParser,
             # ... add mappings for other sources using their API class name ...
         }

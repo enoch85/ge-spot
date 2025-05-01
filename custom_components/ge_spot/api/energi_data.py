@@ -14,6 +14,8 @@ from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
 from .utils import fetch_with_retry
 from ..const.time import TimezoneName
+from ..const.currencies import Currency
+from ..const.energy import EnergyUnit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,10 +96,11 @@ class EnergiDataAPI(BasePriceAPI):
                     "tomorrow": raw_tomorrow,
                 },
                 "timezone": "Europe/Copenhagen", # EnergiDataService API timezone context
-                "currency": "DKK", # Default currency, parser might override
+                "currency": Currency.DKK, # Use constant
                 "area": area,
                 "source": self.source_type,
                 "fetched_at": datetime.datetime.now(timezone.utc).isoformat(),
+                "source_unit": EnergyUnit.MWH,
             }
         finally:
             if session is None and client:
