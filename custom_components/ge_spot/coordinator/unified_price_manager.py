@@ -429,10 +429,17 @@ class UnifiedPriceManager:
             processed_data = await self._data_processor.process(result)
             processed_data["has_data"] = bool(processed_data.get("hourly_prices")) # Add a simple flag
             processed_data["last_update"] = dt_util.now().isoformat() # Timestamp the processing time
-            # Ensure fallback/attempt info is preserved
-            processed_data["attempted_sources"] = self._attempted_sources
-            processed_data["fallback_sources"] = self._fallback_sources
-            processed_data["data_source"] = self._active_source # Reflect the source determined during fetch
+
+            # Get source info directly from the input result dictionary
+            attempted_sources = result.get("attempted_sources", [])
+            active_source = result.get("data_source", "unknown") # Source determined by FallbackManager or cache
+            fallback_sources = [s for s in attempted_sources if s != active_source]
+
+            # Ensure fallback/attempt info is preserved using data from the result
+            processed_data["attempted_sources"] = attempted_sources
+            processed_data["fallback_sources"] = fallback_sources
+            processed_data["data_source"] = active_source # Reflect the source determined during fetch/cache retrieval
+
             # Ensure the final flag reflects the input is_cached status
             processed_data["using_cached_data"] = is_cached
 
