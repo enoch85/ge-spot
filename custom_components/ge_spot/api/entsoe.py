@@ -283,24 +283,26 @@ class EntsoeAPI(BasePriceAPI):
             
             if not parsed_data or not parsed_data.get("hourly_raw"):
                  _LOGGER.warning("ENTSOE API: Parser returned no hourly_raw data.")
-                 # Optionally log the raw_data again if parsing failed unexpectedly
-                 # _LOGGER.debug(f"Raw data passed to parser: {raw_data}")
-                 return {} # Return empty if parsing failed to produce hourly data
+                 return {}
 
             _LOGGER.debug(f"ENTSOE API: Parser returned keys: {list(parsed_data.keys())}")
             
             # Add source name for consistency if not already present
             if "source_name" not in parsed_data:
-                parsed_data["source_name"] = Source.ENTSOE.value
+                parsed_data["source_name"] = Source.ENTSOE
 
             # Include the original raw data for potential debugging/caching
-            parsed_data["raw_data"] = raw_data # Keep original raw data if needed downstream
+            parsed_data["raw_data"] = raw_data
+            
+            # Remove the deprecated key if it exists
+            if "hourly_prices" in parsed_data:
+                del parsed_data["hourly_prices"]
 
             return parsed_data
 
         except Exception as e:
             _LOGGER.error(f"ENTSOE API: Error during parsing: {e}", exc_info=True)
-            return {} # Return empty dict on error
+            return {}
 
 async def validate_api_key(api_key, area, session=None):
     """Validate an API key by making a test request.

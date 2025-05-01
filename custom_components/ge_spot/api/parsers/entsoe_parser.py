@@ -36,7 +36,6 @@ class EntsoeParser(BasePriceParser):
             _LOGGER.debug(f"ENTSOE Parser: Input data is string (len={len(data)})")
 
         result = {
-            "hourly_prices": {},  # Deprecated, use hourly_raw
             "hourly_raw": {},  # Standardized output key
             "currency": "EUR",
             "source": self.source
@@ -96,8 +95,8 @@ class EntsoeParser(BasePriceParser):
         _LOGGER.debug(f"ENTSOE Parser: Final aggregated hourly_raw size: {len(all_hourly_prices)}")
 
         # Add current and next hour prices
-        result["current_price"] = self._get_current_price(all_hourly_prices)
-        result["next_hour_price"] = self._get_next_hour_price(all_hourly_prices)
+        result["current_price"] = self._get_current_price(result["hourly_raw"])
+        result["next_hour_price"] = self._get_next_hour_price(result["hourly_raw"])
 
         # Add metadata
         metadata_source = data if isinstance(data, str) else (data.get("xml_responses", [None])[0] or data.get("raw_data"))
@@ -384,43 +383,13 @@ class EntsoeParser(BasePriceParser):
 
         return hourly_prices
 
-    def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        if not hourly_prices:
-            return None
-        now = datetime.now(timezone.utc)
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
-        iso_key = current_hour.isoformat()
-        short_key = current_hour.strftime("%H:00")
-        for key in (iso_key, short_key):
-            if key in hourly_prices:
-                return hourly_prices[key]
-        for key in hourly_prices:
-            try:
-                dt = datetime.fromisoformat(key)
-                if dt.hour == current_hour.hour and dt.date() == current_hour.date():
-                    return hourly_prices[key]
-            except Exception:
-                continue
-        return None
+    def _get_current_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:
+        """Get the current hour's price from the hourly_raw data."""
+        return super()._get_current_price(hourly_raw)
 
-    def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        if not hourly_prices:
-            return None
-        now = datetime.now(timezone.utc)
-        next_hour = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
-        iso_key = next_hour.isoformat()
-        short_key = next_hour.strftime("%H:00")
-        for key in (iso_key, short_key):
-            if key in hourly_prices:
-                return hourly_prices[key]
-        for key in hourly_prices:
-            try:
-                dt = datetime.fromisoformat(key)
-                if dt.hour == next_hour.hour and dt.date() == next_hour.date():
-                    return hourly_prices[key]
-            except Exception:
-                continue
-        return None
+    def _get_next_hour_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:
+        """Get the next hour's price from the hourly_raw data."""
+        return super()._get_next_hour_price(hourly_raw)
 
     def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
         """Calculate day average price.

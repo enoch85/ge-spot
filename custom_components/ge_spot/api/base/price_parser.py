@@ -321,89 +321,95 @@ class BasePriceParser(ABC):
         _LOGGER.debug(f"Normalized {len(prices)} timestamps into: today({len(normalized_prices['today'])}), tomorrow({len(normalized_prices['tomorrow'])}), other({len(normalized_prices['other'])})")
         return normalized_prices
 
-    def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get current hour price based on the target timezone."""
-        if not hourly_prices:
+    def _get_current_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:
+        """Get the current hour's price from the hourly_raw data."""
+        if not hourly_raw:
+            _LOGGER.warning(f"{self.source}: No hourly_raw prices found to determine current price.")
+            return None
+        
+        now_utc = datetime.now(timezone.utc)
+        current_hour_utc = now_utc.replace(minute=0, second=0, microsecond=0)
+        
+        # Try finding the price using the ISO format key (most reliable)
+        iso_key = current_hour_utc.isoformat()
+        if iso_key in hourly_raw:
+            return hourly_raw[iso_key]
+            
+        # Fallback: Iterate through keys and compare datetime objects (less efficient)
+        for key, price in hourly_raw.items():
+            try:
+                dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
+                # Ensure comparison is timezone-aware (both should be UTC)
+                if dt == current_hour_utc:
+                    return price
+            except (ValueError, TypeError):
+                _LOGGER.debug(f"Skipping invalid key format in hourly_raw: {key}")
+                continue
+                
+        _LOGGER.warning(f"{self.source}: Could not find current hour price for {iso_key}")
+        return None
+
+    def _get_next_hour_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:
+        """Get the next hour's price from the hourly_raw data."""
+        if not hourly_raw:
+            _LOGGER.warning(f"{self.source}: No hourly_raw prices found to determine next hour price.")
+            return None
+            
+        now_utc = datetime.now(timezone.utc)
+        next_hour_utc = (now_utc.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+        
+        # Try finding the price using the ISO format key
+        iso_key = next_hour_utc.isoformat()
+        if iso_key in hourly_raw:
+            return hourly_raw[iso_key]
+
+        # Fallback: Iterate through keys
+        for key, price in hourly_raw.items():
+            try:
+                dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
+                if dt == next_hour_utc:
+                    return price
+            except (ValueError, TypeError):
+                _LOGGER.debug(f"Skipping invalid key format in hourly_raw: {key}")
+                continue
+                
+        _LOGGER.warning(f"{self.source}: Could not find next hour price for {iso_key}")
+        return None
+
+    def _calculate_day_average(self, hourly_raw: Dict[str, float], day: str = "today") -> Optional[float]:
+        """Calculate day average price from hourly_raw data."""
+        if not hourly_raw:
+            _LOGGER.warning(f"{self.source}: No hourly_raw prices found to calculate average.")
             return None
 
-        target_tz = self.timezone_service.target_timezone
-        if isinstance(target_tz, str):
-             target_tz = get_timezone_object(target_tz)
+        target_date = datetime.now(timezone.utc).date()
+        if day == "tomorrow":
+            target_date += timedelta(days=1)
+        elif day != "today":
+             _LOGGER.warning(f"Invalid day specified for average calculation: {day}. Defaulting to today.")
 
-        now_target = datetime.now(target_tz)
-        current_hour_key = f"{now_target.hour:02d}:00"
-
-        # Primary check: Look for the simple HH:00 key first
-        if current_hour_key in hourly_prices:
-             _LOGGER.debug(f"Found current hour price using simple key: {current_hour_key}")
-             return hourly_prices[current_hour_key]
-
-        # Fallback: Iterate and parse complex keys (less efficient)
-        current_hour_start_target = now_target.replace(minute=0, second=0, microsecond=0)
-        _LOGGER.debug(f"Looking for current hour price matching {current_hour_start_target.isoformat()} using fallback parsing...")
-        for key, price in hourly_prices.items():
+        day_prices = []
+        for hour_key, price in hourly_raw.items():
             try:
-                # Attempt to parse the key as a datetime (assuming UTC from parser)
-                dt_utc = self.parse_timestamp(key, timezone.utc) # Assume UTC if parsing raw key
-                dt_target = dt_utc.astimezone(target_tz)
-
-                if dt_target.replace(minute=0, second=0, microsecond=0) == current_hour_start_target:
-                    _LOGGER.debug(f"Found current hour price using fallback parsing for key: {key}")
-                    return price
-            except (ValueError, TypeError) as e:
-                _LOGGER.debug(f"Could not parse key '{key}' during current hour price fallback: {e}")
+                # Ensure keys are parsed as UTC
+                hour_dt = datetime.fromisoformat(hour_key.replace('Z', '+00:00')).astimezone(timezone.utc)
+                if hour_dt.date() == target_date:
+                    day_prices.append(price)
+            except (ValueError, TypeError):
+                _LOGGER.debug(f"Skipping invalid key format in hourly_raw: {hour_key}")
                 continue
 
-        _LOGGER.warning(f"Current hour price not found for target time {current_hour_start_target.isoformat()} or key {current_hour_key}. Available keys: {list(hourly_prices.keys())}")
-        return None
+        if not day_prices:
+             _LOGGER.warning(f"{self.source}: No prices found for {day} ({target_date}) to calculate average.")
+             return None
+             
+        # Consider if a minimum number of hours is required for a meaningful average
+        # if len(day_prices) < 12: # Example threshold
+        #     _LOGGER.warning(f"{self.source}: Not enough data points ({len(day_prices)}) for {day} average.")
+        #     return None
 
-    def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get next hour price based on the target timezone."""
-        if not hourly_prices:
-            return None
+        return sum(day_prices) / len(day_prices)
 
-        target_tz = self.timezone_service.target_timezone
-        if isinstance(target_tz, str):
-             target_tz = get_timezone_object(target_tz)
-
-        now_target = datetime.now(target_tz)
-        next_hour_dt_target = now_target + timedelta(hours=1)
-        next_hour_key = f"{next_hour_dt_target.hour:02d}:00"
-
-        # Primary check: Look for the simple HH:00 key first
-        if next_hour_key in hourly_prices:
-             _LOGGER.debug(f"Found next hour price using simple key: {next_hour_key}")
-             return hourly_prices[next_hour_key]
-
-        # Fallback: Iterate and parse complex keys
-        next_hour_start_target = next_hour_dt_target.replace(minute=0, second=0, microsecond=0)
-        _LOGGER.debug(f"Looking for next hour price matching {next_hour_start_target.isoformat()} using fallback parsing...")
-        for key, price in hourly_prices.items():
-            try:
-                dt_utc = self.parse_timestamp(key, timezone.utc) # Assume UTC if parsing raw key
-                dt_target = dt_utc.astimezone(target_tz)
-
-                if dt_target.replace(minute=0, second=0, microsecond=0) == next_hour_start_target:
-                    _LOGGER.debug(f"Found next hour price using fallback parsing for key: {key}")
-                    return price
-            except (ValueError, TypeError) as e:
-                _LOGGER.debug(f"Could not parse key '{key}' during next hour price fallback: {e}")
-                continue
-
-        _LOGGER.warning(f"Next hour price not found for target time {next_hour_start_target.isoformat()} or key {next_hour_key}. Available keys: {list(hourly_prices.keys())}")
-        return None
-
-    def calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Calculate average price for a dictionary of HH:00 keys."""
-        if not hourly_prices:
-            return None
-
-        prices = list(hourly_prices.values())
-        if prices:
-            return sum(prices) / len(prices)
-        return None
-
-    # Add similar methods for peak/off-peak if needed, operating on the simple dict
     def calculate_peak_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
          if not hourly_prices:
              return None
