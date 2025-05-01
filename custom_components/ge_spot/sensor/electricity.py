@@ -37,15 +37,25 @@ async def async_setup_entry(
     """Set up the GE Spot electricity sensors."""
     coordinator: UnifiedPriceCoordinator = hass.data[DOMAIN][config_entry.entry_id]
     options = config_entry.options
+    data = config_entry.data # Get data as well
+
+    # Prioritize options, fallback to data, then default for display_unit
+    display_unit_setting = options.get(
+        Config.DISPLAY_UNIT,
+        data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
+    )
 
     # Create a proper config_data dictionary including area and other relevant options
     config_data = {
         Attributes.AREA: coordinator.area, # Get area from coordinator
-        Attributes.VAT: options.get(Config.VAT, 0), # Get VAT from options
-        Config.PRECISION: options.get(Config.PRECISION, Defaults.PRECISION), # Get precision from options
-        Config.DISPLAY_UNIT: options.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT), # Get display unit from options
-        Attributes.CURRENCY: options.get(Config.CURRENCY, coordinator.currency), # Get currency from options
-        # Add entry_id if needed elsewhere, though base sensor doesn't use it directly
+        # Prioritize options, fallback to data, then default for VAT
+        Attributes.VAT: options.get(Config.VAT, data.get(Config.VAT, 0)),
+        # Prioritize options, fallback to data, then default for PRECISION
+        Config.PRECISION: options.get(Config.PRECISION, data.get(Config.PRECISION, Defaults.PRECISION)),
+        # Use the resolved display_unit_setting
+        Config.DISPLAY_UNIT: display_unit_setting,
+        # Prioritize options, fallback to data, then default for CURRENCY
+        Attributes.CURRENCY: options.get(Config.CURRENCY, data.get(Config.CURRENCY, coordinator.currency)),
         "entry_id": config_entry.entry_id,
     }
 
@@ -60,7 +70,7 @@ async def async_setup_entry(
     # Get specific settings used by some sensors directly (already present)
     vat = options.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
     include_vat = options.get(Config.INCLUDE_VAT, False)
-    price_in_cents = options.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS # Use DisplayUnit constant
+    price_in_cents = display_unit_setting == DisplayUnit.CENTS # Use resolved display_unit_setting
 
     # Create sensor entities (passing the populated config_data)
 
