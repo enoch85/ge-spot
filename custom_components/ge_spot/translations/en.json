@@ -67,7 +67,7 @@
           "timezone_reference": "Choose which timezone to use for displaying hourly prices",
           "entsoe_api_key": "Required for using ENTSO-E as a data source",
           "clear_cache": "Clear the price cache to force a fresh data fetch",
-          "stromligning_supplier": "Complete list: list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
+          "stromligning_supplier": "Complete list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
         }
       }
     },
