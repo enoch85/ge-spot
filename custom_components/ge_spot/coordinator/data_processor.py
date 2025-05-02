@@ -347,7 +347,6 @@ class DataProcessor:
         from ..api.parsers.aemo_parser import AemoParser
         from ..api.parsers.epex_parser import EpexParser
         # Add other parsers as needed
-        # from ..api.parsers.aemo_parser import AemoParser
         # ...
 
         parser_map = {
@@ -360,7 +359,10 @@ class DataProcessor:
             "EnergiDataAPI": EnergiDataParser,
             # Add mapping for OmieAPI
             "OmieAPI": OmieParser,
-            # "AemoAPI": AemoParser,
+            # Add mapping for AemoAPI
+            "AemoAPI": AemoParser,
+            # Add mapping for EpexAPI
+            "EpexAPI": EpexParser,
             # ... add mappings for other sources using their API class name ...
         }
 
