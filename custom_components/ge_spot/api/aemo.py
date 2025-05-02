@@ -99,8 +99,8 @@ class AemoAPI(BasePriceAPI):
             if response and isinstance(response, dict) and Aemo.SUMMARY_ARRAY in response:
                 # Parse the response using the appropriate parser
                 parser = self.get_parser_for_area(area)
-                parsed = parser.parse(response, area=area)
-                hourly_raw = parsed.get("hourly_prices", {})
+                parsed = parser.parse(response, area=area) # Pass area to the parser
+                hourly_raw = parsed.get("hourly_raw", {}) # Correct key
                 
                 # Return standardized data structure with ISO timestamps
                 return {

@@ -21,11 +21,12 @@ class AemoParser(BasePriceParser):
         """Initialize the parser."""
         super().__init__(Source.AEMO, timezone_service)
 
-    def parse(self, raw_data: Any) -> Dict[str, Any]:
+    def parse(self, raw_data: Any, area: Optional[str] = None) -> Dict[str, Any]:
         """Parse AEMO API response.
 
         Args:
             raw_data: Raw API response data
+            area: Optional area code to filter results for
 
         Returns:
             Parsed data with hourly prices
@@ -33,6 +34,7 @@ class AemoParser(BasePriceParser):
         result = {
             "hourly_raw": {},  # Changed from hourly_prices
             "currency": Currency.AUD,
+            "area": area  # Store the area if provided
         }
 
         # Check for valid data
@@ -45,11 +47,11 @@ class AemoParser(BasePriceParser):
             try:
                 # Try JSON format first
                 json_data = json.loads(raw_data)
-                self._parse_json(json_data, result)
+                self._parse_json(json_data, result, area)  # Pass area
             except json.JSONDecodeError:
                 # Try CSV format
                 try:
-                    self._parse_csv(raw_data, result)
+                    self._parse_csv(raw_data, result, area)  # Pass area
                 except Exception as e:
                     _LOGGER.warning(f"Failed to parse AEMO data as CSV: {e}")
         # If raw_data is a dictionary, extract data directly
@@ -59,7 +61,10 @@ class AemoParser(BasePriceParser):
                 result["hourly_raw"] = raw_data["hourly_raw"]  # Changed from hourly_prices
             elif "raw_data" in raw_data:
                 # Try to parse raw_data entry
-                self._parse_json(raw_data, result)
+                self._parse_json(raw_data, result, area)  # Pass area
+            else:
+                # Try parsing the dict directly as if it's the JSON response
+                self._parse_json(raw_data, result, area)  # Pass area
 
         # Calculate current and next hour prices if not provided
         if not result.get("current_price"):
@@ -107,6 +112,7 @@ class AemoParser(BasePriceParser):
             "source": self.source,
             "price_count": len(data.get("hourly_raw", {})),  # Changed from hourly_prices
             "currency": data.get("currency", "AUD"),  # Changed default
+            "area": data.get("area", "NSW1"),  # Use area from parsed data
             "has_current_price": "current_price" in data and data["current_price"] is not None,
             "has_next_hour_price": "next_hour_price" in data and data["next_hour_price"] is not None,
             "parser_version": "2.1",  # Updated version
@@ -115,12 +121,13 @@ class AemoParser(BasePriceParser):
 
         return metadata
 
-    def _parse_json(self, json_data: Dict[str, Any], result: Dict[str, Any]) -> None:
+    def _parse_json(self, json_data: Dict[str, Any], result: Dict[str, Any], area: Optional[str] = None) -> None:
         """Parse JSON formatted data from AEMO.
 
         Args:
             json_data: JSON data
             result: Result dictionary to update
+            area: Optional area code to filter results for
         """
         # Check if we're using the consolidated endpoint
         from ...const.api import Aemo
@@ -129,6 +136,10 @@ class AemoParser(BasePriceParser):
         if Aemo.SUMMARY_ARRAY in json_data:
             # Process data from the main summary array
             for entry in json_data[Aemo.SUMMARY_ARRAY]:
+                # Filter by area if provided
+                if area and Aemo.REGION_FIELD in entry and entry[Aemo.REGION_FIELD] != area:
+                    continue
+                    
                 if Aemo.PRICE_FIELD in entry and Aemo.SETTLEMENT_DATE_FIELD in entry:
                     try:
                         # Parse timestamp
@@ -148,12 +159,13 @@ class AemoParser(BasePriceParser):
         # Update result with parsed hourly prices
         result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
 
-    def _parse_csv(self, csv_data: str, result: Dict[str, Any]) -> None:
+    def _parse_csv(self, csv_data: str, result: Dict[str, Any], area: Optional[str] = None) -> None:
         """Parse CSV formatted data from AEMO.
 
         Args:
             csv_data: CSV data
             result: Result dictionary to update
+            area: Optional area code to filter results for
         """
         hourly_prices = {}
         
@@ -166,6 +178,9 @@ class AemoParser(BasePriceParser):
             for row in csv_reader:
                 # Check for required fields
                 if "SETTLEMENTDATE" in row and "RRP" in row and "REGIONID" in row:
+                    # Filter by area if provided
+                    if area and row["REGIONID"] != area:
+                        continue
                     try:
                         # Parse timestamp
                         timestamp_str = row["SETTLEMENTDATE"]

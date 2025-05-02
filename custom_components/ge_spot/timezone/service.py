@@ -156,32 +156,35 @@ class TimezoneService:
         return self.converter.convert(dt, self.target_timezone)
 
 
-    def normalize_hourly_prices(self, hourly_prices: Dict[str, float], source_tz_str: Optional[str] = None) -> Dict[datetime, float]:
-        """Normalizes hourly price timestamps to the target timezone, optionally using a source timezone hint."""
+    def normalize_hourly_prices(self, hourly_prices: Dict[str, float], source_tz_str: Optional[str] = None, is_five_minute: bool = False) -> Dict[datetime, float]:
+        """Normalizes price timestamps to the target timezone, optionally using a source timezone hint and handling 5-minute intervals."""
         _LOGGER.debug(
-            "Normalizing %d hourly price timestamps using target timezone: %s%s",
+            "Normalizing %d price timestamps using target timezone: %s%s%s",
             len(hourly_prices),
-            # Use self.target_timezone instead of self._target_tz
             self.target_timezone,
-            f" (with source hint: {source_tz_str})" if source_tz_str else ""
+            f" (with source hint: {source_tz_str})" if source_tz_str else "",
+            " (5-minute intervals)" if is_five_minute else " (hourly intervals)"
         )
         normalized_prices = {}
 
         for timestamp_str, price in hourly_prices.items():
             try:
-                # Use helper for parsing, passing the hint
                 aware_dt = self._parse_timestamp(timestamp_str, source_hint=source_tz_str)
 
                 if aware_dt is None:
                     _LOGGER.warning("Could not parse timestamp '%s', skipping.", timestamp_str)
                     continue
 
-                # Convert to target timezone
-                # Use self.target_timezone instead of self._target_tz
                 target_dt = aware_dt.astimezone(self.target_timezone)
 
-                # Align to the start of the hour
-                aligned_dt = target_dt.replace(minute=0, second=0, microsecond=0)
+                # Align to the start of the interval (hour or 5-minute)
+                if is_five_minute:
+                    # For 5-minute data, keep the original minute, just zero out seconds/microseconds
+                    aligned_dt = target_dt.replace(second=0, microsecond=0)
+                else:
+                    # For hourly data, align to the start of the hour
+                    aligned_dt = target_dt.replace(minute=0, second=0, microsecond=0)
+                
                 normalized_prices[aligned_dt] = price
 
             except (ValueError, TypeError, pytz.exceptions.UnknownTimeZoneError) as e:
