@@ -140,9 +140,6 @@ def get_options_schema(defaults, supported_sources, area):
     # Add source priority selection with header
     current_priority = defaults.get(Config.SOURCE_PRIORITY, supported_sources)
     schema[vol.Optional(
-        "header_source_priority"
-    )] = str
-    schema[vol.Optional(
         Config.SOURCE_PRIORITY,
         default=current_priority,
         description="Priority is determined by order: first selected = highest priority"
