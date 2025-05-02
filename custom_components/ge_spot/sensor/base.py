@@ -154,13 +154,27 @@ class BaseElectricityPriceSensor(SensorEntity):
         if "source_timezone" in self.coordinator.data:
             attrs["api_timezone"] = self.coordinator.data["source_timezone"]
 
-        # Add hourly prices if available
+        # Add hourly prices if available, rounding float values
         if "hourly_prices" in self.coordinator.data:
-            attrs["hourly_prices"] = self.coordinator.data["hourly_prices"]
+            hourly_prices = self.coordinator.data["hourly_prices"]
+            if isinstance(hourly_prices, dict):
+                attrs["hourly_prices"] = {
+                    k: round(v, 4) if isinstance(v, float) else v
+                    for k, v in hourly_prices.items()
+                }
+            else:
+                attrs["hourly_prices"] = hourly_prices # Keep original if not a dict
 
-        # Add tomorrow hourly prices if available
+        # Add tomorrow hourly prices if available, rounding float values
         if "tomorrow_hourly_prices" in self.coordinator.data:
-            attrs["tomorrow_hourly_prices"] = self.coordinator.data["tomorrow_hourly_prices"]
+            tomorrow_hourly_prices = self.coordinator.data["tomorrow_hourly_prices"]
+            if isinstance(tomorrow_hourly_prices, dict):
+                attrs["tomorrow_hourly_prices"] = {
+                    k: round(v, 4) if isinstance(v, float) else v
+                    for k, v in tomorrow_hourly_prices.items()
+                }
+            else:
+                attrs["tomorrow_hourly_prices"] = tomorrow_hourly_prices # Keep original if not a dict
 
         # Add error message if available
         if "error" in self.coordinator.data and self.coordinator.data["error"]:
