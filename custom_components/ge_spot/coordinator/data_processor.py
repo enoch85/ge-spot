@@ -343,6 +343,9 @@ class DataProcessor:
         from ..api.parsers.nordpool_parser import NordpoolPriceParser
         from ..api.parsers.stromligning_parser import StromligningParser
         from ..api.parsers.energi_data_parser import EnergiDataParser
+        from ..api.parsers.omie_parser import OmieParser
+        from ..api.parsers.aemo_parser import AemoParser
+        from ..api.parsers.epex_parser import EpexParser
         # Add other parsers as needed
         # from ..api.parsers.aemo_parser import AemoParser
         # ...
@@ -355,6 +358,8 @@ class DataProcessor:
             "StromligningAPI": StromligningParser,
             # Add mapping for EnergiDataService
             "EnergiDataAPI": EnergiDataParser,
+            # Add mapping for OmieAPI
+            "OmieAPI": OmieParser,
             # "AemoAPI": AemoParser,
             # ... add mappings for other sources using their API class name ...
         }
