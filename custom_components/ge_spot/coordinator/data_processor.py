@@ -274,16 +274,19 @@ class DataProcessor:
 
                 today_keys = set(self._tz_service.get_today_range())
                 found_keys = set(final_today_prices.keys())
-                today_complete = today_keys.issubset(found_keys)
+                # Allow statistics if at least 20 hours are present
+                today_complete_enough = len(found_keys) >= 20 
 
-                if today_complete:
+                if today_complete_enough:
                     stats = self._calculate_statistics(final_today_prices)
-                    stats.complete_data = True
+                    # Mark as complete only if all 24 hours are present
+                    stats.complete_data = today_keys.issubset(found_keys) 
                     processed_result["statistics"] = stats.to_dict()
                     _LOGGER.debug(f"Calculated today's statistics for {self.area}: {processed_result['statistics']}") # Log today's stats
                 else:
                     missing_keys = sorted(list(today_keys - found_keys))
-                    _LOGGER.warning(f"Incomplete data for today ({len(found_keys)}/{len(today_keys)} keys found, missing: {missing_keys}), skipping statistics calculation for {self.area}.")
+                    # Update warning message threshold
+                    _LOGGER.warning(f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need 20), skipping statistics calculation for {self.area}. Missing: {missing_keys}")
                     processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
             else:
                 _LOGGER.warning(f"No final prices for today available after processing for area {self.area}, skipping stats.")
@@ -293,17 +296,21 @@ class DataProcessor:
             if final_tomorrow_prices:
                 tomorrow_keys = set(self._tz_service.get_tomorrow_range())
                 found_keys = set(final_tomorrow_prices.keys())
-                tomorrow_complete = tomorrow_keys.issubset(found_keys)
+                # Allow statistics if at least 20 hours are present
+                tomorrow_complete_enough = len(found_keys) >= 20
 
-                if tomorrow_complete:
+                if tomorrow_complete_enough:
                     stats = self._calculate_statistics(final_tomorrow_prices)
-                    stats.complete_data = True
+                     # Mark as complete only if all 24 hours are present
+                    stats.complete_data = tomorrow_keys.issubset(found_keys)
                     processed_result["tomorrow_statistics"] = stats.to_dict()
-                    processed_result["tomorrow_valid"] = True # Set flag to True when stats are calculated
+                    # Set tomorrow_valid if we have enough data for stats, even if not fully complete
+                    processed_result["tomorrow_valid"] = True 
                     _LOGGER.debug(f"Calculated tomorrow's statistics for {self.area}: {processed_result['tomorrow_statistics']}") # Log tomorrow's stats
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
-                    _LOGGER.warning(f"Incomplete data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, missing: {missing_keys}), skipping statistics calculation for {self.area}.")
+                    # Update warning message threshold
+                    _LOGGER.warning(f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need 20), skipping statistics calculation for {self.area}. Missing: {missing_keys}")
                     processed_result["tomorrow_statistics"] = PriceStatistics(complete_data=False).to_dict()
             else:
                 # No tomorrow prices, ensure stats reflect incompleteness

@@ -79,7 +79,7 @@ async def async_setup_entry(
         PriceValueSensor(
             coordinator,
             config_data, # Pass the correctly populated config_data
-            f"{coordinator.area}_current_price",
+            "current_price", # Pass only the sensor type
             "Current Price",
             get_current_price, # Pass the function
             get_base_attrs     # Pass the function for additional attributes
@@ -91,7 +91,7 @@ async def async_setup_entry(
         PriceValueSensor(
             coordinator,
             config_data, # Pass the correctly populated config_data
-            f"{coordinator.area}_next_hour_price",
+            "next_hour_price", # Pass only the sensor type
             "Next Hour Price",
             get_next_hour_price, # Pass the function
             None                 # No specific additional attributes needed here yet
@@ -103,7 +103,7 @@ async def async_setup_entry(
         PriceStatisticSensor(
             coordinator,
             config_data, # Pass config_data
-            f"{coordinator.area}_average_price",
+            "average_price", # Pass only the sensor type
             "Average Price",
             "average" # Removed additional_attrs
         )
@@ -114,7 +114,7 @@ async def async_setup_entry(
         ExtremaPriceSensor(
             coordinator,
             config_data, # Pass the correctly populated config_data
-            f"{coordinator.area}_peak_price",
+            "peak_price", # Pass only the sensor type
             "Peak Price",
             extrema_type="max" # Removed additional_attrs
         )
@@ -125,7 +125,7 @@ async def async_setup_entry(
         ExtremaPriceSensor(
             coordinator,
             config_data, # Pass the correctly populated config_data
-            f"{coordinator.area}_off_peak_price",
+            "off_peak_price", # Pass only the sensor type
             "Off-Peak Price",
             extrema_type="min" # Removed additional_attrs
         )
@@ -136,7 +136,7 @@ async def async_setup_entry(
         PriceDifferenceSensor(
             coordinator,
             config_data, # Pass config_data
-            f"{coordinator.area}_price_difference",
+            "price_difference", # Pass only the sensor type
             "Price Difference",
             "current_price",
             "average"
@@ -148,7 +148,7 @@ async def async_setup_entry(
         PricePercentSensor(
             coordinator,
             config_data, # Pass config_data
-            f"{coordinator.area}_price_percentage",
+            "price_percentage", # Pass only the sensor type
             "Price Percentage",
             "current_price",
             "average"
@@ -164,7 +164,7 @@ async def async_setup_entry(
         TomorrowAveragePriceSensor(
             coordinator,
             config_data, # Pass the correctly populated config_data
-            f"{coordinator.area}_tomorrow_average_price",
+            "tomorrow_average_price", # Pass only the sensor type
             "Tomorrow Average Price",
             get_tomorrow_avg_price, # Pass the function
             additional_attrs=get_base_attrs # Keep here, TomorrowAveragePriceSensor inherits from PriceValueSensor correctly
@@ -176,7 +176,7 @@ async def async_setup_entry(
         TomorrowExtremaPriceSensor(
             coordinator,
             config_data, # Pass the correctly populated config_data
-            f"{coordinator.area}_tomorrow_peak_price",
+            "tomorrow_peak_price", # Pass only the sensor type
             "Tomorrow Peak Price",
             day_offset=1,       # Specify tomorrow
             extrema_type="max"  # Specify peak
@@ -188,7 +188,7 @@ async def async_setup_entry(
         TomorrowExtremaPriceSensor(
             coordinator,
             config_data, # Pass the correctly populated config_data
-            f"{coordinator.area}_tomorrow_off_peak_price",
+            "tomorrow_off_peak_price", # Pass only the sensor type
             "Tomorrow Off-Peak Price",
             day_offset=1,       # Specify tomorrow
             extrema_type="min"  # Specify off-peak
