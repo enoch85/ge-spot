@@ -97,9 +97,11 @@ async def main():
     # Initialize timezone service based on area
     logger.info("Setting up timezone service...")
     tz_config = {"timezone_reference": "area"} # Assuming area dictates timezone
-    tz_service = TimezoneService(area=area, config=tz_config, fixed_timezone=local_tz_name)
+    tz_service = TimezoneService(area=area, config=tz_config) 
     tz_converter = TimezoneConverter(tz_service)
-    logger.info(f"Timezone service initialized for area: {area} using {local_tz_name}")
+    # Determine the local timezone name based on the area for logging/reference
+    local_tz_name = EPEX_AREA_TIMEZONES.get(area, 'Europe/Berlin')
+    logger.info(f"Timezone service initialized for area: {area} using target timezone: {tz_service.target_timezone}")
 
     # Initialize the API client
     api = EpexAPI(config={}) # EPEX API might not need specific config
