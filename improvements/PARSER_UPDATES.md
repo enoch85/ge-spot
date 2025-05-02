@@ -5,11 +5,6 @@
 ### Overview
 All API handlers have been standardized to follow the `BasePriceAPI` abstract class structure. This ensures consistent behavior, error handling, and data formatting across all price sources.
 
-### Updates
-- **Stromligning API**: Refactored to inherit from `BasePriceAPI` with standardized methods for fetching and parsing data.
-- **ENTSO-E API**: Follows the `BasePriceAPI` structure for consistent implementation.
-- **Legacy Support**: Maintained backward compatibility with previous API versions.
-
 ### Benefits
 - Consistent error handling across all price sources
 - Standardized data format for all integrations
