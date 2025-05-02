@@ -1,23 +1,24 @@
 """OMIE API client."""
 import logging
-from datetime import datetime, timezone, timedelta, time
+from datetime import datetime, timezone, timedelta
 import aiohttp
 from typing import Dict, Any, Optional
 
 from .base.base_price_api import BasePriceAPI
 from .parsers.omie_parser import OmieParser
 from ..const.sources import Source
-from ..const.api import Omie
 from .base.api_client import ApiClient
 from ..const.network import Network
 from ..const.currencies import Currency
 from ..const.time import TimezoneName
-from .utils import fetch_with_retry
+from ..utils.date_range import generate_date_ranges
 
 _LOGGER = logging.getLogger(__name__)
 
+BASE_URL_TEMPLATE = "https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{day}_{month}_{year}_{day}_{month}_{year}.TXT"
+
 class OmieAPI(BasePriceAPI):
-    """OMIE API client."""
+    """OMIE API client - Fetches data directly from OMIE text files."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, session: Optional[aiohttp.ClientSession] = None, timezone_service=None):
         """Initialize the API client.
@@ -38,96 +39,82 @@ class OmieAPI(BasePriceAPI):
         return Source.OMIE
 
     def _get_base_url(self) -> str:
-        """Get the base URL for API requests.
+        """Get the base URL template for API requests.
 
         Returns:
-            Base URL string
+            Base URL template string
         """
-        # Use constant defined in const/api.py if available, otherwise fallback
-        return getattr(Omie, 'BASE_URL', "https://api.esios.ree.es/archives/70/download?date=")
+        return BASE_URL_TEMPLATE
 
-    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
-        """Fetch raw price data for the given area.
-        
+    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Optional[Dict[str, Any]]:
+        """Fetch raw price data for the given area by trying date-specific file URLs.
+
         Args:
             area: Area code (e.g., ES or PT)
             session: Optional session for API requests
             **kwargs: Additional parameters
-            
+
         Returns:
-            Raw data from API
+            Raw data from API or None if no valid data found
         """
-        # Use current UTC time as reference
-        now_utc = datetime.now(timezone.utc)
-        
+        reference_time = kwargs.get('reference_time', datetime.now(timezone.utc))
+
         client = ApiClient(session=session or self.session)
         try:
-            # Always compute today and tomorrow
-            today = now_utc.strftime("%Y-%m-%d")
-            tomorrow = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
-            
-            # Fetch today's data
-            url_today = f"{self._get_base_url()}{today}"
-            csv_today = await client.fetch(url_today, timeout=Network.Defaults.TIMEOUT, response_format='text')
-            
-            # Fetch tomorrow's data after 13:00 CET, with retry logic
-            now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
-            csv_tomorrow = None
-            
-            if now_cet.hour >= 13:
-                url_tomorrow = f"{self._get_base_url()}{tomorrow}"
-                
-                async def fetch_tomorrow():
-                    return await client.fetch(url_tomorrow, timeout=Network.Defaults.TIMEOUT, response_format='text')
-                
-                def is_data_available(data):
-                    return data and isinstance(data, str) and data.strip()
-                
-                local_tz = TimezoneName.EUROPE_LISBON if area and area.upper() == "PT" else TimezoneName.EUROPE_MADRID
-                
-                csv_tomorrow = await fetch_with_retry(
-                    fetch_tomorrow,
-                    is_data_available,
-                    retry_interval=1800,
-                    end_time=time(23, 50),
-                    local_tz_name=local_tz
+            date_ranges = generate_date_ranges(
+                reference_time,
+                source_type=Source.OMIE,
+                include_future=False,
+                max_days_back=1
+            )
+
+            for start_date, _ in date_ranges:
+                target_date = start_date.date()
+                year = str(target_date.year)
+                month = str.zfill(str(target_date.month), 2)
+                day = str.zfill(str(target_date.day), 2)
+
+                url = self._get_base_url().format(
+                    year=year, month=month, day=day
                 )
-            
-            # Parse the data from both today and tomorrow
-            parser = self.get_parser_for_area(area)
-            combined_hourly_prices = {}
-            
-            if csv_today and isinstance(csv_today, str) and csv_today.strip():
-                parsed_today = parser.parse({"raw_data": csv_today, "target_date": today, "area": area}) # Pass area
-                # Use 'hourly_raw' key from parser result
-                if parsed_today and "hourly_raw" in parsed_today:
-                    combined_hourly_prices.update(parsed_today["hourly_raw"])
-            
-            if csv_tomorrow and isinstance(csv_tomorrow, str) and csv_tomorrow.strip():
-                parsed_tomorrow = parser.parse({"raw_data": csv_tomorrow, "target_date": tomorrow, "area": area}) # Pass area
-                # Use 'hourly_raw' key from parser result
-                if parsed_tomorrow and "hourly_raw" in parsed_tomorrow:
-                    combined_hourly_prices.update(parsed_tomorrow["hourly_raw"])
-            
-            # Return standardized data structure with ISO timestamps
-            return {
-                "hourly_raw": combined_hourly_prices,
-                "timezone": self.get_timezone_for_area(area),
-                "currency": Currency.EUR,
-                "source_name": "omie",
-                "raw_data": {
-                    "today": csv_today,
-                    "tomorrow": csv_tomorrow,
-                    "timestamp": now_utc.isoformat(),
-                    "area": area
-                },
-            }
+                _LOGGER.debug(f"[OmieAPI] Attempting to fetch OMIE data from URL: {url}")
+
+                response_text = await client.fetch(
+                    url,
+                    timeout=Network.Defaults.TIMEOUT,
+                    encoding='iso-8859-1',
+                    response_format='text'
+                )
+
+                if isinstance(response_text, dict) and response_text.get("error"):
+                    _LOGGER.warning(f"[OmieAPI] Client error fetching {url}: {response_text.get('message')}")
+                    continue
+
+                if not response_text or isinstance(response_text, str) and ("<html" in response_text.lower() or "<!doctype" in response_text.lower()):
+                    _LOGGER.debug(f"[OmieAPI] No valid data or HTML response from OMIE for {day}_{month}_{year}, trying next date.")
+                    continue
+
+                _LOGGER.info(f"[OmieAPI] Successfully fetched OMIE data for {day}_{month}_{year}")
+                return {
+                    "raw_data": response_text,
+                    "area": area,
+                    "timezone": self.get_timezone_for_area(area),
+                    "url": url,
+                    "target_date": target_date.isoformat()
+                }
+
+            _LOGGER.warning("[OmieAPI] No valid data found from OMIE after trying relevant dates.")
+            return None
+
+        except Exception as e:
+            _LOGGER.error(f"[OmieAPI] Unexpected error fetching OMIE data: {e}", exc_info=True)
+            return None
         finally:
             if session is None and client:
                 await client.close()
 
     def get_timezone_for_area(self, area: str) -> str:
-        """Get the timezone for a specific area.
+        """Get the timezone name string for a specific area.
 
         Args:
             area: Area code
@@ -135,14 +122,13 @@ class OmieAPI(BasePriceAPI):
         Returns:
             Timezone string
         """
-        if area and area.upper() == "PT": # Check area explicitly
-            return "Europe/Lisbon"
+        if area and area.upper() == "PT":
+            return TimezoneName.EUROPE_LISBON
         else:
-            # Default to Madrid timezone for ES or unspecified
-            return "Europe/Madrid"
+            return TimezoneName.EUROPE_MADRID
 
     def get_parser_for_area(self, area: str) -> Any:
-        """Get the appropriate parser for the area.
+        """Get the appropriate parser instance.
 
         Args:
             area: Area code
@@ -150,5 +136,4 @@ class OmieAPI(BasePriceAPI):
         Returns:
             Parser instance
         """
-        # OMIE parser might be generic, or could potentially adapt based on area if needed
-        return OmieParser()
+        return OmieParser(timezone_service=self.timezone_service)

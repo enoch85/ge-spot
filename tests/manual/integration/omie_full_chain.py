@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # Add the root directory to the path so we can import the component modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 from custom_components.ge_spot.api.omie import OmieAPI
+from custom_components.ge_spot.api.parsers.omie_parser import OmieParser # Import the parser
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
@@ -104,45 +105,51 @@ async def main():
         # Step 1: Fetch raw data
         logger.info(f"Fetching OMIE data for area: {area}")
         # Adjust fetch call based on OmieAPI's expected parameters
-        raw_data = await api.fetch_raw_data(area=area, reference_time=reference_time)
+        raw_data_dict = await api.fetch_raw_data(area=area, reference_time=reference_time)
         
-        if not raw_data:
+        if not raw_data_dict:
             logger.error("Error: Failed to fetch data from OMIE API")
             return 1
             
-        logger.debug(f"Raw data keys: {list(raw_data.keys())}")
+        logger.debug(f"Raw data keys: {list(raw_data_dict.keys())}")
         log_data = {}
-        for k, v in raw_data.items():
+        for k, v in raw_data_dict.items():
              # Handle potentially large data like CSV content
-             if k == 'raw_csv_by_date' and isinstance(v, dict):
-                 log_data[k] = {date: csv[:100] + "..." if len(csv) > 100 else csv for date, csv in v.items()}
+             if k == 'raw_data' and isinstance(v, str): # Check specifically for raw_data string
+                 log_data[k] = v[:100] + "..." if len(v) > 100 else v
              elif isinstance(v, (str, list, dict)) and len(str(v)) > 300:
                  log_data[k] = str(v)[:300] + "..."
              else:
                  log_data[k] = v
         logger.debug(f"Raw data content (summary): {json.dumps(log_data, indent=2)}")
         
-        # Step 2: Use the already parsed data from fetch step
-        logger.info("\nUsing parsed data from fetch step...")
-        parsed_data = raw_data # Use the result from fetch directly
-        
+        # Step 2: Parse the raw data
+        logger.info("\nParsing the fetched raw data...")
+        parser = OmieParser() # Instantiate the parser
+        parsed_data = parser.parse(raw_data_dict) # Call the parser's parse method
+
+        if not parsed_data or not parsed_data.get("hourly_raw"):
+             logger.error("Error: Parser did not return valid data or hourly_raw prices.")
+             # Log raw response if helpful
+             if 'raw_data' in raw_data_dict:
+                 logger.debug(f"--- Raw Text Data --- START ---\n{raw_data_dict['raw_data']}\n--- Raw Text Data --- END ---")
+             return 1
+
         logger.debug(f"Parsed data keys: {list(parsed_data.keys())}")
-        logger.info(f"Source: {parsed_data.get('source_name', parsed_data.get('source'))}")
+        # Use 'source' key as set by the parser
+        logger.info(f"Source: {parsed_data.get('source')}")
         logger.info(f"Area: {area}")
         original_currency = parsed_data.get('currency', Currency.EUR)
         logger.info(f"Currency: {original_currency}")
-        source_timezone = parsed_data.get('timezone') # Parser should determine this
+        # Use 'timezone' key as set by the parser
+        source_timezone = parsed_data.get('timezone')
         logger.info(f"API Timezone: {source_timezone}")
         
         # OMIE provides prices per MWh, usually hourly
         hourly_raw_prices = parsed_data.get("hourly_raw", {}) # Assuming parser returns raw prices here
+        # This check should now reflect the parser's output
         if not hourly_raw_prices:
-            logger.error("Error: No hourly prices found in the parsed data after parsing step.")
-            # Log raw response if helpful
-            if 'raw_csv_by_date' in raw_data:
-                 logger.debug(f"--- Raw CSV Data --- START ---")
-                 logger.debug(json.dumps(raw_data['raw_csv_by_date'], indent=2))
-                 logger.debug(f"--- Raw CSV Data --- END ---")
+            logger.error("Error: No hourly prices found in the parsed data *after parsing step*.")
             return 1
             
         logger.info(f"Found {len(hourly_raw_prices)} raw hourly prices (before timezone normalization)")
