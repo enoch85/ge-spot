@@ -199,9 +199,10 @@ class UnifiedPriceManager:
             if not force and last_fetch:
                 time_since_last_fetch = now - last_fetch
                 if time_since_last_fetch < min_interval:
+                    next_fetch_allowed_in_seconds = (min_interval - time_since_last_fetch).total_seconds()
                     _LOGGER.info(
                         f"Rate limiting in effect for area {self.area}. "
-                        f"Next fetch allowed in {(min_interval - time_since_last_fetch).total_seconds():.1f} seconds. "
+                        f"Next fetch allowed in {next_fetch_allowed_in_seconds:.1f} seconds. "
                         f"Using cached data if available."
                     )
                     # Use cached data if rate limited - specify today's date
@@ -214,6 +215,7 @@ class UnifiedPriceManager:
                         _LOGGER.debug("Returning rate-limited cached data for %s", self.area)
                         # Ensure the cached data is marked correctly
                         cached_data["using_cached_data"] = True
+                        cached_data["next_fetch_allowed_in_seconds"] = round(next_fetch_allowed_in_seconds, 1)
                         
                         # Check if the cached data is already processed
                         # (processed data has hourly_prices but not hourly_raw)

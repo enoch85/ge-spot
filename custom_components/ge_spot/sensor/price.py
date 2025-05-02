@@ -74,40 +74,16 @@ class PriceValueSensor(BaseElectricityPriceSensor):
 
         # Add formatted timestamps with prices for current price sensor
         if self._sensor_type == "current_price" and self.coordinator.data:
-            if "adapter" in self.coordinator.data and hasattr(self.coordinator.data["adapter"], "get_prices_with_timestamps"):
-                adapter = self.coordinator.data["adapter"]
+            # Use processed hourly prices from coordinator data
+            today_prices = self.coordinator.data.get("hourly_prices")
+            if today_prices:
+                attrs["today_with_timestamps"] = self._format_timestamp_display(today_prices)
 
-                # Get today prices with timestamps
-                today_prices = adapter.get_prices_with_timestamps(0)
-                # Format for display
-                if today_prices:
-                    attrs["today_with_timestamps"] = self._format_timestamp_display(today_prices)
-
-                # Add tomorrow prices with timestamps if available
-                if adapter.is_tomorrow_valid():
-                    tomorrow_prices = adapter.get_prices_with_timestamps(1)
-                    if tomorrow_prices:
-                        attrs["tomorrow_with_timestamps"] = self._format_timestamp_display(tomorrow_prices)
-
-                # Add fallback API data if available
-                if "fallback_adapters" in self.coordinator.data:
-                    fallback_adapters = self.coordinator.data["fallback_adapters"]
-                    for source, fb_adapter in fallback_adapters.items():
-                        if hasattr(fb_adapter, "get_prices_with_timestamps"):
-                            # Add today prices from fallback source
-                            today_fb_prices = fb_adapter.get_prices_with_timestamps(0)
-                            if today_fb_prices:
-                                attrs[f"today_{source}_with_timestamps"] = self._format_timestamp_display(today_fb_prices)
-
-                            # Add tomorrow prices from fallback source if available
-                            if fb_adapter.is_tomorrow_valid():
-                                tomorrow_fb_prices = fb_adapter.get_prices_with_timestamps(1)
-                                if tomorrow_fb_prices:
-                                    attrs[f"tomorrow_{source}_with_timestamps"] = self._format_timestamp_display(tomorrow_fb_prices)
-
-                # Remove raw price list
-                attrs.pop("today", None)
-                attrs.pop("tomorrow", None)
+            # Add tomorrow prices if valid and available
+            if self.coordinator.data.get("tomorrow_valid", False):
+                tomorrow_prices = self.coordinator.data.get("tomorrow_hourly_prices")
+                if tomorrow_prices:
+                    attrs["tomorrow_with_timestamps"] = self._format_timestamp_display(tomorrow_prices)
 
         # Add additional attributes if provided
         if self._additional_attrs and self.coordinator.data:

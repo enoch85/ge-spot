@@ -19,8 +19,8 @@ from .price import (
     ExtremaPriceSensor,
     PriceDifferenceSensor,
     PricePercentSensor,
-    TomorrowAveragePriceSensor,  # Added
-    TomorrowExtremaPriceSensor   # Added
+    TomorrowAveragePriceSensor,
+    TomorrowExtremaPriceSensor
 )
 
 from ..const.attributes import Attributes
@@ -105,7 +105,8 @@ async def async_setup_entry(
             config_data, # Pass config_data
             f"{coordinator.area}_average_price",
             "Average Price",
-            "average"
+            "average",
+            additional_attrs=get_base_attrs # Add tomorrow_valid attribute
         )
     )
 
@@ -116,7 +117,8 @@ async def async_setup_entry(
             config_data, # Pass the correctly populated config_data
             f"{coordinator.area}_peak_price",
             "Peak Price",
-            extrema_type="max" # Pass as keyword argument
+            extrema_type="max", # Pass as keyword argument
+            additional_attrs=get_base_attrs # Add tomorrow_valid attribute
         )
     )
 
@@ -127,7 +129,8 @@ async def async_setup_entry(
             config_data, # Pass the correctly populated config_data
             f"{coordinator.area}_off_peak_price",
             "Off-Peak Price",
-            extrema_type="min" # Pass as keyword argument
+            extrema_type="min", # Pass as keyword argument
+            additional_attrs=get_base_attrs # Add tomorrow_valid attribute
         )
     )
 
@@ -167,7 +170,7 @@ async def async_setup_entry(
             f"{coordinator.area}_tomorrow_average_price",
             "Tomorrow Average Price",
             get_tomorrow_avg_price, # Pass the function
-            None # No specific additional attributes needed here yet
+            additional_attrs=get_base_attrs # Add tomorrow_valid attribute
         )
     )
 
@@ -179,7 +182,8 @@ async def async_setup_entry(
             f"{coordinator.area}_tomorrow_peak_price",
             "Tomorrow Peak Price",
             day_offset=1,       # Specify tomorrow
-            extrema_type="max"  # Specify peak
+            extrema_type="max",  # Specify peak
+            additional_attrs=get_base_attrs # Add tomorrow_valid attribute
         )
     )
 
@@ -191,7 +195,8 @@ async def async_setup_entry(
             f"{coordinator.area}_tomorrow_off_peak_price",
             "Tomorrow Off-Peak Price",
             day_offset=1,       # Specify tomorrow
-            extrema_type="min"  # Specify off-peak
+            extrema_type="min",  # Specify off-peak
+            additional_attrs=get_base_attrs # Add tomorrow_valid attribute
         )
     )
     # --- End Tomorrow Sensors ---

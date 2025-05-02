@@ -15,6 +15,7 @@ from ..const.config import Config
 from ..const.currencies import Currency, CurrencyInfo
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit # Ensure DisplayUnit is imported
+from ..const.network import Network # Import Network
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -134,6 +135,13 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Add API key status if available
         if "api_key_status" in self.coordinator.data:
             source_info["api_key_status"] = self.coordinator.data["api_key_status"]
+
+        # Add rate limit info (minimum interval)
+        source_info["rate_limit_interval_seconds"] = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES * 60
+
+        # Add remaining time if currently rate limited
+        if "next_fetch_allowed_in_seconds" in self.coordinator.data:
+            source_info["next_fetch_allowed_in_seconds"] = self.coordinator.data["next_fetch_allowed_in_seconds"]
 
         # Only add source_info if it contains data
         if source_info:
