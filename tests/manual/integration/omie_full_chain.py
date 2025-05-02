@@ -38,7 +38,8 @@ from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
 from custom_components.ge_spot.timezone.service import TimezoneService
-from custom_components.ge_spot.timezone.timezone_converter import TimezoneConverter
+from custom_components.ge_spot.const.config import Config # Added import
+from custom_components.ge_spot.const.time import TimezoneReference # Added import
 
 # OMIE areas and their corresponding timezones
 OMIE_AREA_TIMEZONES = {
@@ -91,10 +92,9 @@ async def main():
     
     # Initialize timezone service based on area
     logger.info("Setting up timezone service...")
-    tz_config = {"timezone_reference": "area"} # Assuming area dictates timezone
-    tz_service = TimezoneService(area=area, config=tz_config, fixed_timezone=local_tz_name)
-    tz_converter = TimezoneConverter(tz_service)
-    logger.info(f"Timezone service initialized for area: {area} using {local_tz_name}")
+    tz_config = {Config.TIMEZONE_REFERENCE: TimezoneReference.LOCAL_AREA} 
+    tz_service = TimezoneService(hass=None, area=area, config=tz_config) # Correct initialization
+    logger.info(f"Timezone service initialized for area: {area} using target timezone: {tz_service.target_timezone}")
 
     # Initialize the API client
     api = OmieAPI(config={}) # OMIE API might not need specific config
@@ -121,9 +121,9 @@ async def main():
                  log_data[k] = v
         logger.debug(f"Raw data content (summary): {json.dumps(log_data, indent=2)}")
         
-        # Step 2: Parse raw data
-        logger.info("\nParsing raw data...")
-        parsed_data = await api.parse_raw_data(raw_data)
+        # Step 2: Use the already parsed data from fetch step
+        logger.info("\nUsing parsed data from fetch step...")
+        parsed_data = raw_data # Use the result from fetch directly
         
         logger.debug(f"Parsed data keys: {list(parsed_data.keys())}")
         logger.info(f"Source: {parsed_data.get('source_name', parsed_data.get('source'))}")
@@ -149,11 +149,11 @@ async def main():
 
         # Step 3: Normalize Timezones
         logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
-        # Use the timezone converter
-        normalized_prices = tz_converter.normalize_hourly_prices(
+        # Use the timezone converter instance via the service
+        normalized_prices = tz_service.converter.normalize_hourly_prices(
             hourly_prices=hourly_raw_prices,
             source_timezone_str=source_timezone,
-            preserve_date=True # Keep original date context
+            preserve_date=True # Ensure date is included in keys for split_into_today_tomorrow
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
         logger.debug(f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}")
@@ -182,9 +182,8 @@ async def main():
         logger.info(f"Converted Unit: {target_currency}/kWh")
         
         # Split into today/tomorrow based on the *local* target date
-        today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(
-            normalized_prices, 
-            target_date=target_date # Pass the target date explicitly
+        today_prices, tomorrow_prices = tz_service.converter.split_into_today_tomorrow(
+            normalized_prices
         )
         
         all_display_prices = {**today_prices, **tomorrow_prices}

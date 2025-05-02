@@ -98,14 +98,16 @@ class OmieAPI(BasePriceAPI):
             combined_hourly_prices = {}
             
             if csv_today and isinstance(csv_today, str) and csv_today.strip():
-                parsed_today = parser.parse({"raw_data": csv_today, "target_date": today})
-                if parsed_today and "hourly_prices" in parsed_today:
-                    combined_hourly_prices.update(parsed_today["hourly_prices"])
+                parsed_today = parser.parse({"raw_data": csv_today, "target_date": today, "area": area}) # Pass area
+                # Use 'hourly_raw' key from parser result
+                if parsed_today and "hourly_raw" in parsed_today:
+                    combined_hourly_prices.update(parsed_today["hourly_raw"])
             
             if csv_tomorrow and isinstance(csv_tomorrow, str) and csv_tomorrow.strip():
-                parsed_tomorrow = parser.parse({"raw_data": csv_tomorrow, "target_date": tomorrow})
-                if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
-                    combined_hourly_prices.update(parsed_tomorrow["hourly_prices"])
+                parsed_tomorrow = parser.parse({"raw_data": csv_tomorrow, "target_date": tomorrow, "area": area}) # Pass area
+                # Use 'hourly_raw' key from parser result
+                if parsed_tomorrow and "hourly_raw" in parsed_tomorrow:
+                    combined_hourly_prices.update(parsed_tomorrow["hourly_raw"])
             
             # Return standardized data structure with ISO timestamps
             return {
