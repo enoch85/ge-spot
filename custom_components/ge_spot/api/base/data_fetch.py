@@ -8,6 +8,7 @@ from ...const.sources import Source
 from .error_handler import ErrorHandler
 from .base_price_api import BasePriceAPI
 from .data_structure import StandardizedPriceData, create_standardized_price_data
+from ...utils.advanced_cache import AdvancedCache
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,8 +123,11 @@ class PriceDataFetcher:
     def __init__(self):
         """Initialize the price data fetcher."""
         self.error_handler = ErrorHandler("PriceDataFetcher")
-        self.cache = {}  # Simple memory cache for last successful results
-    
+        # Replace simple dict with AdvancedCache (using defaults, no persistence)
+        # Note: Persistence requires hass and config, which aren't available here.
+        # Max entries and default TTL will use defaults from AdvancedCache.
+        self.cache = AdvancedCache()
+
     async def fetch_with_fallback(
         self,
         sources: List[Union[BasePriceAPI, Type[BasePriceAPI]]],
@@ -134,7 +138,7 @@ class PriceDataFetcher:
         session=None,
         vat: Optional[float] = None,
         include_vat: bool = False,
-        cache_expiry_hours: Optional[float] = None,
+        cache_expiry_hours: Optional[float] = None,  # Keep this parameter for TTL
         **kwargs
     ) -> Dict[str, Any]:
         """Fetch data from multiple sources with fallback.
@@ -148,7 +152,7 @@ class PriceDataFetcher:
             session: Optional session
             vat: Optional VAT rate
             include_vat: Whether to include VAT
-            cache_expiry_hours: Optional cache expiry time in hours
+            cache_expiry_hours: Optional cache expiry time in hours (used for TTL)
             **kwargs: Additional parameters
             
         Returns:
@@ -209,11 +213,13 @@ class PriceDataFetcher:
                     
                     # Store in cache for future use
                     cache_key = f"{area}_{currency}"
-                    self.cache[cache_key] = {
-                        "data": source_result,
-                        "timestamp": datetime.now(timezone.utc).timestamp(),
-                        "source": source_name
-                    }
+                    # Use cache.set() with TTL from cache_expiry_hours or AdvancedCache default
+                    ttl_seconds = None
+                    if cache_expiry_hours is not None:
+                        ttl_seconds = int(cache_expiry_hours * 3600)
+                    
+                    # Store the actual data, not a dict containing data/timestamp/source
+                    self.cache.set(cache_key, source_result, ttl=ttl_seconds, metadata={"source": source_name})
                     
                     # Use this result
                     result = source_result
@@ -235,35 +241,26 @@ class PriceDataFetcher:
         # If all sources failed, try to use cached data
         if result is None:
             cache_key = f"{area}_{currency}"
-            cached = self.cache.get(cache_key)
+            # Use cache.get() which handles expiration automatically
+            cached_data = self.cache.get(cache_key)
             
-            if cached:
-                # Check if cache is not too old
-                max_cache_age = 6 * 60 * 60  # Default 6 hours in seconds
+            if cached_data:
+                # Get source info from metadata if needed
+                # Use a temporary dict to avoid errors if entry is gone between get() and get_info()
+                cache_info = self.cache.get_info()
+                entry_info = cache_info.get("entries", {}).get(cache_key, {})
+                cached_source = entry_info.get("metadata", {}).get("source", "unknown_cached")
+                cache_age_seconds = entry_info.get("age", 0)
                 
-                # Override with provided cache expiry if available
-                if cache_expiry_hours is not None:
-                    max_cache_age = cache_expiry_hours * 60 * 60
-                
-                cache_age = datetime.now(timezone.utc).timestamp() - cached["timestamp"]
-                
-                if cache_age <= max_cache_age:
-                    _LOGGER.warning(
-                        f"All sources failed for area {area}, using cached data from {cached['source']} "
-                        f"({int(cache_age / 60)} minutes old)"
-                    )
-                    result = cached["data"]
-                    using_cached_data = True
-                    successful_source = f"{cached['source']} (cached)"
-                else:
-                    _LOGGER.error(
-                        f"All sources failed for area {area} and cache is too old "
-                        f"({int(cache_age / 60)} minutes, max {int(max_cache_age / 60)} minutes)"
-                    )
-                    # Return an empty result structure in this case
-                    result = self._create_empty_result(area, currency, "All sources failed and cache expired")
+                _LOGGER.warning(
+                    f"All sources failed for area {area}, using cached data from {cached_source} "
+                    f"({int(cache_age_seconds / 60)} minutes old)"
+                )
+                result = cached_data
+                using_cached_data = True
+                successful_source = f"{cached_source} (cached)"
             else:
-                _LOGGER.error(f"All sources failed for area {area} and no cache available")
+                _LOGGER.error(f"All sources failed for area {area} and no valid cache available")
                 # Return an empty result structure
                 result = self._create_empty_result(area, currency, "All sources failed and no cache available")
         
@@ -387,105 +384,22 @@ class PriceDataFetcher:
         
         return results
     
-    def clear_cache(self, area: Optional[str] = None, older_than: Optional[float] = None):
-        """Clear cached data.
-        
-        Args:
-            area: Optional area code to clear cache for specific area
-            older_than: Optional timestamp to clear only older entries
-        """
-        # If area is specified, clear only that area
-        if area:
-            keys_to_clear = [key for key in self.cache.keys() if key.startswith(f"{area}_")]
-            
-            # If older_than is specified, only clear old entries
-            if older_than:
-                now = datetime.now(timezone.utc).timestamp()
-                keys_to_clear = [
-                    key for key in keys_to_clear 
-                    if now - self.cache[key]["timestamp"] > older_than
-                ]
-            
-            # Clear the specified keys
-            for key in keys_to_clear:
-                del self.cache[key]
-            
-            _LOGGER.debug(f"Cleared {len(keys_to_clear)} cache entries for area {area}")
-        
-        # If no area specified, clear all cache
-        else:
-            # If older_than is specified, only clear old entries
-            if older_than:
-                now = datetime.now(timezone.utc).timestamp()
-                keys_to_clear = [
-                    key for key in self.cache.keys() 
-                    if now - self.cache[key]["timestamp"] > older_than
-                ]
-                
-                # Clear the specified keys
-                for key in keys_to_clear:
-                    del self.cache[key]
-                
-                _LOGGER.debug(f"Cleared {len(keys_to_clear)} old cache entries")
-            
-            # Otherwise clear everything
-            else:
-                old_count = len(self.cache)
-                self.cache.clear()
-                _LOGGER.debug(f"Cleared all {old_count} cache entries")
+    def clear_cache(self):
+        """Clear all cached data."""
+        # Simplify to just clear the whole cache
+        # Get count before clearing if possible (accessing internal _cache)
+        try:
+            old_count = len(self.cache._cache)
+        except AttributeError:
+            old_count = 'unknown'
+        self.cache.clear()
+        _LOGGER.debug(f"Cleared {old_count} cache entries")
     
     def get_cache_stats(self) -> Dict[str, Any]:
-        """Get statistics about the cache.
-        
+        """Get statistics about the cache using AdvancedCache.get_info().
+
         Returns:
-            Dictionary with cache statistics
+            Dictionary with cache statistics from AdvancedCache
         """
-        stats = {
-            "cache_size": len(self.cache),
-            "areas": set(),
-            "sources": set(),
-            "oldest_entry": None,
-            "newest_entry": None,
-            "average_age": None
-        }
-        
-        if not self.cache:
-            return stats
-        
-        now = datetime.now(timezone.utc).timestamp()
-        all_ages = []
-        
-        for key, entry in self.cache.items():
-            # Extract area from key (format: "area_currency")
-            area = key.split("_")[0]
-            stats["areas"].add(area)
-            
-            # Add source
-            stats["sources"].add(entry["source"])
-            
-            # Calculate age
-            age = now - entry["timestamp"]
-            all_ages.append(age)
-            
-            # Update oldest/newest
-            if stats["oldest_entry"] is None or age > stats["oldest_entry"]:
-                stats["oldest_entry"] = age
-                
-            if stats["newest_entry"] is None or age < stats["newest_entry"]:
-                stats["newest_entry"] = age
-        
-        # Calculate average age
-        if all_ages:
-            stats["average_age"] = sum(all_ages) / len(all_ages)
-        
-        # Convert to nicer format
-        if stats["oldest_entry"] is not None:
-            stats["oldest_entry_minutes"] = int(stats["oldest_entry"] / 60)
-            
-        if stats["newest_entry"] is not None:
-            stats["newest_entry_minutes"] = int(stats["newest_entry"] / 60)
-            
-        if stats["average_age"] is not None:
-            stats["average_age_minutes"] = int(stats["average_age"] / 60)
-        
-        return stats
+        # Use the get_info method from AdvancedCache
+        return self.cache.get_info()
