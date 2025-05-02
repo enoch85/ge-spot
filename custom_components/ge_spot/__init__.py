@@ -23,8 +23,7 @@ from .price.currency_service import get_default_currency
 PLATFORMS = [Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)
 
-# Use feature flag to enable new coordinator
-USE_UNIFIED_COORDINATOR = True
+# UnifiedPriceCoordinator is the sole supported approach; legacy coordinator has been removed.
 
 async def async_setup(hass: HomeAssistant, config):  # pylint: disable=unused-argument
     """Set up the GE-Spot component."""
