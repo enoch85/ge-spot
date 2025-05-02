@@ -94,7 +94,8 @@ async def main():
     logger.info("Setting up timezone service...")
     tz_config = {Config.TIMEZONE_REFERENCE: TimezoneReference.LOCAL_AREA} 
     tz_service = TimezoneService(hass=None, area=area, config=tz_config) # Correct initialization
-    logger.info(f"Timezone service initialized for area: {area} using target timezone: {tz_service.target_timezone}")
+    # Use str() to correctly log the timezone name
+    logger.info(f"Timezone service initialized for area: {area} using target timezone: {str(tz_service.target_timezone)}")
 
     # Initialize the API client
     api = OmieAPI(config={}) # OMIE API might not need specific config

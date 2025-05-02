@@ -61,9 +61,9 @@ class TimezoneService:
 
 
         # Initialize component classes
-        # Pass the determined target_timezone to the converter
         self.parser = TimestampParser()
-        self.converter = TimezoneConverter(self.target_timezone) # Use target_timezone for converter init
+        # Pass self (the TimezoneService instance) to the converter
+        self.converter = TimezoneConverter(self) 
         self.dst_handler = DSTHandler(self.target_timezone) # Use target_timezone for DST handler
 
         # Determine which timezone to use for hour calculation based on the timezone reference
