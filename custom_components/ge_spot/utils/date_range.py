@@ -29,8 +29,8 @@ def generate_date_ranges(
         interval: Time interval (hourly, quarter-hourly, etc.)
         include_historical: Whether to include historical ranges
         include_future: Whether to include future ranges
-        max_days_back: Maximum days to look back
-        max_days_forward: Maximum days to look ahead
+        max_days_back: Maximum days to look back (used for specific sources and fallback)
+        max_days_forward: Maximum days to look ahead (used for specific sources and fallback)
 
     Returns:
         List of (start_time, end_time) tuples to try in order
@@ -51,7 +51,7 @@ def generate_date_ranges(
         if source_type in [Source.AEMO, Source.COMED]:
             # These sources sometimes need more historical data
             date_ranges.append(
-                (reference_time - timedelta(days=max_days_back), reference_time)
+                (reference_time - timedelta(days=2), reference_time)
             )
 
     # Add future ranges if requested
@@ -64,14 +64,24 @@ def generate_date_ranges(
         # Add more future ranges for sources that provide forecasts
         if source_type in [Source.NORDPOOL, Source.ENTSOE]:
             date_ranges.append(
-                (reference_time, reference_time + timedelta(days=max_days_forward))
+                (reference_time, reference_time + timedelta(days=2))
             )
 
-    # Add wider range as a fallback
+    # Add wider range as a fallback, using the function arguments
     date_ranges.append(
         (reference_time - timedelta(days=max_days_back),
          reference_time + timedelta(days=max_days_forward))
     )
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_ranges = []
+    for item in date_ranges:
+        item_str = str(item)
+        if item_str not in seen:
+            unique_ranges.append(item)
+            seen.add(item_str)
+    date_ranges = unique_ranges
 
     # Handle special cases for specific APIs with non-hourly intervals
     if interval != TimeInterval.HOURLY or source_type in [Source.AEMO, Source.COMED]:

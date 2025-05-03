@@ -10,7 +10,9 @@ from ..utils.debug_utils import log_rate_limiting
 _LOGGER = logging.getLogger(__name__)
 
 class RateLimiter:
-    """Shared rate limiting logic for API requests."""
+    def __init__(self, identifier=None):
+        """Initialize the RateLimiter with an optional identifier."""
+        self.identifier = identifier
 
     @staticmethod
     def should_skip_fetch(

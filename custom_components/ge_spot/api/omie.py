@@ -1,253 +1,139 @@
-"""API handler for OMIE (Operador del Mercado Ibérico de Energía)."""
+"""OMIE API client."""
 import logging
-from datetime import datetime, timezone, timedelta, time
-import csv
-import io
+from datetime import datetime, timezone, timedelta
+import aiohttp
 from typing import Dict, Any, Optional
 
-from ..utils.api_client import ApiClient
-from ..price.conversion import async_convert_energy_price
-from ..timezone import TimezoneService
-from ..const.sources import Source
-from ..const.config import Config
-from ..const.display import DisplayUnit
-from ..const.currencies import Currency
-from ..const.energy import EnergyUnit
-from ..const.api import Omie
+from .base.base_price_api import BasePriceAPI
 from .parsers.omie_parser import OmieParser
+from ..const.sources import Source
+from .base.api_client import ApiClient
+from ..const.network import Network
+from ..const.currencies import Currency
+from ..const.time import TimezoneName
 from ..utils.date_range import generate_date_ranges
 
 _LOGGER = logging.getLogger(__name__)
 
-# Base URL template
 BASE_URL_TEMPLATE = "https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{day}_{month}_{year}_{day}_{month}_{year}.TXT"
 
-async def fetch_day_ahead_prices(source_type, config, area, currency, reference_time=None, hass=None, session=None):
-    """Fetch day-ahead prices using OMIE API."""
-    client = ApiClient(session=session)
-    try:
-        # Settings
-        use_subunit = config.get(Config.DISPLAY_UNIT) == DisplayUnit.CENTS
-        vat = config.get(Config.VAT, 0)
+class OmieAPI(BasePriceAPI):
+    """OMIE API client - Fetches data directly from OMIE text files."""
 
-        # Fetch raw data
-        raw_data = await _fetch_data(client, config, area, reference_time)
-        if not raw_data:
-            return None
+    def __init__(self, config: Optional[Dict[str, Any]] = None, session: Optional[aiohttp.ClientSession] = None, timezone_service=None):
+        """Initialize the API client.
 
-        # Process data
-        result = await _process_data(raw_data, area, currency, vat, use_subunit, reference_time, hass, session, config)
+        Args:
+            config: Configuration dictionary
+            session: aiohttp client session
+            timezone_service: Timezone service instance
+        """
+        super().__init__(config, session, timezone_service)
 
-        # Add metadata
-        if result:
-            result["data_source"] = "OMIE"
-            result["last_updated"] = datetime.now(timezone.utc).isoformat()
-            result["currency"] = currency
+    def _get_source_type(self) -> str:
+        """Get the source type for this API.
 
-        return result
-    finally:
-        if not session and client:
-            await client.close()
+        Returns:
+            Source type string
+        """
+        return Source.OMIE
 
-async def _fetch_data(client, config, area, reference_time):
-    """Fetch data from OMIE."""
-    try:
-        # Get proper date in the local timezone of the area (ES/PT)
-        if reference_time is None:
-            reference_time = datetime.now(timezone.utc)
+    def _get_base_url(self) -> str:
+        """Get the base URL template for API requests.
 
-        # Generate date ranges to try
-        date_ranges = generate_date_ranges(reference_time, Source.OMIE)
+        Returns:
+            Base URL template string
+        """
+        return BASE_URL_TEMPLATE
 
-        # Try each date range until we get a valid response
-        for start_date, end_date in date_ranges:
-            # OMIE uses the start date for its files
-            target_date = start_date.date()
-            year = str(target_date.year)
-            month = str.zfill(str(target_date.month), 2)
-            day = str.zfill(str(target_date.day), 2)
+    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Optional[Dict[str, Any]]:
+        """Fetch raw price data for the given area by trying date-specific file URLs.
 
-            # Build OMIE URL using template
-            url = BASE_URL_TEMPLATE.format(
-                year=year, month=month, day=day
+        Args:
+            area: Area code (e.g., ES or PT)
+            session: Optional session for API requests
+            **kwargs: Additional parameters
+
+        Returns:
+            Raw data from API or None if no valid data found
+        """
+        reference_time = kwargs.get('reference_time', datetime.now(timezone.utc))
+
+        client = ApiClient(session=session or self.session)
+        try:
+            date_ranges = generate_date_ranges(
+                reference_time,
+                source_type=Source.OMIE,
+                include_future=False,
+                max_days_back=1
             )
 
-            _LOGGER.debug(f"Fetching OMIE data from URL: {url}")
+            for start_date, _ in date_ranges:
+                target_date = start_date.date()
+                year = str(target_date.year)
+                month = str.zfill(str(target_date.month), 2)
+                day = str.zfill(str(target_date.day), 2)
 
-            # Fetch data with built-in retry mechanism - use ISO-8859-1 encoding for Spanish/Portuguese characters
-            response = await client.fetch(url, timeout=30, encoding='iso-8859-1')
+                url = self._get_base_url().format(
+                    year=year, month=month, day=day
+                )
+                _LOGGER.debug(f"[OmieAPI] Attempting to fetch OMIE data from URL: {url}")
 
-            # OMIE returns HTML for non-existent files rather than 404
-            if not response:
-                _LOGGER.warning(f"No response from OMIE for {day}_{month}_{year}, trying next date range")
-                continue
+                response_text = await client.fetch(
+                    url,
+                    timeout=Network.Defaults.TIMEOUT,
+                    encoding='iso-8859-1',
+                    response_format='text'
+                )
 
-            if isinstance(response, str) and ("<html" in response.lower() or "<!doctype" in response.lower()):
-                _LOGGER.warning(f"HTML response from OMIE for {day}_{month}_{year}, likely data not available yet, trying next date range")
-                continue
+                if isinstance(response_text, dict) and response_text.get("error"):
+                    _LOGGER.warning(f"[OmieAPI] Client error fetching {url}: {response_text.get('message')}")
+                    continue
 
-            # If we got a valid response, return it
-            _LOGGER.info(f"Successfully fetched OMIE data for {day}_{month}_{year}")
-            return {
-                "raw_data": response,
-                "date_str": f"{day}_{month}_{year}",
-                "target_date": target_date,
-                "url": url
-            }
+                if not response_text or isinstance(response_text, str) and ("<html" in response_text.lower() or "<!doctype" in response_text.lower()):
+                    _LOGGER.debug(f"[OmieAPI] No valid data or HTML response from OMIE for {day}_{month}_{year}, trying next date.")
+                    continue
 
-        # If we've tried all date ranges and still have no data, log a warning
-        _LOGGER.warning("No valid data found from OMIE after trying multiple date ranges")
-        return None
-    except Exception as e:
-        _LOGGER.error(f"Failed to fetch data from OMIE: {e}")
-        return None
+                _LOGGER.info(f"[OmieAPI] Successfully fetched OMIE data for {day}_{month}_{year}")
+                return {
+                    "raw_data": response_text,
+                    "area": area,
+                    "timezone": self.get_timezone_for_area(area),
+                    "url": url,
+                    "target_date": target_date.isoformat()
+                }
 
-async def _process_data(data, area, currency, vat, use_subunit, reference_time, hass, session, config):
-    """Process data from OMIE."""
-    if not data or "raw_data" not in data:
-        return None
-
-    try:
-        # Get current time
-        now = reference_time or datetime.now(timezone.utc)
-
-        # Initialize timezone service with area and config to use area-specific timezone
-        tz_service = TimezoneService(hass, area, config)
-        _LOGGER.debug(f"Initialized TimezoneService for area {area} with timezone {tz_service.area_timezone or tz_service.ha_timezone}")
-
-        # Extract source timezone from OMIE data or use default
-        source_timezone = tz_service.extract_source_timezone(data, Source.OMIE)
-
-        if hass:
-            now = tz_service.convert_to_ha_timezone(now)
-
-        # Initialize result structure
-        result = {
-            "current_price": None,
-            "next_hour_price": None,
-            "day_average_price": None,
-            "peak_price": None,
-            "off_peak_price": None,
-            "hourly_prices": {},
-            "raw_values": {},
-            "raw_prices": [],
-            "api_timezone": source_timezone  # Store API timezone for reference
-        }
-
-        try:
-            # Use the OmieParser to parse hourly prices
-            parser = OmieParser()
-
-            # Extract metadata
-            metadata = parser.extract_metadata(data)
-            api_currency = metadata.get("currency", Currency.EUR)
-
-            # Add metadata to result
-            if "date_str" in metadata:
-                result["date_str"] = metadata["date_str"]
-
-            if "target_date" in metadata:
-                result["target_date"] = metadata["target_date"]
-
-            if "url" in metadata:
-                result["url"] = metadata["url"]
-
-            # Parse hourly prices
-            raw_hourly_prices = parser.parse_hourly_prices(data, area)
-
-            # Create raw prices array for reference
-            for hour_str, price in raw_hourly_prices.items():
-                # Create a timezone-aware datetime
-                hour = int(hour_str.split(":")[0])
-                now_date = datetime.now().date()
-                hour_time = datetime.combine(now_date, time(hour=hour))
-                # Make it timezone-aware
-                hour_time = tz_service.converter.convert(hour_time, source_tz=source_timezone)
-                end_time = hour_time + timedelta(hours=1)
-
-                # Store raw price
-                result["raw_prices"].append({
-                    "start": hour_time.isoformat(),
-                    "end": end_time.isoformat(),
-                    "price": price
-                })
-
-            # Now convert hourly prices to area-specific timezone (or HA timezone) in a single step
-            if raw_hourly_prices:
-                converted_hourly_prices = tz_service.normalize_hourly_prices(
-                    raw_hourly_prices, source_timezone)
-
-                # Apply price conversions (currency, VAT, etc.)
-                for hour_str, price in converted_hourly_prices.items():
-                    # Convert price
-                    converted_price = await async_convert_energy_price(
-                        price=price,
-                        from_unit=EnergyUnit.MWH,
-                        to_unit="kWh",
-                        from_currency=api_currency,
-                        to_currency=currency,
-                        vat=vat,
-                        to_subunit=use_subunit,
-                        session=session
-                    )
-
-                    # Store hourly price
-                    result["hourly_prices"][hour_str] = converted_price
-
-                # Get current and next hour prices
-                current_hour_key = tz_service.get_current_hour_key()
-                if current_hour_key in result["hourly_prices"]:
-                    result["current_price"] = result["hourly_prices"][current_hour_key]
-                    result["raw_values"]["current_price"] = {
-                        "raw": raw_hourly_prices.get(current_hour_key),
-                        "unit": f"{api_currency}/MWh",
-                        "final": result["current_price"],
-                        "currency": currency,
-                        "vat_rate": vat
-                    }
-
-                # Calculate next hour
-                current_hour = int(current_hour_key.split(":")[0])
-                next_hour = (current_hour + 1) % 24
-                next_hour_key = f"{next_hour:02d}:00"
-
-                if next_hour_key in result["hourly_prices"]:
-                    result["next_hour_price"] = result["hourly_prices"][next_hour_key]
-                    result["raw_values"]["next_hour_price"] = {
-                        "raw": raw_hourly_prices.get(next_hour_key),
-                        "unit": f"{api_currency}/MWh",
-                        "final": result["next_hour_price"],
-                        "currency": currency,
-                        "vat_rate": vat
-                    }
-
-                # Calculate statistics
-                prices = list(result["hourly_prices"].values())
-                if prices:
-                    result["day_average_price"] = sum(prices) / len(prices)
-                    result["peak_price"] = max(prices)
-                    result["off_peak_price"] = min(prices)
-
-                    # Add raw values for stats
-                    result["raw_values"]["day_average_price"] = {
-                        "value": result["day_average_price"],
-                        "calculation": "average of all hourly prices"
-                    }
-                    result["raw_values"]["peak_price"] = {
-                        "value": result["peak_price"],
-                        "calculation": "maximum of all hourly prices"
-                    }
-                    result["raw_values"]["off_peak_price"] = {
-                        "value": result["off_peak_price"],
-                        "calculation": "minimum of all hourly prices"
-                    }
-
-        except ValueError as e:
-            _LOGGER.error(f"Error parsing OMIE data: {e}")
+            _LOGGER.warning("[OmieAPI] No valid data found from OMIE after trying relevant dates.")
             return None
 
-        return result
+        except Exception as e:
+            _LOGGER.error(f"[OmieAPI] Unexpected error fetching OMIE data: {e}", exc_info=True)
+            return None
+        finally:
+            if session is None and client:
+                await client.close()
 
-    except Exception as e:
-        _LOGGER.error(f"Error processing OMIE data: {e}", exc_info=True)
-        return None
+    def get_timezone_for_area(self, area: str) -> str:
+        """Get the timezone name string for a specific area.
+
+        Args:
+            area: Area code
+
+        Returns:
+            Timezone string
+        """
+        if area and area.upper() == "PT":
+            return TimezoneName.EUROPE_LISBON
+        else:
+            return TimezoneName.EUROPE_MADRID
+
+    def get_parser_for_area(self, area: str) -> Any:
+        """Get the appropriate parser instance.
+
+        Args:
+            area: Area code
+
+        Returns:
+            Parser instance
+        """
+        return OmieParser(timezone_service=self.timezone_service)

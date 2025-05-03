@@ -14,7 +14,8 @@ from ..const.attributes import Attributes
 from ..const.config import Config
 from ..const.currencies import Currency, CurrencyInfo
 from ..const.defaults import Defaults
-from ..const.display import DisplayUnit
+from ..const.display import DisplayUnit # Ensure DisplayUnit is imported
+from ..const.network import Network # Import Network
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,20 +28,35 @@ class BaseElectricityPriceSensor(SensorEntity):
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):
         """Initialize the base sensor."""
         self.coordinator = coordinator
+        if not isinstance(config_data, dict):
+            raise TypeError("config_data must be a dictionary")
         self._area = config_data.get(Attributes.AREA)
         self._vat = config_data.get(Attributes.VAT, 0)
         self._precision = config_data.get("precision", 3)
         self._sensor_type = sensor_type
 
         # Display settings
-        self._display_unit = coordinator.display_unit
-        self._use_subunit = coordinator.use_subunit
+        self._display_unit = config_data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT) # Get from config_data
+        # Determine if subunit should be used based on the display_unit setting
+        self._use_subunit = self._display_unit == DisplayUnit.CENTS # Correctly determine based on _display_unit
         self._currency = config_data.get(Attributes.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(self._area))
 
         # Create entity ID and name
-        self.entity_id = f"sensor.gespot_{sensor_type.lower()}_{self._area.lower()}"
-        self._attr_name = f"GE-Spot {name_suffix} {self._area}"
-        self._attr_unique_id = f"gespot_{sensor_type}_{self._area}".lower()
+        if self._area:
+            area_lower = self._area.lower()
+            self.entity_id = f"sensor.gespot_{sensor_type.lower()}_{area_lower}"
+            self._attr_name = f"GE-Spot {name_suffix} {self._area}"
+            self._attr_unique_id = f"gespot_{sensor_type}_{area_lower}"
+        else:
+            # Log an error and potentially set default/invalid values or raise to prevent setup
+            _LOGGER.error("Area is not configured or is None. Cannot create sensor entity.")
+            # Option 1: Set dummy values (might hide the config issue)
+            # self.entity_id = f"sensor.gespot_{sensor_type.lower()}_invalid_area"
+            # self._attr_name = f"GE-Spot {name_suffix} (Invalid Area)"
+            # self._attr_unique_id = f"gespot_{sensor_type}_invalid_area"
+            # Option 2: Raise an error to clearly signal failed setup (might be better)
+            raise ValueError("Area configuration is missing, cannot initialize sensor.")
+
 
         # Set unit based on display_unit configuration
         if self._use_subunit:
@@ -69,62 +85,100 @@ class BaseElectricityPriceSensor(SensorEntity):
             "vat": f"{self._vat * 100:.0f}%",
             "display_unit": self._display_unit,
             "use_subunit": self._use_subunit,
-            "data_source": self.coordinator.data.get("source", "unknown"),
+            # Corrected: Use 'data_source' from coordinator data
+            "data_source": self.coordinator.data.get("data_source", "unknown"),
         }
 
         # Add timestamps if available
-        if "last_updated" in self.coordinator.data:
-            attrs["last_updated"] = self.coordinator.data["last_updated"]
+        # Corrected: Use 'last_update' key
+        if "last_update" in self.coordinator.data:
+            attrs["last_updated"] = self.coordinator.data["last_update"]
 
-        if "last_api_fetch" in self.coordinator.data:
-            attrs["last_api_fetch"] = self.coordinator.data["last_api_fetch"]
+        # Corrected: Use 'last_fetch_attempt' key
+        if "last_fetch_attempt" in self.coordinator.data:
+            attrs["last_api_fetch"] = self.coordinator.data["last_fetch_attempt"]
 
-        if "next_update" in self.coordinator.data:
-            attrs["next_update"] = self.coordinator.data["next_update"]
-
-        # Add raw value if available for current hour only
-        if "raw_values" in self.coordinator.data and self._sensor_type in self.coordinator.data["raw_values"]:
-            raw_info = self.coordinator.data["raw_values"][self._sensor_type]
-            if isinstance(raw_info, dict) and "raw" in raw_info:
-                attrs["raw_value"] = raw_info["raw"]
-                attrs["raw_unit"] = raw_info.get("unit")
-
-        # Add source info dictionary
+        # Add source info dictionary (logic previously updated)
         source_info = {}
+        active_source = self.coordinator.data.get("data_source")
+        attempted_sources = self.coordinator.data.get("attempted_sources")
+        primary_source = None
 
-        # Only add these if they exist
-        if "active_source" in self.coordinator.data:
-            source_info["active_source"] = self.coordinator.data["active_source"]
+        # Infer primary source from attempted_sources if available
+        if attempted_sources and isinstance(attempted_sources, list) and len(attempted_sources) > 0:
+            primary_source = attempted_sources[0]
+            source_info["primary_source"] = primary_source # Add inferred primary source
 
-        if "attempted_sources" in self.coordinator.data:
-            source_info["attempted_sources"] = self.coordinator.data["attempted_sources"]
+        if active_source:
+            source_info["active_source"] = active_source # Use data_source as active_source
 
-        if "source" in self.coordinator.data:
-            source_info["primary_source"] = self.coordinator.data["source"]
+        if attempted_sources:
+            source_info["attempted_sources"] = attempted_sources
 
-        # Calculate fallback status if we have both values
-        if "active_source" in self.coordinator.data and "source" in self.coordinator.data:
-            source_info["is_using_fallback"] = self.coordinator.data["active_source"] != self.coordinator.data["source"]
+        # Calculate fallback status using inferred primary and active source
+        if primary_source and active_source:
+            source_info["is_using_fallback"] = (active_source != primary_source) and (active_source != "None")
+        elif active_source == "None" and primary_source:
+            source_info["is_using_fallback"] = True
+        else:
+            source_info["is_using_fallback"] = False
 
-        # Add fallback sources if available
+        # Add fallback sources list if available
         if "fallback_sources" in self.coordinator.data:
-            source_info["fallback_sources"] = self.coordinator.data["fallback_sources"]
-            source_info["available_fallbacks"] = len(self.coordinator.data["fallback_sources"])
+            fallback_sources_list = self.coordinator.data["fallback_sources"]
+            source_info["fallback_sources"] = fallback_sources_list
+            source_info["available_fallbacks"] = len(fallback_sources_list)
+        else:
+             source_info["fallback_sources"] = []
+             source_info["available_fallbacks"] = 0
 
         # Add API key status if available
         if "api_key_status" in self.coordinator.data:
             source_info["api_key_status"] = self.coordinator.data["api_key_status"]
+
+        # Add rate limit info
+        source_info["rate_limit_interval_seconds"] = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES * 60
+        if "next_fetch_allowed_in_seconds" in self.coordinator.data:
+            source_info["next_fetch_allowed_in_seconds"] = self.coordinator.data["next_fetch_allowed_in_seconds"]
 
         # Only add source_info if it contains data
         if source_info:
             attrs["source_info"] = source_info
 
         # Add timezone info
-        if "ha_timezone" in self.coordinator.data:
-            attrs["ha_timezone"] = self.coordinator.data["ha_timezone"]
+        # Corrected: Use 'target_timezone' key for HA timezone
+        if "target_timezone" in self.coordinator.data:
+            attrs["ha_timezone"] = self.coordinator.data["target_timezone"]
 
-        if "api_timezone" in self.coordinator.data:
-            attrs["api_timezone"] = self.coordinator.data["api_timezone"]
+        # Corrected: Use 'source_timezone' key for API timezone
+        if "source_timezone" in self.coordinator.data:
+            attrs["api_timezone"] = self.coordinator.data["source_timezone"]
+
+        # Add hourly prices if available, rounding float values
+        if "hourly_prices" in self.coordinator.data:
+            hourly_prices = self.coordinator.data["hourly_prices"]
+            if isinstance(hourly_prices, dict):
+                attrs["hourly_prices"] = {
+                    k: round(v, 4) if isinstance(v, float) else v
+                    for k, v in hourly_prices.items()
+                }
+            else:
+                attrs["hourly_prices"] = hourly_prices # Keep original if not a dict
+
+        # Add tomorrow hourly prices if available, rounding float values
+        if "tomorrow_hourly_prices" in self.coordinator.data:
+            tomorrow_hourly_prices = self.coordinator.data["tomorrow_hourly_prices"]
+            if isinstance(tomorrow_hourly_prices, dict):
+                attrs["tomorrow_hourly_prices"] = {
+                    k: round(v, 4) if isinstance(v, float) else v
+                    for k, v in tomorrow_hourly_prices.items()
+                }
+            else:
+                attrs["tomorrow_hourly_prices"] = tomorrow_hourly_prices # Keep original if not a dict
+
+        # Add error message if available
+        if "error" in self.coordinator.data and self.coordinator.data["error"]:
+            attrs["error"] = self.coordinator.data["error"]
 
         return attrs
 

@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, Optional, Callable
 from datetime import datetime
 
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.util import dt as dt_util
 
 from .base import BaseElectricityPriceSensor
@@ -10,10 +11,22 @@ from .base import BaseElectricityPriceSensor
 _LOGGER = logging.getLogger(__name__)
 
 class PriceValueSensor(BaseElectricityPriceSensor):
-    """Generic sensor for price values with flexible data extraction."""
+    """Representation of a GE Spot price sensor."""
 
-    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value_fn, additional_attrs=None):
-        """Initialize the price value sensor."""
+    def __init__(
+        self,
+        coordinator,
+        config_data,
+        sensor_type,
+        name_suffix,
+        value_fn: Callable[[Dict[str, Any]], Optional[float]], # Added parameter
+        additional_attrs: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None # Added parameter
+    ):
+        """Initialize the sensor."""
+        # Ensure config_data is a dictionary before passing to super().__init__
+        if not isinstance(config_data, dict):
+            config_data = {"entry_id": coordinator.config_entry.entry_id}
+            
         super().__init__(coordinator, config_data, sensor_type, name_suffix)
         self._value_fn = value_fn
         self._additional_attrs = additional_attrs
@@ -23,7 +36,12 @@ class PriceValueSensor(BaseElectricityPriceSensor):
         """Return the native value of the sensor."""
         if not self.coordinator.data:
             return None
-        return self._value_fn(self.coordinator.data)
+        
+        # Return the value directly from the coordinator data via the value function.
+        # The DataProcessor/CurrencyConverter already handles subunit conversion.
+        value = self._value_fn(self.coordinator.data)
+        
+        return value
 
     def _format_timestamp_display(self, timestamp_prices):
         """Format timestamp prices for clean display in attributes."""
@@ -56,40 +74,16 @@ class PriceValueSensor(BaseElectricityPriceSensor):
 
         # Add formatted timestamps with prices for current price sensor
         if self._sensor_type == "current_price" and self.coordinator.data:
-            if "adapter" in self.coordinator.data and hasattr(self.coordinator.data["adapter"], "get_prices_with_timestamps"):
-                adapter = self.coordinator.data["adapter"]
+            # Use processed hourly prices from coordinator data
+            today_prices = self.coordinator.data.get("hourly_prices")
+            if today_prices:
+                attrs["today_with_timestamps"] = self._format_timestamp_display(today_prices)
 
-                # Get today prices with timestamps
-                today_prices = adapter.get_prices_with_timestamps(0)
-                # Format for display
-                if today_prices:
-                    attrs["today_with_timestamps"] = self._format_timestamp_display(today_prices)
-
-                # Add tomorrow prices with timestamps if available
-                if adapter.is_tomorrow_valid():
-                    tomorrow_prices = adapter.get_prices_with_timestamps(1)
-                    if tomorrow_prices:
-                        attrs["tomorrow_with_timestamps"] = self._format_timestamp_display(tomorrow_prices)
-
-                # Add fallback API data if available
-                if "fallback_adapters" in self.coordinator.data:
-                    fallback_adapters = self.coordinator.data["fallback_adapters"]
-                    for source, fb_adapter in fallback_adapters.items():
-                        if hasattr(fb_adapter, "get_prices_with_timestamps"):
-                            # Add today prices from fallback source
-                            today_fb_prices = fb_adapter.get_prices_with_timestamps(0)
-                            if today_fb_prices:
-                                attrs[f"today_{source}_with_timestamps"] = self._format_timestamp_display(today_fb_prices)
-
-                            # Add tomorrow prices from fallback source if available
-                            if fb_adapter.is_tomorrow_valid():
-                                tomorrow_fb_prices = fb_adapter.get_prices_with_timestamps(1)
-                                if tomorrow_fb_prices:
-                                    attrs[f"tomorrow_{source}_with_timestamps"] = self._format_timestamp_display(tomorrow_fb_prices)
-
-                # Remove raw price list
-                attrs.pop("today", None)
-                attrs.pop("tomorrow", None)
+            # Add tomorrow prices if valid and available
+            if self.coordinator.data.get("tomorrow_valid", False):
+                tomorrow_prices = self.coordinator.data.get("tomorrow_hourly_prices")
+                if tomorrow_prices:
+                    attrs["tomorrow_with_timestamps"] = self._format_timestamp_display(tomorrow_prices)
 
         # Add additional attributes if provided
         if self._additional_attrs and self.coordinator.data:
@@ -110,23 +104,26 @@ class ExtremaPriceSensor(PriceValueSensor):
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix, day_offset=0, extrema_type="min"):
         """Initialize the extrema price sensor."""
-        self._day_offset = day_offset  # 0 for today, 1 for tomorrow
-        self._extrema_type = extrema_type  # "min" or "max"
-        self._stats_key = "today_stats" if day_offset == 0 else "tomorrow_stats"
+        self._day_offset = day_offset
+        self._extrema_type = extrema_type
+        # Use the correct keys used by DataProcessor
+        self._stats_key = "statistics" if day_offset == 0 else "tomorrow_statistics"
 
         # Create value extraction function
         def extract_value(data):
-            if self._stats_key not in data:
-                return None
+            if self._stats_key not in data or not data[self._stats_key]: # Check if stats dict exists and is not empty
+                 _LOGGER.debug(f"Stats key '{self._stats_key}' not found or empty in data for {self.entity_id}")
+                 return None
+            stats_dict = data[self._stats_key]
             key = "min" if self._extrema_type == "min" else "max"
-            return data[self._stats_key].get(key)
+            value = stats_dict.get(key)
+            # Add specific logging for this sensor type
+            _LOGGER.debug(f"ExtremaSensor {self.entity_id}: Reading '{key}' from '{self._stats_key}'. Found value: {value}. Stats dict: {stats_dict}")
+            return value
 
         def get_timestamp(data):
             from homeassistant.util import dt as dt_util
-            if self._stats_key not in data:
-                return {}
-
-            stats = data[self._stats_key]
+            stats = data.get(self._stats_key, {}) # Use .get() for safety
             timestamp_key = f"{self._extrema_type}_timestamp"
             price_key = "min" if self._extrema_type == "min" else "max"
             price_value = stats.get(price_key)
@@ -179,3 +176,137 @@ class TomorrowExtremaPriceSensor(TomorrowSensorMixin, ExtremaPriceSensor):
 class TomorrowAveragePriceSensor(TomorrowSensorMixin, PriceValueSensor):
     """Average price sensor for tomorrow data with proper availability behavior."""
     pass
+
+
+class PriceStatisticSensor(PriceValueSensor):
+    """Sensor for price statistics (average, min, max)."""
+    device_class    = SensorDeviceClass.MONETARY
+    state_class     = SensorStateClass.TOTAL  # Changed from MEASUREMENT to TOTAL for HA compliance
+
+    def __init__(self, coordinator, config_data, sensor_type, name_suffix, stat_type):
+        """Initialize the price statistic sensor."""
+        # Create value extraction function
+        def extract_value(data):
+            # Use .get() for safety and the correct key "statistics"
+            stats = data.get("statistics", {}) 
+            if not stats:
+                _LOGGER.debug(f"PriceStatisticSensor {self.entity_id}: 'statistics' dictionary not found or empty in data.")
+                return None
+            value = stats.get(stat_type)
+            _LOGGER.debug(f"PriceStatisticSensor {self.entity_id}: Reading '{stat_type}' from 'statistics'. Found value: {value}. Stats dict: {stats}")
+            return value
+
+        # Initialize parent class, passing the full config_data
+        super().__init__(
+            coordinator,
+            config_data, # Pass the full config_data
+            sensor_type,
+            name_suffix,
+            extract_value,
+            None
+        )
+        self._stat_type = stat_type
+
+    # Add this property to inherit unit logic from base class
+    @property
+    def native_unit_of_measurement(self):
+        return super().native_unit_of_measurement
+
+
+class PriceDifferenceSensor(PriceValueSensor):
+    """Sensor for price difference between two values."""
+    device_class    = SensorDeviceClass.MONETARY
+    state_class     = SensorStateClass.TOTAL  # Changed from MEASUREMENT to TOTAL for HA compliance
+
+    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value1_key, value2_key):
+        """Initialize the price difference sensor."""
+        # Create value extraction function
+        def extract_value(data):
+            value1 = data.get(value1_key)
+            if value1_key == "current_price" and value1 is None:
+                # Try to get from statistics
+                stats = data.get("statistics", {})
+                value1 = stats.get("current") # Assuming 'current' might exist in stats, otherwise this needs adjustment
+                _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Fallback for current_price from statistics: {value1}")
+                    
+            value2 = None
+            if value2_key == "average":
+                # Get from statistics
+                stats = data.get("statistics", {})
+                value2 = stats.get("average")
+                _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Reading average from statistics: {value2}")
+            else:
+                value2 = data.get(value2_key)
+                _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Reading {value2_key} directly: {value2}")
+                
+            if value1 is None or value2 is None:
+                _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Calculation failed. value1={value1}, value2={value2}")
+                return None
+                
+            result = value1 - value2
+            _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Calculated difference: {result} (value1={value1}, value2={value2})")
+            return result
+
+        # Initialize parent class, passing the full config_data
+        super().__init__(
+            coordinator,
+            config_data, # Pass the full config_data
+            sensor_type,
+            name_suffix,
+            extract_value,
+            None
+        )
+        self._value1_key = value1_key
+        self._value2_key = value2_key
+
+
+class PricePercentSensor(PriceValueSensor):
+    """Sensor for price percentage relative to a reference value."""
+    device_class    = SensorDeviceClass.MONETARY
+    state_class     = None  # Percent is not a monetary total, so set to None
+
+    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value_key, reference_key):
+        """Initialize the price percentage sensor."""
+        # Create value extraction function
+        def extract_value(data):
+            value = data.get(value_key)
+            if value_key == "current_price" and value is None:
+                # Try to get from statistics
+                stats = data.get("statistics", {})
+                value = stats.get("current") # Assuming 'current' might exist in stats
+                _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Fallback for current_price from statistics: {value}")
+                    
+            reference = None
+            if reference_key == "average":
+                # Get from statistics
+                stats = data.get("statistics", {})
+                reference = stats.get("average")
+                _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Reading average from statistics: {reference}")
+            else:
+                reference = data.get(reference_key)
+                _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Reading {reference_key} directly: {reference}")
+                
+            if value is None or reference is None or reference == 0:
+                _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Calculation failed. value={value}, reference={reference}")
+                return None
+                
+            result = (value / reference - 1) * 100
+            _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Calculated percentage: {result} (value={value}, reference={reference})")
+            return result
+
+        # Initialize parent class, passing the full config_data
+        super().__init__(
+            coordinator,
+            config_data, # Pass the full config_data
+            sensor_type,
+            name_suffix,
+            extract_value,
+            None
+        )
+        self._value_key = value_key
+        self._reference_key = reference_key
+        
+    @property
+    def native_unit_of_measurement(self):
+        """Return the unit of measurement."""
+        return "%"

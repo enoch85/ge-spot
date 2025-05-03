@@ -1,21 +1,31 @@
 """Configuration constants for GE-Spot integration."""
 
 class Config:
-    """Configuration constants."""
+    """Configuration keys used in the integration."""
     SOURCE = "source"
     AREA = "area"
     VAT = "vat"
+    INCLUDE_VAT = "include_vat"  # Whether to include VAT in price calculations
     UPDATE_INTERVAL = "update_interval"
     DISPLAY_UNIT = "display_unit"
     CURRENCY = "currency"
     PRECISION = "precision"
+    CACHE_MAX_DAYS = "cache_max_days"  # Maximum number of days to keep in cache
+    # Cache Settings
+    CACHE_MAX_ENTRIES = "cache_max_entries"
+    CACHE_TTL = "cache_ttl"
+    PERSIST_CACHE = "persist_cache"
+    CACHE_DIR = "cache_dir" # Added cache directory config key
+
+    # API & Network
+    # API Keys (Sensitive - Handled separately)
     API_KEY = "api_key"
     PRICE_IN_CENTS = "price_in_cents"
 
+    # Stromligning specific
+    CONF_STROMLIGNING_SUPPLIER = "stromligning_supplier"
+
     # Cache configuration
-    CACHE_TTL = "cache_ttl"  # Time to live in seconds
-    CACHE_MAX_DAYS = "cache_max_days"  # Maximum number of days to keep in cache
-    CACHE_MAX_ENTRIES = "cache_max_entries"  # Maximum number of entries per area
     CACHE_COMPRESSION_THRESHOLD = "cache_compression_threshold"  # Size threshold for compression
     CACHE_CLEANUP_THRESHOLD = "cache_cleanup_threshold"  # Number of stores before auto cleanup
     CACHE_ADVANCED = "cache_advanced"  # Whether to use advanced cache

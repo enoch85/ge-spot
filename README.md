@@ -1,6 +1,6 @@
 # GE-Spot: Global Electricity Spot Prices Integration for Home Assistant
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg)
 
 > *"Hit the right spot with your energy prices"*
 
@@ -14,8 +14,8 @@ This custom integration allows you to fetch day-ahead electricity spot prices fr
 - [Supported Price Sources & Regions](#supported-price-sources--regions)
 - [Features](#features)
 - [Configuration](#configuration)
-- [Multi-Source API & Fallback System](#multi-source-api--fallback-system)
 - [Technical Features](#technical-features)
+  - [Multi-Source API & Fallback System](#multi-source-api--fallback-system)
   - [Timezone Handling](#timezone-handling)
   - [Price Conversion Logic](#price-conversion-logic)
   - [Currency Conversion](#currency-conversion)
@@ -49,41 +49,42 @@ The integration supports multiple price data sources with automatic fallback cap
 - **Energi Data Service** - Prices for Denmark
 - **Stromligning** - Prices for Denmark
 - **ENTSO-E** - European Network of Transmission System Operators for Electricity (requires API key)
-- **EPEX SPOT** - European Power Exchange for Central Europe
 - **OMIE** - Iberian Electricity Market Operator for Spain and Portugal
-- **AEMO** - Australian Energy Market Operator
-- **ComEd** - Commonwealth Edison hourly pricing for Chicago area (USA)
+- **EPEX SPOT** - European Power Exchange for Central Europe **(WIP)**
+- **AEMO** - Australian Energy Market Operator **(WIP)**
+- **ComEd** - Commonwealth Edison hourly pricing for Chicago area (USA) **(WIP)**
+- **Amber** - Amber Electric for Australia **(WIP - Not yet fully integrated/listed in matrix)**
 
 ### Region Support Matrix
 
 The table below shows which price sources support specific regions:
 
-| Region | Description | Nordpool | ENTSO-E | Energi Data | Stromligning | EPEX | OMIE | AEMO | ComEd |
-|--------|-------------|:--------:|:-------:|:-----------:|:------------:|:----:|:----:|:----:|:-----:|
-| SE1    | Sweden North | ✓ | ✓ | | | | | | |
-| SE2    | Sweden North-Central | ✓ | ✓ | | | | | | |
-| SE3    | Sweden South-Central | ✓ | ✓ | | | | | | |
-| SE4    | Sweden South | ✓ | ✓ | | | | | | |
-| DK1    | Denmark West | ✓ | ✓ | ✓ | ✓ | | | | |
-| DK2    | Denmark East | ✓ | ✓ | ✓ | ✓ | | | | |
-| NO1-4  | Norway Areas | ✓ | ✓ | | | | | | |
-| FI     | Finland | ✓ | ✓ | | | | | | |
-| EE     | Estonia | ✓ | ✓ | | | | | | |
-| LV     | Latvia | ✓ | | | | | | | |
-| LT     | Lithuania | ✓ | | | | | | | |
-| DE     | Germany | | ✓ | | | ✓ | | | |
-| FR     | France | | ✓ | | | ✓ | | | |
-| NL     | Netherlands | | ✓ | | | ✓ | | | |
-| BE     | Belgium | | ✓ | | | ✓ | | | |
-| AT     | Austria | | ✓ | | | ✓ | | | |
-| ES     | Spain | | ✓ | | | | ✓ | | |
-| PT     | Portugal | | ✓ | | | | ✓ | | |
-| NSW1   | Australia NSW | | | | | | | ✓ | |
-| QLD1   | Australia Queensland | | | | | | | ✓ | |
-| SA1    | Australia South | | | | | | | ✓ | |
-| TAS1   | Australia Tasmania | | | | | | | ✓ | |
-| VIC1   | Australia Victoria | | | | | | | ✓ | |
-| US-IL  | Chicago Area | | | | | | | | ✓ |
+| Region | Description | Nordpool | ENTSO-E | Energi Data | Stromligning | EPEX (WIP) | OMIE | AEMO (WIP) | ComEd (WIP) | Amber (WIP) |
+|--------|-------------|:--------:|:-------:|:-----------:|:------------:|:----------:|:----:|:----------:|:-----------:|:-----------:|
+| SE1    | Sweden North | ✓ | ✓ | | | | | | | |
+| SE2    | Sweden North-Central | ✓ | ✓ | | | | | | | |
+| SE3    | Sweden South-Central | ✓ | ✓ | | | | | | | |
+| SE4    | Sweden South | ✓ | ✓ | | | | | | | |
+| DK1    | Denmark West | ✓ | ✓ | ✓ | ✓ | | | | | |
+| DK2    | Denmark East | ✓ | ✓ | ✓ | ✓ | | | | | |
+| NO1-4  | Norway Areas | ✓ | ✓ | | | | | | | |
+| FI     | Finland | ✓ | ✓ | | | | | | | |
+| EE     | Estonia | ✓ | ✓ | | | | | | | |
+| LV     | Latvia | ✓ | | | | | | | | |
+| LT     | Lithuania | ✓ | | | | | | | | |
+| DE     | Germany | | ✓ | | | ✓ | | | | |
+| FR     | France | | ✓ | | | ✓ | | | | |
+| NL     | Netherlands | | ✓ | | | ✓ | | | | |
+| BE     | Belgium | | ✓ | | | ✓ | | | | |
+| AT     | Austria | | ✓ | | | ✓ | | | | |
+| ES     | Spain | | ✓ | | | | ✓ | | | |
+| PT     | Portugal | | ✓ | | | | ✓ | | | |
+| NSW1   | Australia NSW | | | | | | | ✓ | | ✓ |
+| QLD1   | Australia Queensland | | | | | | | ✓ | | ✓ |
+| SA1    | Australia South | | | | | | | ✓ | | ✓ |
+| TAS1   | Australia Tasmania | | | | | | | ✓ | | ✓ |
+| VIC1   | Australia Victoria | | | | | | | ✓ | | ✓ |
+| US-IL  | Chicago Area | | | | | | | | ✓ | |
 
 For a complete list of supported areas and their currency mappings, see the [Const files](custom_components/ge_spot/const/areas.py) in the codebase.
 
@@ -97,15 +98,17 @@ For a complete list of supported areas and their currency mappings, see the [Con
 - Seamless timezone handling to ensure correct hourly price display regardless of API source
 - Currency conversion with dynamic exchange rates from the European Central Bank
 - Timestamps in ISO format for compatibility with other systems
-- Eight sensor types for each configured region:
-  - Current hour price
-  - Next hour price
-  - Day average price
-  - Peak price (highest of the day)
-  - Off-peak price (lowest of the day)
-  - Tomorrow average price
-  - Tomorrow peak price (highest of tomorrow)
-  - Tomorrow off-peak price (lowest of tomorrow)
+- Provides the following sensors for each configured region:
+  - **Current Price:** The electricity spot price for the current hour in your chosen display unit (e.g., cents/kWh).
+  - **Next Hour Price:** The electricity spot price for the upcoming hour.
+  - **Average Price:** The average electricity spot price calculated across all hours of the current day (today).
+  - **Peak Price:** The highest hourly electricity spot price encountered during the current day (today).
+  - **Off-Peak Price:** The lowest hourly electricity spot price encountered during the current day (today).
+  - **Price Difference:** The absolute difference between the *Current Price* and the *Average Price* for today. A negative value indicates the current price is below the daily average.
+  - **Price Percentage:** The relative difference between the *Current Price* and the *Average Price* for today, expressed as a percentage of the average price. A negative percentage indicates the current price is below the daily average.
+  - **Tomorrow Average Price:** The average electricity spot price calculated across all hours of the *next* day (tomorrow). This sensor becomes available once tomorrow's prices are published by the source (typically around 13:00-14:00 CET).
+  - **Tomorrow Peak Price:** The highest hourly electricity spot price forecast for the *next* day (tomorrow). Becomes available when tomorrow's prices are published.
+  - **Tomorrow Off-Peak Price:** The lowest hourly electricity spot price forecast for the *next* day (tomorrow). Becomes available when tomorrow's prices are published.
 
 ## Configuration
 
@@ -146,81 +149,57 @@ The integration implements several mechanisms to ensure reliability:
 - **Rate Limiting**: Minimum update interval of 15 minutes to respect API rate limits
 - **Special Update Windows**: More frequent updates during price publication times (around 13:00 CET)
 
-## Multi-Source API & Fallback System
+## Technical Features
+
+### Multi-Source API & Fallback System
 
 GE-Spot uses a robust multi-source approach to ensure reliable price data:
 
 ```mermaid
 flowchart TD
-    Config[User Configuration] --> Coordinator
-    
-    subgraph Coordinator["Data Coordinator"]
-        TodayManager["Today Data Manager"]
-        TomorrowManager["Tomorrow Data Manager"]
-        Priority[Source Priority List]
-        FetchLoop["Try Each API in Priority Order"]
-        Cache["Data Cache"]
-        
-        Priority --> FetchLoop
-        FetchLoop --> |Success| DataStore["Store Current Data"]
-        FetchLoop --> |All Failed| Fallback["Use Cached Data"]
-        Cache --> Fallback
-        DataStore --> Cache
-        
-        TodayManager --> FetchLoop
-        TomorrowManager --> FetchLoop
-        Clock["Time-based Triggers"] --> TodayManager
-        Clock --> TomorrowManager
-    end
-    
-    Coordinator --> Sensors
+    %% ───────────── ENTRY ─────────────
+    Config["User configuration"] --> Coord["UnifiedPriceCoordinator"]
+    Coord --> UPM_Start["UnifiedPriceManager"]
 
-    subgraph APIGroup["API Sources"]
-        Nordpool["Nordpool API"]
-        ENTSOE["ENTSO-E API"]
-        EPEX["EPEX API"]
-        EDS["Energi Data Service API"]
-        OMIE["OMIE API"]
-        AEMO["AEMO API"]
-        Stromligning["Stromligning API"]
-        ComEd["ComEd API"]
+    %% ────────── MANAGER ──────────
+    subgraph UPM["UnifiedPriceManager"]
+        direction TB
+        RL{"Allowed to fetch (rate-limit passed)?"}
+        UseCache["CacheManager.get()"]
+        UseFallback["FallbackManager loop"]
+        Process["DataProcessor.process()"]
+        CacheStore["CacheManager.store()"]
+        Empty["Generate empty result"]
+        Final["Return to coordinator"]
+
+        RL -- no --> UseCache
+        RL -- yes --> UseFallback
+
+        UseCache -- hit --> Final
+        UseCache -- miss --> Empty
+
+        UseFallback --> FB_OK
+        FB_OK --> Process --> CacheStore --> Final
+        UseFallback -.-> FB_Fail
+        FB_Fail --> UseCache
+
+        Empty --> Final
     end
-    
-    FetchLoop --> APIGroup
-    
-    subgraph ErrorHandling["Error Handling"]
-        Retry["Exponential Backoff Retry"]
-        SourceHealth["Source Health Tracking"]
-        FallbackChain["Fallback Chain"]
+
+    %% ────── FALLBACK DETAIL ──────
+    subgraph FallbackLoop["FallbackManager"]
+        direction TB
+        More{{"more APIs?"}}
+        APICall["api.fetch_day_ahead_prices()"]
+        More --> APICall
+        APICall -- success --> FB_OK["raw data"]
+        APICall -- failure --> More
+        More -- none --> FB_Fail["fail"]
     end
-    
-    APIGroup --> ErrorHandling
-    ErrorHandling --> FetchLoop
+
+    %% ────── OUTPUT ──────
+    Final --> Sensors["Update Home-Assistant sensors"]
 ```
-
-- **Source Prioritization**: You control the order in which APIs are tried
-- **Automatic Fallback**: If the primary source fails, the system tries alternative sources automatically
-- **Transparent Attribution**: Sensor attributes show which API provided the data
-- **Data Caching**: Previously fetched data serves as a last-resort fallback if all APIs fail
-
-### Fallback Chain Logic
-
-Each region has a defined fallback chain based on data compatibility:
-
-| Primary Source | Fallback Sources (in order) |
-|----------------|------------------------------|
-| Nordpool | Energi Data Service, ENTSO-E, EPEX |
-| Energi Data Service | Nordpool, ENTSO-E |
-| ENTSO-E | Nordpool, EPEX |
-| EPEX | ENTSO-E, Nordpool |
-| OMIE | ENTSO-E |
-| AEMO | (No fallbacks available) |
-| Stromligning | Energi Data Service, Nordpool |
-| ComEd | (No fallbacks available) |
-
-The integration will automatically adjust the fallback chain based on the region's compatibility with each source.
-
-## Technical Features
 
 ### Timezone Handling
 
@@ -228,34 +207,26 @@ The integration normalizes timestamps from different APIs to ensure correct hour
 
 ```mermaid
 flowchart TD
-    API["API Response with Timestamps"] --> Parser["Timestamp Parser"]
-    Parser --> Normalizer["Timezone Normalizer"]
-    
-    subgraph TimezoneHandling["Timezone Handling"]
-        SourceTZ["Source-specific Timezone"] --> Converter
-        AreaTZ["Region-specific Timezone"] --> Converter
-        HAConfig["Home Assistant Timezone"] --> Converter
-        DSTHandler["DST Transition Handler"] --> Converter
-        Converter["Convert to Normalized Time"]
+    API["API response with timestamps"] --> Parser["TimestampParser"]
+    Parser --> Converter["TimezoneConverter"]
+
+    subgraph TZ["TimezoneService internals"]
+        SourceTZ["Source-specific TZ"]
+        AreaTZ["Area TZ"]
+        HA_TZ["HA TZ"]
+        DST["DST handler"]
+        SourceTZ & AreaTZ & HA_TZ & DST --> Converter
     end
-    
-    Normalizer --> TimezoneHandling
-    
-    TimezoneHandling --> HourMatcher["Hour Matching Logic"]
-    HourMatcher --> |"Current Hour"| CurrentPrice["Current Price Sensor"]
-    HourMatcher --> |"Next Hour"| NextPrice["Next Hour Price Sensor"]
-    HourMatcher --> |"All Hours"| HourlyPrices["Hourly Prices"]
-    
-    HourlyPrices --> |"Today"| TodayStats["Today's Statistics"]
-    HourlyPrices --> |"Tomorrow"| TomorrowStats["Tomorrow's Statistics"]
-    
-    TodayStats --> DayAvg["Day Average Price"]
-    TodayStats --> PeakPrice["Peak Price"]
-    TodayStats --> OffPeakPrice["Off-Peak Price"]
-    
-    TomorrowStats --> TmrwAvg["Tomorrow Average Price"]
-    TomorrowStats --> TmrwPeak["Tomorrow Peak Price"]
-    TomorrowStats --> TmrwOffPeak["Tomorrow Off-Peak Price"]
+
+    Converter --> HourMatch["Hour-matching logic"]
+    HourMatch -->|current| Cur["Current-price sensor"]
+    HourMatch -->|next| Next["Next-hour sensor"]
+    HourMatch -->|all| All["Hourly prices"]
+
+    All -->|today| TStats["Today's stats"]
+    All -->|tomorrow| MStats["Tomorrow stats"]
+    TStats --> Avg["Day avg"] & Peak["Peak"] & Off["Off-peak"]
+    MStats --> MAvg["Tmrw avg"] & MPeak["Tmrw peak"] & MOff["Tmrw off-peak"]
 ```
 
 - **Timezone Awareness**: Handles UTC, local time, and timezone-naive timestamps correctly
@@ -268,83 +239,77 @@ The integration implements a comprehensive price conversion system that ensures 
 
 ```mermaid
 flowchart TD
-    API[API Response] -->|Raw Data| Process
-    
-    subgraph Process["Price Processing"]
-        Extract[Extract Raw Price\ne.g. 158.67 EUR/MWh]
-        Validate[Validate Price Range]
-        Convert[Convert to Target Currency & Unit]
-        Apply[Apply VAT]
-        Format[Format for Display]
-        Store[Store in Standardized Format]
-        
-        Extract --> Validate
-        Validate --> Convert
-        Convert --> Apply
-        Apply --> Format
-        Format --> Store
+    Raw["Raw API data"] --> Proc
+
+    subgraph Proc["DataProcessor"]
+        direction TB
+        Parse --> Validate --> Convert --> VAT --> Format --> Stats --> Out
+        Parse["Parse"]
+        Validate["Validate"]
+        Convert["CurrencyConverter"]
+        VAT["Apply VAT"]
+        Format["Format"]
+        Stats["Calc stats"]
+        Out["Output"]
     end
-    
-    Process --> Sensors[Home Assistant Sensors]
-    
-    subgraph Exchange["Exchange Rate Service"]
-        ECB[ECB Exchange Rate API]
-        Cache[Local Cache File]
-        Fallback[Fallback Fixed Rates]
-        Scheduler[Scheduled Updates\n00:00, 06:00, 12:00, 18:00]
-        
-        Scheduler --> ECB
-        ECB --> Cache
-        Cache --> |If API fails| Fallback
+
+    Out --> CM["CacheManager.store()"] --> Coord["Coordinator data"]
+    Coord --> Sensors["HA sensors"]
+
+    subgraph CurrencyConverter
+        GetRates["Get rates"] --> DoConvert["Convert currency & unit"]
     end
-    
-    Convert <-.->|Get rates| Exchange
-    
-    Config[User Configuration\nVAT, Currency, Display Unit] --> Apply
-    Config --> Format
-    RegionMap[Region to Currency Mapping] --> Convert
+
+    subgraph CurrencyService
+        CacheHit["Cache hit"]:::ok --> Return
+        CacheMiss["Cache miss"]:::err --> ECB["Fetch ECB"] --> Store --> Return
+        CacheHit -.-> Return
+        style CacheHit fill:#c9ffc9
+        style CacheMiss fill:#ffdede
+    end
 ```
 
 The price conversion follows this detailed process:
 
 ```mermaid
 sequenceDiagram
-    participant API as API Source
-    participant Processor as Price Processor
-    participant Converter as Currency Utils
-    participant Exchange as Exchange Service
-    participant Cache as Exchange Rate Cache
+    participant FallbackMgr as FallbackManager
+    participant Processor as DataProcessor
+    participant Converter as CurrencyConverter
+    participant CurrencySvc as CurrencyService
+    participant CacheMgr as CacheManager
     participant ECB as ECB API
-    
-    API->>Processor: Raw Price Data (e.g., 158.67 EUR/MWh)
-    
-    Processor->>Converter: async_convert_energy_price()
-    
-    Converter->>Exchange: Get exchange rates
-    Exchange->>Cache: Check for cached rates
-    
-    alt Cache valid
-        Cache-->>Exchange: Return cached rates
-    else Cache invalid or missing
-        Exchange->>ECB: Fetch current rates
-        
+
+    FallbackMgr->>Processor: Raw Price Data Structure
+
+    Processor->>Converter: async_convert_energy_price(raw_price, source_unit, source_currency)
+
+    Converter->>CurrencySvc: get_exchange_rates(base_currency, target_currency)
+
+    CurrencySvc->>CacheMgr: get_exchange_rate(key)
+    alt Cache Hit
+        CacheMgr-->>CurrencySvc: Return cached rate
+    else Cache Miss
+        CurrencySvc->>ECB: Fetch current rates
         alt ECB API success
-            ECB-->>Exchange: Current exchange rates
-            Exchange->>Cache: Save to cache
+            ECB-->>CurrencySvc: Current exchange rates
+            CurrencySvc->>CacheMgr: store_exchange_rate(key, rate, ttl)
         else ECB API fails
-            Exchange->>Exchange: Use fallback rates
+            CurrencySvc->>CurrencySvc: Use fallback rates
         end
-        
-        Exchange-->>Converter: Return rates
+        CurrencySvc-->>Converter: Return rates
     end
-    
-    Note over Converter: Step 1: Convert Currency<br>(e.g., EUR → SEK using rate)
-    Note over Converter: Step 2: Convert Energy Unit<br>(MWh → kWh, divide by 1000)
-    Note over Converter: Step 3: Apply VAT<br>(if configured)
-    Note over Converter: Step 4: Convert to Subunit<br>(e.g., SEK → öre, multiply by 100)
-    
-    Converter-->>Processor: Final Price
-    Processor-->>Processor: Store price in standardized format
+
+    Note over Converter: Step 1: Convert Currency (if needed)
+    Note over Converter: Step 2: Convert Energy Unit (e.g., MWh → kWh)
+    Note over Converter: Step 3: Apply VAT (if configured)
+    Note over Converter: Step 4: Convert to Subunit (if configured, e.g., EUR → cents)
+
+    Converter-->>Processor: Final Price (in target unit/currency/subunit)
+    Processor->>Processor: Calculate Statistics
+    Processor->>CacheMgr: Store Final Processed Data
+    CacheMgr-->>Processor: Confirmation
+    Processor-->>FallbackMgr: Return Final Data (to Coordinator)
 ```
 
 ### Currency Conversion
@@ -373,20 +338,11 @@ Different data sources will return different prices for the same hour due to wha
 | Energi Data Service/ENTSO-E | Raw spot price | Base wholesale electricity market price |
 | Nordpool | Raw spot price | May differ slightly due to timing/rounding |
 | Stromligning | Spot price + grid fees + tariffs + taxes | Full consumer electricity price |
-| ComEd | Hourly real-time pricing | 5-minute and hourly average options |
-
-Energi Data Service and ENTSO-E typically match as they provide raw spot market prices. Stromligning includes additional cost components as seen in its implementation:
-
-```python
-# Components extracted from Stromligning
-electricity_price = price_entry["details"]["electricity"]["total"]
-grid_price = (
-    price_entry["details"]["transmission"]["systemTariff"]["total"] +
-    price_entry["details"]["transmission"]["netTariff"]["total"] +
-    price_entry["details"]["distribution"]["total"]
-)
-tax_price = price_entry["details"]["electricityTax"]["total"]
-```
+| ComEd (WIP) | Hourly real-time pricing | 5-minute and hourly average options |
+| EPEX (WIP) | Raw spot price | Similar to ENTSO-E |
+| OMIE | Raw spot price | Similar to ENTSO-E |
+| AEMO (WIP) | Raw spot price | Australian market specifics |
+| Amber (WIP) | Spot price + network fees + carbon costs | Includes additional components |
 
 For Danish areas (DK1, DK2), the integration extracts only the electricity component from Stromligning to match other price sources. The full price breakdown with all components is available in the sensor attributes.
 
@@ -400,6 +356,34 @@ To ensure all sources report prices for the same hours despite different source 
 4. DST transitions are handled automatically
 
 This ensures that, for example, the price for 14:00 is the same regardless of which API provided it.
+
+### Tomorrow's Data Fetching
+
+The integration implements a sophisticated system for fetching tomorrow's electricity prices:
+
+```mermaid
+flowchart TD
+    Coord["UnifiedPriceCoordinator"] --> UPM["UnifiedPriceManager"]
+    UPM --> RL{"Rate-limit OK?"}
+    RL -- no --> Cache["Use cache"]
+    RL -- yes --> FM["FallbackManager"]
+
+    subgraph FM["Fallback loop"]
+        direction TB
+        More{{"APIs left?"}} --> APICall["api.fetch_day_ahead_prices()"]
+        APICall --> TZ["TimezoneService"]
+        TZ --> APICall
+        APICall -- success --> Raw["raw data"]
+        APICall -- fail --> More
+        More -- none --> Fail["fail"]
+    end
+
+    Raw --> Proc["DataProcessor"] --> Store["CacheManager.store()"] --> Done
+    Fail --> Cache
+    Cache --> Done
+
+    Done --> Sensors["Update HA sensors (today + tomorrow)"]
+```
 
 ## Usage Examples
 
@@ -506,189 +490,174 @@ If you experience issues:
 
 ## For Developers
 
-### Architecture Overview
-
 GE-Spot follows a modular architecture with clear separation of concerns:
 
 ```
 custom_components/ge_spot/
+├── __init__.py           # Integration setup
+├── config_flow.py        # Configuration flow handler
+├── manifest.json         # Integration manifest
 ├── api/                  # API clients for different price sources
+│   ├── __init__.py
+│   ├── base/             # Base classes for API functionality (adapter, fetcher, error handler)
 │   ├── parsers/          # Dedicated parsers for each API source
-│   └── base/             # Base classes for API functionality
-├── const/                # Constants and configuration
+│   └── [source_name].py  # Specific API client implementations (e.g., nordpool.py)
+├── config_flow/          # UI Configuration flow logic
+│   ├── __init__.py
+│   ├── implementation.py # Main config flow steps
+│   ├── options.py        # Options flow handler
+│   ├── schemas.py        # Voluptuous schemas for validation
+│   └── validators.py     # Custom validators
+├── const/                # Constants (areas, sources, currencies, defaults, etc.)
 ├── coordinator/          # Data coordination and management
+│   ├── __init__.py
+│   ├── unified_price_manager.py # Orchestrates fetching, processing, caching
+│   ├── fallback_manager.py    # Handles trying sources in priority order
+│   ├── data_processor.py      # Processes raw data (timezone, currency, stats)
+│   ├── cache_manager.py       # Manages data caching
+│   └── api_key_manager.py     # Manages API keys
 ├── price/                # Price data processing and conversion
-├── sensor/               # Sensor implementations
+│   ├── __init__.py
+│   ├── currency_converter.py  # Handles currency/unit conversion
+│   ├── currency_service.py    # Manages exchange rate fetching/caching
+│   └── statistics.py        # Calculates price statistics (avg, peak, etc.)
+├── sensor/               # Sensor entity implementations
+│   ├── __init__.py
+│   ├── base.py           # Base sensor class
+│   ├── electricity.py    # Main electricity price sensor logic
+│   └── price.py          # Specific price sensor types (current, avg, etc.)
 ├── timezone/             # Timezone handling and conversion
+│   ├── __init__.py
+│   ├── service.py        # Main timezone service
+│   └── ...               # Helper modules for parsing, DST, etc.
+├── translations/         # UI translation strings
 └── utils/                # Utility functions and classes
-    ├── error/            # Error handling and recovery
-    ├── fallback/         # Fallback mechanisms
-    └── validation/       # Data validation
+    ├── __init__.py
+    ├── advanced_cache.py # Advanced caching implementation
+    ├── data_validator.py # Data validation helpers
+    ├── exchange_service.py # Fetches/caches ECB exchange rates
+    ├── rate_limiter.py   # Handles API rate limiting
+    └── ...               # Other utilities (date range, unit conversion, etc.)
 ```
 
 ### API System
 
 The API system is designed to be extensible and fault-tolerant:
 
-1. **API Registry**: Central registry of all API sources
-2. **Source Prioritization**: APIs are tried in priority order
-3. **Fallback Chains**: Each source has a defined fallback chain
-4. **Data Validation**: Robust validation of API responses
-5. **Error Recovery**: Automatic retry with exponential backoff
+1.  **Modular Adapters**: Each price source is implemented as a separate module in `custom_components/ge_spot/api/`, often inheriting from a base adapter in `api/base/`.
+2.  **Source Prioritization**: During configuration, users define the order in which API sources should be tried for their selected region.
+3.  **Fallback Mechanism**: The `FallbackManager` iterates through the prioritized list of adapters for a region, attempting to fetch data until one succeeds.
+4.  **Data Validation**: Parsed data undergoes validation (e.g., using `utils/data_validator.py`) before further processing.
+5.  **Error Handling**: Base API classes and the fetching process include error handling, logging, and retry logic (often with backoff).
 
 ### Adding a New Price Source
 
 To add a new price source:
 
-1. Create a new API module in `custom_components/ge_spot/api/`
-2. Implement the `fetch_day_ahead_prices` function following the pattern in existing modules
-3. Create a dedicated parser in `custom_components/ge_spot/api/parsers/`
-4. Register the source in `api/__init__.py` and add to the `SOURCE_REGION_SUPPORT` mapping
-5. Add region mappings in the `const/areas.py` file
-6. Update the fallback chain in `ApiRegistry.get_fallback_chain()` to include the new source
+1.  Create a new API client module in `custom_components/ge_spot/api/` (e.g., `my_new_source.py`).
+2.  Implement the client logic, ideally inheriting from `api.base.BasePriceAPI` or a similar base class. This typically involves implementing methods like `fetch_raw_data` and potentially `parse_raw_data` (or creating a separate parser).
+3.  If needed, create a dedicated parser in `custom_components/ge_spot/api/parsers/`.
+4.  Register the new source:
+    *   Add a constant for the source name in `const/sources.py`.
+    *   Map the source to its implementation class in `api/__init__.py` (in the `SOURCE_MAP`).
+    *   Define which regions the source supports in `const/api.py` (in `SOURCE_REGION_SUPPORT`).
+5.  Add any relevant region/area codes and currency mappings in `const/areas.py`.
+6.  Update the configuration flow (`config_flow/schemas.py`, `config_flow/implementation.py`) to allow users to select the new source in the priority list if applicable for their region.
+7.  Add tests for the new API client and parser.
 
 ### Standardized Return Format
 
-All API modules should return data in this format:
+API parsers aim to return a standardized dictionary format containing raw hourly prices, timezone, and currency information. This raw structure is then processed by the `DataProcessor` into the final format used by sensors, which typically includes:
 
 ```python
 {
-    "current_price": float,           # Current hour price
-    "next_hour_price": float,         # Next hour price
-    "day_average_price": float,       # Day average
-    "peak_price": float,              # Day maximum
-    "off_peak_price": float,          # Day minimum
-    "hourly_prices": dict,            # Hourly prices "HH:00" -> float
-    "tomorrow_hourly_prices": dict,   # Tomorrow's hourly prices (if available)
-    "raw_values": dict,               # Raw conversion information
-    "data_source": str,               # Source name
-    "last_updated": str,              # ISO timestamp
-    "currency": str                   # Target currency
+    "current_price": float,           # Current hour price (converted)
+    "next_hour_price": float,         # Next hour price (converted)
+    "day_average_price": float,       # Day average (converted)
+    "peak_price": float,              # Day maximum (converted)
+    "off_peak_price": float,          # Day minimum (converted)
+    "hourly_prices": dict,            # Hourly prices "YYYY-MM-DDTHH:00:00+ZZ:ZZ" -> float (converted)
+    "tomorrow_hourly_prices": dict,   # Tomorrow's hourly prices (if available, converted)
+    "raw_today": dict,                # Raw hourly prices for today (before conversion)
+    "raw_tomorrow": dict,             # Raw hourly prices for tomorrow (before conversion)
+    "source_data": {                  # Metadata about the fetch
+        "source": str,                # Source name that provided the data
+        "currency": str,              # Original currency from source
+        "timezone": str,              # Original timezone from source
+        # ... other source-specific details
+    },
+    "conversion_details": {           # Details about the conversion process
+        "target_currency": str,
+        "target_unit": str,
+        "vat_rate": float,
+        "exchange_rate": float,
+        # ...
+    },
+    "last_updated": str,              # ISO timestamp of the update
+    # ... other calculated attributes
 }
 ```
+*Note: The exact structure might vary slightly; check `DataProcessor` and sensor attributes for the precise format.*
 
 ### Error Handling System
 
 The error handling system provides:
 
-1. **Error Classification**: Errors are classified by type for better handling
-2. **Error Recovery**: Automatic retry with exponential backoff for transient errors
-3. **Error Tracking**: Comprehensive tracking of errors for better diagnostics
-4. **API Health Monitoring**: Continuous monitoring of API health to detect issues early
+1.  **Error Classification**: Specific exceptions are often defined (e.g., in `api/base/exceptions.py`) and raised by API clients.
+2.  **Error Recovery**: The `FallbackManager` and underlying fetch mechanisms often include retries (sometimes with exponential backoff) for transient network or API errors.
+3.  **Logging**: Errors during fetching or processing are logged to Home Assistant logs for diagnostics.
+4.  **Fallback to Cache**: If all sources fail, the system attempts to use previously cached data.
 
 ### Fallback System
 
 The fallback system ensures reliability:
 
-1. **Source Health Tracking**: Track the health of each data source
-2. **Intelligent Fallback**: Automatically fall back to alternative sources when primary sources fail
-3. **Data Quality Scoring**: Score data quality to choose the best source
-4. **Cached Fallback**: Use cached data when all sources fail
+1.  **Prioritized List**: Uses the user-configured source priority list for the region.
+2.  **Sequential Attempts**: The `FallbackManager` tries fetching from each source in order.
+3.  **First Success Wins**: Uses the data from the first source in the list that returns valid data.
+4.  **Caching**: If all sources in the priority list fail, it falls back to using cached data if available and not expired.
+5.  **Status Tracking**: Sensor attributes often indicate which source succeeded (`data_source`), which were tried (`attempted_sources`), and if cache was used (`using_cached_data`).
 
 ### Testing
 
-The integration includes comprehensive test scripts:
+The integration includes automated tests using `pytest` and manual test scripts.
 
-#### API Tests
+#### Automated Tests (pytest)
 
-Test the basic functionality of all APIs:
+Located in `tests/pytest/`. Organized into `unit`, `integration`, and `lib` tests.
 
+To run all pytest tests:
 ```bash
-python scripts/tests/test_all_apis.py
+pytest tests/pytest/
 ```
 
-#### Date Range Tests
-
-Test the date range utility with all APIs:
-
+To run specific categories (e.g., unit tests):
 ```bash
-python scripts/tests/test_date_range_apis.py
+pytest tests/pytest/unit/
 ```
 
-#### Timezone Tests
+(Refer to `tests/README.md` for more details on pytest structure and execution).
 
-Test timezone handling and conversion:
+#### Manual Tests
 
+Located in `tests/manual/`. These scripts often test against live APIs (API keys might be required via environment variables).
+
+Example: Run a specific manual integration test:
 ```bash
-python scripts/tests/test_timezone_handling.py
+python -m tests/manual.integration.nordpool_full_chain SE4
 ```
 
-These tests verify that each API correctly handles different date ranges, timezone conversions, and edge cases. This is particularly important for ensuring consistent behavior across different regions and time periods.
+(Refer to `tests/README.md` and individual script headers for usage instructions).
 
 ### Performance Optimization
 
 The integration includes several performance optimizations:
 
-1. **Parallel Fetching**: Fetch data from multiple sources in parallel
-2. **Priority-Based Fetching**: Fetch from sources in priority order
-3. **Advanced Caching**: Sophisticated caching with TTL and invalidation
-4. **Reduced Network Load**: Conditional requests and rate limiting
-
-### Tomorrow's Data Fetching
-
-The integration implements a sophisticated system for fetching tomorrow's electricity prices:
-
-```mermaid
-flowchart TD
-    Clock["System Clock"] --> TimeCheck["Check Current Time"]
-    TimeCheck --> |"After 13:00 CET"| TomorrowManager["Tomorrow Data Manager"]
-    TimeCheck --> |"Regular Interval"| TodayManager["Today Data Manager"]
-    
-    TomorrowManager --> DateRange["Generate Tomorrow Date Range"]
-    DateRange --> APIRequest["Request Tomorrow's Prices"]
-    
-    APIRequest --> |"Success"| ProcessData["Process Tomorrow Data"]
-    APIRequest --> |"Not Available"| RetryLater["Schedule Retry"]
-    APIRequest --> |"All Sources Failed"| UseCached["Use Cached Data If Available"]
-    
-    ProcessData --> ValidateData["Validate Tomorrow Data"]
-    ValidateData --> |"Valid"| StoreTomorrow["Store Tomorrow Prices"]
-    ValidateData --> |"Invalid"| RetryLater
-    
-    StoreTomorrow --> UpdateSensors["Update Tomorrow Sensors"]
-    
-    subgraph PublicationTimes["Publication Times by Source"]
-        NordpoolTime["Nordpool: ~13:00 CET"]
-        ENTSOETime["ENTSO-E: ~14:00 CET"]
-        EPEXTime["EPEX: ~13:00 CET"]
-        OtherTimes["Other Sources: Varies"]
-    end
-    
-    PublicationTimes -.-> TimeCheck
-```
-
-Key aspects of tomorrow's data handling:
-
-1. **Publication Time Awareness**: The integration knows that most European electricity markets publish tomorrow's prices around 13:00 CET.
-
-2. **Special Update Windows**: The system has special update windows defined in `const/network.py`:
-
-```python
-SPECIAL_HOUR_WINDOWS = [
-    (0, 1),   # 00:00-01:00 - For today's new prices
-    (13, 14)  # 13:00-14:00 - For tomorrow's prices
-]
-```
-
-3. **Dedicated Tomorrow Manager**: A specialized `TomorrowDataManager` class handles all aspects of tomorrow's data:
-   - Determines the correct date range for tomorrow
-   - Attempts to fetch tomorrow's data from configured sources
-   - Validates that the data is complete (all 24 hours)
-   - Stores tomorrow's data separately from today's data
-   - Updates tomorrow-specific sensors
-
-4. **Graceful Fallback**: If tomorrow's data isn't available yet:
-   - The integration will continue using today's data for current sensors
-   - Tomorrow's sensors will indicate data is not yet available
-   - The system will automatically retry during the next update cycle
-   - Once tomorrow's data becomes available, all sensors will update accordingly
-
-5. **Source-Specific Handling**: Different sources publish tomorrow's data at slightly different times:
-   - Nordpool typically publishes around 13:00 CET
-   - ENTSO-E may publish slightly later, around 14:00 CET
-   - The integration will try all configured sources in priority order
-
-This approach ensures that tomorrow's price data is fetched as soon as it becomes available, while gracefully handling the period before publication.
+1.  **Asynchronous Operations**: Uses `asyncio` and `httpx.AsyncClient` for non-blocking I/O during API calls.
+2.  **Source Prioritization**: Avoids calling lower-priority sources if a higher-priority one succeeds quickly.
+3.  **Advanced Caching**: Caches processed data (`CacheManager`) and exchange rates (`ExchangeService`) with configurable TTLs to reduce redundant computations and API calls.
+4.  **Rate Limiting**: Implements rate limiting (`utils/rate_limiter.py`) to avoid overwhelming APIs and respect usage limits, especially during frequent update checks.
+5.  **Parallel Fetching (Potential)**: While `utils/parallel_fetcher.py` exists, verify its current usage in the main fetch flow. This was a planned refactoring which never went live due to it's complexity.
 
 ## License
 

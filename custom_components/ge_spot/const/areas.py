@@ -344,3 +344,181 @@ class AreaMapping:
         "stromligning": Area.DK1,
         "comed": "5minutefeed",
     }
+
+
+class AreaInfo:
+    """Utility class for area information."""
+    
+    # Map areas to their regions
+    AREA_REGIONS = {
+        # Nordic countries
+        "DK1": "Nordic",
+        "DK2": "Nordic",
+        "SE1": "Nordic",
+        "SE2": "Nordic",
+        "SE3": "Nordic",
+        "SE4": "Nordic",
+        "FI": "Nordic",
+        "NO1": "Nordic",
+        "NO2": "Nordic",
+        "NO3": "Nordic",
+        "NO4": "Nordic",
+        "NO5": "Nordic",
+        "EE": "Baltic",
+        "LT": "Baltic",
+        "LV": "Baltic",
+        
+        # Central Europe
+        "DE": "Central Europe",
+        "DE-LU": "Central Europe",
+        "AT": "Central Europe",
+        "FR": "Central Europe",
+        "BE": "Central Europe",
+        "NL": "Central Europe",
+        "CH": "Central Europe",
+        "CZ": "Central Europe",
+        "PL": "Central Europe",
+        "HU": "Central Europe",
+        "SK": "Central Europe",
+        "SI": "Central Europe",
+        
+        # Southern Europe
+        "ES": "Southern Europe",
+        "PT": "Southern Europe",
+        "IT": "Southern Europe",
+        "GR": "Southern Europe",
+        "HR": "Southern Europe",
+        "BG": "Southern Europe",
+        "RO": "Southern Europe",
+        
+        # British Isles
+        "GB": "British Isles",
+        "UK": "British Isles",
+        "IE": "British Isles",
+        
+        # Australia
+        "NSW1": "Australia",
+        "QLD1": "Australia",
+        "SA1": "Australia",
+        "TAS1": "Australia",
+        "VIC1": "Australia",
+        
+        # USA
+        "COMED": "USA",
+        "US": "USA",
+    }
+    
+    # Map areas to their common names
+    AREA_NAMES = {
+        # Nordic countries
+        "DK1": "West Denmark",
+        "DK2": "East Denmark",
+        "SE1": "North Sweden",
+        "SE2": "North-Central Sweden",
+        "SE3": "South-Central Sweden",
+        "SE4": "South Sweden",
+        "FI": "Finland",
+        "NO1": "East Norway (Oslo)",
+        "NO2": "South Norway (Kristiansand)",
+        "NO3": "Central Norway (Trondheim)",
+        "NO4": "North Norway (Tromsø)",
+        "NO5": "West Norway (Bergen)",
+        "EE": "Estonia",
+        "LT": "Lithuania",
+        "LV": "Latvia",
+        
+        # Central Europe
+        "DE": "Germany",
+        "DE-LU": "Germany-Luxembourg",
+        "AT": "Austria",
+        "FR": "France",
+        "BE": "Belgium",
+        "NL": "Netherlands",
+        "CH": "Switzerland",
+        
+        # Southern Europe
+        "ES": "Spain",
+        "PT": "Portugal",
+        
+        # Australia
+        "NSW1": "New South Wales",
+        "QLD1": "Queensland",
+        "SA1": "South Australia",
+        "TAS1": "Tasmania",
+        "VIC1": "Victoria",
+    }
+    
+    @classmethod
+    def get_region_for_area(cls, area: str) -> str:
+        """Get region for a specific area code.
+        
+        Args:
+            area: Area code
+            
+        Returns:
+            Region name or None if not found
+        """
+        return cls.AREA_REGIONS.get(area)
+    
+    @classmethod
+    def get_name_for_area(cls, area: str) -> str:
+        """Get human-readable name for a specific area code.
+        
+        Args:
+            area: Area code
+            
+        Returns:
+            Area name or the area code if not found
+        """
+        return cls.AREA_NAMES.get(area, area)
+    
+    @classmethod
+    def get_areas_for_region(cls, region: str) -> list:
+        """Get all areas in a specific region.
+        
+        Args:
+            region: Region name
+            
+        Returns:
+            List of area codes in the region
+        """
+        return [area for area, reg in cls.AREA_REGIONS.items() if reg == region]
+
+
+def get_available_sources(area: str) -> list:
+    """Get a list of available sources for an area.
+    
+    Args:
+        area: The area code to check
+        
+    Returns:
+        List of source identifiers that support this area
+    """
+    available_sources = []
+    
+    # Check each source's area mappings
+    if area in AreaMapping.NORDPOOL_AREAS:
+        available_sources.append("nordpool")
+        
+    if area in AreaMapping.ENERGI_DATA_AREAS:
+        available_sources.append("energi_data_service")
+    
+    if area in AreaMapping.ENTSOE_AREAS or area in AreaMapping.ENTSOE_MAPPING:
+        available_sources.append("entsoe")
+        
+    if area in AreaMapping.EPEX_AREAS:
+        available_sources.append("epex")
+        
+    if area in AreaMapping.OMIE_AREAS:
+        available_sources.append("omie")
+        
+    if area in AreaMapping.AEMO_AREAS:
+        available_sources.append("aemo")
+        
+    if area in AreaMapping.STROMLIGNING_AREAS:
+        available_sources.append("stromligning")
+        
+    if area in AreaMapping.COMED_AREAS:
+        available_sources.append("comed")
+    
+    return available_sources

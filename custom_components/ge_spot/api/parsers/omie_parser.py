@@ -2,452 +2,243 @@
 import logging
 import csv
 from io import StringIO
-from datetime import datetime, timedelta
+import json
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List, Tuple
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ...const.sources import Source
-from ...timezone.timezone_utils import normalize_hour_value
+from ...const.currencies import Currency
 from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
 
 _LOGGER = logging.getLogger(__name__)
 
 class OmieParser(BasePriceParser):
-    """Parser for OMIE API responses."""
+    """Parser for OMIE API responses (direct text files)."""
 
-    def __init__(self):
+    def __init__(self, timezone_service=None):
         """Initialize the parser."""
-        super().__init__(Source.OMIE)
+        super().__init__(Source.OMIE, timezone_service)
 
     def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse OMIE API response.
+        """Parse OMIE API response dictionary containing raw text data.
 
         Args:
-            data: Raw API response data
+            data: Dictionary from OmieAPI.fetch_raw_data containing:
+                  'raw_data': The raw text content from the OMIE file.
+                  'timezone': The timezone name string (e.g., 'Europe/Madrid').
+                  'area': The area code ('ES' or 'PT').
+                  'url': Source URL (metadata).
+                  'target_date': Date the data corresponds to (metadata).
 
         Returns:
-            Parsed data with hourly prices
+            Parsed data dictionary: {'hourly_raw': {...}, 'currency': 'EUR', 'timezone': 'Europe/Madrid', 'source': 'omie'}
         """
-        # Validate data
-        data = validate_data(data, self.source)
+        # Extract info from the input dictionary
+        raw_data_text = data.get("raw_data")
+        source_timezone = data.get("timezone", "Europe/Madrid")  # Default if missing
+        area = data.get("area", "ES")  # Default if missing
+        _LOGGER.debug(f"[OmieParser] Received data for Area: {area}, Timezone: {source_timezone}")
 
         result = {
-            "hourly_prices": {},
-            "currency": data.get("currency", "EUR"),
-            "source": self.source
+            "hourly_raw": {},
+            "currency": Currency.EUR,  # OMIE is always EUR
+            "source": Source.OMIE,
+            "timezone": source_timezone,  # Pass through the source timezone name
+            "metadata": {
+                "url": data.get("url"),
+                "target_date": data.get("target_date"),
+                "area": area
+            }
         }
 
-        # If hourly prices were already processed
-        if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
-            result["hourly_prices"] = data["hourly_prices"]
-        elif "raw_data" in data and isinstance(data["raw_data"], str):
-            # OMIE typically returns CSV data
-            self._parse_csv(data["raw_data"], result)
+        # Check for valid text data
+        if not raw_data_text or not isinstance(raw_data_text, str):
+            _LOGGER.warning("[OmieParser] No valid 'raw_data' text found in input dictionary.")
+            return result  # Return empty structure
 
-        # Add current and next hour prices if available
-        if "current_price" in data:
-            result["current_price"] = data["current_price"]
+        # --- Parsing Logic ---
+        try:
+            # Check if it looks like JSON first (less likely but possible)
+            if raw_data_text.strip().startswith('{') and raw_data_text.strip().endswith('}'):
+                _LOGGER.debug("[OmieParser] Attempting to parse raw data as JSON.")
+                self._parse_json(raw_data_text, result, source_timezone)
+                if not result["hourly_raw"]:
+                    _LOGGER.debug("[OmieParser] JSON parsing yielded no prices, falling back to CSV.")
+                    self._parse_csv(raw_data_text, result, source_timezone)
+            else:
+                _LOGGER.debug("[OmieParser] Attempting to parse raw data as CSV.")
+                self._parse_csv(raw_data_text, result, source_timezone)
 
-        if "next_hour_price" in data:
-            result["next_hour_price"] = data["next_hour_price"]
+        except Exception as e:
+            _LOGGER.error(f"[OmieParser] Failed during parsing: {e}", exc_info=True)
 
-        # Calculate current and next hour prices if not provided
-        if "current_price" not in result:
-            result["current_price"] = self._get_current_price(result["hourly_prices"])
-
-        if "next_hour_price" not in result:
-            result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
-
-        # Calculate day average if enough prices
-        if len(result["hourly_prices"]) >= 12:
-            result["day_average_price"] = self._calculate_day_average(result["hourly_prices"])
+        _LOGGER.debug(f"[OmieParser] Found {len(result['hourly_raw'])} hourly prices.")
+        if not result["hourly_raw"]:
+            _LOGGER.warning("[OmieParser] Parsing completed, but no hourly prices were extracted.")
 
         return result
 
-    def extract_metadata(self, data: Any) -> Dict[str, Any]:
-        """Extract metadata from OMIE API response.
-
-        Args:
-            data: Raw API response data
-
-        Returns:
-            Metadata dictionary
-        """
-        metadata = {
-            "currency": "EUR",  # Default currency for OMIE
-        }
-
-        # If data is a dictionary with metadata
-        if isinstance(data, dict):
-            # Copy relevant metadata fields
-            for field in ["date_str", "target_date", "url"]:
-                if field in data:
-                    metadata[field] = data[field]
-
-        return metadata
-
-    def parse_hourly_prices(self, data: Any, area: str) -> Dict[str, float]:
-        """Parse hourly prices from OMIE API response.
-
-        Args:
-            data: Raw API response data
-            area: Area code
-
-        Returns:
-            Dictionary of hourly prices with hour string keys (HH:00)
-        """
+    def _parse_json(self, json_data: str, result: Dict[str, Any], timezone_name: str) -> None:
+        """Parse JSON data (less common for OMIE files, might be ESIOS format)."""
         hourly_prices = {}
-
-        # If data is a dictionary with raw_data
-        if isinstance(data, dict) and "raw_data" in data and isinstance(data["raw_data"], str):
-            # Create a temporary result dictionary
-            temp_result = {"hourly_prices": {}}
-
-            # Parse CSV data
-            self._parse_csv(data["raw_data"], temp_result)
-
-            # Convert ISO format timestamps to hour strings (HH:00)
-            for iso_key, price in temp_result["hourly_prices"].items():
-                try:
-                    # Parse ISO timestamp
-                    dt = datetime.fromisoformat(iso_key)
-                    # Format as hour string
-                    normalized_hour, adjusted_date = normalize_hour_value(dt.hour, dt.date())
-                    hour_key = f"{normalized_hour:02d}:00"
-                    # Add to hourly prices
-                    hourly_prices[hour_key] = price
-                except (ValueError, TypeError) as e:
-                    _LOGGER.warning(f"Failed to convert ISO timestamp to hour string: {e}")
-
-        return hourly_prices
-
-    def _parse_csv(self, csv_data: str, result: Dict[str, Any]) -> None:
-        """Parse OMIE CSV response.
-
-        Args:
-            csv_data: CSV data
-            result: Result dictionary to update
-        """
-        # OMIE CSV format can vary, so we'll try different approaches
-
-        # First, try to parse as the tabular format with hours as columns
-        if self._parse_tabular_format(csv_data, result):
-            return
-
-        # If tabular format fails, try to parse as CSV with header
         try:
-            csv_reader = csv.DictReader(StringIO(csv_data), delimiter=';')
+            local_tz = ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError:
+            _LOGGER.error(f"[OmieParser/_parse_json] Timezone '{timezone_name}' not found. Falling back to UTC.")
+            local_tz = timezone.utc
 
-            # Look for common field names
-            date_fields = ["Fecha", "Date", "DATA", "FECHA"]
-            hour_fields = ["Hora", "Hour", "HORA"]
-            price_fields = ["Precio", "Price", "PRECIO", "PRICE"]
+        try:
+            data = json.loads(json_data)
+            if "PVPC" in data and isinstance(data["PVPC"], list):
+                _LOGGER.debug("[OmieParser/_parse_json] Parsing ESIOS PVPC JSON structure.")
+                for entry in data["PVPC"]:
+                    try:
+                        day_str = entry.get("Dia")
+                        hour_str = entry.get("Hora")  # HH-HH+1
+                        price_str = None
+                        for field in ["PCB", "CYM", "GEN", "price"]:
+                            if field in entry and entry[field]:
+                                price_str = entry[field]
+                                break
+                        if not day_str or not hour_str or price_str is None:
+                            continue
 
-            for row in csv_reader:
-                # Find date field
-                date_field = next((f for f in date_fields if f in row), None)
-                if not date_field:
-                    continue
+                        price = float(str(price_str).replace(",", "."))
+                        start_hour = int(hour_str.split("-")[0])
 
-                # Find hour field
-                hour_field = next((f for f in hour_fields if f in row), None)
-                if not hour_field:
-                    continue
+                        if "/" in day_str:
+                            day, month, year = map(int, day_str.split("/"))
+                        else:
+                            year, month, day = map(int, day_str.split("-"))
 
-                # Find price field
-                price_field = next((f for f in price_fields if f in row), None)
-                if not price_field:
-                    continue
+                        dt_naive = datetime(year, month, day, start_hour)
+                        dt_local = dt_naive.replace(tzinfo=local_tz)
+                        dt_utc = dt_local.astimezone(timezone.utc)
+                        timestamp = dt_utc.isoformat()
+                        hourly_prices[timestamp] = price
+                    except (ValueError, KeyError, IndexError, TypeError) as e:
+                        _LOGGER.warning(f"[OmieParser/_parse_json] Error parsing PVPC entry: {entry}. Error: {e}")
+                        continue
+            else:
+                _LOGGER.warning("[OmieParser/_parse_json] JSON data found, but not in expected PVPC format.")
 
-                try:
-                    # Parse date and hour
-                    date_str = row[date_field]
-                    hour_str = row[hour_field]
+            result["hourly_raw"].update(hourly_prices)
+            _LOGGER.debug(f"[OmieParser/_parse_json] Parsed {len(hourly_prices)} prices from JSON.")
 
-                    # Parse timestamp
-                    timestamp = self._parse_timestamp(date_str, hour_str)
-                    if timestamp:
-                        # Format as ISO string for the hour
-                        hour_key = timestamp.strftime("%Y-%m-%dT%H:00:00")
-
-                        # Parse price
-                        price_str = row[price_field].replace(',', '.')
-                        price = float(price_str)
-
-                        # Add to hourly prices
-                        result["hourly_prices"][hour_key] = price
-                except (ValueError, TypeError) as e:
-                    _LOGGER.warning(f"Failed to parse OMIE CSV row: {e}")
-
+        except json.JSONDecodeError as e:
+            _LOGGER.error(f"[OmieParser/_parse_json] Invalid JSON: {e}")
         except Exception as e:
-            _LOGGER.warning(f"Failed to parse OMIE CSV with header: {e}")
+            _LOGGER.error(f"[OmieParser/_parse_json] Error during JSON parsing: {e}", exc_info=True)
 
-            # If that fails, try to parse as CSV without header
-            try:
-                csv_reader = csv.reader(StringIO(csv_data), delimiter=';')
+    def _parse_csv(self, csv_data: str, result: Dict[str, Any], timezone_name: str) -> None:
+        """Parse CSV-like text data from OMIE files (Updated Logic)."""
+        hourly_prices = {}
+        area = result.get("metadata", {}).get("area", "ES")
+        target_date_str = None
+        price_line = None
 
-                # Skip header row
-                next(csv_reader, None)
-
-                for row in csv_reader:
-                    if len(row) >= 3:  # Expect at least date, hour, price
-                        try:
-                            # Parse date and hour
-                            date_str = row[0]
-                            hour_str = row[1]
-
-                            # Parse timestamp
-                            timestamp = self._parse_timestamp(date_str, hour_str)
-                            if timestamp:
-                                # Format as ISO string for the hour
-                                hour_key = timestamp.strftime("%Y-%m-%dT%H:00:00")
-
-                                # Parse price
-                                price_str = row[2].replace(',', '.')
-                                price = float(price_str)
-
-                                # Add to hourly prices
-                                result["hourly_prices"][hour_key] = price
-                        except (ValueError, TypeError) as e:
-                            _LOGGER.warning(f"Failed to parse OMIE CSV row without header: {e}")
-
-            except Exception as e:
-                _LOGGER.warning(f"Failed to parse OMIE CSV without header: {e}")
-
-    def _parse_tabular_format(self, csv_data: str, result: Dict[str, Any]) -> bool:
-        """Parse OMIE data in tabular format with hours as columns.
-
-        This handles the format:
-        OMIE - Mercado de electricidad;Fecha Emision :13/04/2025 - 01:09;;13/04/2025;...
-
-        ;1;2;3;4;5;6;7;8;9;...;24;
-        Precio marginal en el sistema español (EUR/MWh);35,00;35,00;31,30;...
-
-        Args:
-            csv_data: CSV data
-            result: Result dictionary to update
-
-        Returns:
-            True if parsing was successful, False otherwise
-        """
         try:
-            # Split lines and filter out empty ones
-            lines = [line.strip() for line in csv_data.split('\n') if line.strip()]
+            local_tz = ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError:
+            _LOGGER.error(f"[OmieParser/_parse_csv] Timezone '{timezone_name}' not found. Falling back to UTC.")
+            local_tz = timezone.utc
 
-            if len(lines) < 3:
-                return False
+        try:
+            csv_file = StringIO(csv_data)
+            lines = csv_file.readlines()
 
-            # Extract date from header line
-            date_line = lines[0]
-            date_str = None
+            # 1. Find the date from the first few lines
+            for i, line in enumerate(lines[:5]): # Check first 5 lines for date
+                parts = line.strip().split(';')
+                if len(parts) > 3 and parts[3].count('/') == 2: # Look for DD/MM/YYYY in 4th column
+                    try:
+                        # Validate it looks like a date
+                        datetime.strptime(parts[3], '%d/%m/%Y')
+                        target_date_str = parts[3]
+                        _LOGGER.debug(f"[OmieParser/_parse_csv] Found target date: {target_date_str} in line {i+1}")
+                        break
+                    except ValueError:
+                        continue # Not a valid date in this format
+            if not target_date_str:
+                _LOGGER.error("[OmieParser/_parse_csv] Could not find target date (DD/MM/YYYY) in header lines.")
+                return
 
-            # Look for a date in DD/MM/YYYY format
-            import re
-            date_matches = re.findall(r'(\d{1,2}/\d{1,2}/\d{4})', date_line)
-            if date_matches:
-                date_str = date_matches[-1]  # Take the last date in the line
-
-            if not date_str:
-                _LOGGER.warning("Could not find date in OMIE tabular data")
-                return False
-
-            # Parse the date
-            try:
-                date_obj = datetime.strptime(date_str, "%d/%m/%Y").date()
-            except ValueError:
-                _LOGGER.warning(f"Could not parse date: {date_str}")
-                return False
-
-            # Find the hour header row and price row
-            hour_row = None
-            price_row = None
+            # 2. Find the relevant price line based on area
+            price_line_prefix_es = "Precio marginal en el sistema español"
+            price_line_prefix_pt = "Precio marginal en el sistema portugués"
+            target_prefix = price_line_prefix_pt if area.upper() == "PT" else price_line_prefix_es
+            fallback_prefix = price_line_prefix_es if area.upper() == "PT" else price_line_prefix_pt
 
             for i, line in enumerate(lines):
-                if line.strip().startswith(';1;2;'):
-                    hour_row = i
-                elif 'Precio marginal en el sistema' in line:
-                    price_row = i
+                stripped_line = line.strip()
+                if stripped_line.startswith(target_prefix):
+                    price_line = stripped_line
+                    _LOGGER.debug(f"[OmieParser/_parse_csv] Found target price line for {area}: '{price_line[:100]}...'")
+                    break
+            
+            # Fallback if primary area line not found (e.g., PT requested but only ES exists)
+            if not price_line:
+                 _LOGGER.warning(f"[OmieParser/_parse_csv] Target price line for {area} not found, trying fallback.")
+                 for i, line in enumerate(lines):
+                     stripped_line = line.strip()
+                     if stripped_line.startswith(fallback_prefix):
+                         price_line = stripped_line
+                         _LOGGER.debug(f"[OmieParser/_parse_csv] Found fallback price line: '{price_line[:100]}...'")
+                         break
 
-            if hour_row is None or price_row is None:
-                _LOGGER.warning("Could not find hour header row or price row in OMIE data")
-                return False
+            if not price_line:
+                _LOGGER.error(f"[OmieParser/_parse_csv] Could not find any price line starting with '{target_prefix}' or '{fallback_prefix}'.")
+                return
 
-            # Parse hour headers
-            hour_headers = lines[hour_row].split(';')
-            # Parse price values
-            price_values = lines[price_row].split(';')
+            # 3. Parse the date
+            try:
+                day, month, year = map(int, target_date_str.split('/'))
+                target_date = datetime(year, month, day).date()
+            except ValueError:
+                 _LOGGER.error(f"[OmieParser/_parse_csv] Failed to parse found date string: {target_date_str}")
+                 return
 
-            # Check if we have enough data
-            if len(hour_headers) < 2 or len(price_values) < 2:
-                _LOGGER.warning("Not enough data in OMIE rows")
-                return False
+            # 4. Extract prices from the found line
+            price_parts = price_line.split(';')
+            if len(price_parts) < 25: # Need prefix + 24 prices
+                _LOGGER.error(f"[OmieParser/_parse_csv] Price line does not contain enough columns (expected >= 25): {price_line}")
+                return
 
-            # First column in price row should contain text descriptor
-            price_row_header = price_values[0]
-            if not price_row_header:
-                _LOGGER.warning("Missing price row header")
-                return False
+            raw_prices = [p.strip() for p in price_parts[1:25]] # Prices are in columns 1 to 24 (0-indexed)
+            _LOGGER.debug(f"[OmieParser/_parse_csv] Extracted {len(raw_prices)} raw price strings: {raw_prices}")
 
-            # Create hourly prices
-            for i in range(1, min(len(hour_headers), len(price_values))):
-                if not hour_headers[i]:
-                    continue
-
+            # 5. Combine date, hour (1-24), and prices
+            for hour_1_24, price_str in enumerate(raw_prices, 1):
                 try:
-                    # Parse hour
-                    hour = int(hour_headers[i])
+                    if not price_str:
+                        _LOGGER.warning(f"[OmieParser/_parse_csv] Missing price for hour {hour_1_24}. Skipping.")
+                        continue
+                    
+                    # Clean and parse price (allow comma, digits, minus)
+                    cleaned_price_str = ''.join(c for c in price_str if c.isdigit() or c == ',' or c == '-')
+                    if not cleaned_price_str or cleaned_price_str == '-':
+                         _LOGGER.warning(f"[OmieParser/_parse_csv] Invalid price string for hour {hour_1_24}: '{price_str}' -> '{cleaned_price_str}'. Skipping.")
+                         continue
+                    price = float(cleaned_price_str.replace(',', '.'))
 
-                    # Parse price (replace comma with dot for decimal)
-                    price_str = price_values[i].strip().replace(',', '.')
-                    price = float(price_str)
+                    # Create timestamp
+                    hour_0_23 = hour_1_24 - 1
+                    dt_naive = datetime.combine(target_date, datetime.min.time().replace(hour=hour_0_23))
+                    dt_local = dt_naive.replace(tzinfo=local_tz)
+                    dt_utc = dt_local.astimezone(timezone.utc)
+                    timestamp = dt_utc.isoformat()
 
-                    # Normalize hour value (subtract 1 because hours are 1-indexed in this format)
-                    normalized_hour, adjusted_date = normalize_hour_value(hour-1, date_obj)
-
-                    # Create datetime for this hour
-                    dt = datetime.combine(adjusted_date, datetime.min.time()) + timedelta(hours=normalized_hour)
-
-                    # Format as ISO string for the hour
-                    hour_key = dt.strftime("%Y-%m-%dT%H:00:00")
-
-                    # Add to hourly prices
-                    result["hourly_prices"][hour_key] = price
+                    hourly_prices[timestamp] = price
+                    _LOGGER.debug(f"[OmieParser/_parse_csv] Hour {hour_1_24}: Price={price}, Timestamp={timestamp}")
 
                 except (ValueError, IndexError) as e:
-                    _LOGGER.warning(f"Failed to parse hour {hour_headers[i]} or price {price_values[i]}: {e}")
-
-            # Check if we parsed at least some prices
-            if result["hourly_prices"]:
-                _LOGGER.debug(f"Successfully parsed {len(result['hourly_prices'])} hours from OMIE tabular format")
-                return True
-
-            return False
-
-        except Exception as e:
-            _LOGGER.warning(f"Failed to parse OMIE tabular format: {e}")
-            return False
-
-    def _parse_timestamp(self, date_str: str, hour_str: str) -> Optional[datetime]:
-        """Parse timestamp from OMIE format.
-
-        Args:
-            date_str: Date string
-            hour_str: Hour string
-
-        Returns:
-            Parsed datetime or None if parsing fails
-        """
-        try:
-            # Try to parse date
-            date_formats = [
-                "%d/%m/%Y",
-                "%Y/%m/%d",
-                "%d-%m-%Y",
-                "%Y-%m-%d"
-            ]
-
-            parsed_date = None
-            for fmt in date_formats:
-                try:
-                    parsed_date = datetime.strptime(date_str, fmt).date()
-                    break
-                except ValueError:
+                    _LOGGER.warning(f"[OmieParser/_parse_csv] Error processing hour {hour_1_24} with price '{price_str}'. Error: {e}")
                     continue
 
-            if not parsed_date:
-                return None
-
-            # Try to parse hour
-            hour = None
-
-            # Try as integer (e.g., "1", "2", etc.)
-            try:
-                hour = int(hour_str)
-            except ValueError:
-                # Try as hour range (e.g., "01-02", "1-2", etc.)
-                if '-' in hour_str:
-                    try:
-                        hour = int(hour_str.split('-')[0])
-                    except ValueError:
-                        pass
-
-            if hour is None:
-                return None
-
-            # Normalize hour value
-            normalized_hour, adjusted_date = normalize_hour_value(hour, parsed_date)
-
-            # Create timestamp
-            return datetime.combine(adjusted_date, datetime.min.time()) + timedelta(hours=normalized_hour)
+            result["hourly_raw"].update(hourly_prices)
+            _LOGGER.debug(f"[OmieParser/_parse_csv] Successfully parsed {len(hourly_prices)} prices from OMIE file.")
 
         except Exception as e:
-            _LOGGER.warning(f"Failed to parse timestamp: {e}")
-            return None
-
-    def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get current hour price.
-
-        Args:
-            hourly_prices: Dictionary of hourly prices
-
-        Returns:
-            Current hour price or None if not available
-        """
-        if not hourly_prices:
-            return None
-
-        now = datetime.now()
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
-        current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
-
-        return hourly_prices.get(current_hour_key)
-
-    def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get next hour price.
-
-        Args:
-            hourly_prices: Dictionary of hourly prices
-
-        Returns:
-            Next hour price or None if not available
-        """
-        if not hourly_prices:
-            return None
-
-        now = datetime.now()
-        next_hour = (now.replace(minute=0, second=0, microsecond=0) +
-                    timedelta(hours=1))
-        next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
-
-        return hourly_prices.get(next_hour_key)
-
-    def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Calculate day average price.
-
-        Args:
-            hourly_prices: Dictionary of hourly prices
-
-        Returns:
-            Day average price or None if not enough data
-        """
-        if not hourly_prices:
-            return None
-
-        # Get today's date
-        today = datetime.now().date()
-
-        # Filter prices for today
-        today_prices = []
-        for hour_key, price in hourly_prices.items():
-            try:
-                hour_dt = datetime.fromisoformat(hour_key)
-                if hour_dt.date() == today:
-                    today_prices.append(price)
-            except (ValueError, TypeError):
-                continue
-
-        # Calculate average if we have enough prices
-        if len(today_prices) >= 12:
-            return sum(today_prices) / len(today_prices)
-
-        return None
+            _LOGGER.error(f"[OmieParser/_parse_csv] Error during CSV processing: {e}", exc_info=True)

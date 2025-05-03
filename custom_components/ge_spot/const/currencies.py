@@ -14,6 +14,7 @@ class Currency:
     GEL = "GEL"  # Georgian lari
     AZN = "AZN"  # Azerbaijani manat
     USD = "USD"  # US dollar
+    JPY = "JPY"  # Japanese yen
     CENTS = "cents"  # US cents (used by ComEd API)
 
 
@@ -109,6 +110,7 @@ class CurrencyInfo:
         Currency.GEL: 100,  # Georgian lari to tetri
         Currency.AZN: 100,  # Azerbaijani manat to qəpik
         Currency.USD: 100,  # US dollar to cents
+        Currency.JPY: 1,    # Japanese Yen is already in the smallest unit
         Currency.CENTS: 1,   # cents are already in the smallest unit
     }
 
@@ -126,5 +128,6 @@ class CurrencyInfo:
         Currency.GEL: "tetri",
         Currency.AZN: "qəpik",
         Currency.USD: "cents",
+        Currency.JPY: "Yen",
         Currency.CENTS: "cents",  # cents are already in the smallest unit
     }

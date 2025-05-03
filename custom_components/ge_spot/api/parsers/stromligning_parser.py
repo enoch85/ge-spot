@@ -1,128 +1,88 @@
 """Parser for Stromligning API responses."""
 import logging
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List, Tuple
 
 from ...const.sources import Source
+from ...const.currencies import Currency
 from ...timezone.timezone_utils import normalize_hour_value
 from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
+from ...const.energy import EnergyUnit # Add this import
 
 _LOGGER = logging.getLogger(__name__)
 
 class StromligningParser(BasePriceParser):
     """Parser for Stromligning API responses."""
 
-    def __init__(self):
+    def __init__(self, timezone_service=None):
         """Initialize the parser."""
-        super().__init__(Source.STROMLIGNING)
+        super().__init__(Source.STROMLIGNING, timezone_service)
         self._price_components = {}
 
-    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(self, raw_data: Any) -> Dict[str, Any]:
         """Parse Stromligning API response.
 
         Args:
-            data: Raw API response data
+            raw_data: Raw API response data
 
         Returns:
             Parsed data with hourly prices
         """
-        # Validate data
-        data = validate_data(data, self.source)
-
         result = {
-            "hourly_prices": {},
-            "currency": data.get("currency", "DKK"),
-            "source": self.source
+            "hourly_raw": {},
+            "currency": Currency.DKK,
+            "timezone": "Europe/Copenhagen",
+            "source_unit": EnergyUnit.KWH # Stromligning provides prices in kWh
         }
 
-        # If hourly prices were already processed
-        if "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
-            result["hourly_prices"] = data["hourly_prices"]
-        elif "prices" in data and isinstance(data["prices"], list):
-            # Parse prices from Stromligning
-            for price_data in data["prices"]:
-                if "date" in price_data and "price" in price_data and "value" in price_data["price"]:
-                    try:
-                        # Parse timestamp
-                        timestamp = self._parse_timestamp(price_data["date"])
-                        if timestamp:
-                            # Format as ISO string for the hour
-                            hour_key = timestamp.strftime("%Y-%m-%dT%H:00:00")
+        # Reset price components
+        self._price_components = {}
 
-                            # Parse price
-                            price = float(price_data["price"]["value"])
+        # Check for valid data
+        if not raw_data:
+            _LOGGER.warning("Empty Stromligning data received")
+            return result
 
-                            # Add to hourly prices
-                            result["hourly_prices"][hour_key] = price
-
-                            # Extract price components if available
-                            if "components" in price_data["price"] and isinstance(price_data["price"]["components"], list):
-                                hour_str = f"{timestamp.hour:02d}:00"
-                                self._price_components[hour_str] = {}
-
-                                for component in price_data["price"]["components"]:
-                                    if "name" in component and "value" in component:
-                                        component_name = component["name"]
-                                        component_value = float(component["value"])
-                                        self._price_components[hour_str][component_name] = component_value
-                    except (ValueError, TypeError) as e:
-                        _LOGGER.warning(f"Failed to parse Stromligning price: {e}")
-        elif "raw_data" in data and isinstance(data["raw_data"], str):
-            # Try to parse raw data as JSON
+        # --- Find the list of prices --- 
+        prices_list = None
+        if isinstance(raw_data, dict):
+            # Direct 'prices' key (most common case from API adapter)
+            if "prices" in raw_data and isinstance(raw_data["prices"], list):
+                prices_list = raw_data["prices"]
+                _LOGGER.debug("Using top-level 'prices' list.")
+            # Check if raw_data itself contains the list (less likely)
+            elif "raw_data" in raw_data and isinstance(raw_data["raw_data"], dict) and "prices" in raw_data["raw_data"] and isinstance(raw_data["raw_data"]["prices"], list):
+                 prices_list = raw_data["raw_data"]["prices"]
+                 _LOGGER.debug("Using 'prices' list nested under 'raw_data'.")
+            # Check if raw_data contains a JSON string to decode
+            elif "raw_data" in raw_data and isinstance(raw_data["raw_data"], str):
+                try:
+                    json_data = json.loads(raw_data["raw_data"])
+                    if "prices" in json_data and isinstance(json_data["prices"], list):
+                        prices_list = json_data["prices"]
+                        _LOGGER.debug("Using 'prices' list decoded from JSON string in 'raw_data'.")
+                except json.JSONDecodeError as e:
+                    _LOGGER.warning(f"Failed to parse Stromligning raw data string as JSON: {e}")
+        # Check if the input is a JSON string itself
+        elif isinstance(raw_data, str):
             try:
-                json_data = json.loads(data["raw_data"])
-
-                # Check if it's the expected format
+                json_data = json.loads(raw_data)
                 if "prices" in json_data and isinstance(json_data["prices"], list):
-                    for price_data in json_data["prices"]:
-                        if "date" in price_data and "price" in price_data and "value" in price_data["price"]:
-                            try:
-                                # Parse timestamp
-                                timestamp = self._parse_timestamp(price_data["date"])
-                                if timestamp:
-                                    # Format as ISO string for the hour
-                                    hour_key = timestamp.strftime("%Y-%m-%dT%H:00:00")
-
-                                    # Parse price
-                                    price = float(price_data["price"]["value"])
-
-                                    # Add to hourly prices
-                                    result["hourly_prices"][hour_key] = price
-
-                                    # Extract price components if available
-                                    if "components" in price_data["price"] and isinstance(price_data["price"]["components"], list):
-                                        hour_str = f"{timestamp.hour:02d}:00"
-                                        self._price_components[hour_str] = {}
-
-                                        for component in price_data["price"]["components"]:
-                                            if "name" in component and "value" in component:
-                                                component_name = component["name"]
-                                                component_value = float(component["value"])
-                                                self._price_components[hour_str][component_name] = component_value
-                            except (ValueError, TypeError) as e:
-                                _LOGGER.warning(f"Failed to parse Stromligning price from JSON: {e}")
+                    prices_list = json_data["prices"]
+                    _LOGGER.debug("Using 'prices' list decoded from direct JSON string input.")
             except json.JSONDecodeError as e:
-                _LOGGER.warning(f"Failed to parse Stromligning raw data as JSON: {e}")
-
-        # Add current and next hour prices if available
-        if "current_price" in data:
-            result["current_price"] = data["current_price"]
-
-        if "next_hour_price" in data:
-            result["next_hour_price"] = data["next_hour_price"]
-
-        # Calculate current and next hour prices if not provided
-        if "current_price" not in result:
-            result["current_price"] = self._get_current_price(result["hourly_prices"])
-
-        if "next_hour_price" not in result:
-            result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
-
-        # Calculate day average if enough prices
-        if len(result["hourly_prices"]) >= 12:
-            result["day_average_price"] = self._calculate_day_average(result["hourly_prices"])
+                _LOGGER.warning(f"Failed to parse Stromligning direct string input as JSON: {e}")
+        
+        # --- Validate extracted prices list ---
+        if not prices_list:
+            _LOGGER.warning("No valid 'prices' list found in Stromligning data after checking various structures.")
+            _LOGGER.debug(f"Data received by Stromligning parser: {raw_data}")
+            return result
+        
+        # --- Parse the list ---
+        self._parse_price_list(prices_list, result)
 
         return result
 
@@ -135,82 +95,133 @@ class StromligningParser(BasePriceParser):
         Returns:
             Metadata dictionary
         """
-        metadata = {
-            "currency": "DKK",  # Default currency for Stromligning
-        }
+        metadata = super().extract_metadata(data)
+        metadata.update({
+            "currency": Currency.DKK,  # Default currency for Stromligning
+            "timezone": "Europe/Copenhagen",
+            "area": "DK1",  # Default area
+        })
 
-        # Extract price area if available
-        if isinstance(data, dict) and "priceArea" in data:
-            metadata["price_area"] = data["priceArea"]
-
-        # Check if we have price components
-        has_components = False
-        component_types = set()
-
-        if isinstance(data, dict) and "prices" in data and isinstance(data["prices"], list):
-            for price_data in data["prices"]:
-                if "price" in price_data and "components" in price_data["price"] and isinstance(price_data["price"]["components"], list):
-                    has_components = True
-
-                    # Extract component types
-                    for component in price_data["price"]["components"]:
-                        if "name" in component:
-                            component_types.add(component["name"])
-
-        metadata["has_components"] = has_components
-        if component_types:
-            metadata["component_types"] = list(component_types)
+        # Extract additional metadata
+        if isinstance(data, dict):
+            # Extract price area if available
+            if "priceArea" in data:
+                metadata["price_area"] = data["priceArea"]
+                metadata["area"] = data["priceArea"]
+            
+            # Check for price components and structure
+            component_types = set()
+            if "prices" in data and isinstance(data["prices"], list) and data["prices"]:
+                # Check the first price entry to determine the data structure
+                first_price = data["prices"][0]
+                
+                # Check if details are available
+                if "details" in first_price and isinstance(first_price["details"], dict):
+                    metadata["has_details"] = True
+                    
+                    # Extract component types from details
+                    for component_name in first_price["details"].keys():
+                        component_types.add(component_name)
+                        
+                        # Check for nested components (like transmission)
+                        component_data = first_price["details"][component_name]
+                        if isinstance(component_data, dict):
+                            for sub_name in component_data.keys():
+                                if sub_name not in ("value", "vat", "total", "unit"):
+                                    component_types.add(f"{component_name}.{sub_name}")
+            
+            if component_types:
+                metadata["component_types"] = list(component_types)
+                
+            # Extract additional supplier info if available
+            if "supplier" in data:
+                metadata["supplier"] = data["supplier"]
+            if "company" in data:
+                metadata["company"] = data["company"]
 
         return metadata
 
-    def parse_hourly_prices(self, data: Any, area: str) -> Dict[str, float]:
-        """Parse hourly prices from Stromligning API response.
+    def _parse_price_list(self, prices: List[Dict], result: Dict[str, Any]) -> None:
+        """Parse price list from Stromligning API response.
 
         Args:
-            data: Raw API response data
-            area: Area code
-
-        Returns:
-            Dictionary of hourly prices with hour string keys (HH:00)
+            prices: List of price data
+            result: Result dictionary to update
         """
-        hourly_prices = {}
-
-        if isinstance(data, dict) and "prices" in data and isinstance(data["prices"], list):
-            for price_data in data["prices"]:
-                if "date" in price_data and "price" in price_data and "value" in price_data["price"]:
+        for price_data in prices:
+            # Ensure essential keys exist
+            if "date" in price_data and "price" in price_data and isinstance(price_data["price"], dict):
+                try:
+                    # Parse timestamp
+                    timestamp_str = price_data["date"]
                     try:
-                        # Parse timestamp
-                        timestamp = self._parse_timestamp(price_data["date"])
-                        if timestamp:
-                            # Format as hour string (HH:00)
-                            normalized_hour, adjusted_date = normalize_hour_value(timestamp.hour, timestamp.date())
-                            hour_key = f"{normalized_hour:02d}:00"
+                        # ISO format
+                        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                        # Create ISO formatted timestamp key
+                        hour_key = dt.isoformat()
+                        price_date = dt.date().isoformat()
+                        
+                        # --- Price Extraction Logic Change ---
+                        # Prioritize the main price.value, similar to the old parser
+                        price_value = None
+                        if "value" in price_data["price"]:
+                            try:
+                                price_value = float(price_data["price"]["value"])
+                                _LOGGER.debug(f"Using primary price.value for {hour_key}: {price_value}")
+                            except (ValueError, TypeError):
+                                _LOGGER.warning(f"Could not parse primary price value: {price_data['price'].get('value')} for {hour_key}")
+                        
+                        # Fallback to details.electricity.value if primary fails (less likely now)
+                        if price_value is None and "details" in price_data and isinstance(price_data["details"], dict):
+                            if "electricity" in price_data["details"] and isinstance(price_data["details"]["electricity"], dict):
+                                electricity = price_data["details"]["electricity"]
+                                if "value" in electricity:
+                                    try:
+                                        price_value = float(electricity["value"])
+                                        _LOGGER.debug(f"Using fallback electricity.value as price for {hour_key}: {price_value}")
+                                    except (ValueError, TypeError):
+                                        _LOGGER.warning(f"Could not parse fallback electricity value: {electricity.get('value')} for {hour_key}")
+                        # --- End Price Extraction Logic Change ---
 
-                            # Parse price
-                            price = float(price_data["price"]["value"])
+                        if price_value is not None:
+                            # Store original price value in DKK/kWh
+                            result["hourly_raw"][hour_key] = price_value  # Store raw price in DKK/kWh
+                            _LOGGER.debug(f"Storing raw price for {hour_key}: {price_value} DKK/kWh")
+                        else:
+                            _LOGGER.warning(f"No valid price found in Stromligning data for hour {hour_key}")
 
-                            # Add to hourly prices
-                            hourly_prices[hour_key] = price
-
-                            # Extract price components if available
-                            if "components" in price_data["price"] and isinstance(price_data["price"]["components"], list):
-                                self._price_components[hour_key] = {}
-
-                                for component in price_data["price"]["components"]:
-                                    if "name" in component and "value" in component:
-                                        component_name = component["name"]
-                                        component_value = float(component["value"])
+                        # Extract price components from details for internal storage/debugging
+                        if "details" in price_data and isinstance(price_data["details"], dict):
+                            self._price_components[hour_key] = {}
+                            for component_name, component_data in price_data["details"].items():
+                                if isinstance(component_data, dict) and "value" in component_data:
+                                    try:
+                                        component_value = float(component_data["value"])
                                         self._price_components[hour_key][component_name] = component_value
+                                    except (ValueError, TypeError):
+                                        _LOGGER.debug(f"Could not parse component '{component_name}' value: {component_data.get('value')} for {hour_key}")
+                                
+                                # Handle nested components like transmission
+                                elif isinstance(component_data, dict):
+                                    for sub_name, sub_data in component_data.items():
+                                        if isinstance(sub_data, dict) and "value" in sub_data:
+                                            try:
+                                                sub_value = float(sub_data["value"])
+                                                self._price_components[hour_key][f"{component_name}.{sub_name}"] = sub_value
+                                            except (ValueError, TypeError):
+                                                _LOGGER.debug(f"Could not parse nested component '{component_name}.{sub_name}' value: {sub_data.get('value')} for {hour_key}")
                     except (ValueError, TypeError) as e:
-                        _LOGGER.warning(f"Failed to parse Stromligning price: {e}")
-
-        return hourly_prices
+                        _LOGGER.debug(f"Failed to parse Stromligning timestamp: {timestamp_str} - {e}")
+                except Exception as e: # Catch broader errors during item processing
+                    _LOGGER.warning(f"Failed to process price item: {price_data}. Error: {e}", exc_info=True)
+            else:
+                _LOGGER.debug(f"Skipping invalid price item structure: {price_data}")
 
     def get_price_components(self) -> Dict[str, Dict[str, float]]:
-        """Get price components.
-
+        """Get price components extracted during parsing.
+        
         Returns:
-            Dictionary of price components by hour
+            Dictionary of price components per hour
         """
         return self._price_components
 
@@ -224,28 +235,21 @@ class StromligningParser(BasePriceParser):
             Parsed datetime or None if parsing fails
         """
         try:
-            # Stromligning typically uses ISO format
+            # Try ISO format
             return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
         except (ValueError, AttributeError):
-            # Try common formats
+            # Try common Stromligning formats
             formats = [
-                "%Y-%m-%dT%H:%M:%S",
-                "%Y-%m-%dT%H:%M",
+                "%Y-%m-%dT%H:%M:%S",  # ISO without timezone
                 "%Y-%m-%d %H:%M:%S",
                 "%Y-%m-%d %H:%M",
-                "%Y-%m-%d"
+                "%Y-%m-%dT%H"  # Date with hour only
             ]
 
             for fmt in formats:
                 try:
-                    dt = datetime.strptime(timestamp_str, fmt)
-
-                    # If only date is provided, assume start of day
-                    if fmt == "%Y-%m-%d":
-                        return dt
-
-                    return dt
-                except ValueError:
+                    return datetime.strptime(timestamp_str, fmt)
+                except (ValueError, TypeError):
                     continue
 
             _LOGGER.warning(f"Failed to parse timestamp: {timestamp_str}")
@@ -263,9 +267,9 @@ class StromligningParser(BasePriceParser):
         if not hourly_prices:
             return None
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         current_hour = now.replace(minute=0, second=0, microsecond=0)
-        current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
+        current_hour_key = current_hour.isoformat()
 
         return hourly_prices.get(current_hour_key)
 
@@ -281,40 +285,8 @@ class StromligningParser(BasePriceParser):
         if not hourly_prices:
             return None
 
-        now = datetime.now()
-        next_hour = (now.replace(minute=0, second=0, microsecond=0) +
-                    timedelta(hours=1))
-        next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
+        now = datetime.now(timezone.utc)
+        next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        next_hour_key = next_hour.isoformat()
 
         return hourly_prices.get(next_hour_key)
-
-    def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Calculate day average price.
-
-        Args:
-            hourly_prices: Dictionary of hourly prices
-
-        Returns:
-            Day average price or None if not enough data
-        """
-        if not hourly_prices:
-            return None
-
-        # Get today's date
-        today = datetime.now().date()
-
-        # Filter prices for today
-        today_prices = []
-        for hour_key, price in hourly_prices.items():
-            try:
-                hour_dt = datetime.fromisoformat(hour_key)
-                if hour_dt.date() == today:
-                    today_prices.append(price)
-            except (ValueError, TypeError):
-                continue
-
-        # Calculate average if we have enough prices
-        if len(today_prices) >= 12:
-            return sum(today_prices) / len(today_prices)
-
-        return None

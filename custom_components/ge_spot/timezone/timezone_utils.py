@@ -1,6 +1,6 @@
 """Timezone utility functions to avoid circular imports."""
 import logging
-from datetime import datetime, tzinfo, timedelta
+from datetime import datetime, tzinfo, timedelta, timezone
 from typing import Dict, Any, Optional, Union
 
 import zoneinfo
@@ -8,8 +8,35 @@ import zoneinfo
 from ..const.sources import Source
 from ..const.time import TimezoneConstants, TimezoneName
 from ..const.api import SourceTimezone
+from ..const.areas import Timezone
 
 _LOGGER = logging.getLogger(__name__)
+
+def get_timezone_by_name(timezone_name: str) -> str:
+    """Get timezone identifier for a given name or area.
+    
+    Args:
+        timezone_name: Timezone name or area code
+        
+    Returns:
+        Timezone identifier (IANA format)
+    """
+    # Check if it's a direct timezone identifier already (contains a '/')
+    if "/" in timezone_name:
+        return timezone_name
+        
+    # Check if it's in the area timezones mapping
+    if timezone_name in Timezone.AREA_TIMEZONES:
+        return Timezone.AREA_TIMEZONES[timezone_name]
+        
+    # Check if it's a known timezone name that can be mapped
+    iana_name = TimezoneName.get_iana_name(timezone_name)
+    if iana_name != timezone_name:  # If mapping occurred
+        return iana_name
+        
+    # Fallback
+    _LOGGER.warning("Could not resolve timezone for name: %s, using default", timezone_name)
+    return TimezoneConstants.DEFAULT_FALLBACK
 
 def get_source_timezone(source: str, area: Optional[str] = None) -> str:
     """Get timezone for a specific API source.
@@ -62,14 +89,13 @@ def get_timezone_object(timezone_id: str) -> tzinfo:
     Raises:
         ValueError: If timezone_id is invalid or cannot be resolved
     """
-    # Handle case where timezone_id is already a ZoneInfo object
-    if isinstance(timezone_id, zoneinfo.ZoneInfo):
+    if isinstance(timezone_id, tzinfo):
+        # If already a tzinfo object (like datetime.timezone.utc), return as is
         return timezone_id
 
     # Special case for UTC
-    if timezone_id == "UTC":
-        import datetime
-        return datetime.timezone.utc
+    if timezone_id in ('UTC', 'Z', 'GMT', 'GMT0', 'GMT+0', 'GMT-0'):
+        return timezone.utc
 
     # Convert common timezone names to IANA names
     iana_timezone_id = TimezoneName.get_iana_name(timezone_id)
@@ -77,8 +103,8 @@ def get_timezone_object(timezone_id: str) -> tzinfo:
     try:
         return zoneinfo.ZoneInfo(iana_timezone_id)
     except Exception as e:
-        error_msg = f"Failed to get timezone object for {timezone_id} (as {iana_timezone_id}): {e}"
-        _LOGGER.error(error_msg)
+        error_msg = f"Invalid source timezone identifier: {timezone_id}"
+        _LOGGER.error(f"Failed to get timezone object for {timezone_id} (as {iana_timezone_id}): {e}")
         raise ValueError(error_msg)
 
 def convert_datetime(dt: datetime, target_tz: Union[str, tzinfo], source_tz: Optional[Union[str, tzinfo]] = None) -> datetime:

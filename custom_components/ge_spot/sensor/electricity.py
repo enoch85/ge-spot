@@ -1,126 +1,200 @@
-"""Electricity price sensors setup and registration."""
+"""Electricity price data sensors for the GE-Spot integration."""
 import logging
-from typing import Any, Dict, List
-
-from homeassistant.util import dt as dt_util
+from datetime import datetime, timedelta
+import voluptuous as vol
+from homeassistant.components.sensor import SensorDeviceClass
+from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.const import ATTR_ATTRIBUTION
 
 from ..const import DOMAIN
 from ..const.config import Config
-from ..const.sources import Source
-from ..const.attributes import Attributes
-from ..const.defaults import Defaults
-from ..const.currencies import CurrencyInfo
-from .base import BaseElectricityPriceSensor
+from ..price.formatter import format_price, format_price_value, format_relative_price
+from ..coordinator import UnifiedPriceCoordinator
 from .price import (
     PriceValueSensor,
+    PriceStatisticSensor,
     ExtremaPriceSensor,
-    TomorrowExtremaPriceSensor,
+    PriceDifferenceSensor,
+    PricePercentSensor,
     TomorrowAveragePriceSensor,
+    TomorrowExtremaPriceSensor
 )
+
+from ..const.attributes import Attributes
+from ..const.defaults import Defaults
+from ..const.display import DisplayUnit
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Set up the electricity price sensors from config entries."""
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]
-    area = config_entry.data.get(Config.AREA)
+async def async_setup_entry(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+):
+    """Set up the GE Spot electricity sensors."""
+    coordinator: UnifiedPriceCoordinator = hass.data[DOMAIN][config_entry.entry_id]
+    options = config_entry.options
+    data = config_entry.data # Get data as well
 
-    # Get VAT from options first, then fallback to data
-    vat = config_entry.options.get(Config.VAT, config_entry.data.get(Config.VAT, 0))
+    # Prioritize options, fallback to data, then default for display_unit
+    display_unit_setting = options.get(
+        Config.DISPLAY_UNIT,
+        data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
+    )
 
-    # Determine currency based on area
-    currency = config_entry.data.get(Config.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(area))
-
-    # Get display unit setting from coordinator
-    display_unit = coordinator.display_unit
-
+    # Create a proper config_data dictionary including area and other relevant options
     config_data = {
-        Attributes.AREA: area,
-        Attributes.VAT: vat,
-        Attributes.CURRENCY: currency,
-        Config.DISPLAY_UNIT: display_unit,
+        Attributes.AREA: coordinator.area, # Get area from coordinator
+        # Prioritize options, fallback to data, then default for VAT
+        Attributes.VAT: options.get(Config.VAT, data.get(Config.VAT, 0)),
+        # Prioritize options, fallback to data, then default for PRECISION
+        Config.PRECISION: options.get(Config.PRECISION, data.get(Config.PRECISION, Defaults.PRECISION)),
+        # Use the resolved display_unit_setting
+        Config.DISPLAY_UNIT: display_unit_setting,
+        # Prioritize options, fallback to data, then default for CURRENCY
+        Attributes.CURRENCY: options.get(Config.CURRENCY, data.get(Config.CURRENCY, coordinator.currency)),
+        "entry_id": config_entry.entry_id,
     }
 
-    # Define sensor entities
-    entities = [
-        # Current price sensor
+    # Define value extraction functions
+    get_current_price = lambda data: data.get('current_price')
+    get_next_hour_price = lambda data: data.get('next_hour_price')
+    # Define a simple additional attributes function
+    get_base_attrs = lambda data: {"tomorrow_valid": data.get("tomorrow_valid", False)}
+
+    entities = []
+
+    # Get specific settings used by some sensors directly (already present)
+    vat = options.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
+    include_vat = options.get(Config.INCLUDE_VAT, False)
+    price_in_cents = display_unit_setting == DisplayUnit.CENTS # Use resolved display_unit_setting
+
+    # Create sensor entities (passing the populated config_data)
+
+    # Current price sensor
+    entities.append(
         PriceValueSensor(
             coordinator,
-            config_data,
-            "current_price",
+            config_data, # Pass the correctly populated config_data
+            "current_price", # Pass only the sensor type
             "Current Price",
-            lambda data: data.get("current_price"),
-            lambda data: {
-                "tomorrow_valid": data.get("tomorrow_valid", False),
-            }
-        ),
+            get_current_price, # Pass the function
+            get_base_attrs     # Pass the function for additional attributes
+        )
+    )
 
-        # Next hour price
+    # Next hour price sensor
+    entities.append(
         PriceValueSensor(
             coordinator,
-            config_data,
-            "next_hour_price",
+            config_data, # Pass the correctly populated config_data
+            "next_hour_price", # Pass only the sensor type
             "Next Hour Price",
-            lambda data: data.get("next_hour_price")
-        ),
+            get_next_hour_price, # Pass the function
+            None                 # No specific additional attributes needed here yet
+        )
+    )
 
-        # Day average
-        PriceValueSensor(
+    # Average price sensor
+    entities.append(
+        PriceStatisticSensor(
             coordinator,
-            config_data,
-            "day_average_price",
-            "Day Average",
-            lambda data: data.get("today_stats", {}).get("average")
-        ),
+            config_data, # Pass config_data
+            "average_price", # Pass only the sensor type
+            "Average Price",
+            "average" # Removed additional_attrs
+        )
+    )
 
-        # Today peak price (max)
+    # Peak price sensor
+    entities.append(
         ExtremaPriceSensor(
             coordinator,
-            config_data,
-            "peak_price",
+            config_data, # Pass the correctly populated config_data
+            "peak_price", # Pass only the sensor type
             "Peak Price",
-            day_offset=0,
-            extrema_type="max"
-        ),
+            extrema_type="max" # Removed additional_attrs
+        )
+    )
 
-        # Today off-peak price (min)
+    # Off-peak price sensor
+    entities.append(
         ExtremaPriceSensor(
             coordinator,
-            config_data,
-            "off_peak_price",
+            config_data, # Pass the correctly populated config_data
+            "off_peak_price", # Pass only the sensor type
             "Off-Peak Price",
-            day_offset=0,
-            extrema_type="min"
-        ),
+            extrema_type="min" # Removed additional_attrs
+        )
+    )
 
-        # Tomorrow average price
+    # Price difference (current vs average)
+    entities.append(
+        PriceDifferenceSensor(
+            coordinator,
+            config_data, # Pass config_data
+            "price_difference", # Pass only the sensor type
+            "Price Difference",
+            "current_price",
+            "average"
+        )
+    )
+
+    # Price percentage (current vs average)
+    entities.append(
+        PricePercentSensor(
+            coordinator,
+            config_data, # Pass config_data
+            "price_percentage", # Pass only the sensor type
+            "Price Percentage",
+            "current_price",
+            "average"
+        )
+    )
+
+    # --- Add Tomorrow Sensors --- 
+
+    # Tomorrow Average price sensor
+    # Define value extraction function for tomorrow average
+    get_tomorrow_avg_price = lambda data: data.get("tomorrow_statistics", {}).get("average")
+    entities.append(
         TomorrowAveragePriceSensor(
             coordinator,
-            config_data,
-            "tomorrow_average_price",
-            "Tomorrow Average",
-            lambda data: data.get("tomorrow_stats", {}).get("average")
-        ),
-
-        # Tomorrow peak price (max)
-        TomorrowExtremaPriceSensor(
-            coordinator,
-            config_data,
-            "tomorrow_peak_price",
-            "Tomorrow Peak",
-            day_offset=1,
-            extrema_type="max"
-        ),
-
-        # Tomorrow off-peak price (min)
-        TomorrowExtremaPriceSensor(
-            coordinator,
-            config_data,
-            "tomorrow_off_peak_price",
-            "Tomorrow Off-Peak",
-            day_offset=1,
-            extrema_type="min"
+            config_data, # Pass the correctly populated config_data
+            "tomorrow_average_price", # Pass only the sensor type
+            "Tomorrow Average Price",
+            get_tomorrow_avg_price, # Pass the function
+            additional_attrs=get_base_attrs # Keep here, TomorrowAveragePriceSensor inherits from PriceValueSensor correctly
         )
-    ]
+    )
 
+    # Tomorrow Peak price sensor
+    entities.append(
+        TomorrowExtremaPriceSensor(
+            coordinator,
+            config_data, # Pass the correctly populated config_data
+            "tomorrow_peak_price", # Pass only the sensor type
+            "Tomorrow Peak Price",
+            day_offset=1,       # Specify tomorrow
+            extrema_type="max"  # Specify peak
+        )
+    )
+
+    # Tomorrow Off-Peak price sensor
+    entities.append(
+        TomorrowExtremaPriceSensor(
+            coordinator,
+            config_data, # Pass the correctly populated config_data
+            "tomorrow_off_peak_price", # Pass only the sensor type
+            "Tomorrow Off-Peak Price",
+            day_offset=1,       # Specify tomorrow
+            extrema_type="min"  # Specify off-peak
+        )
+    )
+    # --- End Tomorrow Sensors ---
+
+    # Add all entities
     async_add_entities(entities)

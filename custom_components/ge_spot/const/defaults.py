@@ -3,13 +3,24 @@ from .display import DisplayUnit
 from .time import TimezoneReference
 
 class Defaults:
-    """Default values."""
+    """Default configuration values."""
     NAME = "Electricity Price"
     VAT = 0.0
+    VAT_RATE = 0  # Default VAT rate in percentage
+    INCLUDE_VAT = False  # Whether to include VAT by default
     UPDATE_INTERVAL = 30  # minutes
+    # Display & Formatting
     DISPLAY_UNIT = DisplayUnit.DECIMAL
-    PRECISION = 3
+    PRECISION = 4
+    CURRENCY_SUBUNIT = "cents" # Added default for subunit check
 
+    # Cache Settings
+    CACHE_MAX_ENTRIES = 100
+    CACHE_TTL = 3600 * 6 # 6 hours default TTL
+    PERSIST_CACHE = False # Added default for cache persistence
+    CACHE_DIR = "cache" # Added default cache directory
+
+    # API & Network
     # Cache defaults
     CACHE_TTL = 60  # minutes
     CACHE_MAX_DAYS = 3  # days
