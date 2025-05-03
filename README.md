@@ -199,7 +199,7 @@ flowchart TD
     end
 
     Manager --> FinalResult
-    FinalResult --> Sensors[Update HA Sensors]
+    FinalResult --> Sensors[Update HA Sensors];
 
     note over FallbackMgr: Handles retries and selecting the first successful API based on priority.
     note over Manager: Orchestrates fetch, processing, caching, and rate limiting.
@@ -266,10 +266,10 @@ flowchart TD
         Parse[Parse Raw Data]
         Validate[Validate Price Data]
         Convert[Call CurrencyConverter]
-        ApplyVAT[Apply VAT (if enabled)]
-        Format[Format for Display (using PriceFormatter)]
-        CalcStats[Calculate Statistics (using PriceStatistics)]
-        CreateOutput[Create Final Data Structure]
+        ApplyVAT["Apply VAT (if enabled)"]
+        Format["Format for Display (using PriceFormatter)"]
+        CalcStats["Calculate Statistics (using PriceStatistics)"]
+        CreateOutput["Create Final Data Structure"]
 
         Parse --> Validate
         Validate --> Convert
@@ -293,9 +293,9 @@ flowchart TD
     subgraph CurrencyService ["CurrencyService"]
         direction TB
         CheckCache[Call CacheManager: Check Rates Cache]
-        FetchECB[Fetch from ECB API (on cache miss)]
+        FetchECB["Fetch from ECB API (on cache miss)"]
         StoreCache[Call CacheManager: Store Rates]
-        UseFallback[Use Fallback Rates (on API fail)]
+        UseFallback["Use Fallback Rates (on API fail)"]
         Scheduler[Scheduled Updates Trigger]
 
         Scheduler --> CheckCache
