@@ -14,8 +14,8 @@ This custom integration allows you to fetch day-ahead electricity spot prices fr
 - [Supported Price Sources & Regions](#supported-price-sources--regions)
 - [Features](#features)
 - [Configuration](#configuration)
-- [Multi-Source API & Fallback System](#multi-source-api--fallback-system)
 - [Technical Features](#technical-features)
+  - [Multi-Source API & Fallback System](#multi-source-api--fallback-system)
   - [Timezone Handling](#timezone-handling)
   - [Price Conversion Logic](#price-conversion-logic)
   - [Currency Conversion](#currency-conversion)
@@ -149,7 +149,9 @@ The integration implements several mechanisms to ensure reliability:
 - **Rate Limiting**: Minimum update interval of 15 minutes to respect API rate limits
 - **Special Update Windows**: More frequent updates during price publication times (around 13:00 CET)
 
-## Multi-Source API & Fallback System
+## Technical Features
+
+### Multi-Source API & Fallback System
 
 GE-Spot uses a robust multi-source approach to ensure reliable price data:
 
@@ -198,8 +200,6 @@ flowchart TD
     %% ────── OUTPUT ──────
     Final --> Sensors["Update Home-Assistant sensors"]
 ```
-
-## Technical Features
 
 ### Timezone Handling
 
