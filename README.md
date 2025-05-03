@@ -490,162 +490,174 @@ If you experience issues:
 
 ## For Developers
 
-### Architecture Overview
-
 GE-Spot follows a modular architecture with clear separation of concerns:
 
 ```
 custom_components/ge_spot/
+├── __init__.py           # Integration setup
+├── config_flow.py        # Configuration flow handler
+├── manifest.json         # Integration manifest
 ├── api/                  # API clients for different price sources
+│   ├── __init__.py
+│   ├── base/             # Base classes for API functionality (adapter, fetcher, error handler)
 │   ├── parsers/          # Dedicated parsers for each API source
-│   └── base/             # Base classes for API functionality
-├── const/                # Constants and configuration
+│   └── [source_name].py  # Specific API client implementations (e.g., nordpool.py)
+├── config_flow/          # UI Configuration flow logic
+│   ├── __init__.py
+│   ├── implementation.py # Main config flow steps
+│   ├── options.py        # Options flow handler
+│   ├── schemas.py        # Voluptuous schemas for validation
+│   └── validators.py     # Custom validators
+├── const/                # Constants (areas, sources, currencies, defaults, etc.)
 ├── coordinator/          # Data coordination and management
+│   ├── __init__.py
+│   ├── unified_price_manager.py # Orchestrates fetching, processing, caching
+│   ├── fallback_manager.py    # Handles trying sources in priority order
+│   ├── data_processor.py      # Processes raw data (timezone, currency, stats)
+│   ├── cache_manager.py       # Manages data caching
+│   └── api_key_manager.py     # Manages API keys
 ├── price/                # Price data processing and conversion
-├── sensor/               # Sensor implementations
+│   ├── __init__.py
+│   ├── currency_converter.py  # Handles currency/unit conversion
+│   ├── currency_service.py    # Manages exchange rate fetching/caching
+│   └── statistics.py        # Calculates price statistics (avg, peak, etc.)
+├── sensor/               # Sensor entity implementations
+│   ├── __init__.py
+│   ├── base.py           # Base sensor class
+│   ├── electricity.py    # Main electricity price sensor logic
+│   └── price.py          # Specific price sensor types (current, avg, etc.)
 ├── timezone/             # Timezone handling and conversion
+│   ├── __init__.py
+│   ├── service.py        # Main timezone service
+│   └── ...               # Helper modules for parsing, DST, etc.
+├── translations/         # UI translation strings
 └── utils/                # Utility functions and classes
-    ├── error/            # Error handling and recovery
-    ├── fallback/         # Fallback mechanisms
-    └── validation/       # Data validation
+    ├── __init__.py
+    ├── advanced_cache.py # Advanced caching implementation
+    ├── data_validator.py # Data validation helpers
+    ├── exchange_service.py # Fetches/caches ECB exchange rates
+    ├── rate_limiter.py   # Handles API rate limiting
+    └── ...               # Other utilities (date range, unit conversion, etc.)
 ```
 
 ### API System
 
 The API system is designed to be extensible and fault-tolerant:
 
-1. **API Registry**: Central registry of all API sources
-2. **Source Prioritization**: APIs are tried in priority order
-3. **Fallback Chains**: Each source has a defined fallback chain
-4. **Data Validation**: Robust validation of API responses
-5. **Error Recovery**: Automatic retry with exponential backoff
+1.  **Modular Adapters**: Each price source is implemented as a separate module in `custom_components/ge_spot/api/`, often inheriting from a base adapter in `api/base/`.
+2.  **Source Prioritization**: During configuration, users define the order in which API sources should be tried for their selected region.
+3.  **Fallback Mechanism**: The `FallbackManager` iterates through the prioritized list of adapters for a region, attempting to fetch data until one succeeds.
+4.  **Data Validation**: Parsed data undergoes validation (e.g., using `utils/data_validator.py`) before further processing.
+5.  **Error Handling**: Base API classes and the fetching process include error handling, logging, and retry logic (often with backoff).
 
 ### Adding a New Price Source
 
 To add a new price source:
 
-1. Create a new API module in `custom_components/ge_spot/api/`
-2. Implement the `fetch_day_ahead_prices` function following the pattern in existing modules
-3. Create a dedicated parser in `custom_components/ge_spot/api/parsers/`
-4. Register the source in `api/__init__.py` and add to the `SOURCE_REGION_SUPPORT` mapping
-5. Add region mappings in the `const/areas.py` file
-6. Update the fallback chain in `ApiRegistry.get_fallback_chain()` to include the new source
+1.  Create a new API client module in `custom_components/ge_spot/api/` (e.g., `my_new_source.py`).
+2.  Implement the client logic, ideally inheriting from `api.base.BasePriceAPI` or a similar base class. This typically involves implementing methods like `fetch_raw_data` and potentially `parse_raw_data` (or creating a separate parser).
+3.  If needed, create a dedicated parser in `custom_components/ge_spot/api/parsers/`.
+4.  Register the new source:
+    *   Add a constant for the source name in `const/sources.py`.
+    *   Map the source to its implementation class in `api/__init__.py` (in the `SOURCE_MAP`).
+    *   Define which regions the source supports in `const/api.py` (in `SOURCE_REGION_SUPPORT`).
+5.  Add any relevant region/area codes and currency mappings in `const/areas.py`.
+6.  Update the configuration flow (`config_flow/schemas.py`, `config_flow/implementation.py`) to allow users to select the new source in the priority list if applicable for their region.
+7.  Add tests for the new API client and parser.
 
 ### Standardized Return Format
 
-All API modules should return data in this format:
+API parsers aim to return a standardized dictionary format containing raw hourly prices, timezone, and currency information. This raw structure is then processed by the `DataProcessor` into the final format used by sensors, which typically includes:
 
 ```python
 {
-    "current_price": float,           # Current hour price
-    "next_hour_price": float,         # Next hour price
-    "day_average_price": float,       # Day average
-    "peak_price": float,              # Day maximum
-    "off_peak_price": float,          # Day minimum
-    "hourly_prices": dict,            # Hourly prices "HH:00" -> float
-    "tomorrow_hourly_prices": dict,   # Tomorrow's hourly prices (if available)
-    "raw_values": dict,               # Raw conversion information
-    "data_source": str,               # Source name
-    "last_updated": str,              # ISO timestamp
-    "currency": str                   # Target currency
+    "current_price": float,           # Current hour price (converted)
+    "next_hour_price": float,         # Next hour price (converted)
+    "day_average_price": float,       # Day average (converted)
+    "peak_price": float,              # Day maximum (converted)
+    "off_peak_price": float,          # Day minimum (converted)
+    "hourly_prices": dict,            # Hourly prices "YYYY-MM-DDTHH:00:00+ZZ:ZZ" -> float (converted)
+    "tomorrow_hourly_prices": dict,   # Tomorrow's hourly prices (if available, converted)
+    "raw_today": dict,                # Raw hourly prices for today (before conversion)
+    "raw_tomorrow": dict,             # Raw hourly prices for tomorrow (before conversion)
+    "source_data": {                  # Metadata about the fetch
+        "source": str,                # Source name that provided the data
+        "currency": str,              # Original currency from source
+        "timezone": str,              # Original timezone from source
+        # ... other source-specific details
+    },
+    "conversion_details": {           # Details about the conversion process
+        "target_currency": str,
+        "target_unit": str,
+        "vat_rate": float,
+        "exchange_rate": float,
+        # ...
+    },
+    "last_updated": str,              # ISO timestamp of the update
+    # ... other calculated attributes
 }
 ```
+*Note: The exact structure might vary slightly; check `DataProcessor` and sensor attributes for the precise format.*
 
 ### Error Handling System
 
 The error handling system provides:
 
-1. **Error Classification**: Errors are classified by type for better handling
-2. **Error Recovery**: Automatic retry with exponential backoff for transient errors
-3. **Error Tracking**: Comprehensive tracking of errors for better diagnostics
-4. **API Health Monitoring**: Continuous monitoring of API health to detect issues early
+1.  **Error Classification**: Specific exceptions are often defined (e.g., in `api/base/exceptions.py`) and raised by API clients.
+2.  **Error Recovery**: The `FallbackManager` and underlying fetch mechanisms often include retries (sometimes with exponential backoff) for transient network or API errors.
+3.  **Logging**: Errors during fetching or processing are logged to Home Assistant logs for diagnostics.
+4.  **Fallback to Cache**: If all sources fail, the system attempts to use previously cached data.
 
 ### Fallback System
 
 The fallback system ensures reliability:
 
-1. **Source Health Tracking**: Track the health of each data source
-2. **Intelligent Fallback**: Automatically fall back to alternative sources when primary sources fail
-3. **Data Quality Scoring**: Score data quality to choose the best source
-4. **Cached Fallback**: Use cached data when all sources fail
+1.  **Prioritized List**: Uses the user-configured source priority list for the region.
+2.  **Sequential Attempts**: The `FallbackManager` tries fetching from each source in order.
+3.  **First Success Wins**: Uses the data from the first source in the list that returns valid data.
+4.  **Caching**: If all sources in the priority list fail, it falls back to using cached data if available and not expired.
+5.  **Status Tracking**: Sensor attributes often indicate which source succeeded (`data_source`), which were tried (`attempted_sources`), and if cache was used (`using_cached_data`).
 
 ### Testing
 
-The integration includes comprehensive test scripts:
+The integration includes automated tests using `pytest` and manual test scripts.
 
-#### API Tests
+#### Automated Tests (pytest)
 
-Test the basic functionality of all APIs:
+Located in `tests/pytest/`. Organized into `unit`, `integration`, and `lib` tests.
 
+To run all pytest tests:
 ```bash
-python scripts/tests/test_all_apis.py
+pytest tests/pytest/
 ```
 
-#### Date Range Tests
-
-Test the date range utility with all APIs:
-
+To run specific categories (e.g., unit tests):
 ```bash
-python scripts/tests/test_date_range_apis.py
+pytest tests/pytest/unit/
 ```
 
-#### Timezone Tests
+(Refer to `tests/README.md` for more details on pytest structure and execution).
 
-Test timezone handling and conversion:
+#### Manual Tests
 
+Located in `tests/manual/`. These scripts often test against live APIs (API keys might be required via environment variables).
+
+Example: Run a specific manual integration test:
 ```bash
-python scripts/tests/test_timezone_handling.py
+python -m tests/manual.integration.nordpool_full_chain SE4
 ```
 
-These tests verify that each API correctly handles different date ranges, timezone conversions, and edge cases. This is particularly important for ensuring consistent behavior across different regions and time periods.
+(Refer to `tests/README.md` and individual script headers for usage instructions).
 
 ### Performance Optimization
 
 The integration includes several performance optimizations:
 
-1. **Parallel Fetching**: Fetch data from multiple sources in parallel
-2. **Priority-Based Fetching**: Fetch from sources in priority order
-3. **Advanced Caching**: Sophisticated caching with TTL and invalidation
-4. **Reduced Network Load**: Conditional requests and rate limiting
-
-### Tomorrow's Data Fetching
-
-The integration implements a sophisticated system for fetching tomorrow's electricity prices:
-
-```mermaid
-flowchart TD
-    Coordinator[UnifiedPriceCoordinator] -- Triggers Update (Regular Interval) --> Manager[UnifiedPriceManager]
-    Manager --> CheckRateLimit{Rate Limit Check}
-    CheckRateLimit -- OK --> CallFallback[Call FallbackManager]
-    CheckRateLimit -- Blocked --> UseCacheOrWait[Use Cache / Wait]
-    CallFallback --> FallbackMgr[FallbackManager]
-
-    subgraph FallbackMgrLogic ["FallbackManager: Try APIs in Priority"]
-        APICall["API Instance: fetch_day_ahead_prices"]
-        APICall -- Uses --> TZService[TimezoneService]
-        TZService -- Determines --> DateRange["Date Range (Today/Tomorrow based on current time)"]
-        APICall -- Requests --> ExternalAPI["External API Source"]
-        ExternalAPI -- Returns --> RawData["Raw Data (Today + Tomorrow if available)"]
-        APICall -- Success --> ReturnRawData["Return Raw Data Structure"]
-        APICall -- Failure --> TryNext["Try Next API or Fail"]
-    end
-
-    FallbackMgr -- Raw Data --> Manager
-    FallbackMgr -- Failure --> Manager
-    Manager -- Success --> ProcessData["DataProcessor: Process Today & Tomorrow Data"]
-    Manager -- Failure --> UseCacheOrFail["Use Cache / Generate Empty"]
-    ProcessData --> StoreCache["CacheManager: Store Result"]
-    StoreCache --> UpdateCoord["Update Coordinator Data"]
-    UseCacheOrFail --> UpdateCoord
-    UpdateCoord --> Sensors["Update HA Sensors (incl. Tomorrow if data exists)"]
-
-    
-note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.;
-note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.;
-note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.;
-```
-
-This approach ensures that tomorrow's price data is fetched efficiently as part of the regular update cycle once it becomes available from the source APIs, without needing complex dedicated scheduling.
+1.  **Asynchronous Operations**: Uses `asyncio` and `httpx.AsyncClient` for non-blocking I/O during API calls.
+2.  **Source Prioritization**: Avoids calling lower-priority sources if a higher-priority one succeeds quickly.
+3.  **Advanced Caching**: Caches processed data (`CacheManager`) and exchange rates (`ExchangeService`) with configurable TTLs to reduce redundant computations and API calls.
+4.  **Rate Limiting**: Implements rate limiting (`utils/rate_limiter.py`) to avoid overwhelming APIs and respect usage limits, especially during frequent update checks.
+5.  **Parallel Fetching (Potential)**: While `utils/parallel_fetcher.py` exists, verify its current usage in the main fetch flow. This was a planned refactoring which never went live due to it's complexity.
 
 ## License
 
