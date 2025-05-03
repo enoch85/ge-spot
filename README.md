@@ -207,34 +207,26 @@ The integration normalizes timestamps from different APIs to ensure correct hour
 
 ```mermaid
 flowchart TD
-    API["API Response with Timestamps"] --> Parser["Timestamp Parser"]
-    Parser --> Normalizer["Timezone Normalizer"]
-    
-    subgraph TimezoneHandling["Timezone Handling"]
-        SourceTZ["Source-specific Timezone"] --> Converter
-        AreaTZ["Region-specific Timezone"] --> Converter
-        HAConfig["Home Assistant Timezone"] --> Converter
-        DSTHandler["DST Transition Handler"] --> Converter
-        Converter["Convert to Normalized Time"]
+    API["API response with timestamps"] --> Parser["TimestampParser"]
+    Parser --> Converter["TimezoneConverter"]
+
+    subgraph TZ["TimezoneService internals"]
+        SourceTZ["Source-specific TZ"]
+        AreaTZ["Area TZ"]
+        HA_TZ["HA TZ"]
+        DST["DST handler"]
+        SourceTZ & AreaTZ & HA_TZ & DST --> Converter
     end
-    
-    Normalizer --> TimezoneHandling
-    
-    TimezoneHandling --> HourMatcher["Hour Matching Logic"]
-    HourMatcher --> |"Current Hour"| CurrentPrice["Current Price Sensor"]
-    HourMatcher --> |"Next Hour"| NextPrice["Next Hour Price Sensor"]
-    HourMatcher --> |"All Hours"| HourlyPrices["Hourly Prices"]
-    
-    HourlyPrices --> |"Today"| TodayStats["Today's Statistics"]
-    HourlyPrices --> |"Tomorrow"| TomorrowStats["Tomorrow's Statistics"]
-    
-    TodayStats --> DayAvg["Day Average Price"]
-    TodayStats --> PeakPrice["Peak Price"]
-    TodayStats --> OffPeakPrice["Off-Peak Price"]
-    
-    TomorrowStats --> TmrwAvg["Tomorrow Average Price"]
-    TomorrowStats --> TmrwPeak["Tomorrow Peak Price"]
-    TomorrowStats --> TmrwOffPeak["Tomorrow Off-Peak Price"]
+
+    Converter --> HourMatch["Hour-matching logic"]
+    HourMatch -->|current| Cur["Current-price sensor"]
+    HourMatch -->|next| Next["Next-hour sensor"]
+    HourMatch -->|all| All["Hourly prices"]
+
+    All -->|today| TStats["Today's stats"]
+    All -->|tomorrow| MStats["Tomorrow stats"]
+    TStats --> Avg["Day avg"] & Peak["Peak"] & Off["Off-peak"]
+    MStats --> MAvg["Tmrw avg"] & MPeak["Tmrw peak"] & MOff["Tmrw off-peak"]
 ```
 
 - **Timezone Awareness**: Handles UTC, local time, and timezone-naive timestamps correctly
@@ -247,47 +239,34 @@ The integration implements a comprehensive price conversion system that ensures 
 
 ```mermaid
 flowchart TD
-    RawData["Raw API Data"] --> Processor[DataProcessor]
+    Raw["Raw API data"] --> Proc
 
-    subgraph DataProcessor
+    subgraph Proc["DataProcessor"]
         direction TB
-        Parse["Parse Raw Data"]
-        Validate["Validate Price Data"]
-        Convert["Call CurrencyConverter"]
-        ApplyVAT["Apply VAT (if configured)"]
-        Format["Format for Display"]
-        CalcStats["Calculate Statistics"]
-        CreateOutput["Create Final Data Structure"]
-
-        Parse --> Validate --> Convert --> ApplyVAT --> Format --> CalcStats --> CreateOutput
+        Parse --> Validate --> Convert --> VAT --> Format --> Stats --> Out
+        Parse["Parse"]
+        Validate["Validate"]
+        Convert["CurrencyConverter"]
+        VAT["Apply VAT"]
+        Format["Format"]
+        Stats["Calc stats"]
+        Out["Output"]
     end
 
-    Processor --> CacheStore[CacheManager: Store]
-    CacheStore --> CoordData["Coordinator Data"]
-    CoordData --> Sensors["Home Assistant Sensors"]
+    Out --> CM["CacheManager.store()"] --> Coord["Coordinator data"]
+    Coord --> Sensors["HA sensors"]
 
     subgraph CurrencyConverter
-        direction TB
-        GetRates["Get Rates from CurrencyService"]
-        DoConvert["Perform Currency & Unit Conversion"]
-        GetRates --> DoConvert
+        GetRates["Get rates"] --> DoConvert["Convert currency & unit"]
     end
 
     subgraph CurrencyService
-        direction TB
-        CheckCache["Check Rates Cache"]
-        CheckCache -- Cache Hit --> ReturnRates["Return Cached Rates"]
-        CheckCache -- Cache Miss --> FetchECB["Fetch from ECB API"]
-        FetchECB -- Success --> StoreCache["Store Rates in Cache"] --> ReturnRates
-        FetchECB -- Failure --> UseFallback["Use Fallback Rates"] --> ReturnRates
-        Scheduler["Scheduled Updates"] --> CheckCache
+        CacheHit["Cache hit"]:::ok --> Return
+        CacheMiss["Cache miss"]:::err --> ECB["Fetch ECB"] --> Store --> Return
+        CacheHit -.-> Return
+        style CacheHit fill:#c9ffc9
+        style CacheMiss fill:#ffdede
     end
-
-    Convert --> CurrencyConverter
-    GetRates --> CurrencyService
-
-    Config["User Config:\nVAT, Currency, Display Unit"] --> ApplyVAT & Format
-    RegionMap["Region to Currency Mapping"] --> Convert
 ```
 
 The price conversion follows this detailed process:
@@ -384,35 +363,26 @@ The integration implements a sophisticated system for fetching tomorrow's electr
 
 ```mermaid
 flowchart TD
-    Coordinator[UnifiedPriceCoordinator] -- Triggers Update (Regular Interval) --> Manager[UnifiedPriceManager]
-    Manager --> CheckRateLimit{Rate Limit Check}
-    CheckRateLimit -- OK --> CallFallback[Call FallbackManager]
-    CheckRateLimit -- Blocked --> UseCacheOrWait[Use Cache / Wait]
-    CallFallback --> FallbackMgr[FallbackManager]
+    Coord["UnifiedPriceCoordinator"] --> UPM["UnifiedPriceManager"]
+    UPM --> RL{"Rate-limit OK?"}
+    RL -- no --> Cache["Use cache"]
+    RL -- yes --> FM["FallbackManager"]
 
-    subgraph FallbackMgrLogic ["FallbackManager: Try APIs in Priority"]
-        APICall["API Instance: fetch_day_ahead_prices"]
-        APICall -- Uses --> TZService[TimezoneService]
-        TZService -- Determines --> DateRange["Date Range (Today/Tomorrow based on current time)"]
-        APICall -- Requests --> ExternalAPI["External API Source"]
-        ExternalAPI -- Returns --> RawData["Raw Data (Today + Tomorrow if available)"]
-        APICall -- Success --> ReturnRawData["Return Raw Data Structure"]
-        APICall -- Failure --> TryNext["Try Next API or Fail"]
+    subgraph FM["Fallback loop"]
+        direction TB
+        More{{"APIs left?"}} --> APICall["api.fetch_day_ahead_prices()"]
+        APICall --> TZ["TimezoneService"]
+        TZ --> APICall
+        APICall -- success --> Raw["raw data"]
+        APICall -- fail --> More
+        More -- none --> Fail["fail"]
     end
 
-    FallbackMgr -- Raw Data --> Manager
-    FallbackMgr -- Failure --> Manager
-    Manager -- Success --> ProcessData["DataProcessor: Process Today & Tomorrow Data"]
-    Manager -- Failure --> UseCacheOrFail["Use Cache / Generate Empty"]
-    ProcessData --> StoreCache["CacheManager: Store Result"]
-    StoreCache --> UpdateCoord["Update Coordinator Data"]
-    UseCacheOrFail --> UpdateCoord
-    UpdateCoord --> Sensors["Update HA Sensors (incl. Tomorrow if data exists)"]
+    Raw --> Proc["DataProcessor"] --> Store["CacheManager.store()"] --> Done
+    Fail --> Cache
+    Cache --> Done
 
-    
-note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.;
-note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.;
-note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.;
+    Done --> Sensors["Update HA sensors (today + tomorrow)"]
 ```
 
 ## Usage Examples
