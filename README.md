@@ -201,11 +201,10 @@ flowchart TD
     Manager --> FinalResult
     FinalResult --> Sensors["Update HA Sensors"]
 
-
     
-    note over FallbackMgr: Handles retries and selecting the first successful API based on priority.;
-    note over Manager: Orchestrates fetch, processing, caching, and rate limiting.;
-    note over ProcessResult: Converts raw data, applies VAT/currency, calculates stats.;
+note over FallbackMgr: Handles retries and selecting the first successful API based on priority.;
+note over Manager: Orchestrates fetch, processing, caching, and rate limiting.;
+note over ProcessResult: Converts raw data, applies VAT/currency, calculates stats.;
 ```
 
 ## Technical Features
@@ -432,9 +431,9 @@ flowchart TD
     UpdateCoord --> Sensors["Update HA Sensors (incl. Tomorrow if data exists)"]
 
     
-    note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.;
-    note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.;
-    note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.;
+note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.;
+note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.;
+note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.;
 ```
 
 ## Usage Examples
@@ -692,9 +691,9 @@ flowchart TD
     UpdateCoord --> Sensors["Update HA Sensors (incl. Tomorrow if data exists)"]
 
     
-    note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.;
-    note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.;
-    note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.;
+note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.;
+note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.;
+note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.;
 ```
 
 This approach ensures that tomorrow's price data is fetched efficiently as part of the regular update cycle once it becomes available from the source APIs, without needing complex dedicated scheduling.
