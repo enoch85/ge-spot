@@ -177,5 +177,33 @@ class EpexAPI(BasePriceAPI):
         _LOGGER.debug(f"Fetching EPEX with params: {params}")
         
         response = await client.fetch(BASE_URL, params=params)
-        
-        return response
+
+        # Add detailed logging to inspect the response
+        _LOGGER.debug(f"ApiClient.fetch returned: type={type(response)}, value={repr(response)}")
+
+        # Check response status (where the error occurred previously)
+        if response and hasattr(response, 'status') and response.status == 200: # Added hasattr check for safety
+            try:
+                text_content = await response.text()
+                _LOGGER.debug(f"EPEX API request successful (Status {response.status}). Response text length: {len(text_content)}")
+                return text_content
+            except Exception as e:
+                _LOGGER.error(f"Error reading EPEX response text: {e}")
+                return None
+        elif response and hasattr(response, 'status'): # Added hasattr check
+            error_text = "N/A"
+            try:
+                error_text = await response.text()
+            except Exception:
+                pass
+            _LOGGER.warning(
+                f"EPEX API request failed: Status {response.status}, Response: {error_text[:200]}..."
+            )
+            return None
+        elif isinstance(response, str): # Handle case where response IS a string
+             _LOGGER.warning(f"EPEX API request returned a string directly: {response[:200]}...")
+             # Return None as it's unexpected and likely an error page.
+             return None
+        else: # Handle None or other unexpected types
+            _LOGGER.warning(f"EPEX API request failed: No valid response received (type: {type(response)}).")
+            return None

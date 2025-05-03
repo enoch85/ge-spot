@@ -26,6 +26,7 @@ class EpexParser(BasePriceParser):
         Returns:
             Parsed data with hourly prices
         """
+        _LOGGER.debug(f"EpexParser received raw_data of type: {type(raw_data)}")
         result = {
             "hourly_prices": {},
             "currency": Currency.EUR
@@ -34,6 +35,7 @@ class EpexParser(BasePriceParser):
         # Check for valid data
         if not raw_data:
             _LOGGER.warning("Empty EPEX data received")
+            _LOGGER.debug(f"EpexParser returning result: {result}")
             return result
 
         # Parse HTML response if it's a string
@@ -52,6 +54,7 @@ class EpexParser(BasePriceParser):
         result["current_price"] = self._get_current_price(result["hourly_prices"])
         result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
 
+        _LOGGER.debug(f"EpexParser returning result: {result}")
         return result
 
     def extract_metadata(self, data: Any) -> Dict[str, Any]:
@@ -194,11 +197,11 @@ class EpexParser(BasePriceParser):
             
         return None
 
-    def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
+    def _get_current_price(self, hourly_prices: Dict[str, Dict[str, Any]]) -> Optional[float]:
         """Get current hour price.
 
         Args:
-            hourly_prices: Dictionary of hourly prices
+            hourly_prices: Dictionary of hourly prices {iso_timestamp: {"price": float, ...}}
 
         Returns:
             Current hour price or None if not available
@@ -206,17 +209,19 @@ class EpexParser(BasePriceParser):
         if not hourly_prices:
             return None
 
-        now = datetime.now()
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
-        current_hour_key = current_hour.strftime("%Y-%m-%dT%H:00:00")
+        # Use UTC time for comparison
+        now_utc = datetime.now(timezone.utc)
+        current_hour_utc = now_utc.replace(minute=0, second=0, microsecond=0)
+        current_hour_key = current_hour_utc.isoformat()
 
-        return hourly_prices.get(current_hour_key)
+        price_data = hourly_prices.get(current_hour_key)
+        return price_data.get("price") if price_data else None
 
-    def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
+    def _get_next_hour_price(self, hourly_prices: Dict[str, Dict[str, Any]]) -> Optional[float]:
         """Get next hour price.
 
         Args:
-            hourly_prices: Dictionary of hourly prices
+            hourly_prices: Dictionary of hourly prices {iso_timestamp: {"price": float, ...}}
 
         Returns:
             Next hour price or None if not available
@@ -224,9 +229,11 @@ class EpexParser(BasePriceParser):
         if not hourly_prices:
             return None
 
-        now = datetime.now()
-        next_hour = (now.replace(minute=0, second=0, microsecond=0) +
-                    timedelta(hours=1))
-        next_hour_key = next_hour.strftime("%Y-%m-%dT%H:00:00")
+        # Use UTC time for comparison
+        now_utc = datetime.now(timezone.utc)
+        next_hour_utc = (now_utc.replace(minute=0, second=0, microsecond=0) +
+                         timedelta(hours=1))
+        next_hour_key = next_hour_utc.isoformat()
 
-        return hourly_prices.get(next_hour_key)
+        price_data = hourly_prices.get(next_hour_key)
+        return price_data.get("price") if price_data else None
