@@ -167,17 +167,17 @@ flowchart TD
     subgraph Manager ["UnifiedPriceManager"]
         direction TB
         RateLimit{Rate Limit Check}
-        UseFallback[Call FallbackManager]
-        ProcessResult[Call DataProcessor]
-        UseCache[Call CacheManager]
-        GenerateEmpty[Generate Empty Result]
+        UseFallback["Call FallbackManager"]
+        ProcessResult["Call DataProcessor"]
+        UseCache["Call CacheManager"]
+        GenerateEmpty["Generate Empty Result"]
 
         RateLimit -- OK --> UseFallback
         RateLimit -- Blocked --> UseCache
         UseFallback --> FallbackMgr[FallbackManager]
         FallbackMgr -- Success --> ProcessResult
         FallbackMgr -- Failure --> UseCache
-        ProcessResult -- Processed Data --> CacheStore[CacheManager: Store]
+        ProcessResult -- Processed Data --> CacheStore["CacheManager: Store"]
         UseCache -- Cached Data --> ProcessResult
         UseCache -- No Cache --> GenerateEmpty
         GenerateEmpty --> FinalResult
@@ -188,28 +188,25 @@ flowchart TD
         direction TB
         LoopAPIs["Loop Through API Instances (Priority Order)"]
         subgraph APIInstance ["API Instance (e.g., NordpoolAPI)"]
-            FetchMethod[fetch_day_ahead_prices]
+            FetchMethod["fetch_day_ahead_prices"]
             FetchMethod -- Uses --> TZSvc[TimezoneService]
-            FetchMethod -- Calls --> ExternalAPI[External API]
+            FetchMethod -- Calls --> ExternalAPI["External API"]
         end
         LoopAPIs --> APIInstance
-        APIInstance -- Success --> ReturnRaw[Return Raw Data]
+        APIInstance -- Success --> ReturnRaw["Return Raw Data"]
         APIInstance -- Failure --> LoopAPIs
-        LoopAPIs -- All Fail --> ReturnFailure[Return Failure]
+        LoopAPIs -- All Fail --> ReturnFailure["Return Failure"]
     end
 
     Manager --> FinalResult
-    FinalResult --> Sensors[Update HA Sensors];
+    FinalResult --> Sensors["Update HA Sensors"]
 
+
+    
     note over FallbackMgr: Handles retries and selecting the first successful API based on priority.;
     note over Manager: Orchestrates fetch, processing, caching, and rate limiting.;
     note over ProcessResult: Converts raw data, applies VAT/currency, calculates stats.;
 ```
-
-- **Source Prioritization**: You control the order in which APIs are tried via configuration.
-- **Automatic Fallback**: The `FallbackManager` tries alternative sources automatically if the primary source fails.
-- **Transparent Attribution**: Sensor attributes show which API provided the data (`data_source`).
-- **Data Caching**: The `CacheManager` stores successfully processed data and provides it as a fallback if all APIs fail or during rate limiting.
 
 ## Technical Features
 
@@ -410,51 +407,35 @@ The integration implements a sophisticated system for fetching tomorrow's electr
 ```mermaid
 flowchart TD
     Coordinator[UnifiedPriceCoordinator] -- Triggers Update (Regular Interval) --> Manager[UnifiedPriceManager]
-
     Manager --> CheckRateLimit{Rate Limit Check}
     CheckRateLimit -- OK --> CallFallback[Call FallbackManager]
     CheckRateLimit -- Blocked --> UseCacheOrWait[Use Cache / Wait]
-
     CallFallback --> FallbackMgr[FallbackManager]
 
-    subgraph FallbackMgrLogic [FallbackManager: Try APIs in Priority]
-        APICall[API Instance: fetch_day_ahead_prices]
+    subgraph FallbackMgrLogic ["FallbackManager: Try APIs in Priority"]
+        APICall["API Instance: fetch_day_ahead_prices"]
         APICall -- Uses --> TZService[TimezoneService]
         TZService -- Determines --> DateRange["Date Range (Today/Tomorrow based on current time)"]
-        APICall -- Requests --> ExternalAPI[External API Source]
-        ExternalAPI -- Returns --> RawData[Raw Data (Today + Tomorrow if available)]
-        APICall -- Success --> ReturnRawData[Return Raw Data Structure]
-        APICall -- Failure --> TryNext[Try Next API or Fail]
+        APICall -- Requests --> ExternalAPI["External API Source"]
+        ExternalAPI -- Returns --> RawData["Raw Data (Today + Tomorrow if available)"]
+        APICall -- Success --> ReturnRawData["Return Raw Data Structure"]
+        APICall -- Failure --> TryNext["Try Next API or Fail"]
     end
 
     FallbackMgr -- Raw Data --> Manager
     FallbackMgr -- Failure --> Manager
-
-    Manager -- Success --> ProcessData[DataProcessor: Process Today & Tomorrow Data]
-    Manager -- Failure --> UseCacheOrFail[Use Cache / Generate Empty]
-
-    ProcessData --> StoreCache[CacheManager: Store Result]
-    StoreCache --> UpdateCoord[Update Coordinator Data]
+    Manager -- Success --> ProcessData["DataProcessor: Process Today & Tomorrow Data"]
+    Manager -- Failure --> UseCacheOrFail["Use Cache / Generate Empty"]
+    ProcessData --> StoreCache["CacheManager: Store Result"]
+    StoreCache --> UpdateCoord["Update Coordinator Data"]
     UseCacheOrFail --> UpdateCoord
+    UpdateCoord --> Sensors["Update HA Sensors (incl. Tomorrow if data exists)"]
 
-    UpdateCoord --> Sensors[Update HA Sensors (incl. Tomorrow if data exists)]
-
-    note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.
-    note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.
-    note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.
+    
+    note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.;
+    note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.;
+    note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.;
 ```
-
-Key aspects of tomorrow's data handling:
-
-1. **Regular Updates**: Tomorrow's data is fetched during the coordinator's *regular* update interval. There are no special trigger times actively monitored by the coordinator.
-2. **API Logic**: When an update runs, the `UnifiedPriceManager` calls the `FallbackManager`.
-3. **Date Range Determination**: The `FallbackManager` iterates through API clients. Each client's `fetch_day_ahead_prices` method uses the `TimezoneService` to determine the appropriate date range to request. If the current time (in the relevant timezone, often CET for Europe) is past the typical publication time (e.g., 13:00-14:00 CET), the date range will include tomorrow.
-4. **Fetching**: The API client attempts to fetch data for the determined range (which might be just today, or today *and* tomorrow).
-5. **Processing**: If the API returns data successfully (including tomorrow's data if available), the `DataProcessor` processes *all* of it, calculating statistics for both days if applicable.
-6. **Storage & Update**: The processed data (potentially containing both today's and tomorrow's prices) is cached by the `CacheManager` and passed to the `UnifiedPriceCoordinator`, which updates the relevant Home Assistant sensors.
-7. **Graceful Handling**: If tomorrow's data isn't available yet when an update runs, the API call will only return today's data. The sensors related to tomorrow will remain unavailable or show previous data until a subsequent update successfully fetches tomorrow's prices.
-
-This approach ensures that tomorrow's price data is fetched efficiently as part of the regular update cycle once it becomes available from the source APIs, without needing complex dedicated scheduling.
 
 ## Usage Examples
 
@@ -686,49 +667,35 @@ The integration implements a sophisticated system for fetching tomorrow's electr
 ```mermaid
 flowchart TD
     Coordinator[UnifiedPriceCoordinator] -- Triggers Update (Regular Interval) --> Manager[UnifiedPriceManager]
-
     Manager --> CheckRateLimit{Rate Limit Check}
     CheckRateLimit -- OK --> CallFallback[Call FallbackManager]
     CheckRateLimit -- Blocked --> UseCacheOrWait[Use Cache / Wait]
-
     CallFallback --> FallbackMgr[FallbackManager]
 
-    subgraph FallbackMgrLogic [FallbackManager: Try APIs in Priority]
-        APICall[API Instance: fetch_day_ahead_prices]
+    subgraph FallbackMgrLogic ["FallbackManager: Try APIs in Priority"]
+        APICall["API Instance: fetch_day_ahead_prices"]
         APICall -- Uses --> TZService[TimezoneService]
         TZService -- Determines --> DateRange["Date Range (Today/Tomorrow based on current time)"]
-        APICall -- Requests --> ExternalAPI[External API Source]
-        ExternalAPI -- Returns --> RawData[Raw Data (Today + Tomorrow if available)]
-        APICall -- Success --> ReturnRawData[Return Raw Data Structure]
-        APICall -- Failure --> TryNext[Try Next API or Fail]
+        APICall -- Requests --> ExternalAPI["External API Source"]
+        ExternalAPI -- Returns --> RawData["Raw Data (Today + Tomorrow if available)"]
+        APICall -- Success --> ReturnRawData["Return Raw Data Structure"]
+        APICall -- Failure --> TryNext["Try Next API or Fail"]
     end
 
     FallbackMgr -- Raw Data --> Manager
     FallbackMgr -- Failure --> Manager
-
-    Manager -- Success --> ProcessData[DataProcessor: Process Today & Tomorrow Data]
-    Manager -- Failure --> UseCacheOrFail[Use Cache / Generate Empty]
-
-    ProcessData --> StoreCache[CacheManager: Store Result]
-    StoreCache --> UpdateCoord[Update Coordinator Data]
+    Manager -- Success --> ProcessData["DataProcessor: Process Today & Tomorrow Data"]
+    Manager -- Failure --> UseCacheOrFail["Use Cache / Generate Empty"]
+    ProcessData --> StoreCache["CacheManager: Store Result"]
+    StoreCache --> UpdateCoord["Update Coordinator Data"]
     UseCacheOrFail --> UpdateCoord
+    UpdateCoord --> Sensors["Update HA Sensors (incl. Tomorrow if data exists)"]
 
-    UpdateCoord --> Sensors[Update HA Sensors (incl. Tomorrow if data exists)]
-
-    note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.
-    note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.
-    note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.
+    
+    note over TZService: Helps determine if publication time (e.g., ~13:00 CET) has passed to include tomorrow's date range.;
+    note over APICall: Fetches data for the date range determined via TimezoneService. Handles API specifics.;
+    note over ProcessData: Calculates stats for both today and tomorrow if data is present in the raw response.;
 ```
-
-Key aspects of tomorrow's data handling:
-
-1. **Regular Updates**: Tomorrow's data is fetched during the coordinator's *regular* update interval. There are no special trigger times actively monitored by the coordinator.
-2. **API Logic**: When an update runs, the `UnifiedPriceManager` calls the `FallbackManager`.
-3. **Date Range Determination**: The `FallbackManager` iterates through API clients. Each client's `fetch_day_ahead_prices` method uses the `TimezoneService` to determine the appropriate date range to request. If the current time (in the relevant timezone, often CET for Europe) is past the typical publication time (e.g., 13:00-14:00 CET), the date range will include tomorrow.
-4. **Fetching**: The API client attempts to fetch data for the determined range (which might be just today, or today *and* tomorrow).
-5. **Processing**: If the API returns data successfully (including tomorrow's data if available), the `DataProcessor` processes *all* of it, calculating statistics for both days if applicable.
-6. **Storage & Update**: The processed data (potentially containing both today's and tomorrow's prices) is cached by the `CacheManager` and passed to the `UnifiedPriceCoordinator`, which updates the relevant Home Assistant sensors.
-7. **Graceful Handling**: If tomorrow's data isn't available yet when an update runs, the API call will only return today's data. The sensors related to tomorrow will remain unavailable or show previous data until a subsequent update successfully fetches tomorrow's prices.
 
 This approach ensures that tomorrow's price data is fetched efficiently as part of the regular update cycle once it becomes available from the source APIs, without needing complex dedicated scheduling.
 
