@@ -155,56 +155,48 @@ GE-Spot uses a robust multi-source approach to ensure reliable price data:
 
 ```mermaid
 flowchart TD
-    Config[User Configuration] --> Coord[UnifiedPriceCoordinator]
+    %% ───────────── ENTRY ─────────────
+    Config["User configuration"] --> Coord["UnifiedPriceCoordinator"]
+    Coord --> UPM_Start["UnifiedPriceManager"]
 
-    subgraph Coord ["UnifiedPriceCoordinator"]
-        direction LR
-        Manager[UnifiedPriceManager]
-    end
-
-    Coord -- Triggers Update --> Manager
-
-    subgraph Manager ["UnifiedPriceManager"]
+    %% ────────── MANAGER ──────────
+    subgraph UPM["UnifiedPriceManager"]
         direction TB
-        RateLimit{Rate Limit Check}
-        UseFallback["Call FallbackManager"]
-        ProcessResult["Call DataProcessor"]
-        UseCache["Call CacheManager"]
-        GenerateEmpty["Generate Empty Result"]
+        RL{"Allowed to fetch (rate-limit passed)?"}
+        UseCache["CacheManager.get()"]
+        UseFallback["FallbackManager loop"]
+        Process["DataProcessor.process()"]
+        CacheStore["CacheManager.store()"]
+        Empty["Generate empty result"]
+        Final["Return to coordinator"]
 
-        RateLimit -- OK --> UseFallback
-        RateLimit -- Blocked --> UseCache
-        UseFallback --> FallbackMgr[FallbackManager]
-        FallbackMgr -- Success --> ProcessResult
-        FallbackMgr -- Failure --> UseCache
-        ProcessResult -- Processed Data --> CacheStore["CacheManager: Store"]
-        UseCache -- Cached Data --> ProcessResult
-        UseCache -- No Cache --> GenerateEmpty
-        GenerateEmpty --> FinalResult
-        CacheStore --> FinalResult[Coordinator Data]
+        RL -- no --> UseCache
+        RL -- yes --> UseFallback
+
+        UseCache -- hit --> Final
+        UseCache -- miss --> Empty
+
+        UseFallback --> FB_OK
+        FB_OK --> Process --> CacheStore --> Final
+        UseFallback -.-> FB_Fail
+        FB_Fail --> UseCache
+
+        Empty --> Final
     end
 
-    subgraph FallbackMgr ["FallbackManager"]
+    %% ────── FALLBACK DETAIL ──────
+    subgraph FallbackLoop["FallbackManager"]
         direction TB
-        LoopAPIs["Loop Through API Instances (Priority Order)"]
-        subgraph APIInstance ["API Instance (e.g., NordpoolAPI)"]
-            FetchMethod["fetch_day_ahead_prices"]
-            FetchMethod -- Uses --> TZSvc[TimezoneService]
-            FetchMethod -- Calls --> ExternalAPI["External API"]
-        end
-        LoopAPIs --> APIInstance
-        APIInstance -- Success --> ReturnRaw["Return Raw Data"]
-        APIInstance -- Failure --> LoopAPIs
-        LoopAPIs -- All Fail --> ReturnFailure["Return Failure"]
+        More{{"more APIs?"}}
+        APICall["api.fetch_day_ahead_prices()"]
+        More --> APICall
+        APICall -- success --> FB_OK["raw data"]
+        APICall -- failure --> More
+        More -- none --> FB_Fail["fail"]
     end
 
-    Manager --> FinalResult
-    FinalResult --> Sensors["Update HA Sensors"]
-
-    
-note over FallbackMgr: Handles retries and selecting the first successful API based on priority.;
-note over Manager: Orchestrates fetch, processing, caching, and rate limiting.;
-note over ProcessResult: Converts raw data, applies VAT/currency, calculates stats.;
+    %% ────── OUTPUT ──────
+    Final --> Sensors["Update Home-Assistant sensors"]
 ```
 
 ## Technical Features
@@ -255,60 +247,47 @@ The integration implements a comprehensive price conversion system that ensures 
 
 ```mermaid
 flowchart TD
-    RawData[Raw API Data Structure] -->|From FallbackManager| Processor[DataProcessor]
+    RawData["Raw API Data"] --> Processor[DataProcessor]
 
-    subgraph Processor ["DataProcessor"]
+    subgraph DataProcessor
         direction TB
-        Parse[Parse Raw Data]
-        Validate[Validate Price Data]
-        Convert[Call CurrencyConverter]
-        ApplyVAT["Apply VAT (if enabled)"]
-        Format["Format for Display (using PriceFormatter)"]
-        CalcStats["Calculate Statistics (using PriceStatistics)"]
+        Parse["Parse Raw Data"]
+        Validate["Validate Price Data"]
+        Convert["Call CurrencyConverter"]
+        ApplyVAT["Apply VAT (if configured)"]
+        Format["Format for Display"]
+        CalcStats["Calculate Statistics"]
         CreateOutput["Create Final Data Structure"]
 
-        Parse --> Validate
-        Validate --> Convert
-        Convert --> ApplyVAT
-        ApplyVAT --> Format
-        Format --> CalcStats
-        CalcStats --> CreateOutput
+        Parse --> Validate --> Convert --> ApplyVAT --> Format --> CalcStats --> CreateOutput
     end
 
-    Processor -- Final Data --> CacheMgrStore[CacheManager: Store]
-    CacheMgrStore --> CoordData[Coordinator Data]
-    CoordData --> Sensors[Home Assistant Sensors]
+    Processor --> CacheStore[CacheManager: Store]
+    CacheStore --> CoordData["Coordinator Data"]
+    CoordData --> Sensors["Home Assistant Sensors"]
 
-    subgraph CurrencyConverter ["CurrencyConverter"]
+    subgraph CurrencyConverter
         direction TB
-        GetRates[Call CurrencyService: Get Rates]
-        DoConvert[Perform Currency & Unit Conversion]
+        GetRates["Get Rates from CurrencyService"]
+        DoConvert["Perform Currency & Unit Conversion"]
         GetRates --> DoConvert
     end
 
-    subgraph CurrencyService ["CurrencyService"]
+    subgraph CurrencyService
         direction TB
-        CheckCache[Call CacheManager: Check Rates Cache]
-        FetchECB["Fetch from ECB API (on cache miss)"]
-        StoreCache[Call CacheManager: Store Rates]
-        UseFallback["Use Fallback Rates (on API fail)"]
-        Scheduler[Scheduled Updates Trigger]
-
-        Scheduler --> CheckCache
-        CheckCache -- Cache Miss --> FetchECB
-        CheckCache -- Cache Hit --> ReturnRates[Return Cached Rates]
-        FetchECB -- Success --> StoreCache
-        FetchECB -- Failure --> UseFallback
-        StoreCache --> ReturnRates
-        UseFallback --> ReturnRates
+        CheckCache["Check Rates Cache"]
+        CheckCache -- Cache Hit --> ReturnRates["Return Cached Rates"]
+        CheckCache -- Cache Miss --> FetchECB["Fetch from ECB API"]
+        FetchECB -- Success --> StoreCache["Store Rates in Cache"] --> ReturnRates
+        FetchECB -- Failure --> UseFallback["Use Fallback Rates"] --> ReturnRates
+        Scheduler["Scheduled Updates"] --> CheckCache
     end
 
-    Convert -- Uses --> CurrencyConverter
-    GetRates -- Uses --> CurrencyService
+    Convert --> CurrencyConverter
+    GetRates --> CurrencyService
 
-    Config["User Configuration: VAT, Currency, Display Unit"] --> ApplyVAT
-    Config --> Format
-    RegionMap[Region to Currency Mapping] --> Convert
+    Config["User Config:\nVAT, Currency, Display Unit"] --> ApplyVAT & Format
+    RegionMap["Region to Currency Mapping"] --> Convert
 ```
 
 The price conversion follows this detailed process:
