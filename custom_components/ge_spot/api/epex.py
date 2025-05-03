@@ -23,56 +23,30 @@ class EpexAPI(BasePriceAPI):
     """API client for EPEX SPOT."""
 
     def _get_source_type(self) -> str:
-        """Get the source type identifier.
-        
-        Returns:
-            Source type identifier
-        """
         return Source.EPEX
-    
+
     def _get_base_url(self) -> str:
-        """Get the base URL for the API.
-        
-        Returns:
-            Base URL as string
-        """
         return BASE_URL
-        
+
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
-        """Fetch raw data from EPEX SPOT API.
-        
-        Args:
-            area: Area code
-            session: Optional aiohttp session
-            
-        Returns:
-            Dictionary with raw data
-        """
         client = ApiClient(session=session or self.session)
         try:
-            # Use UTC for all reference times
             now_utc = datetime.datetime.now(timezone.utc)
-            
-            # Always compute today and tomorrow
             today = now_utc.strftime("%Y-%m-%d")
             tomorrow = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
-            
-            # Fetch today's data
             raw_today = await self._fetch_data(client, area, today)
-            
-            # Fetch tomorrow's data after 13:00 CET, with retry logic
+            if raw_today and isinstance(raw_today, str) and raw_today.strip().lower().startswith("<!doctype html"):
+                _LOGGER.error("EPEX returned HTML for today's data (possible cookie wall or error page). Treating as no data.")
+                raw_today = None
             now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
             raw_tomorrow = None
-            
             if now_cet.hour >= 13:
                 async def fetch_tomorrow():
                     return await self._fetch_data(client, area, tomorrow)
-                
                 def is_data_available(data):
                     parser = self.get_parser_for_area(area)
                     parsed = parser.parse(data) if data else None
                     return parsed and parsed.get("hourly_prices")
-                
                 raw_tomorrow = await fetch_with_retry(
                     fetch_tomorrow,
                     is_data_available,
@@ -80,27 +54,34 @@ class EpexAPI(BasePriceAPI):
                     end_time=time(23, 50),
                     local_tz_name=TimezoneName.EUROPE_BERLIN
                 )
-                
+                if raw_tomorrow and isinstance(raw_tomorrow, str) and raw_tomorrow.strip().lower().startswith("<!doctype html"):
+                    _LOGGER.error("EPEX returned HTML for tomorrow's data (possible cookie wall or error page). Treating as no data.")
+                    raw_tomorrow = None
                 if not raw_tomorrow:
                     _LOGGER.warning(f"Failed to fetch EPEX tomorrow's data. Proceeding without it.")
-            
-            # Parse data using appropriate parser
             parser = self.get_parser_for_area(area)
             hourly_raw = {}
-            
             if raw_today:
                 parsed_today = parser.parse(raw_today)
                 if parsed_today and "hourly_prices" in parsed_today:
                     hourly_raw.update(parsed_today["hourly_prices"])
-            
             if raw_tomorrow:
                 parsed_tomorrow = parser.parse(raw_tomorrow)
                 if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
                     hourly_raw.update(parsed_tomorrow["hourly_prices"])
-            
-            # Extract metadata
-            metadata = parser.extract_metadata(raw_today if raw_today else raw_tomorrow)
-            
+            metadata = {}
+            if raw_today:
+                try:
+                    metadata = parser.extract_metadata(raw_today)
+                except Exception as e:
+                    _LOGGER.error(f"Failed to extract metadata from today's data: {e}")
+            elif raw_tomorrow:
+                try:
+                    metadata = parser.extract_metadata(raw_tomorrow)
+                except Exception as e:
+                    _LOGGER.error(f"Failed to extract metadata from tomorrow's data: {e}")
+            else:
+                _LOGGER.error("No valid EPEX data available for metadata extraction.")
             return {
                 "hourly_raw": hourly_raw,
                 "timezone": metadata.get("timezone", "Europe/Berlin"),
@@ -116,94 +97,70 @@ class EpexAPI(BasePriceAPI):
         finally:
             if session is None and client:
                 await client.close()
-    
-    def get_timezone_for_area(self, area: str) -> str:
-        """Get timezone for the area.
-        
-        Args:
-            area: Area code
-            
-        Returns:
-            Timezone string
-        """
-        return "Europe/Berlin"
-    
-    def get_parser_for_area(self, area: str) -> Any:
-        """Get parser for the area.
-        
-        Args:
-            area: Area code
-            
-        Returns:
-            Parser instance
-        """
-        return EpexParser()
 
-    async def _fetch_data(self, client, area, date_str):
-        """Fetch data from EPEX SPOT.
-        
-        Args:
-            client: API client
-            area: Area code
-            date_str: Date string in YYYY-MM-DD format
-            
-        Returns:
-            Raw response
+    async def _fetch_data(self, client: ApiClient, area: str, date_str: str) -> Optional[str]:
         """
-        # Parse the provided date string
-        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        
-        # Generate date ranges to try
-        date_ranges = generate_date_ranges(date_obj, Source.EPEX)
-        
-        # EPEX uses trading_date and delivery_date
-        # We'll use the first range (today to tomorrow) as our primary range
-        today_start, tomorrow_end = date_ranges[0]
-        
-        # Format dates for the query
-        trading_date = today_start.strftime("%Y-%m-%d")
-        delivery_date = tomorrow_end.strftime("%Y-%m-%d")
-        
+        Fetch raw HTML data for a given area and date from EPEX SPOT.
+        Implements a two-step fetch to handle cookie walls and anti-bot measures:
+        1. Fetch the main page to get cookies.
+        2. Use those cookies in the actual data request.
+        """
+        import aiohttp
         params = {
             "market_area": area,
             "auction": "MRC",
-            "trading_date": trading_date,
-            "delivery_date": delivery_date,
+            "trading_date": date_str,
+            "delivery_date": (datetime.datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d"),
             "modality": "Auction",
             "sub_modality": "DayAhead",
             "data_mode": "table"
         }
-        
-        _LOGGER.debug(f"Fetching EPEX with params: {params}")
-        
-        response = await client.fetch(BASE_URL, params=params)
-
-        # Add detailed logging to inspect the response
-        _LOGGER.debug(f"ApiClient.fetch returned: type={type(response)}, value={repr(response)}")
-
-        # Check response status (where the error occurred previously)
-        if response and hasattr(response, 'status') and response.status == 200: # Added hasattr check for safety
-            try:
-                text_content = await response.text()
-                _LOGGER.debug(f"EPEX API request successful (Status {response.status}). Response text length: {len(text_content)}")
-                return text_content
-            except Exception as e:
-                _LOGGER.error(f"Error reading EPEX response text: {e}")
-                return None
-        elif response and hasattr(response, 'status'): # Added hasattr check
-            error_text = "N/A"
-            try:
-                error_text = await response.text()
-            except Exception:
-                pass
-            _LOGGER.warning(
-                f"EPEX API request failed: Status {response.status}, Response: {error_text[:200]}..."
-            )
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9,fr;q=0.8,de;q=0.7",
+            "Connection": "keep-alive",
+        }
+        _LOGGER.debug(f"EPEX two-step fetch: getting cookies from {BASE_URL}")
+        try:
+            # Step 1: Get cookies from the main page
+            async with aiohttp.ClientSession() as session:
+                async with session.get(BASE_URL, headers=headers, timeout=15) as resp:
+                    if resp.status != 200:
+                        _LOGGER.warning(f"EPEX cookie fetch: HTTP {resp.status}")
+                    cookies = session.cookie_jar.filter_cookies(BASE_URL)
+                    cookie_header = "; ".join([f"{k}={v.value}" for k, v in cookies.items()])
+                # Step 2: Use cookies in the actual data request
+                headers_with_cookies = dict(headers)
+                if cookie_header:
+                    headers_with_cookies["Cookie"] = cookie_header
+                _LOGGER.debug(f"EPEX data fetch: {BASE_URL} with params {params} and cookies {cookie_header}")
+                async with session.get(BASE_URL, params=params, headers=headers_with_cookies, timeout=30) as resp2:
+                    text = await resp2.text()
+                    if resp2.status != 200:
+                        _LOGGER.error(f"EPEX data fetch: HTTP {resp2.status}")
+                    return text
+        except Exception as e:
+            _LOGGER.error(f"EPEX _fetch_data error (two-step): {e}")
             return None
-        elif isinstance(response, str): # Handle case where response IS a string
-             _LOGGER.warning(f"EPEX API request returned a string directly: {response[:200]}...")
-             # Return None as it's unexpected and likely an error page.
-             return None
-        else: # Handle None or other unexpected types
-            _LOGGER.warning(f"EPEX API request failed: No valid response received (type: {type(response)}).")
-            return None
+
+    async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        parser = self.get_parser_for_area(raw_data.get("raw_data", {}).get("area") or raw_data.get("area") or "FR")
+        hourly_prices = {}
+        timezone = raw_data.get("timezone", "Europe/Paris")
+        currency = raw_data.get("currency", "EUR")
+        for key in ("today", "tomorrow"):
+            html = raw_data.get("raw_data", {}).get(key)
+            if html:
+                parsed = parser.parse(html)
+                if parsed and "hourly_prices" in parsed:
+                    hourly_prices.update(parsed["hourly_prices"])
+        return {
+            "hourly_prices": hourly_prices,
+            "currency": currency,
+            "api_timezone": timezone,
+            "source": "epex",
+            "area": raw_data.get("raw_data", {}).get("area") or raw_data.get("area") or "FR",
+            "fetched_at": raw_data.get("raw_data", {}).get("timestamp"),
+        }
+
