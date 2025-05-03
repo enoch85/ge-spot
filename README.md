@@ -201,9 +201,9 @@ flowchart TD
     Manager --> FinalResult
     FinalResult --> Sensors[Update HA Sensors];
 
-    note over FallbackMgr: Handles retries and selecting the first successful API based on priority.
-    note over Manager: Orchestrates fetch, processing, caching, and rate limiting.
-    note over ProcessResult: Converts raw data, applies VAT/currency, calculates stats.
+    note over FallbackMgr: Handles retries and selecting the first successful API based on priority.;
+    note over Manager: Orchestrates fetch, processing, caching, and rate limiting.;
+    note over ProcessResult: Converts raw data, applies VAT/currency, calculates stats.;
 ```
 
 - **Source Prioritization**: You control the order in which APIs are tried via configuration.
@@ -310,7 +310,7 @@ flowchart TD
     Convert -- Uses --> CurrencyConverter
     GetRates -- Uses --> CurrencyService
 
-    Config[User Configuration\nVAT, Currency, Display Unit] --> ApplyVAT
+    Config["User Configuration: VAT, Currency, Display Unit"] --> ApplyVAT
     Config --> Format
     RegionMap[Region to Currency Mapping] --> Convert
 ```
