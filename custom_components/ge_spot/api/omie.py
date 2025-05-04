@@ -11,10 +11,9 @@ from .base.api_client import ApiClient
 from ..const.network import Network
 from ..const.currencies import Currency
 from ..const.time import TimezoneName
-from ..utils.date_range import generate_date_ranges
-from ..const.config import Config
 from ..timezone.timezone_utils import get_timezone_object
 from .utils import fetch_with_retry
+from .base.error_handler import ErrorHandler
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +31,9 @@ class OmieAPI(BasePriceAPI):
             timezone_service: Timezone service instance
         """
         super().__init__(config, session, timezone_service)
-        self.area = config.get(Config.AREA) if config else None
+        self.area = config.get("area") if config else None
+        self.error_handler = ErrorHandler(self.source_type)
+        self.parser = OmieParser(timezone_service=self.timezone_service)
 
     def _get_source_type(self) -> str:
         """Get the source type for this API.
@@ -80,87 +81,79 @@ class OmieAPI(BasePriceAPI):
         return response_text
 
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Optional[Dict[str, Any]]:
-        """Fetch raw price data for the given area, checking for tomorrow if fallback is enabled."""
+        """Fetch raw price data for the given area using ErrorHandler."""
         if not self.area:
             self.area = area
 
-        reference_time_utc = kwargs.get('reference_time', datetime.now(timezone.utc))
-        today_date = reference_time_utc.date()
-        tomorrow_date = today_date + timedelta(days=1)
-
         client = ApiClient(session=session or self.session)
         try:
-            raw_today = await self._fetch_omie_file(client, today_date)
-
-            if not raw_today:
-                yesterday_date = today_date - timedelta(days=1)
-                _LOGGER.warning(f"[OmieAPI] Today's ({today_date}) data missing, trying yesterday ({yesterday_date}).")
-                raw_yesterday = await self._fetch_omie_file(client, yesterday_date)
-                if raw_yesterday:
-                    return {
-                        "raw_data": {"today": None, "yesterday": raw_yesterday, "tomorrow": None},
-                        "area": area,
-                        "timezone": self.get_timezone_for_area(area),
-                        "target_date": yesterday_date.isoformat(),
-                        "data_source": self.source_type,
-                        "attempted_sources": [self.source_type]
-                    }
-                else:
-                    _LOGGER.error(f"[OmieAPI] Failed to fetch data for today ({today_date}) and yesterday ({yesterday_date}).")
-                    return None
-
-            raw_tomorrow = None
-            fallback_sources = self.config.get(Config.FALLBACK_SOURCES, {})
-            is_fallback_enabled = self.area in fallback_sources and fallback_sources[self.area]
-
-            if is_fallback_enabled:
-                local_tz_name = self.get_timezone_for_area(self.area)
-                local_tz = get_timezone_object(local_tz_name)
-                if not local_tz:
-                    _LOGGER.warning(f"[OmieAPI] Could not get timezone object for {local_tz_name}, defaulting to UTC for time check.")
-                    local_tz = timezone.utc
-
-                now_local = reference_time_utc.astimezone(local_tz)
-                release_hour_local = 14
-
-                should_fetch_tomorrow = now_local.hour >= release_hour_local
-
-                if should_fetch_tomorrow:
-                    _LOGGER.debug(f"[OmieAPI] Fallback enabled for {self.area} and it's after {release_hour_local}:00 {local_tz_name}. Attempting to fetch tomorrow's ({tomorrow_date}) data.")
-                    raw_tomorrow = await self._fetch_omie_file(client, tomorrow_date)
-
-                    if not raw_tomorrow:
-                        _LOGGER.warning(
-                            f"[OmieAPI] Fetch failed for area {self.area}: Tomorrow's ({tomorrow_date}) data expected after "
-                            f"{release_hour_local}:00 {local_tz_name} but was not available or invalid. Triggering fallback."
-                        )
-                        return None
-                else:
-                    _LOGGER.debug(f"[OmieAPI] Fallback enabled for {self.area}, but it's before {release_hour_local}:00 {local_tz_name}. Not checking for tomorrow's data yet.")
-            else:
-                _LOGGER.debug(f"[OmieAPI] Fallback not enabled for area {self.area}. Not checking for tomorrow's data.")
-
-            raw_data_payload = {
-                "today": raw_today,
-                "tomorrow": raw_tomorrow,
-                "yesterday": None
-            }
-
-            return {
-                "raw_data": raw_data_payload,
-                "area": area,
-                "timezone": self.get_timezone_for_area(area),
-                "target_date": today_date.isoformat(),
-                "data_source": self.source_type,
-                "attempted_sources": [self.source_type]
-            }
-
-        except Exception as e:
-            _LOGGER.error(f"[OmieAPI] Unexpected error fetching OMIE data: {e}", exc_info=True)
-            return None
+            data = await self.error_handler.run_with_retry(
+                self._fetch_data,
+                client=client,
+                area=area,
+                reference_time=kwargs.get('reference_time')
+            )
+            if not data or not isinstance(data, dict) or not data.get('raw_data', {}).get('today'):
+                _LOGGER.error(f"OMIE API fetch ultimately failed for area {area} after retries or returned invalid data.")
+                return None
+            return data
         finally:
             if session is None and client:
                 await client.close()
+
+    async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
+        """Internal method to fetch data, called by ErrorHandler."""
+        if reference_time is None:
+            reference_time = datetime.now(timezone.utc)
+
+        today_date = reference_time.date()
+        tomorrow_date = today_date + timedelta(days=1)
+
+        raw_today = await self._fetch_omie_file(client, today_date)
+
+        if not raw_today:
+            _LOGGER.warning(f"[OmieAPI] Today's ({today_date}) data missing or invalid. Signaling failure.")
+            return None
+
+        raw_tomorrow = None
+        local_tz_name = self.get_timezone_for_area(area)
+        local_tz = get_timezone_object(local_tz_name)
+        if not local_tz:
+            _LOGGER.warning(f"[OmieAPI] Could not get timezone object for {local_tz_name}, defaulting to UTC for time check.")
+            local_tz = timezone.utc
+
+        now_local = reference_time.astimezone(local_tz)
+        release_hour_local = 14
+        failure_check_hour_local = 16
+
+        should_fetch_tomorrow = now_local.hour >= release_hour_local
+
+        if should_fetch_tomorrow:
+            _LOGGER.debug(f"[OmieAPI] Attempting to fetch tomorrow's ({tomorrow_date}) data as it's after {release_hour_local}:00 {local_tz_name}.")
+            raw_tomorrow = await self._fetch_omie_file(client, tomorrow_date)
+
+            if now_local.hour >= failure_check_hour_local and not raw_tomorrow:
+                _LOGGER.warning(
+                    f"[OmieAPI] Fetch failed for area {area}: Tomorrow's ({tomorrow_date}) data expected after "
+                    f"{failure_check_hour_local}:00 {local_tz_name} but was not available or invalid. Triggering fallback."
+                )
+                return None
+        else:
+            _LOGGER.debug(f"[OmieAPI] Not attempting to fetch tomorrow's ({tomorrow_date}) data yet (before {release_hour_local}:00 {local_tz_name}).")
+
+        raw_data_payload = {
+            "today": raw_today,
+            "tomorrow": raw_tomorrow,
+        }
+
+        return {
+            "raw_data": raw_data_payload,
+            "area": area,
+            "timezone": local_tz_name,
+            "currency": Currency.EUR,
+            "source": self.source_type,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     def get_timezone_for_area(self, area: str) -> str:
         """Get the timezone name string for a specific area.
@@ -175,14 +168,3 @@ class OmieAPI(BasePriceAPI):
             return TimezoneName.EUROPE_LISBON
         else:
             return TimezoneName.EUROPE_MADRID
-
-    def get_parser_for_area(self, area: str) -> Any:
-        """Get the appropriate parser instance.
-
-        Args:
-            area: Area code
-
-        Returns:
-            Parser instance
-        """
-        return OmieParser(timezone_service=self.timezone_service)
