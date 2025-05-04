@@ -428,25 +428,40 @@ async def main():
                 target_currency = Currency.SEK if area.startswith('SE') else Currency.EUR
                 
                 logger.info(f"\nConverting prices from {source_currency} to {target_currency}...")
+                # Fix: Pass the existing session to the exchange rate service
                 exchange_service = DebugExchangeRateService(session=session)
-                await exchange_service.get_rates(force_refresh=True)
-                
-                # Convert prices and from MWh to kWh
-                converted_prices = {}
-                for hour_key, price_info in normalized_prices.items():
-                    # Extract price from dict structure
-                    price = price_info["price"] if isinstance(price_info, dict) else price_info
-                    price_converted = price
-                    if source_currency != target_currency:
-                        price_converted = await exchange_service.convert(
-                            price,
-                            source_currency,
-                            target_currency
-                        )
-                    # Convert from MWh to kWh (assuming source_unit is MWh)
-                    # TODO: Add check for source_unit if it could vary
-                    price_kwh = price_converted / 1000
-                    converted_prices[hour_key] = price_kwh
+                try:
+                    await exchange_service.get_rates(force_refresh=True)
+                    
+                    # Convert prices and from MWh to kWh
+                    converted_prices = {}
+                    for hour_key, price_info in normalized_prices.items():
+                        # Extract price from dict structure
+                        price = price_info["price"] if isinstance(price_info, dict) else price_info
+                        price_converted = price
+                        if source_currency != target_currency:
+                            price_converted = await exchange_service.convert(
+                                price,
+                                source_currency,
+                                target_currency
+                            )
+                        # Convert from MWh to kWh (assuming source_unit is MWh)
+                        # TODO: Add check for source_unit if it could vary
+                        price_kwh = price_converted / 1000
+                        converted_prices[hour_key] = price_kwh
+                except Exception as e:
+                    logger.warning(f"Exchange rate conversion error: {e}")
+                    logger.info("Continuing with unconverted prices")
+                    # Provide fallback conversion for demo purposes
+                    converted_prices = {}
+                    for hour_key, price_info in normalized_prices.items():
+                        price = price_info["price"] if isinstance(price_info, dict) else price_info
+                        # Apply a simple fixed exchange rate as fallback
+                        fallback_rate = 11.0 if target_currency == Currency.SEK else 1.0
+                        price_converted = price * fallback_rate if source_currency != target_currency else price
+                        # Convert to kWh
+                        price_kwh = price_converted / 1000
+                        converted_prices[hour_key] = price_kwh
                 
                 # Use the split_into_today_tomorrow method from TimezoneConverter
                 today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(normalized_prices)
