@@ -32,6 +32,7 @@ class Config:
 
     # API configuration
     SOURCE_PRIORITY = "source_priority"  # Priority order for data sources
+    FALLBACK_SOURCES = "fallback_sources" # Added fallback sources config key
     ORIGINAL_AREA = "original_area"  # Original area code before mapping
     TIMEZONE_REFERENCE = "timezone_reference"  # Timezone reference for area
 

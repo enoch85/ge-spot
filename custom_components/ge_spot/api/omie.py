@@ -1,6 +1,6 @@
 """OMIE API client."""
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
 import aiohttp
 from typing import Dict, Any, Optional
 
@@ -12,6 +12,9 @@ from ..const.network import Network
 from ..const.currencies import Currency
 from ..const.time import TimezoneName
 from ..utils.date_range import generate_date_ranges
+from ..const.config import Config
+from ..timezone.timezone_utils import get_timezone_object
+from .utils import fetch_with_retry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +32,7 @@ class OmieAPI(BasePriceAPI):
             timezone_service: Timezone service instance
         """
         super().__init__(config, session, timezone_service)
+        self.area = config.get(Config.AREA) if config else None
 
     def _get_source_type(self) -> str:
         """Get the source type for this API.
@@ -46,65 +50,110 @@ class OmieAPI(BasePriceAPI):
         """
         return BASE_URL_TEMPLATE
 
+    async def _fetch_omie_file(self, client: ApiClient, target_date: datetime.date) -> Optional[str]:
+        """Fetch a single OMIE data file for a specific date."""
+        year = str(target_date.year)
+        month = str.zfill(str(target_date.month), 2)
+        day = str.zfill(str(target_date.day), 2)
+
+        url = self._get_base_url().format(
+            year=year, month=month, day=day
+        )
+        _LOGGER.debug(f"[OmieAPI] Attempting to fetch OMIE data from URL: {url}")
+
+        response_text = await client.fetch(
+            url,
+            timeout=Network.Defaults.TIMEOUT,
+            encoding='iso-8859-1',
+            response_format='text'
+        )
+
+        if isinstance(response_text, dict) and response_text.get("error"):
+            _LOGGER.warning(f"[OmieAPI] Client error fetching {url}: {response_text.get('message')}")
+            return None
+
+        if not response_text or isinstance(response_text, str) and ("<html" in response_text.lower() or "<!doctype" in response_text.lower()):
+            _LOGGER.debug(f"[OmieAPI] No valid data or HTML response from OMIE for {day}_{month}_{year}.")
+            return None
+
+        _LOGGER.info(f"[OmieAPI] Successfully fetched OMIE data for {day}_{month}_{year}")
+        return response_text
+
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Optional[Dict[str, Any]]:
-        """Fetch raw price data for the given area by trying date-specific file URLs.
+        """Fetch raw price data for the given area, checking for tomorrow if fallback is enabled."""
+        if not self.area:
+            self.area = area
 
-        Args:
-            area: Area code (e.g., ES or PT)
-            session: Optional session for API requests
-            **kwargs: Additional parameters
-
-        Returns:
-            Raw data from API or None if no valid data found
-        """
-        reference_time = kwargs.get('reference_time', datetime.now(timezone.utc))
+        reference_time_utc = kwargs.get('reference_time', datetime.now(timezone.utc))
+        today_date = reference_time_utc.date()
+        tomorrow_date = today_date + timedelta(days=1)
 
         client = ApiClient(session=session or self.session)
         try:
-            date_ranges = generate_date_ranges(
-                reference_time,
-                source_type=Source.OMIE,
-                include_future=False,
-                max_days_back=1
-            )
+            raw_today = await self._fetch_omie_file(client, today_date)
 
-            for start_date, _ in date_ranges:
-                target_date = start_date.date()
-                year = str(target_date.year)
-                month = str.zfill(str(target_date.month), 2)
-                day = str.zfill(str(target_date.day), 2)
+            if not raw_today:
+                yesterday_date = today_date - timedelta(days=1)
+                _LOGGER.warning(f"[OmieAPI] Today's ({today_date}) data missing, trying yesterday ({yesterday_date}).")
+                raw_yesterday = await self._fetch_omie_file(client, yesterday_date)
+                if raw_yesterday:
+                    return {
+                        "raw_data": {"today": None, "yesterday": raw_yesterday, "tomorrow": None},
+                        "area": area,
+                        "timezone": self.get_timezone_for_area(area),
+                        "target_date": yesterday_date.isoformat(),
+                        "data_source": self.source_type,
+                        "attempted_sources": [self.source_type]
+                    }
+                else:
+                    _LOGGER.error(f"[OmieAPI] Failed to fetch data for today ({today_date}) and yesterday ({yesterday_date}).")
+                    return None
 
-                url = self._get_base_url().format(
-                    year=year, month=month, day=day
-                )
-                _LOGGER.debug(f"[OmieAPI] Attempting to fetch OMIE data from URL: {url}")
+            raw_tomorrow = None
+            fallback_sources = self.config.get(Config.FALLBACK_SOURCES, {})
+            is_fallback_enabled = self.area in fallback_sources and fallback_sources[self.area]
 
-                response_text = await client.fetch(
-                    url,
-                    timeout=Network.Defaults.TIMEOUT,
-                    encoding='iso-8859-1',
-                    response_format='text'
-                )
+            if is_fallback_enabled:
+                local_tz_name = self.get_timezone_for_area(self.area)
+                local_tz = get_timezone_object(local_tz_name)
+                if not local_tz:
+                    _LOGGER.warning(f"[OmieAPI] Could not get timezone object for {local_tz_name}, defaulting to UTC for time check.")
+                    local_tz = timezone.utc
 
-                if isinstance(response_text, dict) and response_text.get("error"):
-                    _LOGGER.warning(f"[OmieAPI] Client error fetching {url}: {response_text.get('message')}")
-                    continue
+                now_local = reference_time_utc.astimezone(local_tz)
+                release_hour_local = 14
 
-                if not response_text or isinstance(response_text, str) and ("<html" in response_text.lower() or "<!doctype" in response_text.lower()):
-                    _LOGGER.debug(f"[OmieAPI] No valid data or HTML response from OMIE for {day}_{month}_{year}, trying next date.")
-                    continue
+                should_fetch_tomorrow = now_local.hour >= release_hour_local
 
-                _LOGGER.info(f"[OmieAPI] Successfully fetched OMIE data for {day}_{month}_{year}")
-                return {
-                    "raw_data": response_text,
-                    "area": area,
-                    "timezone": self.get_timezone_for_area(area),
-                    "url": url,
-                    "target_date": target_date.isoformat()
-                }
+                if should_fetch_tomorrow:
+                    _LOGGER.debug(f"[OmieAPI] Fallback enabled for {self.area} and it's after {release_hour_local}:00 {local_tz_name}. Attempting to fetch tomorrow's ({tomorrow_date}) data.")
+                    raw_tomorrow = await self._fetch_omie_file(client, tomorrow_date)
 
-            _LOGGER.warning("[OmieAPI] No valid data found from OMIE after trying relevant dates.")
-            return None
+                    if not raw_tomorrow:
+                        _LOGGER.warning(
+                            f"[OmieAPI] Fetch failed for area {self.area}: Tomorrow's ({tomorrow_date}) data expected after "
+                            f"{release_hour_local}:00 {local_tz_name} but was not available or invalid. Triggering fallback."
+                        )
+                        return None
+                else:
+                    _LOGGER.debug(f"[OmieAPI] Fallback enabled for {self.area}, but it's before {release_hour_local}:00 {local_tz_name}. Not checking for tomorrow's data yet.")
+            else:
+                _LOGGER.debug(f"[OmieAPI] Fallback not enabled for area {self.area}. Not checking for tomorrow's data.")
+
+            raw_data_payload = {
+                "today": raw_today,
+                "tomorrow": raw_tomorrow,
+                "yesterday": None
+            }
+
+            return {
+                "raw_data": raw_data_payload,
+                "area": area,
+                "timezone": self.get_timezone_for_area(area),
+                "target_date": today_date.isoformat(),
+                "data_source": self.source_type,
+                "attempted_sources": [self.source_type]
+            }
 
         except Exception as e:
             _LOGGER.error(f"[OmieAPI] Unexpected error fetching OMIE data: {e}", exc_info=True)
