@@ -117,9 +117,18 @@ class NordpoolAPI(BasePriceAPI):
         # Try to fetch tomorrow's data if it's after 13:00 CET (when typically available)
         tomorrow_data = None
         now_utc = datetime.now(timezone.utc)
-        now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
+        # Use the timezone service if available, otherwise default to CET estimate
+        cet_tz = self.timezone_service.get_timezone_object("Europe/Oslo") if self.timezone_service else timezone(timedelta(hours=1))
+        now_cet = now_utc.astimezone(cet_tz)
 
-        if now_cet.hour >= 13:
+        # Define expected release hour (e.g., 13:00 CET)
+        release_hour_cet = 13
+        # Define a buffer hour to consider it a failure (e.g., 16:00 CET)
+        failure_check_hour_cet = 16
+
+        should_fetch_tomorrow = now_cet.hour >= release_hour_cet
+
+        if should_fetch_tomorrow:
             # Always compute tomorrow as reference_time + 1 day
             tomorrow = (reference_time + timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
             params_tomorrow = {
@@ -131,23 +140,42 @@ class NordpoolAPI(BasePriceAPI):
             async def fetch_tomorrow():
                 return await client.fetch(self.base_url, params=params_tomorrow)
             def is_data_available(data):
+                # Check if data is a dict and has the expected structure
                 return data and isinstance(data, dict) and data.get("multiAreaEntries")
+
+            # Attempt to fetch tomorrow's data with retry
             tomorrow_data = await fetch_with_retry(
                 fetch_tomorrow,
                 is_data_available,
-                retry_interval=1800,
-                end_time=time(23, 50),
-                local_tz_name=TimezoneName.EUROPE_OSLO
+                retry_interval=1800, # 30 minutes
+                end_time=time(23, 50), # Stop retrying late at night
+                local_tz_name=TimezoneName.EUROPE_OSLO # Use Oslo time for end_time check
             )
+
+            # --- Fallback Trigger Logic ---
+            # If it's past the failure check time and tomorrow's data is still not available,
+            # treat this fetch attempt as a failure to trigger fallback.
+            if now_cet.hour >= failure_check_hour_cet and not is_data_available(tomorrow_data):
+                _LOGGER.warning(
+                    f"Nordpool fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
+                    f"but was not available or invalid. Triggering fallback."
+                )
+                return None # Signal failure to FallbackManager
 
         # Construct the dictionary to be returned to FallbackManager/DataProcessor
         # This dictionary should contain everything the parser needs.
+        # Ensure raw_data structure is consistent even if tomorrow_data is None
+        raw_data_payload = {
+             "today": today_data,
+             "tomorrow": tomorrow_data,
+        }
+        # Basic check: If today_data is also missing/invalid, signal failure
+        if not today_data or not isinstance(today_data, dict) or not today_data.get("multiAreaEntries"):
+             _LOGGER.error(f"Nordpool fetch failed for area {area}: Today's data is missing or invalid.")
+             return None # Signal failure
+
         return {
-            # No pre-parsing here, just pass the raw responses
-            "raw_data": {
-                "today": today_data,
-                "tomorrow": tomorrow_data,
-            },
+            "raw_data": raw_data_payload,
             "timezone": "Europe/Oslo", # Nordpool API timezone
             "currency": "EUR", # Nordpool API currency
             "area": area, # Pass the area to the parser via this dict
