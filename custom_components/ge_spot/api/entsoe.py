@@ -24,6 +24,7 @@ from .base.error_handler import ErrorHandler
 from .base.data_structure import create_standardized_price_data
 from .utils import fetch_with_retry
 from ..const.time import TimezoneName
+from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -217,8 +218,8 @@ class EntsoeAPI(BasePriceAPI):
         # Tomorrow's data retry logic
         tomorrow_xml = None
         now_utc = datetime.now(timezone.utc)
-        # Use the timezone service if available, otherwise default to CET estimate
-        cet_tz = self.timezone_service.get_timezone_object("Europe/Paris") if self.timezone_service else timezone(timedelta(hours=1))
+        # Use the imported function directly
+        cet_tz = get_timezone_object("Europe/Paris") # Use Paris time for ENTSO-E
         now_cet = now_utc.astimezone(cet_tz)
 
         # Define expected release hour (e.g., 13:00 CET)

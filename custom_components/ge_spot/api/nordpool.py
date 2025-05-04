@@ -16,6 +16,7 @@ from .base.base_price_api import BasePriceAPI
 from .base.error_handler import ErrorHandler
 from .utils import fetch_with_retry
 from ..const.time import TimezoneName
+from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -117,8 +118,8 @@ class NordpoolAPI(BasePriceAPI):
         # Try to fetch tomorrow's data if it's after 13:00 CET (when typically available)
         tomorrow_data = None
         now_utc = datetime.now(timezone.utc)
-        # Use the timezone service if available, otherwise default to CET estimate
-        cet_tz = self.timezone_service.get_timezone_object("Europe/Oslo") if self.timezone_service else timezone(timedelta(hours=1))
+        # Use the imported function directly
+        cet_tz = get_timezone_object("Europe/Oslo") # Use Oslo time for Nordpool
         now_cet = now_utc.astimezone(cet_tz)
 
         # Define expected release hour (e.g., 13:00 CET)

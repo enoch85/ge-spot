@@ -14,6 +14,7 @@ from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
 from .utils import fetch_with_retry
 from ..const.time import TimezoneName
+from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +36,8 @@ class EpexAPI(BasePriceAPI):
             today = now_utc.strftime("%Y-%m-%d")
             tomorrow = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
             raw_today = await self._fetch_data(client, area, today)
-            now_cet = now_utc.astimezone(timezone(timedelta(hours=1))) # Assuming CET for EPEX
+            cet_tz = get_timezone_object("Europe/Berlin") # Use Berlin time for EPEX
+            now_cet = now_utc.astimezone(cet_tz)
             raw_tomorrow = None
 
             # Define expected release hour (e.g., 13:00 CET)

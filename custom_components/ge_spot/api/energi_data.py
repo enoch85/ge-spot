@@ -16,6 +16,7 @@ from .utils import fetch_with_retry
 from ..const.time import TimezoneName
 from ..const.currencies import Currency
 from ..const.energy import EnergyUnit
+from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,8 +66,8 @@ class EnergiDataAPI(BasePriceAPI):
             
             # Fetch tomorrow's data after 13:00 CET, with retry logic
             now_utc = datetime.datetime.now(timezone.utc)
-            # Use timezone service if available, else estimate CET
-            cet_tz = self.timezone_service.get_timezone_object("Europe/Copenhagen") if self.timezone_service else timezone(timedelta(hours=1))
+            # Use the imported function directly
+            cet_tz = get_timezone_object("Europe/Copenhagen") # Use Copenhagen time for EnergiDataService
             now_cet = now_utc.astimezone(cet_tz)
             raw_tomorrow = None
             
