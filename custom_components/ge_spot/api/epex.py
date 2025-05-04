@@ -14,6 +14,7 @@ from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
 from .utils import fetch_with_retry
 from ..const.time import TimezoneName
+from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,64 +36,106 @@ class EpexAPI(BasePriceAPI):
             today = now_utc.strftime("%Y-%m-%d")
             tomorrow = (now_utc + timedelta(days=1)).strftime("%Y-%m-%d")
             raw_today = await self._fetch_data(client, area, today)
-            if raw_today and isinstance(raw_today, str) and raw_today.strip().lower().startswith("<!doctype html"):
-                _LOGGER.error("EPEX returned HTML for today's data (possible cookie wall or error page). Treating as no data.")
-                raw_today = None
-            now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
+            cet_tz = get_timezone_object("Europe/Berlin") # Use Berlin time for EPEX
+            now_cet = now_utc.astimezone(cet_tz)
             raw_tomorrow = None
-            if now_cet.hour >= 13:
+
+            # Define expected release hour (e.g., 13:00 CET)
+            release_hour_cet = 13
+            # Define a buffer hour to consider it a failure (e.g., 16:00 CET)
+            failure_check_hour_cet = 16
+
+            should_fetch_tomorrow = now_cet.hour >= release_hour_cet
+
+            if should_fetch_tomorrow:
                 async def fetch_tomorrow():
                     return await self._fetch_data(client, area, tomorrow)
+                
+                # Define a more robust check for valid EPEX data (not just HTML error/cookie page)
                 def is_data_available(data):
-                    parser = self.get_parser_for_area(area)
-                    parsed = parser.parse(data) if data else None
-                    return parsed and parsed.get("hourly_prices")
+                    if not data or not isinstance(data, str):
+                        return False
+                    # Check if it's likely an HTML page instead of the data table
+                    if data.strip().lower().startswith("<!doctype html"):
+                         # More specific check for table presence might be needed if error pages vary
+                         # For now, assume any DOCTYPE means it's not the expected data table snippet
+                         return False 
+                    # Basic check if it contains expected table markers (adjust if needed)
+                    # This is brittle, relying on parser might be better if feasible here
+                    return "<table" in data and "epexspot" in data.lower()
+
                 raw_tomorrow = await fetch_with_retry(
                     fetch_tomorrow,
-                    is_data_available,
+                    is_data_available, # Use the refined check
                     retry_interval=1800,
                     end_time=time(23, 50),
                     local_tz_name=TimezoneName.EUROPE_BERLIN
                 )
-                if raw_tomorrow and isinstance(raw_tomorrow, str) and raw_tomorrow.strip().lower().startswith("<!doctype html"):
-                    _LOGGER.error("EPEX returned HTML for tomorrow's data (possible cookie wall or error page). Treating as no data.")
-                    raw_tomorrow = None
-                if not raw_tomorrow:
-                    _LOGGER.warning(f"Failed to fetch EPEX tomorrow's data. Proceeding without it.")
+                
+                # --- Fallback Trigger Logic ---
+                if now_cet.hour >= failure_check_hour_cet and not is_data_available(raw_tomorrow):
+                    _LOGGER.warning(
+                        f"EPEX fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
+                        f"but was not available or invalid. Triggering fallback."
+                    )
+                    return None # Signal failure to FallbackManager
+
+            # --- Final Check for Today's Data --- 
+            # Check if today's data is valid before proceeding
+            if not is_data_available(raw_today):
+                 _LOGGER.error(f"EPEX fetch failed for area {area}: Today's data is missing or invalid.")
+                 return None # Signal failure if today's data is bad
+
+            # --- Parsing and Structuring --- 
+            # (Moved parsing logic down to ensure checks happen first)
             parser = self.get_parser_for_area(area)
             hourly_raw = {}
-            if raw_today:
+            metadata = {}
+
+            # Parse today's data (already validated by is_data_available)
+            try:
                 parsed_today = parser.parse(raw_today)
                 if parsed_today and "hourly_prices" in parsed_today:
                     hourly_raw.update(parsed_today["hourly_prices"])
-            if raw_tomorrow:
-                parsed_tomorrow = parser.parse(raw_tomorrow)
-                if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
-                    hourly_raw.update(parsed_tomorrow["hourly_prices"])
-            metadata = {}
-            if raw_today:
+                # Extract metadata primarily from today's data
+                metadata = parser.extract_metadata(raw_today)
+            except Exception as e:
+                _LOGGER.error(f"Failed to parse or extract metadata from today's EPEX data: {e}")
+                # Decide if this is fatal - returning None might be safer
+                return None 
+
+            # Parse tomorrow's data if available and valid
+            if is_data_available(raw_tomorrow):
                 try:
-                    metadata = parser.extract_metadata(raw_today)
+                    parsed_tomorrow = parser.parse(raw_tomorrow)
+                    if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
+                        hourly_raw.update(parsed_tomorrow["hourly_prices"])
+                    # Optionally update metadata if today's failed, though less likely
+                    if not metadata:
+                         metadata = parser.extract_metadata(raw_tomorrow)
                 except Exception as e:
-                    _LOGGER.error(f"Failed to extract metadata from today's data: {e}")
-            elif raw_tomorrow:
-                try:
-                    metadata = parser.extract_metadata(raw_tomorrow)
-                except Exception as e:
-                    _LOGGER.error(f"Failed to extract metadata from tomorrow's data: {e}")
-            else:
-                _LOGGER.error("No valid EPEX data available for metadata extraction.")
+                    _LOGGER.warning(f"Failed to parse tomorrow's EPEX data, proceeding without it: {e}")
+            
+            # Ensure we have at least some prices before returning success
+            if not hourly_raw:
+                _LOGGER.error(f"EPEX parsing failed for area {area}: No hourly prices extracted from valid raw data.")
+                return None
+
+            # Construct the final dictionary for the DataProcessor
+            # Ensure raw_data key is present for FallbackManager
+            final_raw_data = {
+                "today": raw_today,
+                "tomorrow": raw_tomorrow,
+                "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
+                "area": area
+            }
+
             return {
                 "hourly_raw": hourly_raw,
                 "timezone": metadata.get("timezone", "Europe/Berlin"),
                 "currency": metadata.get("currency", "EUR"),
-                "source_name": "epex",
-                "raw_data": {
-                    "today": raw_today,
-                    "tomorrow": raw_tomorrow,
-                    "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
-                    "area": area
-                },
+                "source_name": Source.EPEX, # Use constant
+                "raw_data": final_raw_data, # Include the raw HTML for parsing/cache
             }
         finally:
             if session is None and client:

@@ -57,11 +57,11 @@ class FallbackManager:
                     session=session,
                     reference_time=reference_time,
                 )
-                # Corrected Check: Only verify if *any* data was returned by fetch_raw_data.
-                # The check for hourly_raw happens after parsing in UnifiedPriceManager.
-                if data:
+                # Corrected Check: Verify if data is a dict and contains the 'raw_data' key.
+                # This ensures the parser has something to work with before stopping fallback.
+                if data and isinstance(data, dict) and data.get('raw_data'):
                     _LOGGER.info(
-                        "Successfully fetched raw data from source: %s for area %s",
+                        "Successfully fetched potentially usable raw data from source: %s for area %s",
                         source_name,
                         area,
                     )

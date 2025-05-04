@@ -24,6 +24,7 @@ from .base.error_handler import ErrorHandler
 from .base.data_structure import create_standardized_price_data
 from .utils import fetch_with_retry
 from ..const.time import TimezoneName
+from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -119,6 +120,7 @@ class EntsoeAPI(BasePriceAPI):
         xml_responses = []
         dict_response_found = None
         found_doc_type = None
+        last_exception = None
         
         # Try fetching data for each date range
         for start_date, end_date in date_ranges:
@@ -216,16 +218,26 @@ class EntsoeAPI(BasePriceAPI):
         # Tomorrow's data retry logic
         tomorrow_xml = None
         now_utc = datetime.now(timezone.utc)
-        now_cet = now_utc.astimezone(timezone(timedelta(hours=1)))
+        # Use the imported function directly
+        cet_tz = get_timezone_object("Europe/Paris") # Use Paris time for ENTSO-E
+        now_cet = now_utc.astimezone(cet_tz)
+
+        # Define expected release hour (e.g., 13:00 CET)
+        release_hour_cet = 13
+        # Define a buffer hour to consider it a failure (e.g., 16:00 CET)
+        failure_check_hour_cet = 16
+
+        should_fetch_tomorrow = now_cet.hour >= release_hour_cet
         
-        if now_cet.hour >= 13:
+        if should_fetch_tomorrow:
             tomorrow = (reference_time + timedelta(days=1))
-            period_start = tomorrow.strftime(TimeFormat.ENTSOE_DATE_HOUR)
-            period_end = (tomorrow + timedelta(hours=23)).strftime(TimeFormat.ENTSOE_DATE_HOUR)
+            # Corrected periodEnd for tomorrow to cover the full day
+            period_start = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).strftime(TimeFormat.ENTSOE_DATE_HOUR)
+            period_end = (tomorrow.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime(TimeFormat.ENTSOE_DATE_HOUR)
             
             params_tomorrow = {
                 "securityToken": api_key,
-                "documentType": "A44",
+                "documentType": "A44", # Only fetch DayAhead for tomorrow
                 "in_Domain": entsoe_area,
                 "out_Domain": entsoe_area,
                 "periodStart": period_start,
@@ -236,7 +248,8 @@ class EntsoeAPI(BasePriceAPI):
                 return await client.fetch(self.base_url, params=params_tomorrow, headers=headers, timeout=Network.Defaults.TIMEOUT)
                 
             def is_data_available(data):
-                return data and "Publication_MarketDocument" in str(data)
+                # Check for non-empty string containing the success marker
+                return data and isinstance(data, str) and "Publication_MarketDocument" in data
                 
             tomorrow_xml = await fetch_with_retry(
                 fetch_tomorrow,
@@ -248,28 +261,56 @@ class EntsoeAPI(BasePriceAPI):
             
             if tomorrow_xml:
                 xml_responses.append(tomorrow_xml)
+
+            # --- Fallback Trigger Logic ---
+            # If it's past the failure check time and tomorrow's data is still not available/valid,
+            # treat this fetch attempt as a failure to trigger fallback.
+            if now_cet.hour >= failure_check_hour_cet and not is_data_available(tomorrow_xml):
+                _LOGGER.warning(
+                    f"ENTSO-E fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
+                    f"but was not available or invalid. Triggering fallback."
+                )
+                # Store the specific error before returning None
+                last_exception = ValueError(f"Tomorrow's data missing after {failure_check_hour_cet}:00 CET") 
+                # Return None to signal failure for tomorrow's data
+                return None 
         
+        # --- Final Check for Today's Data --- 
+        # Ensure we have *some* valid data (today or initial fetch) before proceeding
+        if not dict_response_found and not xml_responses:
+            _LOGGER.error(f"ENTSO-E fetch failed for area {area}: No valid data found for today either.")
+            # If last_exception was set during initial loops or the tomorrow check, use it, otherwise create a generic one
+            final_error = last_exception if last_exception else ValueError(f"No valid data found for area {area}")
+            # Return the error structure expected by FallbackManager
+            return {"attempted_sources": [self.source_type], "error": final_error}
+
         # Prepare the final result
         final_result = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "api_timezone": SourceTimezone.API_TIMEZONES[Source.ENTSOE],
             "source": Source.ENTSOE,
             "area": area,
-            "entsoe_area": entsoe_area
+            "entsoe_area": entsoe_area,
+            # Ensure raw_data key exists for FallbackManager check
+            "raw_data": {}
         }
         
         if dict_response_found:
             final_result["dict_response"] = dict_response_found
             final_result["document_type"] = found_doc_type
-            if xml_responses:
-                final_result["xml_responses"] = xml_responses
-            return final_result
-        elif xml_responses:
+            # Add to raw_data for parser
+            final_result["raw_data"]["dict_response"] = dict_response_found 
+        if xml_responses:
             final_result["xml_responses"] = xml_responses
-            return final_result
-        else:
-            _LOGGER.warning(f"ENTSO-E: No data found for area {area} after trying multiple date ranges and document types")
-            raise ValueError(f"No matching data found for area {area} after trying multiple date ranges and document types")
+            # Add to raw_data for parser
+            final_result["raw_data"]["xml_responses"] = xml_responses
+        
+        # If raw_data is still empty, something went wrong, signal failure
+        if not final_result["raw_data"]:
+             _LOGGER.error(f"ENTSO-E logic error: No dict_response or xml_responses added to raw_data for area {area}")
+             return None
+
+        return final_result
 
     async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse the raw data dictionary fetched by fetch_raw_data."""

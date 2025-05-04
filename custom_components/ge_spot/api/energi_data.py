@@ -16,6 +16,7 @@ from .utils import fetch_with_retry
 from ..const.time import TimezoneName
 from ..const.currencies import Currency
 from ..const.energy import EnergyUnit
+from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,16 +66,23 @@ class EnergiDataAPI(BasePriceAPI):
             
             # Fetch tomorrow's data after 13:00 CET, with retry logic
             now_utc = datetime.datetime.now(timezone.utc)
-            now_cet = now_utc.astimezone(timezone(timedelta(hours=1))) # CET is UTC+1
+            # Use the imported function directly
+            cet_tz = get_timezone_object("Europe/Copenhagen") # Use Copenhagen time for EnergiDataService
+            now_cet = now_utc.astimezone(cet_tz)
             raw_tomorrow = None
             
-            if now_cet.hour >= 13:
+            # Define expected release hour (e.g., 13:00 CET)
+            release_hour_cet = 13
+            # Define a buffer hour to consider it a failure (e.g., 16:00 CET)
+            failure_check_hour_cet = 16
+
+            should_fetch_tomorrow = now_cet.hour >= release_hour_cet
+
+            if should_fetch_tomorrow:
                 async def fetch_tomorrow_task(): # Renamed to avoid conflict
                     return await self._fetch_data(client, area, tomorrow)
                 
-                # The is_data_available check should ideally happen *after* parsing,
-                # but for retry logic, we might need a basic check on raw data.
-                # Let's check if records exist and are not empty.
+                # Basic check for tomorrow's data presence
                 def is_tomorrow_data_present(data):
                     return data and isinstance(data, dict) and data.get("records")
                 
@@ -85,16 +93,33 @@ class EnergiDataAPI(BasePriceAPI):
                     end_time=time(23, 50),
                     local_tz_name=TimezoneName.EUROPE_COPENHAGEN
                 )
+
+                # --- Fallback Trigger Logic ---
+                if now_cet.hour >= failure_check_hour_cet and not is_tomorrow_data_present(raw_tomorrow):
+                    _LOGGER.warning(
+                        f"EnergiDataService fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
+                        f"but was not available or invalid. Triggering fallback."
+                    )
+                    return None # Signal failure to FallbackManager
             
+            # --- Final Check for Today's Data --- 
+            # Check if today's data is valid before proceeding
+            if not raw_today or not isinstance(raw_today, dict) or not raw_today.get("records"):
+                 _LOGGER.error(f"EnergiDataService fetch failed for area {area}: Today's data is missing or invalid.")
+                 return None # Signal failure if today's data is bad
+
             # --- No Parsing Here --- 
             # The parser will be called later by DataProcessor
             
             # Return the raw data along with necessary metadata for the parser
+            # Ensure raw_data key is present for FallbackManager
+            final_raw_data = {
+                "today": raw_today,
+                "tomorrow": raw_tomorrow,
+            }
+
             return {
-                "raw_data": {
-                    "today": raw_today,
-                    "tomorrow": raw_tomorrow,
-                },
+                "raw_data": final_raw_data,
                 "timezone": "Europe/Copenhagen", # EnergiDataService API timezone context
                 "currency": Currency.DKK, # Use constant
                 "area": area,

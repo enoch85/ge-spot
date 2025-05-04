@@ -154,6 +154,59 @@ class CacheManager:
                              except Exception as e:
                                  _LOGGER.warning(f"Error parsing created_at for sorting cache key {key}: {e}")
 
+        # If no valid entries were found for today's date, check if we have yesterday's data with tomorrow's prices
+        # This handles the midnight transition case
+        now = dt_util.now()
+        current_date = now.date()
+
+        # Only attempt the migration if we're looking for today's date and it's just after midnight
+        if target_date == current_date:
+            # Only allow migration between 00:00 and 00:10 (10 minute window after midnight)
+            if now.hour == 0 and now.minute < 10:
+                yesterday = target_date - timedelta(days=1)
+                _LOGGER.debug(
+                    "No valid cache entries for today (%s). Checking yesterday's cache for tomorrow's data.",
+                    target_date
+                )
+
+                # Look for any source from yesterday that has tomorrow data
+                for key, entry_info in all_entries_info.items():
+                    metadata = entry_info.get("metadata", {})
+                    if metadata.get("area") == area and metadata.get("target_date") == yesterday.isoformat():
+                        entry_data = self._price_cache.get(key)
+
+                        # Check if this entry has tomorrow's prices that we can use for today
+                        if entry_data and "tomorrow_hourly_prices" in entry_data and entry_data["tomorrow_hourly_prices"]:
+                            found_source = metadata.get("source", "unknown")
+                            _LOGGER.info(
+                                "Found yesterday's cached data from %s with tomorrow's prices for area %s. "
+                                "Using it for today's prices after midnight transition.",
+                                found_source, area
+                            )
+
+                            # Create a copy of the data to modify
+                            data_copy = dict(entry_data)
+
+                            # Move tomorrow's prices to today's prices
+                            data_copy["hourly_prices"] = data_copy["tomorrow_hourly_prices"]
+                            data_copy["tomorrow_hourly_prices"] = {}
+
+                            # Mark as migrated for debugging purposes
+                            data_copy["migrated_from_tomorrow"] = True
+                            data_copy["original_cache_date"] = yesterday.isoformat()
+
+                            # Store this migrated data with today's date so we don't need to migrate again
+                            self.store(
+                                area=area,
+                                source=found_source,
+                                data=data_copy,
+                                timestamp=now,
+                                target_date=current_date
+                            )
+
+                            # Return the migrated data
+                            return data_copy
+
         if not valid_entries_with_timestamp:
             _LOGGER.debug(f"No valid (non-expired, within max_age) cache entries found for area {area} and date {target_date_str}")
             return None
