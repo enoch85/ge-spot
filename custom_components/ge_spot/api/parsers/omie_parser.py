@@ -22,48 +22,44 @@ class OmieParser(BasePriceParser):
         super().__init__(Source.OMIE, timezone_service)
 
     def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Parse OMIE API response dictionary containing raw text data for potentially multiple days.
+        """Parse OMIE API response dictionary containing raw text data for today and tomorrow.
 
         Args:
-            data: Dictionary from OmieAPI.fetch_raw_data containing:
-                  'raw_data': Dict like {"today": str|None, "tomorrow": str|None, "yesterday": str|None}
+            data: Dictionary from OmieAPI._fetch_data containing:
+                  'raw_data': Dict like {"today": str|None, "tomorrow": str|None}
                   'timezone': The timezone name string (e.g., 'Europe/Madrid').
                   'area': The area code ('ES' or 'PT').
-                  'url': Source URL (metadata - might be less relevant now).
-                  'target_date': Base date the data fetch was initiated for (metadata).
-                  'data_source': The source identifier (e.g., 'omie').
+                  'currency': Currency code (e.g., 'EUR').
+                  'source': The source identifier (e.g., 'omie').
+                  'fetched_at': ISO timestamp of fetch.
 
         Returns:
             Parsed data dictionary: {'hourly_raw': {...}, 'currency': 'EUR', 'timezone': 'Europe/Madrid', 'source': 'omie'}
         """
         # Extract info from the input dictionary
         raw_data_payload = data.get("raw_data")
-        source_timezone = data.get("timezone", "Europe/Madrid")  # Default if missing
-        area = data.get("area", "ES")  # Default if missing
+        source_timezone = data.get("timezone", "Europe/Madrid")
+        area = data.get("area", "ES")
         _LOGGER.debug(f"[OmieParser] Received data for Area: {area}, Timezone: {source_timezone}")
 
         result = {
             "hourly_raw": {},
-            "currency": Currency.EUR,  # OMIE is always EUR
-            "source": data.get("data_source", Source.OMIE), # Use provided source
-            "timezone": source_timezone,  # Pass through the source timezone name
+            "currency": data.get("currency", Currency.EUR), # Use provided currency or default
+            "source": data.get("source", Source.OMIE),
+            "timezone": source_timezone,
             "metadata": {
-                # Keep metadata, url might be less useful if multiple files fetched
-                "target_date": data.get("target_date"),
+                "fetched_at": data.get("fetched_at"),
                 "area": area
             }
         }
 
-        # Check for valid raw_data payload structure
         if not raw_data_payload or not isinstance(raw_data_payload, dict):
             _LOGGER.warning("[OmieParser] No valid 'raw_data' dictionary found in input.")
-            return result  # Return empty structure
+            return result
 
-        # --- Parsing Logic for Multiple Days ---
-        # Process days in order: today, tomorrow, yesterday
-        # This ensures that if today/tomorrow exist, they populate the main result.
-        # Yesterday is only parsed if explicitly provided (e.g., when today was missing).
-        days_to_parse = ["today", "tomorrow", "yesterday"]
+        # --- Parsing Logic for Today and Tomorrow ---
+        # Process only today and tomorrow data
+        days_to_parse = ["today", "tomorrow"]
 
         for day_key in days_to_parse:
             raw_text = raw_data_payload.get(day_key)
@@ -71,14 +67,11 @@ class OmieParser(BasePriceParser):
                 _LOGGER.debug(f"[OmieParser] Parsing data for '{day_key}'.")
                 try:
                     # Pass the raw text and let the sub-parser handle it
-                    # The sub-parser (_parse_csv or _parse_json) needs to correctly identify
-                    # the date *within* the text blob it receives.
                     if raw_text.strip().startswith('{') and raw_text.strip().endswith('}'):
                         _LOGGER.debug(f"[OmieParser] Attempting to parse '{day_key}' data as JSON.")
                         self._parse_json(raw_text, result, source_timezone)
                     else:
                         _LOGGER.debug(f"[OmieParser] Attempting to parse '{day_key}' data as CSV.")
-                        # Pass the result dict directly; _parse_csv updates it
                         self._parse_csv(raw_text, result, source_timezone)
 
                 except Exception as e:
