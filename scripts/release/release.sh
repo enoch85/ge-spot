@@ -157,28 +157,72 @@ function check_manifest {
 # Update version in manifest.json
 function update_manifest {
     local version_tag="$1"
+    local manifest_changed=false
+    local readme_changed=false
     
-    # First, check if manifest exists
+    # Check if manifest exists and is valid JSON
     check_manifest
+    if [[ $? -ne 0 ]]; then
+        return 1 # Indicate error, already logged in check_manifest
+    fi
     
-    # Check if version is already updated
-    local current_version=$(grep -o '"version": *"[^"]*"' "$MANIFEST_PATH" | cut -d'"' -f4)
-    if [[ "$current_version" == "$version_tag" ]]; then
+    # Update Manifest Version
+    local current_manifest_version=$(grep -o '"version": *"[^"]*"' "$MANIFEST_PATH" | cut -d'"' -f4)
+    if [[ "$current_manifest_version" == "$version_tag" ]]; then
         info_log "Version is already set to ${version_tag} in manifest.json"
-        return 0
-    fi
-
-    debug_log "Updating version in: $MANIFEST_PATH"
-    
-    # Use different sed syntax for macOS vs Linux
-    if [[ "$(uname)" == "Darwin" ]]; then
-        sed -i '' "s|\"version\":.*|\"version\": \"${version_tag}\"|g" "$MANIFEST_PATH"
     else
-        sed -i "s|\"version\":.*|\"version\": \"${version_tag}\"|g" "$MANIFEST_PATH"
+        debug_log "Updating version in: $MANIFEST_PATH"
+        if [[ "$(uname)" == "Darwin" ]]; then
+            sed -i '' "s|\\"version\\":.*|\\"version\\": \\"${version_tag}\\"|g" "$MANIFEST_PATH"
+        else
+            sed -i "s|\\"version\\":.*|\\"version\\": \\"${version_tag}\\"|g" "$MANIFEST_PATH"
+        fi
+        if [[ $? -eq 0 ]]; then
+            success_log "Version updated to ${version_tag} in manifest.json"
+            manifest_changed=true
+        else
+            error_log "Failed to update version in manifest.json"
+            return 1 # Indicate error
+        fi
     fi
 
-    success_log "Version updated to ${version_tag} in manifest.json"
-    return 1  # Return non-zero to indicate changes were made
+    # Update README Version Badge
+    local readme_path="README.md"
+    if [[ ! -f "$readme_path" ]]; then
+        error_log "README file not found at: $readme_path"
+        # Don't exit, but log the error and skip README update
+    else
+        local current_readme_version=$(grep -o 'badge/version-.*-blue.svg' "$readme_path" | sed -n 's/badge\/version-\(.*\)-blue.svg/\1/p')
+        # Remove 'v' prefix from tag for comparison if needed, badge usually doesn't have 'v'
+        local plain_version_tag="${version_tag#v}" 
+
+        if [[ "$current_readme_version" == "$plain_version_tag" ]]; then
+            info_log "Version badge is already set to ${plain_version_tag} in ${readme_path}"
+        else
+            debug_log "Updating version badge in: ${readme_path}"
+            # Use a portable sed command that works on both Linux and macOS (Darwin)
+            # It uses a temporary file to avoid in-place editing issues across platforms.
+            local temp_readme=$(mktemp)
+            sed "s|badge/version-.*-blue.svg|badge/version-${plain_version_tag}-blue.svg|" "$readme_path" > "$temp_readme" && mv "$temp_readme" "$readme_path"
+            
+            if [[ $? -eq 0 ]]; then
+                 success_log "Version badge updated to ${plain_version_tag} in ${readme_path}"
+                 readme_changed=true
+            else
+                 error_log "Failed to update version badge in ${readme_path}"
+                 # Don't exit, but log the error
+            fi
+            # Clean up temp file if it still exists (e.g., on mv failure)
+            rm -f "$temp_readme"
+        fi
+    fi
+
+    # Return 0 if any file changed, 1 otherwise (Bash convention: 0=success/changed, non-zero=failure/no change)
+    if [[ "$manifest_changed" == true || "$readme_changed" == true ]]; then
+        return 0 # Changes were made
+    else
+        return 1 # No changes were made
+    fi
 }
 
 # Check if any changes were made to files
