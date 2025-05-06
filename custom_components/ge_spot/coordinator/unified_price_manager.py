@@ -203,14 +203,21 @@ class UnifiedPriceManager:
         has_complete_data_for_today_in_cache = False
 
         if cached_data_for_decision:
-            # Temporarily process to check flags, avoid storing this intermediate result
-            # We need to see what the DataProcessor would determine about this cached data
-            # Pass a copy to avoid modifying the original cached_data_for_decision object
-            temp_processed_data = await self._data_processor.process(dict(cached_data_for_decision))
-            if temp_processed_data.get("current_price") is not None:
+            # Directly inspect the already processed cached_data_for_decision
+            # The cache stores fully processed data, so we don't need to re-process it here.
+            if cached_data_for_decision.get("current_price") is not None:
                 has_current_hour_price_in_cache = True
-            if temp_processed_data.get("statistics", {}).get("complete_data", False):
+            if cached_data_for_decision.get("statistics", {}).get("complete_data", False):
                 has_complete_data_for_today_in_cache = True
+            
+            _LOGGER.debug(
+                f"[{self.area}] Decision making: cached_data_for_decision found. "
+                f"Current price available in cache: {has_current_hour_price_in_cache}. "
+                f"Complete data in cache (20+ hrs): {has_complete_data_for_today_in_cache}. "
+                f"Cached stats content: {cached_data_for_decision.get('statistics')}"
+            )
+        else:
+            _LOGGER.debug(f"[{self.area}] Decision making: no cached_data_for_decision found.")
 
         # Instantiate FetchDecisionMaker
         from .fetch_decision import FetchDecisionMaker # Local import
