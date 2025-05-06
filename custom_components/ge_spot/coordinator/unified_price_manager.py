@@ -191,112 +191,96 @@ class UnifiedPriceManager:
         # Ensure exchange service is initialized before fetching/processing
         await self._ensure_exchange_service()
 
-        # --- Rate Limiting Start ---
+        # --- Decision to Fetch (incorporating FetchDecisionMaker) ---
+        # Get current cache status to inform fetch decision
+        cached_data_for_decision = self._cache_manager.get_data(
+            area=self.area,
+            target_date=today_date,
+            max_age_minutes=Defaults.CACHE_TTL
+        )
+
+        has_current_hour_price_in_cache = False
+        has_complete_data_for_today_in_cache = False
+
+        if cached_data_for_decision:
+            # Temporarily process to check flags, avoid storing this intermediate result
+            # We need to see what the DataProcessor would determine about this cached data
+            # Pass a copy to avoid modifying the original cached_data_for_decision object
+            temp_processed_data = await self._data_processor.process(dict(cached_data_for_decision))
+            if temp_processed_data.get("current_price") is not None:
+                has_current_hour_price_in_cache = True
+            if temp_processed_data.get("statistics", {}).get("complete_data", False):
+                has_complete_data_for_today_in_cache = True
+
+        # Instantiate FetchDecisionMaker
+        from .fetch_decision import FetchDecisionMaker # Local import
+        decision_maker = FetchDecisionMaker(tz_service=self._tz_service)
+
+        # Get last fetch time from the shared dictionary for this area
+        last_fetch_for_decision = _LAST_FETCH_TIME.get(area_key)
+
+        should_fetch_from_api, fetch_reason = decision_maker.should_fetch(
+            now=now,
+            last_fetch=last_fetch_for_decision,
+            fetch_interval=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES, # Use the same interval as rate limiter
+            has_current_hour_price=has_current_hour_price_in_cache,
+            has_complete_data_for_today=has_complete_data_for_today_in_cache
+        )
+
+        if not force and not should_fetch_from_api:
+            _LOGGER.info(f"Skipping API fetch for area {self.area} based on FetchDecisionMaker: {fetch_reason}")
+            if cached_data_for_decision:
+                _LOGGER.debug("Returning data based on initial cache check for decision making for %s", self.area)
+                # Ensure the cached data is marked correctly if it's used
+                cached_data_for_decision["using_cached_data"] = True
+                # Re-process if it wasn't fully processed or to update timestamps
+                return await self._process_result(cached_data_for_decision, is_cached=True)
+            else:
+                _LOGGER.warning(
+                    f"FetchDecisionMaker advised against fetching for {self.area}, but no cached data was available for decision. "
+                    f"This might indicate an issue or an edge case (e.g. initial startup with no cache yet)."
+                )
+                # Attempt to generate an empty result, or consider if a fetch should be forced here
+                return await self._generate_empty_result(error=f"Fetch skipped by decision maker, no cache: {fetch_reason}")
+
+        # --- Rate Limiting Lock (moved after initial fetch decision) ---
+        # If we decided to fetch (or force is true), then acquire the lock.
         async with _FETCH_LOCK: # Use asyncio Lock for atomicity
-            last_fetch = _LAST_FETCH_TIME.get(area_key)
+            # Re-check last_fetch inside the lock to ensure atomicity for rate limiting
+            last_fetch_for_rate_limit = _LAST_FETCH_TIME.get(area_key)
             min_interval = timedelta(minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES)
 
-            if not force and last_fetch:
-                time_since_last_fetch = now - last_fetch
+            if not force and last_fetch_for_rate_limit:
+                time_since_last_fetch = now - last_fetch_for_rate_limit
                 if time_since_last_fetch < min_interval:
                     next_fetch_allowed_in_seconds = (min_interval - time_since_last_fetch).total_seconds()
                     _LOGGER.info(
-                        f"Rate limiting in effect for area {self.area}. "
+                        f"Rate limiting in effect for area {self.area} (checked after fetch decision). "
                         f"Next fetch allowed in {next_fetch_allowed_in_seconds:.1f} seconds. "
                         f"Using cached data if available."
                     )
                     # Use cached data if rate limited - specify today's date
-                    cached_data = self._cache_manager.get_data(
+                    # This is the same logic as before, but now it's after the FetchDecisionMaker check
+                    # and inside the rate limiting lock.
+                    cached_data_rate_limited = self._cache_manager.get_data(
                         area=self.area,
-                        target_date=today_date, # Specify today
+                        target_date=today_date,
                         max_age_minutes=Defaults.CACHE_TTL
                     )
-                    if cached_data:
-                        _LOGGER.debug("Returning rate-limited cached data for %s", self.area)
-                        # Ensure the cached data is marked correctly
-                        cached_data["using_cached_data"] = True
-                        cached_data["next_fetch_allowed_in_seconds"] = round(next_fetch_allowed_in_seconds, 1)
-
-                        # Check if the cached data is already processed
-                        # (processed data has hourly_prices but not hourly_raw)
-                        if ("hourly_prices" in cached_data and
-                            not cached_data.get("hourly_raw") and
-                            cached_data.get("has_data", False)):
-
-                            # Update timestamps to ensure current/next hour prices are correct
-                            if cached_data.get("current_hour_key") or cached_data.get("next_hour_key"):
-                                current_hour_key = self._tz_service.get_current_hour_key()
-                                next_hour_key = self._tz_service.get_next_hour_key()
-
-                                cached_data["current_hour_key"] = current_hour_key
-                                cached_data["next_hour_key"] = next_hour_key
-
-                                # Update current and next prices based on new hour keys
-                                hourly_prices = cached_data.get("hourly_prices", {})
-                                cached_data["current_price"] = hourly_prices.get(current_hour_key)
-                                cached_data["next_hour_price"] = hourly_prices.get(next_hour_key)
-
-                                cached_data["last_update"] = dt_util.now().isoformat()
-
-                            # Return already processed data without reprocessing
-                            return cached_data
-                        else:
-                            # Re-process to ensure stats etc. are up-to-date relative to 'now'
-                            processed_cached_data = await self._process_result(cached_data, is_cached=True)
-                            # Explicitly set the flag again after processing, as _process_result might reset it based on input
-                            processed_cached_data["using_cached_data"] = True
-                            return processed_cached_data
+                    if cached_data_rate_limited:
+                        _LOGGER.debug("Returning rate-limited cached data for %s (after decision check)", self.area)
+                        cached_data_rate_limited["using_cached_data"] = True
+                        cached_data_rate_limited["next_fetch_allowed_in_seconds"] = round(next_fetch_allowed_in_seconds, 1)
+                        return await self._process_result(cached_data_rate_limited, is_cached=True)
                     else:
-                        _LOGGER.warning("Rate limited for %s, but no cached data available for today (%s).", self.area, today_date)
-                        # Pass the specific rate limit error message
-                        return await self._generate_empty_result(error="Rate limited, no cache available")
+                        _LOGGER.warning("Rate limited for %s (after decision check), but no cached data available for today (%s).", self.area, today_date)
+                        return await self._generate_empty_result(error="Rate limited (after decision), no cache available")
 
-            # If not rate limited or forced, proceed to fetch
+            # If not rate limited or forced, proceed to fetch. Update fetch timestamp.
+            _LOGGER.info(f"Proceeding with API fetch for area {self.area} (Reason: {fetch_reason}, Force: {force})")
+            _LAST_FETCH_TIME[area_key] = now # Update fetch time now that we are committed to fetching
 
-            # --- Check Cache Completeness Start ---
-            # Before actually fetching, check if we have recent enough *and* complete cached data
-            if not force:
-                cached_data = self._cache_manager.get_data(
-                    area=self.area,
-                    target_date=today_date, # Uses today_date calculated earlier
-                    # No max_age here, rely on cache TTL. We just need the latest.
-                )
-
-                if cached_data:
-                    # Process the cached data to check for completeness
-                    # (Assume _process_result adds 'is_data_complete' based on DataProcessor)
-                    processed_cached_data = await self._process_result(cached_data, is_cached=True)
-
-                    # Check for completeness (adjust key if needed)
-                    # We assume DataProcessor sets this flag if >= 20 hours data exists
-                    is_complete = processed_cached_data.get("statistics", {}).get("complete_data", False)
-
-                    if is_complete:
-                        _LOGGER.info(
-                            f"Skipping fetch for area {self.area}. "
-                            f"Complete data found in cache (Source: {processed_cached_data.get('data_source', 'unknown')})."
-                        )
-                        # Return the processed cached data - no need to fetch
-                        # Do NOT update _LAST_FETCH_TIME here
-                        return processed_cached_data
-                    else:
-                        _LOGGER.info(
-                            f"Proceeding with fetch for area {self.area}. "
-                            f"Cached data found but is incomplete."
-                        )
-                else:
-                     _LOGGER.info(
-                        f"Proceeding with fetch for area {self.area}. "
-                        f"No suitable cached data found for today."
-                    )
-
-            # --- Check Cache Completeness End ---
-
-            # If we reached here, it means we need to fetch (either forced, no cache, or incomplete cache)
-            _LOGGER.info(f"Fetching price data for area {self.area}")
-            # Update fetch timestamp *before* the actual fetch to prevent race conditions
-            _LAST_FETCH_TIME[area_key] = now
-        # --- Rate Limiting End ---
+        # --- Actual Fetching Logic (outside the rate limiting lock, but after decision and timestamp update) ---
 
         # Fetch data using the new FallbackManager
         try:
