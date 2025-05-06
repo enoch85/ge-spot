@@ -84,7 +84,7 @@ class GSpotOptionsFlow(OptionsFlow):
                 # Handle source priority, timezone reference, and Stromligning supplier updates if present
                 updated_data = None
                 if (
-                    Config.SOURCE_PRIORITY in user_input or 
+                    Config.SOURCE_PRIORITY in user_input or
                     Config.TIMEZONE_REFERENCE in user_input or
                     Config.CONF_STROMLIGNING_SUPPLIER in user_input
                 ):
@@ -127,7 +127,7 @@ class GSpotOptionsFlow(OptionsFlow):
                             else:
                                 # Call without await if it's not async
                                 coordinator.clear_cache()
-                                
+
                             self._errors["base"] = "cache_cleared"
                             return await self._show_form()
                         except Exception as e:

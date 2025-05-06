@@ -48,15 +48,15 @@ def convert_energy_price(
         if source_unit != target_unit:
             source_factor = EnergyUnit.CONVERSION.get(source_unit)
             target_factor = EnergyUnit.CONVERSION.get(target_unit)
-            
+
             if source_factor is None or target_factor is None:
                 _LOGGER.error(f"Invalid energy unit specified: source='{source_unit}', target='{target_unit}'")
                 return None
-                
+
             if source_factor == 0:
                 _LOGGER.error(f"Source unit '{source_unit}' has a zero conversion factor.")
                 return None
-                
+
             # Energy price conversion:
             # Price per MWh to price per kWh: divide by 1000
             # Price per kWh to price per MWh: multiply by 1000
@@ -68,15 +68,15 @@ def convert_energy_price(
             else:
                 # General case - convert using ratio of factors
                 price = price * (source_factor / target_factor)
-                
+
         # 2. Apply VAT
         price *= (1 + vat_rate)
-        
+
         # 3. Apply display unit multiplier (e.g., for cents)
         price *= display_unit_multiplier
-        
+
         return price
-        
+
     except (TypeError, ValueError) as e:
         _LOGGER.error(f"Error during energy price conversion: {e}. Price: {price}, SourceUnit: {source_unit}, TargetUnit: {target_unit}")
         return None

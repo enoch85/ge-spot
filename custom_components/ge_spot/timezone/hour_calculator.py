@@ -140,10 +140,10 @@ class HourCalculator:
 
     def get_hour_key_for_datetime(self, dt: datetime) -> str:
         """Get the hour key for a specific datetime.
-        
+
         Args:
             dt: Datetime to get hour key for
-            
+
         Returns:
             Hour key in format HH:00
         """
@@ -156,7 +156,7 @@ class HourCalculator:
         if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
             target_dt = dt.astimezone(self.area_timezone)
             _LOGGER.debug(f"HourCalculator using area_timezone: target_dt={target_dt}, area_timezone={self.area_timezone}")
-        # Otherwise use Home Assistant Time mode 
+        # Otherwise use Home Assistant Time mode
         else:
             target_dt = dt.astimezone(self.system_timezone)
             _LOGGER.debug(f"HourCalculator using system_timezone: target_dt={target_dt}, system_timezone={self.system_timezone}")

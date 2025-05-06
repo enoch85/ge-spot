@@ -14,10 +14,10 @@ from ..const.areas import Timezone
 
 def get_timezone_for_area(area: str) -> str:
     """Get timezone string for a specific area.
-    
+
     Args:
         area: The area code to get timezone for
-        
+
     Returns:
         Timezone string (e.g., 'Europe/Oslo')
     """

@@ -18,7 +18,7 @@ class BasePriceAPI(ABC):
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None):
         """Initialize the API.
-        
+
         Args:
             config: Configuration dictionary
             session: Optional session for API requests
@@ -34,39 +34,39 @@ class BasePriceAPI(ABC):
     @abstractmethod
     def _get_source_type(self) -> str:
         """Get the source type identifier.
-        
+
         Returns:
             Source type identifier
         """
         pass
-    
+
     @abstractmethod
     def _get_base_url(self) -> str:
         """Get the base URL for the API.
-        
+
         Returns:
             Base URL as string
         """
         pass
-    
+
     @abstractmethod
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> List[Dict[str, Any]]:
         """Fetch raw price data for the given area.
-        
+
         Args:
             area: Area code
             session: Optional session for API requests
             **kwargs: Additional parameters
-            
+
         Returns:
             List of standardized price data dictionaries
         """
         pass
-    
+
     async def parse_raw_data(self, raw_data: Any) -> Dict[str, Any]:
         """Default parse_raw_data implementation (not used in new adapters)."""
         raise NotImplementedError("parse_raw_data is not implemented in this adapter.")
-    
+
     async def fetch_day_ahead_prices(self, area=None, **kwargs):
         try:
             if not self.timezone_service:
@@ -137,34 +137,34 @@ class BasePriceAPI(ABC):
                 "hourly_prices": {},
                 "error": str(e)
             }
-    
+
     # --- Methods required by subclasses (as per PARSER_UPDATES.md) ---
     @abstractmethod
     def get_timezone_for_area(self, area: str) -> Any:
         """Get the source timezone for the specified area.
-        
+
         Args:
             area: Area code
-            
+
         Returns:
             Timezone object or identifier string for the area
         """
         pass
-        
+
     @abstractmethod
     def get_parser_for_area(self, area: str) -> Any:
         """Get the appropriate parser instance for the specified area.
-        
+
         Args:
             area: Area code
-            
+
         Returns:
             Parser instance for the area
         """
         pass
     # --- END Required Methods ---
 
-    # --- REMOVED UNUSED HELPER METHODS --- 
+    # --- REMOVED UNUSED HELPER METHODS ---
     # _calculate_current_next_hour - Logic moved to DataProcessor
     # _calculate_statistics - Logic moved to DataProcessor
     # _validate_complete_day_data - Logic moved to DataProcessor
@@ -173,14 +173,14 @@ class BasePriceAPI(ABC):
     # _calculate_off_peak_hours - Logic moved to DataProcessor (or could be added there if needed)
     # get_timezone_for_area - Logic handled by TimezoneService
     # get_parser_for_area - Parsers instantiated in subclasses
-    # --- END REMOVED METHODS --- 
+    # --- END REMOVED METHODS ---
 
     def get_timezone_for_area(self, area: str) -> Any:
         """Get the source timezone for the specified area.
-        
+
         Args:
             area: Area code
-            
+
         Returns:
             Timezone object for the area
         """
@@ -189,22 +189,22 @@ class BasePriceAPI(ABC):
             area_timezone = self.timezone_service.area_timezone
             if area_timezone:
                 return area_timezone
-        
+
         # Fallback to UTC
         _LOGGER.debug(f"No specific timezone found for area {area}, using UTC")
         return timezone.utc
-        
+
     def get_parser_for_area(self, area: str) -> Any:
         """Get the appropriate parser for the specified area.
-        
+
         Args:
             area: Area code
-            
+
         Returns:
             Parser instance for the area
         """
         # Import here to avoid circular imports
         from ..parsers import get_parser_for_source
-        
+
         # Create parser with our timezone service
         return get_parser_for_source(self.source_type, self.timezone_service)

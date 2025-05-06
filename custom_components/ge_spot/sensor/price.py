@@ -26,7 +26,7 @@ class PriceValueSensor(BaseElectricityPriceSensor):
         # Ensure config_data is a dictionary before passing to super().__init__
         if not isinstance(config_data, dict):
             config_data = {"entry_id": coordinator.config_entry.entry_id}
-            
+
         super().__init__(coordinator, config_data, sensor_type, name_suffix)
         self._value_fn = value_fn
         self._additional_attrs = additional_attrs
@@ -36,11 +36,11 @@ class PriceValueSensor(BaseElectricityPriceSensor):
         """Return the native value of the sensor."""
         if not self.coordinator.data:
             return None
-        
+
         # Return the value directly from the coordinator data via the value function.
         # The DataProcessor/CurrencyConverter already handles subunit conversion.
         value = self._value_fn(self.coordinator.data)
-        
+
         return value
 
     def _format_timestamp_display(self, timestamp_prices):
@@ -188,7 +188,7 @@ class PriceStatisticSensor(PriceValueSensor):
         # Create value extraction function
         def extract_value(data):
             # Use .get() for safety and the correct key "statistics"
-            stats = data.get("statistics", {}) 
+            stats = data.get("statistics", {})
             if not stats:
                 _LOGGER.debug(f"PriceStatisticSensor {self.entity_id}: 'statistics' dictionary not found or empty in data.")
                 return None
@@ -228,7 +228,7 @@ class PriceDifferenceSensor(PriceValueSensor):
                 stats = data.get("statistics", {})
                 value1 = stats.get("current") # Assuming 'current' might exist in stats, otherwise this needs adjustment
                 _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Fallback for current_price from statistics: {value1}")
-                    
+
             value2 = None
             if value2_key == "average":
                 # Get from statistics
@@ -238,11 +238,11 @@ class PriceDifferenceSensor(PriceValueSensor):
             else:
                 value2 = data.get(value2_key)
                 _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Reading {value2_key} directly: {value2}")
-                
+
             if value1 is None or value2 is None:
                 _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Calculation failed. value1={value1}, value2={value2}")
                 return None
-                
+
             result = value1 - value2
             _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Calculated difference: {result} (value1={value1}, value2={value2})")
             return result
@@ -275,7 +275,7 @@ class PricePercentSensor(PriceValueSensor):
                 stats = data.get("statistics", {})
                 value = stats.get("current") # Assuming 'current' might exist in stats
                 _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Fallback for current_price from statistics: {value}")
-                    
+
             reference = None
             if reference_key == "average":
                 # Get from statistics
@@ -285,11 +285,11 @@ class PricePercentSensor(PriceValueSensor):
             else:
                 reference = data.get(reference_key)
                 _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Reading {reference_key} directly: {reference}")
-                
+
             if value is None or reference is None or reference == 0:
                 _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Calculation failed. value={value}, reference={reference}")
                 return None
-                
+
             result = (value / reference - 1) * 100
             _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Calculated percentage: {result} (value={value}, reference={reference})")
             return result
@@ -305,7 +305,7 @@ class PricePercentSensor(PriceValueSensor):
         )
         self._value_key = value_key
         self._reference_key = reference_key
-        
+
     @property
     def native_unit_of_measurement(self):
         """Return the unit of measurement."""

@@ -163,7 +163,7 @@ class ApiClient:
                                 return await response.json()
                             elif response_format.lower() == 'xml':
                                 return await response.text(encoding=encoding)
-                        
+
                         # If no specific format requested, check content type
                         content_type = response.headers.get('Content-Type', '').lower()
 
@@ -212,7 +212,7 @@ class ApiClient:
                                     return await response.json()
                                 elif response_format.lower() == 'xml':
                                     return await response.text(encoding=encoding)
-                            
+
                             # If no specific format requested, check content type
                             content_type = response.headers.get('Content-Type', '').lower()
 

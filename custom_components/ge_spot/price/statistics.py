@@ -6,10 +6,10 @@ from ..api.base.data_structure import PriceStatistics
 
 def calculate_statistics(hourly_prices: Dict[str, float]) -> PriceStatistics:
     """Calculate price statistics from a dictionary of hourly prices.
-    
+
     Args:
         hourly_prices: Dictionary with hour keys (HH:00) and price values
-        
+
     Returns:
         PriceStatistics object with min, max, average, median values
     """

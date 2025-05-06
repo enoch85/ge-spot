@@ -111,7 +111,7 @@ class DataProcessor:
             else:
                 _LOGGER.error("Exchange service not available in DataProcessor")
                 raise RuntimeError("Exchange service could not be initialized or retrieved.")
-        
+
         # Instantiate CurrencyConverter once exchange service is ready
         if self._currency_converter is None and self._exchange_service is not None:
             self._currency_converter = CurrencyConverter(
@@ -121,7 +121,7 @@ class DataProcessor:
                 include_vat=self.include_vat,
                 vat_rate=self.vat_rate
             )
-        
+
         # Ensure we have a valid currency converter
         if self._currency_converter is None:
             _LOGGER.error("Failed to initialize currency converter")
@@ -184,7 +184,7 @@ class DataProcessor:
 
             # Split into today/tomorrow using the normalized keys with dates
             normalized_today, normalized_tomorrow = self._tz_converter.split_into_today_tomorrow(normalized_prices)
-            
+
             # Log the results of normalization and splitting
             _LOGGER.debug(f"Normalized {len(raw_hourly_prices)} timestamps into: today({len(normalized_today)}), tomorrow({len(normalized_tomorrow)})")
         except Exception as e:
@@ -275,12 +275,12 @@ class DataProcessor:
                 today_keys = set(self._tz_service.get_today_range())
                 found_keys = set(final_today_prices.keys())
                 # Allow statistics if at least 20 hours are present
-                today_complete_enough = len(found_keys) >= 20 
+                today_complete_enough = len(found_keys) >= 20
 
                 if today_complete_enough:
                     stats = self._calculate_statistics(final_today_prices)
                     # Mark as complete only if all 24 hours are present
-                    stats.complete_data = today_keys.issubset(found_keys) 
+                    stats.complete_data = today_keys.issubset(found_keys)
                     processed_result["statistics"] = stats.to_dict()
                     _LOGGER.debug(f"Calculated today's statistics for {self.area}: {processed_result['statistics']}") # Log today's stats
                 else:
@@ -305,7 +305,7 @@ class DataProcessor:
                     stats.complete_data = tomorrow_keys.issubset(found_keys)
                     processed_result["tomorrow_statistics"] = stats.to_dict()
                     # Set tomorrow_valid if we have enough data for stats, even if not fully complete
-                    processed_result["tomorrow_valid"] = True 
+                    processed_result["tomorrow_valid"] = True
                     _LOGGER.debug(f"Calculated tomorrow's statistics for {self.area}: {processed_result['tomorrow_statistics']}") # Log tomorrow's stats
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))

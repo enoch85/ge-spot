@@ -12,11 +12,11 @@ from ...const.sources import Source
 
 def get_parser_for_source(source_type: str, timezone_service=None):
     """Get the appropriate parser for the specified source.
-    
+
     Args:
         source_type: Source type identifier
         timezone_service: Optional timezone service
-        
+
     Returns:
         Parser instance for the source
     """
@@ -30,11 +30,11 @@ def get_parser_for_source(source_type: str, timezone_service=None):
         Source.COMED: ComedParser,
         Source.STROMLIGNING: StromligningParser
     }
-    
+
     if source_type in parsers:
         parser_class = parsers[source_type]
         return parser_class(timezone_service)
-    
+
     # Fallback to a generic parser
     from ..base.price_parser import BasePriceParser
     return BasePriceParser(source_type, timezone_service)
@@ -42,7 +42,7 @@ def get_parser_for_source(source_type: str, timezone_service=None):
 __all__ = [
     "NordpoolPriceParser",
     "EntsoePriceParser",
-    "AemoParser", 
+    "AemoParser",
     "EnergiDataParser",
     "EpexParser",
     "OmieParser",

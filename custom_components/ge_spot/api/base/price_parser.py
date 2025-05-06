@@ -329,15 +329,15 @@ class BasePriceParser(ABC):
         if not hourly_raw:
             _LOGGER.warning(f"{self.source}: No hourly_raw prices found to determine current price.")
             return None
-        
+
         now_utc = datetime.now(timezone.utc)
         current_hour_utc = now_utc.replace(minute=0, second=0, microsecond=0)
-        
+
         # Try finding the price using the ISO format key (most reliable)
         iso_key = current_hour_utc.isoformat()
         if iso_key in hourly_raw:
             return hourly_raw[iso_key]
-            
+
         # Fallback: Iterate through keys and compare datetime objects (less efficient)
         for key, price in hourly_raw.items():
             try:
@@ -348,7 +348,7 @@ class BasePriceParser(ABC):
             except (ValueError, TypeError):
                 _LOGGER.debug(f"Skipping invalid key format in hourly_raw: {key}")
                 continue
-                
+
         _LOGGER.warning(f"{self.source}: Could not find current hour price for {iso_key}")
         return None
 
@@ -357,10 +357,10 @@ class BasePriceParser(ABC):
         if not hourly_raw:
             _LOGGER.warning(f"{self.source}: No hourly_raw prices found to determine next hour price.")
             return None
-            
+
         now_utc = datetime.now(timezone.utc)
         next_hour_utc = (now_utc.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
-        
+
         # Try finding the price using the ISO format key
         iso_key = next_hour_utc.isoformat()
         if iso_key in hourly_raw:
@@ -375,7 +375,7 @@ class BasePriceParser(ABC):
             except (ValueError, TypeError):
                 _LOGGER.debug(f"Skipping invalid key format in hourly_raw: {key}")
                 continue
-                
+
         _LOGGER.warning(f"{self.source}: Could not find next hour price for {iso_key}")
         return None
 
@@ -405,7 +405,7 @@ class BasePriceParser(ABC):
         if not day_prices:
              _LOGGER.warning(f"{self.source}: No prices found for {day} ({target_date}) to calculate average.")
              return None
-             
+
         # Consider if a minimum number of hours is required for a meaningful average
         # if len(day_prices) < 12: # Example threshold
         #     _LOGGER.warning(f"{self.source}: Not enough data points ({len(day_prices)}) for {day} average.")

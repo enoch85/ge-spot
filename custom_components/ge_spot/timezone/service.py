@@ -63,7 +63,7 @@ class TimezoneService:
         # Initialize component classes
         self.parser = TimestampParser()
         # Pass self (the TimezoneService instance) to the converter
-        self.converter = TimezoneConverter(self) 
+        self.converter = TimezoneConverter(self)
         self.dst_handler = DSTHandler(self.target_timezone) # Use target_timezone for DST handler
 
         # Determine which timezone to use for hour calculation based on the timezone reference
@@ -184,7 +184,7 @@ class TimezoneService:
                 else:
                     # For hourly data, align to the start of the hour
                     aligned_dt = target_dt.replace(minute=0, second=0, microsecond=0)
-                
+
                 normalized_prices[aligned_dt] = price
 
             except (ValueError, TypeError, pytz.exceptions.UnknownTimeZoneError) as e:

@@ -64,7 +64,7 @@ class StromligningAPI(BasePriceAPI):
         try:
             # Fetch the raw JSON response from the API
             raw_api_response = await self._fetch_data(client, area, reference_time)
-            
+
             if not raw_api_response:
                 _LOGGER.warning(f"StromligningAPI._fetch_data returned empty for area {area}")
                 # Return an empty structure but include essential keys for downstream checks
@@ -78,7 +78,7 @@ class StromligningAPI(BasePriceAPI):
                     "source_unit": "kWh",
                 }
 
-            # --- No Parsing Here --- 
+            # --- No Parsing Here ---
             # The parser will be called later by DataProcessor
 
             # Return the raw data along with necessary metadata for the parser
@@ -97,12 +97,12 @@ class StromligningAPI(BasePriceAPI):
 
     async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
         """Fetch data from Stromligning.dk.
-        
+
         Args:
             client: API client
             area: Area code (e.g., DK1, DK2)
             reference_time: Optional reference time
-            
+
         Returns:
             Raw data from API
         """
@@ -114,13 +114,13 @@ class StromligningAPI(BasePriceAPI):
         if not supplier:
             _LOGGER.error(f"Stromligning supplier ({Config.CONF_STROMLIGNING_SUPPLIER}) is not configured. Please update the integration options.")
             return {}
-            
+
         # Generate date ranges for today (Stromligning only provides current day data)
         date_ranges = generate_date_ranges(reference_time, Source.STROMLIGNING)
         today_start, today_end = date_ranges[0]
-        
+
         _LOGGER.debug(f"Fetching Stromligning data for area: {area}, supplier: {supplier}, date range: {today_start} to {today_end}")
-        
+
         # Fetch from the API - Use priceArea and add supplier
         try:
             url = f"{self._get_base_url()}?priceArea={area}&supplier={supplier}"
@@ -129,7 +129,7 @@ class StromligningAPI(BasePriceAPI):
                 timeout=Network.Defaults.TIMEOUT,
                 response_format='json'
             )
-            
+
             # Check for API-level errors reported in the JSON response
             if isinstance(response, dict) and response.get("error"):
                  _LOGGER.error(f"Stromligning API returned an error for area {area}, supplier {supplier}: {response.get('message', 'Unknown error')}")
@@ -138,10 +138,10 @@ class StromligningAPI(BasePriceAPI):
             if not response or not isinstance(response, dict):
                 _LOGGER.warning(f"Unexpected or empty Stromligning data format received for area {area}, supplier {supplier}")
                 return {}
-                
+
             _LOGGER.debug(f"Successfully fetched Stromligning data for area {area}, supplier {supplier}")
             return response
-            
+
         except Exception as e:
             _LOGGER.error(f"Error fetching data from Stromligning for area {area}, supplier {supplier}: {e}")
             return {}
@@ -162,7 +162,7 @@ class StromligningAPI(BasePriceAPI):
         # Assuming raw_data["raw_data"] holds the actual API response
         api_response = raw_data["raw_data"]
         area = self.config.get(Config.AREA, "DK1") # Get area from config or default
-        
+
         parser = self.get_parser_for_area(area)
         try:
             parsed = parser.parse(api_response)

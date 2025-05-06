@@ -184,7 +184,7 @@ class OmieParser(BasePriceParser):
                     price_line = stripped_line
                     _LOGGER.debug(f"[OmieParser/_parse_csv] Found target price line for {area}: '{price_line[:100]}...'")
                     break
-            
+
             # Fallback if primary area line not found (e.g., PT requested but only ES exists)
             if not price_line:
                  _LOGGER.warning(f"[OmieParser/_parse_csv] Target price line for {area} not found, trying fallback.")
@@ -222,7 +222,7 @@ class OmieParser(BasePriceParser):
                     if not price_str:
                         _LOGGER.warning(f"[OmieParser/_parse_csv] Missing price for hour {hour_1_24}. Skipping.")
                         continue
-                    
+
                     # Clean and parse price (allow comma, digits, minus)
                     cleaned_price_str = ''.join(c for c in price_str if c.isdigit() or c == ',' or c == '-')
                     if not cleaned_price_str or cleaned_price_str == '-':

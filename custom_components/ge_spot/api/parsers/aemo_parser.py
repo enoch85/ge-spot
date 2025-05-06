@@ -69,7 +69,7 @@ class AemoParser(BasePriceParser):
         # Calculate current and next hour prices if not provided
         if not result.get("current_price"):
             result["current_price"] = self._get_current_price(result["hourly_raw"])  # Changed from hourly_prices
-        
+
         if not result.get("next_hour_price"):
             result["next_hour_price"] = self._get_next_hour_price(result["hourly_raw"])  # Changed from hourly_prices
 
@@ -96,12 +96,12 @@ class AemoParser(BasePriceParser):
             # Check for area information
             if "area" in data:
                 metadata["area"] = data["area"]
-            
+
             # Check for additional fields
             from ...const.api import Aemo
             if Aemo.SUMMARY_ARRAY in data:
                 metadata["data_source"] = "ELEC_NEM_SUMMARY"
-                
+
                 # Look for region information in the first entry
                 if data[Aemo.SUMMARY_ARRAY] and isinstance(data[Aemo.SUMMARY_ARRAY], list):
                     first_entry = data[Aemo.SUMMARY_ARRAY][0]
@@ -139,7 +139,7 @@ class AemoParser(BasePriceParser):
                 # Filter by area if provided
                 if area and Aemo.REGION_FIELD in entry and entry[Aemo.REGION_FIELD] != area:
                     continue
-                    
+
                 if Aemo.PRICE_FIELD in entry and Aemo.SETTLEMENT_DATE_FIELD in entry:
                     try:
                         # Parse timestamp
@@ -168,12 +168,12 @@ class AemoParser(BasePriceParser):
             area: Optional area code to filter results for
         """
         hourly_prices = {}
-        
+
         try:
             # Read CSV data
             csv_file = StringIO(csv_data)
             csv_reader = csv.DictReader(csv_file)
-            
+
             # Parse rows
             for row in csv_reader:
                 # Check for required fields
@@ -195,7 +195,7 @@ class AemoParser(BasePriceParser):
                         continue
         except Exception as e:
             _LOGGER.warning(f"Error parsing AEMO CSV data: {e}")
-        
+
         # Update result with parsed hourly prices
         result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
 

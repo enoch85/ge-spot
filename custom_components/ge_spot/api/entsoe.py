@@ -30,10 +30,10 @@ _LOGGER = logging.getLogger(__name__)
 
 class EntsoeAPI(BasePriceAPI):
     """API implementation for ENTSO-E Transparency Platform."""
-    
+
     def __init__(self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None):
         """Initialize the API.
-        
+
         Args:
             config: Configuration dictionary
             session: Optional session for API requests
@@ -42,31 +42,31 @@ class EntsoeAPI(BasePriceAPI):
         super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
         self.parser = EntsoeParser()
-    
+
     def _get_source_type(self) -> str:
         """Get the source type identifier.
-        
+
         Returns:
             Source type identifier
         """
         return Source.ENTSOE
-    
+
     def _get_base_url(self) -> str:
         """Get the base URL for the API.
-        
+
         Returns:
             Base URL as string
         """
         return Network.URLs.ENTSOE
-    
+
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
         """Fetch raw price data for the given area.
-        
+
         Args:
             area: Area code
             session: Optional session for API requests
             **kwargs: Additional parameters
-            
+
         Returns:
             Raw data from API
         """
@@ -85,12 +85,12 @@ class EntsoeAPI(BasePriceAPI):
 
     async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
         """Fetch data from ENTSO-E API.
-        
+
         Args:
             client: API client
             area: Area code
             reference_time: Optional reference time
-            
+
         Returns:
             Raw data dictionary
         """
@@ -98,38 +98,38 @@ class EntsoeAPI(BasePriceAPI):
         if not api_key:
             _LOGGER.debug("No API key provided for ENTSO-E, skipping")
             raise ValueError("No API key provided for ENTSO-E")
-            
+
         # Use the provided reference time or current UTC time
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
-            
+
         # Get the mapped ENTSO-E area code
         entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area, area)
-        
+
         # Set up headers for XML request
         headers = {
             "User-Agent": Network.Defaults.USER_AGENT,
             "Accept": ContentType.XML,
             "Content-Type": ContentType.XML
         }
-        
+
         # Generate date ranges based on the reference time
         date_ranges = generate_date_ranges(reference_time, Source.ENTSOE)
-        
+
         # Initialize storage for responses
         xml_responses = []
         dict_response_found = None
         found_doc_type = None
         last_exception = None
-        
+
         # Try fetching data for each date range
         for start_date, end_date in date_ranges:
             period_start = start_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
             period_end = end_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
-            
+
             # Try different document types (A44: day-ahead prices, A65: week-ahead prices)
             doc_types = ["A44", "A65"]
-            
+
             for doc_type in doc_types:
                 params = {
                     "securityToken": api_key,
@@ -139,9 +139,9 @@ class EntsoeAPI(BasePriceAPI):
                     "periodStart": period_start,
                     "periodEnd": period_end,
                 }
-                
+
                 _LOGGER.debug(f"ENTSO-E fetch: doc_type={doc_type}, range={period_start}-{period_end}, params={sanitize_sensitive_data(params)}")
-                
+
                 try:
                     response = await client.fetch(
                         self.base_url,
@@ -210,11 +210,11 @@ class EntsoeAPI(BasePriceAPI):
                     # Catch other unexpected exceptions during fetch/processing for this attempt
                     _LOGGER.error(f"Unexpected error during ENTSO-E fetch for doc_type={doc_type}: {e}", exc_info=True)
                     continue # Go to next doc_type/date_range
-                    
+
             if xml_responses or dict_response_found:
                 _LOGGER.info(f"Got valid ENTSO-E response(s) for date range {period_start} to {period_end}, skipping remaining ranges")
                 break
-        
+
         # Tomorrow's data retry logic
         tomorrow_xml = None
         now_utc = datetime.now(timezone.utc)
@@ -228,13 +228,13 @@ class EntsoeAPI(BasePriceAPI):
         failure_check_hour_cet = 16
 
         should_fetch_tomorrow = now_cet.hour >= release_hour_cet
-        
+
         if should_fetch_tomorrow:
             tomorrow = (reference_time + timedelta(days=1))
             # Corrected periodEnd for tomorrow to cover the full day
             period_start = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).strftime(TimeFormat.ENTSOE_DATE_HOUR)
             period_end = (tomorrow.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime(TimeFormat.ENTSOE_DATE_HOUR)
-            
+
             params_tomorrow = {
                 "securityToken": api_key,
                 "documentType": "A44", # Only fetch DayAhead for tomorrow
@@ -243,14 +243,14 @@ class EntsoeAPI(BasePriceAPI):
                 "periodStart": period_start,
                 "periodEnd": period_end,
             }
-            
+
             async def fetch_tomorrow():
                 return await client.fetch(self.base_url, params=params_tomorrow, headers=headers, timeout=Network.Defaults.TIMEOUT)
-                
+
             def is_data_available(data):
                 # Check for non-empty string containing the success marker
                 return data and isinstance(data, str) and "Publication_MarketDocument" in data
-                
+
             tomorrow_xml = await fetch_with_retry(
                 fetch_tomorrow,
                 is_data_available,
@@ -258,7 +258,7 @@ class EntsoeAPI(BasePriceAPI):
                 end_time=time(23, 50),
                 local_tz_name=TimezoneName.EUROPE_PARIS
             )
-            
+
             if tomorrow_xml:
                 xml_responses.append(tomorrow_xml)
 
@@ -271,11 +271,11 @@ class EntsoeAPI(BasePriceAPI):
                     f"but was not available or invalid. Triggering fallback."
                 )
                 # Store the specific error before returning None
-                last_exception = ValueError(f"Tomorrow's data missing after {failure_check_hour_cet}:00 CET") 
+                last_exception = ValueError(f"Tomorrow's data missing after {failure_check_hour_cet}:00 CET")
                 # Return None to signal failure for tomorrow's data
-                return None 
-        
-        # --- Final Check for Today's Data --- 
+                return None
+
+        # --- Final Check for Today's Data ---
         # Ensure we have *some* valid data (today or initial fetch) before proceeding
         if not dict_response_found and not xml_responses:
             _LOGGER.error(f"ENTSO-E fetch failed for area {area}: No valid data found for today either.")
@@ -294,17 +294,17 @@ class EntsoeAPI(BasePriceAPI):
             # Ensure raw_data key exists for FallbackManager check
             "raw_data": {}
         }
-        
+
         if dict_response_found:
             final_result["dict_response"] = dict_response_found
             final_result["document_type"] = found_doc_type
             # Add to raw_data for parser
-            final_result["raw_data"]["dict_response"] = dict_response_found 
+            final_result["raw_data"]["dict_response"] = dict_response_found
         if xml_responses:
             final_result["xml_responses"] = xml_responses
             # Add to raw_data for parser
             final_result["raw_data"]["xml_responses"] = xml_responses
-        
+
         # If raw_data is still empty, something went wrong, signal failure
         if not final_result["raw_data"]:
              _LOGGER.error(f"ENTSO-E logic error: No dict_response or xml_responses added to raw_data for area {area}")
@@ -315,26 +315,26 @@ class EntsoeAPI(BasePriceAPI):
     async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse the raw data dictionary fetched by fetch_raw_data."""
         _LOGGER.debug(f"ENTSOE API: Starting parse_raw_data with input keys: {list(raw_data.keys())}")
-        
+
         # The parser expects the dictionary containing 'xml_responses' or 'raw_data'
         # No need to loop here, the parser handles the list internally.
         try:
             # Pass the entire raw_data dictionary directly to the parser instance
-            parsed_data = self.parser.parse(raw_data) 
-            
+            parsed_data = self.parser.parse(raw_data)
+
             if not parsed_data or not parsed_data.get("hourly_raw"):
                  _LOGGER.warning("ENTSOE API: Parser returned no hourly_raw data.")
                  return {}
 
             _LOGGER.debug(f"ENTSOE API: Parser returned keys: {list(parsed_data.keys())}")
-            
+
             # Add source name for consistency if not already present
             if "source_name" not in parsed_data:
                 parsed_data["source_name"] = Source.ENTSOE
 
             # Include the original raw data for potential debugging/caching
             parsed_data["raw_data"] = raw_data
-            
+
             # Remove the deprecated key if it exists
             if "hourly_prices" in parsed_data:
                 del parsed_data["hourly_prices"]
@@ -347,18 +347,18 @@ class EntsoeAPI(BasePriceAPI):
 
 async def validate_api_key(api_key, area, session=None):
     """Validate an API key by making a test request.
-    
+
     Args:
         api_key: The ENTSO-E API key to validate
         area: Area code to test with
         session: Optional session for API requests
-        
+
     Returns:
         Boolean indicating if the API key is valid
     """
     try:
         _LOGGER.info(f"Validating ENTSO-E API key for area {area}")
-        
+
         # Create a simple configuration for validation
         config = {
             "area": area,
@@ -367,7 +367,7 @@ async def validate_api_key(api_key, area, session=None):
 
         # Create a temporary instance of the API
         api = EntsoeAPI(config, session)
-        
+
         # Try to fetch data with minimal parameters
         try:
             await api.fetch_raw_data(area, session)
@@ -385,11 +385,11 @@ async def validate_api_key(api_key, area, session=None):
             else:
                 # Try alternative areas if this one failed for non-auth, non-'no data' reasons
                 _LOGGER.warning(f"API key validation encountered an error with area {area}: {e}")
-                
+
                 # Try alternative areas that are known to have good data availability
                 # These areas were identified in the improvements document
                 alternative_areas = ["DE-LU", "FR", "ES", "NL", "BE"]
-                
+
                 # Skip the already tried area
                 if area in alternative_areas:
                     alternative_areas.remove(area)
@@ -415,7 +415,7 @@ async def validate_api_key(api_key, area, session=None):
                         else:
                             _LOGGER.warning(f"Error with alternative area {alt_area}: {alt_e}")
                             continue # Continue to the next alternative area
-                
+
                 # If we get here, all attempts failed but not due to auth issues
                 # Assume key is valid if the error is not clearly an auth error
                 _LOGGER.info("API key seems valid but encountered data retrieval issues with all tested areas")

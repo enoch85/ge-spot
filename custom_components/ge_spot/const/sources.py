@@ -104,11 +104,11 @@ class Source:
 
 class SourceInfo:
     """Utility class for source information."""
-    
+
     # Map source to supported areas
     SOURCE_AREAS = {
         Source.NORDPOOL: [
-            "DK1", "DK2", "FI", "SE1", "SE2", "SE3", "SE4", 
+            "DK1", "DK2", "FI", "SE1", "SE2", "SE3", "SE4",
             "NO1", "NO2", "NO3", "NO4", "NO5", "EE", "LV", "LT"
         ],
         Source.ENTSOE: [
@@ -125,7 +125,7 @@ class SourceInfo:
         Source.COMED: ["COMED"],
         Source.AMBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
     }
-    
+
     # Map areas to recommended sources
     AREA_RECOMMENDED_SOURCES = {
         # Nordic countries
@@ -144,69 +144,69 @@ class SourceInfo:
         "EE": [Source.NORDPOOL, Source.ENTSOE],
         "LT": [Source.NORDPOOL, Source.ENTSOE],
         "LV": [Source.NORDPOOL, Source.ENTSOE],
-        
+
         # Central Europe
         "DE-LU": [Source.ENTSOE, Source.EPEX],
         "AT": [Source.ENTSOE, Source.EPEX],
         "FR": [Source.ENTSOE, Source.EPEX],
         "BE": [Source.ENTSOE, Source.EPEX],
         "NL": [Source.ENTSOE, Source.EPEX],
-        
+
         # Southern Europe
         "ES": [Source.ENTSOE, Source.OMIE],
         "PT": [Source.ENTSOE, Source.OMIE],
-        
+
         # Australia
         "NSW1": [Source.AEMO, Source.AMBER],
         "QLD1": [Source.AEMO, Source.AMBER],
         "SA1": [Source.AEMO, Source.AMBER],
         "TAS1": [Source.AEMO, Source.AMBER],
         "VIC1": [Source.AEMO, Source.AMBER],
-        
+
         # USA
         "COMED": [Source.COMED]
     }
-    
+
     @classmethod
     def get_default_source_for_area(cls, area: str) -> str:
         """Get default source for a specific area.
-        
+
         Args:
             area: Area code
-            
+
         Returns:
             Default source for the area or None if not found
         """
         sources = cls.AREA_RECOMMENDED_SOURCES.get(area, [])
         if sources:
             return sources[0]
-        
+
         # If no recommended sources, find any source that supports this area
         for source, areas in cls.SOURCE_AREAS.items():
             if area in areas:
                 return source
-                
+
         return None
-    
+
     @classmethod
     def get_sources_for_area(cls, area: str) -> list:
         """Get all sources that support a specific area.
-        
+
         Args:
             area: Area code
-            
+
         Returns:
             List of sources that support the area
         """
         return cls.AREA_RECOMMENDED_SOURCES.get(area, [])
-    
+
     @classmethod
     def get_areas_for_source(cls, source: str) -> list:
         """Get all areas supported by a specific source.
-        
+
         Args:
             source: Source identifier
-            
+
         Returns:
             List of areas supported by the source
         """

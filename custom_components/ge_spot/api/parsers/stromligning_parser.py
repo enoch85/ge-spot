@@ -45,7 +45,7 @@ class StromligningParser(BasePriceParser):
             _LOGGER.warning("Empty Stromligning data received")
             return result
 
-        # --- Find the list of prices --- 
+        # --- Find the list of prices ---
         prices_list = None
         if isinstance(raw_data, dict):
             # Direct 'prices' key (most common case from API adapter)
@@ -74,13 +74,13 @@ class StromligningParser(BasePriceParser):
                     _LOGGER.debug("Using 'prices' list decoded from direct JSON string input.")
             except json.JSONDecodeError as e:
                 _LOGGER.warning(f"Failed to parse Stromligning direct string input as JSON: {e}")
-        
+
         # --- Validate extracted prices list ---
         if not prices_list:
             _LOGGER.warning("No valid 'prices' list found in Stromligning data after checking various structures.")
             _LOGGER.debug(f"Data received by Stromligning parser: {raw_data}")
             return result
-        
+
         # --- Parse the list ---
         self._parse_price_list(prices_list, result)
 
@@ -108,31 +108,31 @@ class StromligningParser(BasePriceParser):
             if "priceArea" in data:
                 metadata["price_area"] = data["priceArea"]
                 metadata["area"] = data["priceArea"]
-            
+
             # Check for price components and structure
             component_types = set()
             if "prices" in data and isinstance(data["prices"], list) and data["prices"]:
                 # Check the first price entry to determine the data structure
                 first_price = data["prices"][0]
-                
+
                 # Check if details are available
                 if "details" in first_price and isinstance(first_price["details"], dict):
                     metadata["has_details"] = True
-                    
+
                     # Extract component types from details
                     for component_name in first_price["details"].keys():
                         component_types.add(component_name)
-                        
+
                         # Check for nested components (like transmission)
                         component_data = first_price["details"][component_name]
                         if isinstance(component_data, dict):
                             for sub_name in component_data.keys():
                                 if sub_name not in ("value", "vat", "total", "unit"):
                                     component_types.add(f"{component_name}.{sub_name}")
-            
+
             if component_types:
                 metadata["component_types"] = list(component_types)
-                
+
             # Extract additional supplier info if available
             if "supplier" in data:
                 metadata["supplier"] = data["supplier"]
@@ -160,7 +160,7 @@ class StromligningParser(BasePriceParser):
                         # Create ISO formatted timestamp key
                         hour_key = dt.isoformat()
                         price_date = dt.date().isoformat()
-                        
+
                         # --- Price Extraction Logic Change ---
                         # Prioritize the main price.value, similar to the old parser
                         price_value = None
@@ -170,7 +170,7 @@ class StromligningParser(BasePriceParser):
                                 _LOGGER.debug(f"Using primary price.value for {hour_key}: {price_value}")
                             except (ValueError, TypeError):
                                 _LOGGER.warning(f"Could not parse primary price value: {price_data['price'].get('value')} for {hour_key}")
-                        
+
                         # Fallback to details.electricity.value if primary fails (less likely now)
                         if price_value is None and "details" in price_data and isinstance(price_data["details"], dict):
                             if "electricity" in price_data["details"] and isinstance(price_data["details"]["electricity"], dict):
@@ -200,7 +200,7 @@ class StromligningParser(BasePriceParser):
                                         self._price_components[hour_key][component_name] = component_value
                                     except (ValueError, TypeError):
                                         _LOGGER.debug(f"Could not parse component '{component_name}' value: {component_data.get('value')} for {hour_key}")
-                                
+
                                 # Handle nested components like transmission
                                 elif isinstance(component_data, dict):
                                     for sub_name, sub_data in component_data.items():
@@ -219,7 +219,7 @@ class StromligningParser(BasePriceParser):
 
     def get_price_components(self) -> Dict[str, Dict[str, float]]:
         """Get price components extracted during parsing.
-        
+
         Returns:
             Dictionary of price components per hour
         """

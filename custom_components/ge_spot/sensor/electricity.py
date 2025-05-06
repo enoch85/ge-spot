@@ -155,7 +155,7 @@ async def async_setup_entry(
         )
     )
 
-    # --- Add Tomorrow Sensors --- 
+    # --- Add Tomorrow Sensors ---
 
     # Tomorrow Average price sensor
     # Define value extraction function for tomorrow average

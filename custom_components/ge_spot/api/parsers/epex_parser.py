@@ -78,11 +78,11 @@ class EpexParser(BasePriceParser):
             # Check for area information
             if "area" in data:
                 metadata["area"] = data["area"]
-            
+
             # Check for market information
             if "modality" in data:
                 metadata["market_type"] = data["modality"]
-            
+
             if "sub_modality" in data:
                 metadata["sub_market_type"] = data["sub_modality"]
 
@@ -100,22 +100,22 @@ class EpexParser(BasePriceParser):
         if not tables:
             # Try alternate table class
             tables = soup.find_all('table', class_='table-01')
-            
+
         if not tables:
             _LOGGER.warning("No tables found in EPEX HTML")
             return
-        
+
         # Process all tables to find the price table
         for table in tables:
             try:
                 # Check if this is a price table by looking for hour headers
                 headers = table.find_all('th')
                 hour_headers = [h for h in headers if h.text.strip().endswith(':00') or h.text.strip().replace(' ', '').endswith('h')]
-                
+
                 if hour_headers:
                     # This looks like a price table
                     _LOGGER.debug("Found likely price table in EPEX HTML")
-                    
+
                     # Find rows with prices
                     rows = table.find_all('tr')
                     for row in rows:
@@ -125,27 +125,27 @@ class EpexParser(BasePriceParser):
                             # Extract date info
                             date_info = cells[0].text.strip() if cells else None
                             date_obj = self._parse_date(date_info)
-                            
+
                             if not date_obj:
                                 continue
-                                
+
                             # Extract prices
                             for hour_idx, cell in enumerate(cells[1:25]):  # Get first 24 hour cells
                                 price_text = cell.text.strip().replace(',', '.').replace('N/A', '')
                                 if not price_text:
                                     continue
-                                    
+
                                 try:
                                     # Extract numeric part from price text, e.g. "42.50 €/MWh" -> 42.50
                                     price_value = float(''.join([c for c in price_text if c.isdigit() or c == '.']))
-                                    
+
                                     # Create hour key in ISO format
                                     hour_dt = datetime(
-                                        date_obj.year, date_obj.month, date_obj.day, 
+                                        date_obj.year, date_obj.month, date_obj.day,
                                         hour_idx, 0, 0, tzinfo=timezone.utc
                                     )
                                     hour_key = hour_dt.isoformat()
-                                    
+
                                     # Add to hourly prices
                                     result["hourly_prices"][hour_key] = {"price": price_value, "api_price_date": date_obj.isoformat()}
                                 except (ValueError, TypeError) as e:
@@ -164,7 +164,7 @@ class EpexParser(BasePriceParser):
         """
         if not date_str:
             return None
-            
+
         try:
             # Try various date formats
             formats = [
@@ -174,13 +174,13 @@ class EpexParser(BasePriceParser):
                 "%d %b %Y",   # 01 Feb 2023
                 "%d %B %Y"    # 01 February 2023
             ]
-            
+
             for fmt in formats:
                 try:
                     return datetime.strptime(date_str, fmt).date()
                 except ValueError:
                     continue
-                    
+
             # If all formats fail, try to extract date parts with regex
             import re
             date_parts = re.findall(r'\d+', date_str)
@@ -194,7 +194,7 @@ class EpexParser(BasePriceParser):
                 return datetime(year, month, day).date()
         except Exception as e:
             _LOGGER.debug(f"Failed to parse EPEX date: {date_str} - {e}")
-            
+
         return None
 
     def _get_current_price(self, hourly_prices: Dict[str, Dict[str, Any]]) -> Optional[float]:

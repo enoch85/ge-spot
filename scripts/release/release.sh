@@ -173,9 +173,9 @@ function update_manifest {
     else
         debug_log "Updating version in: $MANIFEST_PATH"
         if [[ "$(uname)" == "Darwin" ]]; then
-            sed -i '' "s|\\"version\\":.*|\\"version\\": \\"${version_tag}\\"|g" "$MANIFEST_PATH"
+            sed -i '' "s/\\\"version\\\": *\\\"[^\\\"]*\\\"/\\\"version\\\": \\\"${version_tag}\\\"/g" "$MANIFEST_PATH"
         else
-            sed -i "s|\\"version\\":.*|\\"version\\": \\"${version_tag}\\"|g" "$MANIFEST_PATH"
+            sed -i "s/\\\"version\\\": *\\\"[^\\\"]*\\\"/\\\"version\\\": \\\"${version_tag}\\\"/g" "$MANIFEST_PATH"
         fi
         if [[ $? -eq 0 ]]; then
             success_log "Version updated to ${version_tag} in manifest.json"

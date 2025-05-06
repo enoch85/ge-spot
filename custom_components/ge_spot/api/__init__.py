@@ -13,12 +13,12 @@ def get_sources_for_region(region: str) -> List[str]:
 
 def create_api(source_type: str, config: Optional[Dict[str, Any]] = None, session=None):
     """Create an API instance for the specified source type.
-    
+
     Args:
         source_type: Source type identifier
         config: Optional configuration dictionary
         session: Optional session for API requests
-        
+
     Returns:
         API instance for the specified source type
     """

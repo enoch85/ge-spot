@@ -22,7 +22,7 @@ class AmberAPI(BasePriceAPI):
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, session: Optional[ClientSession] = None, timezone_service=None):
         """Initialize the Amber API client.
-        
+
         Args:
             config: Configuration dictionary
             session: Optional aiohttp client session
@@ -32,7 +32,7 @@ class AmberAPI(BasePriceAPI):
 
     def _get_source_type(self) -> str:
         """Get the source type identifier.
-        
+
         Returns:
             Source type identifier
         """
@@ -40,7 +40,7 @@ class AmberAPI(BasePriceAPI):
 
     def _get_base_url(self) -> str:
         """Get the base URL for the API.
-        
+
         Returns:
             Base URL as string
         """
@@ -61,24 +61,24 @@ class AmberAPI(BasePriceAPI):
         """
         # Use current time as reference
         now_utc = datetime.now(timezone.utc)
-        
+
         # Calculate date range for the API request (yesterday to tomorrow)
         today = now_utc.date()
         yesterday = today - timedelta(days=1)
         tomorrow = today + timedelta(days=1)
         start_date = yesterday.isoformat()
         end_date = tomorrow.isoformat()
-        
+
         # Get API key from configuration
         api_key = self.config.get(Config.API_KEY)
         if not api_key:
             _LOGGER.error("No API key provided for Amber API in configuration")
             raise ValueError("Missing Amber API key in configuration")
-        
+
         client = ApiClient(session=session or self.session)
         url = f"{self._get_base_url()}/prices?site_id={area}&start_date={start_date}&end_date={end_date}"
         headers = {"Authorization": f"Bearer {api_key}"}
-        
+
         try:
             # Fetch data from Amber API
             data = await client.fetch(
@@ -87,16 +87,16 @@ class AmberAPI(BasePriceAPI):
                 timeout=Network.Defaults.TIMEOUT,
                 response_format='json'
             )
-            
+
             if not data or not isinstance(data, list):
                 _LOGGER.warning(f"Unexpected or empty Amber data format received for area {area}")
                 return {}
-            
+
             # Parse the response
             parser = self.get_parser_for_area(None)
             parsed = parser.parse(data) if data else {}
             hourly_raw = parsed.get("hourly_prices", {})
-            
+
             # Return standardized data structure with ISO timestamps
             return {
                 "hourly_raw": hourly_raw,
@@ -122,10 +122,10 @@ class AmberAPI(BasePriceAPI):
 
     def get_timezone_for_area(self, area: str) -> str:
         """Get timezone for the area. Amber operates across Australia.
-        
+
         Args:
             area: Area code (not used in this implementation)
-            
+
         Returns:
             Timezone string
         """
@@ -133,10 +133,10 @@ class AmberAPI(BasePriceAPI):
 
     def get_parser_for_area(self, area: str) -> Any:
         """Get parser for the area.
-        
+
         Args:
             area: Area code (not used in this implementation)
-            
+
         Returns:
             Parser instance
         """

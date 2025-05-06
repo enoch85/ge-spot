@@ -121,7 +121,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                             value = value / 100
                         # Ensure display_unit is explicitly saved
                         self._data[key] = value
-                
+
                 # Log the display unit being saved
                 _LOGGER.debug(f"Saving display_unit: {self._data.get(Config.DISPLAY_UNIT)}")
 

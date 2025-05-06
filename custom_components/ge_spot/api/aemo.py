@@ -77,31 +77,31 @@ class AemoAPI(BasePriceAPI):
         Returns:
             Raw API response data as a dictionary, or None if fetch fails.
         """
-        # Use current UTC time as reference - AEMO provides real-time spot prices 
+        # Use current UTC time as reference - AEMO provides real-time spot prices
         # so we don't need a specific reference date
         now_utc = datetime.now(timezone.utc)
-        
+
         client = ApiClient(session=session or self.session)
         try:
             # Validate the area code
             if area not in Aemo.REGIONS:
                 _LOGGER.error(f"Invalid AEMO region: {area}. Must be one of {Aemo.REGIONS}")
                 raise ValueError(f"Invalid AEMO region: {area}")
-            
+
             # Fetch data from the AEMO API
             response = await client.fetch(
                 self._get_base_url(),
                 timeout=Network.Defaults.TIMEOUT,
                 response_format='json'
             )
-            
+
             # Process the response if valid
             if response and isinstance(response, dict) and Aemo.SUMMARY_ARRAY in response:
                 # Parse the response using the appropriate parser
                 parser = self.get_parser_for_area(area)
                 parsed = parser.parse(response, area=area) # Pass area to the parser
                 hourly_raw = parsed.get("hourly_raw", {}) # Correct key
-                
+
                 # Return standardized data structure with ISO timestamps
                 return {
                     "hourly_raw": hourly_raw,

@@ -22,10 +22,10 @@ _LOGGER = logging.getLogger(__name__)
 
 class NordpoolAPI(BasePriceAPI):
     """Nordpool API implementation."""
-    
+
     def __init__(self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None):
         """Initialize the API.
-        
+
         Args:
             config: Configuration dictionary
             session: Optional session for API requests
@@ -34,31 +34,31 @@ class NordpoolAPI(BasePriceAPI):
         super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
         self.parser = NordpoolPriceParser()
-    
+
     def _get_source_type(self) -> str:
         """Get the source type identifier.
-        
+
         Returns:
             Source type identifier
         """
         return Source.NORDPOOL
-    
+
     def _get_base_url(self) -> str:
         """Get the base URL for the API.
-        
+
         Returns:
             Base URL as string
         """
         return Network.URLs.NORDPOOL
-    
+
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
         """Fetch raw price data for the given area.
-        
+
         Args:
             area: Area code
             session: Optional session for API requests
             **kwargs: Additional parameters
-            
+
         Returns:
             Raw data from API
         """
@@ -78,15 +78,15 @@ class NordpoolAPI(BasePriceAPI):
         finally:
             if session is None:
                 await client.close()
-    
+
     async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
         """Fetch data from Nordpool.
-        
+
         Args:
             client: API client
             area: Area code
             reference_time: Optional reference time
-            
+
         Returns:
             Dictionary containing raw data and metadata for the parser.
         """

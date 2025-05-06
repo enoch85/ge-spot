@@ -6,7 +6,7 @@ from datetime import datetime
 @dataclass
 class HourlyPrice:
     """Hourly price data."""
-    
+
     datetime: str  # ISO format datetime string
     price: float
     hour_key: str  # Format: HH:00
@@ -14,7 +14,7 @@ class HourlyPrice:
     timezone: str
     source: str
     vat_included: bool = False
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
@@ -22,19 +22,19 @@ class HourlyPrice:
 @dataclass
 class PriceStatistics:
     """Price statistics.
-    
+
     Note: Statistics should only be calculated when complete data is available.
-    The complete_data flag indicates whether the statistics are based on a 
+    The complete_data flag indicates whether the statistics are based on a
     complete dataset or not. If complete_data is False, the statistics should
     not be used for critical calculations.
     """
-    
+
     min: Optional[float] = None
     max: Optional[float] = None
     average: Optional[float] = None
     median: Optional[float] = None
     complete_data: bool = False
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
@@ -42,9 +42,9 @@ class PriceStatistics:
 @dataclass
 class PeakHourStatistics(PriceStatistics):
     """Peak hour statistics."""
-    
+
     hours: List[str] = field(default_factory=list)
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
@@ -52,7 +52,7 @@ class PeakHourStatistics(PriceStatistics):
 @dataclass
 class StandardizedPriceData:
     """Standardized price data format for all API implementations."""
-    
+
     source: str
     area: str
     currency: str
@@ -73,10 +73,10 @@ class StandardizedPriceData:
     raw_data: Any = None  # Original API response
     has_tomorrow_prices: bool = False  # Whether we have complete data for tomorrow
     tomorrow_prices_expected: bool = False  # Whether tomorrow's prices are expected to be available
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary format.
-        
+
         Returns:
             Dictionary representation of the data
         """
@@ -92,48 +92,48 @@ class StandardizedPriceData:
             "has_tomorrow_prices": self.has_tomorrow_prices,
             "tomorrow_prices_expected": self.tomorrow_prices_expected
         }
-        
+
         # Add optional fields if set
         if self.reference_time:
             result["reference_time"] = self.reference_time
-            
+
         if self.api_timezone:
             result["api_timezone"] = self.api_timezone
-            
+
         if self.current_hour_key:
             result["current_hour_key"] = self.current_hour_key
-            
+
         if self.next_hour_key:
             result["next_hour_key"] = self.next_hour_key
-            
+
         if self.vat_rate is not None:
             result["vat_rate"] = self.vat_rate
-            
+
         # Add statistics if available
         if self.statistics:
             result["statistics"] = self.statistics.to_dict()
-            
+
         if self.peak_hours:
             result["peak_hours"] = self.peak_hours.to_dict()
-            
+
         if self.off_peak_hours:
             result["off_peak_hours"] = self.off_peak_hours.to_dict()
-            
+
         # Add raw prices
         if self.raw_prices:
             result["raw_prices"] = [price.to_dict() for price in self.raw_prices]
-        
+
         return result
-    
+
     @classmethod
     def create_empty(cls, source: str, area: str, currency: str) -> 'StandardizedPriceData':
         """Create an empty price data object.
-        
+
         Args:
             source: Source identifier
             area: Area code
             currency: Currency code
-            
+
         Returns:
             Empty StandardizedPriceData object
         """
@@ -159,7 +159,7 @@ def create_standardized_price_data(
     tomorrow_prices_expected: bool = False
 ) -> StandardizedPriceData:
     """Create standardized price data from API response.
-    
+
     Args:
         source: Source identifier
         area: Area code
@@ -173,17 +173,17 @@ def create_standardized_price_data(
         validate_complete: Whether to validate data completeness (REMOVED - validation should happen AFTER normalization)
         has_tomorrow_prices: Whether complete data for tomorrow is available (determined by parser/fetcher)
         tomorrow_prices_expected: Whether tomorrow's prices are expected to be available (determined by parser/fetcher)
-        
+
     Returns:
         StandardizedPriceData object containing mostly raw/parsed data
     """
     now = datetime.now()
     today = now.date()
-    
+
     # REMOVED: Validation logic - should happen in DataProcessor after normalization
     # REMOVED: Statistics calculation
     # REMOVED: Current/Next hour price calculation
-    
+
     # Create raw_prices list from the input hourly_prices (assuming ISO keys from parser)
     raw_prices_list = []
     for hour_key, price in hourly_prices.items():
@@ -196,7 +196,7 @@ def create_standardized_price_data(
             # Fallback if key is not ISO (e.g., HH:00) - less ideal
             iso_dt = f"{today.isoformat()}T{hour_key}:00" # Placeholder
             simple_hour_key = hour_key
-            
+
         raw_prices_list.append(HourlyPrice(
             datetime=hour_key, # Store original key as datetime string
             price=price,
@@ -206,7 +206,7 @@ def create_standardized_price_data(
             source=source,
             vat_included=vat_included
         ))
-    
+
     # Return a simplified object with raw data
     return StandardizedPriceData(
         source=source,
@@ -230,4 +230,4 @@ def create_standardized_price_data(
         statistics=None,
         peak_hours=None,
         off_peak_hours=None
-    ) 
+    )

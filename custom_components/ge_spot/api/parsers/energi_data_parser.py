@@ -41,7 +41,7 @@ class EnergiDataParser(BasePriceParser):
             _LOGGER.warning("Empty or invalid Energi Data Service data received")
             return result
 
-        # --- Extract records --- 
+        # --- Extract records ---
         records = []
         # Check for the nested structure from EnergiDataAPI adapter
         if "raw_data" in raw_data and isinstance(raw_data["raw_data"], dict):
@@ -56,7 +56,7 @@ class EnergiDataParser(BasePriceParser):
                 # Safely get tomorrow's records
                 tomorrow_data = api_content.get("tomorrow")
                 tomorrow_records = tomorrow_data.get("records", []) if isinstance(tomorrow_data, dict) else []
-                
+
                 records = today_records + tomorrow_records
                 if records:
                     _LOGGER.debug(f"Extracted {len(today_records)} today and {len(tomorrow_records)} tomorrow records from nested structure.")
@@ -64,7 +64,7 @@ class EnergiDataParser(BasePriceParser):
                     _LOGGER.debug("Nested 'raw_data' found, but no 'records' within today/tomorrow.")
             else:
                 _LOGGER.warning("Nested 'raw_data' key found, but its value is None.")
-        
+
         # Fallback: Check for top-level 'records' key (e.g., from direct test data)
         if not records and "records" in raw_data and isinstance(raw_data["records"], list):
              _LOGGER.debug("Using top-level 'records' key.")
@@ -115,11 +115,11 @@ class EnergiDataParser(BasePriceParser):
             # Check for area information
             if "area" in data:
                 metadata["area"] = data["area"]
-            
+
             # Check for records information
             if "records" in data and isinstance(data["records"], list):
                 metadata["record_count"] = len(data["records"])
-                
+
                 # Extract area from the first record if available
                 if data["records"] and "PriceArea" in data["records"][0]:
                     metadata["area"] = data["records"][0]["PriceArea"]

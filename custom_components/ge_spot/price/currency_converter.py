@@ -78,7 +78,7 @@ class CurrencyConverter:
             try:
                 # Initialize rates if needed
                 rates = await self._exchange_service.get_rates()
-                
+
                 # Ensure both currencies exist in the rates dictionary
                 if source_currency in rates and self.target_currency in rates:
                     # Calculate the exchange rate (source to target)
@@ -87,10 +87,10 @@ class CurrencyConverter:
                     source_rate = rates[source_currency]
                     target_rate = rates[self.target_currency]
                     exchange_rate = target_rate / source_rate
-                    
+
                     _LOGGER.debug("Using exchange rate %s -> %s: %.6f",
                                 source_currency, self.target_currency, exchange_rate)
-                    
+
                     # Use current timestamp for rate information
                     rate_timestamp = self._exchange_service.last_update
                 else:
@@ -115,12 +115,12 @@ class CurrencyConverter:
                 # Handle price if it's a dictionary (e.g., {'price': 8.06})
                 if isinstance(price, dict) and 'price' in price:
                     price = price['price']
-                    
+
                 # Apply currency conversion if needed
                 converted_value = price
                 if needs_currency_conversion and exchange_rate is not None:
                     converted_value = price * exchange_rate
-                
+
                 # Use a central conversion function to handle unit conversion and VAT
                 converted_price = convert_energy_price(
                     price=converted_value,

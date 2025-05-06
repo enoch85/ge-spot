@@ -113,10 +113,10 @@ class Amber:
     """Amber Energy API constants."""
     # Default currency for Australia
     DEFAULT_CURRENCY = "AUD"
-    
+
     # Amber API constants
     PRICE_FIELD = "perKwh"
     TIMESTAMP_FIELD = "date"
-    
+
     # Australian regions
     REGIONS = ["NSW", "QLD", "SA", "TAS", "VIC"]

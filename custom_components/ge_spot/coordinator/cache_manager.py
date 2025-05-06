@@ -41,7 +41,7 @@ class CacheManager:
 
     def store(self, area: str, source: str, data: Dict[str, Any], timestamp: Optional[datetime] = None, target_date: Optional[date] = None) -> None:
         """Store data in the cache.
-        
+
         Args:
             area: The area code
             source: The source identifier
@@ -63,7 +63,7 @@ class CacheManager:
         actual_target_date = target_date if target_date is not None else timestamp.date()
 
         cache_key = self._generate_cache_key(area, source, actual_target_date)
-        
+
         # FIX: Ensure the data dictionary itself contains source_timezone before storing
         source_timezone = data.get("source_timezone")
         if not source_timezone:
@@ -71,7 +71,7 @@ class CacheManager:
             # Optionally, add a default or raise an error if this should never happen
         else:
             # Ensure the key is present in the data dictionary being stored
-            data["source_timezone"] = source_timezone 
+            data["source_timezone"] = source_timezone
 
         metadata = {
             "area": area,

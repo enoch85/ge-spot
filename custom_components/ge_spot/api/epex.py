@@ -50,7 +50,7 @@ class EpexAPI(BasePriceAPI):
             if should_fetch_tomorrow:
                 async def fetch_tomorrow():
                     return await self._fetch_data(client, area, tomorrow)
-                
+
                 # Define a more robust check for valid EPEX data (not just HTML error/cookie page)
                 def is_data_available(data):
                     if not data or not isinstance(data, str):
@@ -59,7 +59,7 @@ class EpexAPI(BasePriceAPI):
                     if data.strip().lower().startswith("<!doctype html"):
                          # More specific check for table presence might be needed if error pages vary
                          # For now, assume any DOCTYPE means it's not the expected data table snippet
-                         return False 
+                         return False
                     # Basic check if it contains expected table markers (adjust if needed)
                     # This is brittle, relying on parser might be better if feasible here
                     return "<table" in data and "epexspot" in data.lower()
@@ -71,7 +71,7 @@ class EpexAPI(BasePriceAPI):
                     end_time=time(23, 50),
                     local_tz_name=TimezoneName.EUROPE_BERLIN
                 )
-                
+
                 # --- Fallback Trigger Logic ---
                 if now_cet.hour >= failure_check_hour_cet and not is_data_available(raw_tomorrow):
                     _LOGGER.warning(
@@ -80,13 +80,13 @@ class EpexAPI(BasePriceAPI):
                     )
                     return None # Signal failure to FallbackManager
 
-            # --- Final Check for Today's Data --- 
+            # --- Final Check for Today's Data ---
             # Check if today's data is valid before proceeding
             if not is_data_available(raw_today):
                  _LOGGER.error(f"EPEX fetch failed for area {area}: Today's data is missing or invalid.")
                  return None # Signal failure if today's data is bad
 
-            # --- Parsing and Structuring --- 
+            # --- Parsing and Structuring ---
             # (Moved parsing logic down to ensure checks happen first)
             parser = self.get_parser_for_area(area)
             hourly_raw = {}
@@ -102,7 +102,7 @@ class EpexAPI(BasePriceAPI):
             except Exception as e:
                 _LOGGER.error(f"Failed to parse or extract metadata from today's EPEX data: {e}")
                 # Decide if this is fatal - returning None might be safer
-                return None 
+                return None
 
             # Parse tomorrow's data if available and valid
             if is_data_available(raw_tomorrow):
@@ -115,7 +115,7 @@ class EpexAPI(BasePriceAPI):
                          metadata = parser.extract_metadata(raw_tomorrow)
                 except Exception as e:
                     _LOGGER.warning(f"Failed to parse tomorrow's EPEX data, proceeding without it: {e}")
-            
+
             # Ensure we have at least some prices before returning success
             if not hourly_raw:
                 _LOGGER.error(f"EPEX parsing failed for area {area}: No hourly prices extracted from valid raw data.")

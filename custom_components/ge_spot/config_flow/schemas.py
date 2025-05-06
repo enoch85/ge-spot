@@ -101,7 +101,7 @@ def get_stromligning_config_schema(existing_supplier=None):
     """Return schema for Stromligning config step."""
     schema_dict = {}
     description = "Required for Strømligning data source. Complete list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
-    
+
     # Create field - required for new setups
     field = vol.Required(Config.CONF_STROMLIGNING_SUPPLIER,
                         description=description)

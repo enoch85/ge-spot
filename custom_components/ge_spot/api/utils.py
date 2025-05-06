@@ -25,7 +25,7 @@ async def fetch_with_retry(fetch_func, is_data_available, retry_interval=1800, e
     """
     import datetime
     attempts = 0
-    
+
     # Create the timezone object outside the loop
     local_tz = None
     if local_tz_name:
@@ -33,7 +33,7 @@ async def fetch_with_retry(fetch_func, is_data_available, retry_interval=1800, e
         local_tz = await asyncio.get_event_loop().run_in_executor(
             None, get_timezone, local_tz_name
         )
-    
+
     while True:
         result = await fetch_func(*args, **kwargs)
         if is_data_available(result):
