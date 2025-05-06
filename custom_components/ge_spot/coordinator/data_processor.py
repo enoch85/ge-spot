@@ -280,7 +280,7 @@ class DataProcessor:
                 if today_complete_enough:
                     stats = self._calculate_statistics(final_today_prices)
                     # Mark as complete only if all 24 hours are present
-                    stats.complete_data = today_keys.issubset(found_keys)
+                    stats.complete_data = today_complete_enough # Align with 20-hour quota
                     processed_result["statistics"] = stats.to_dict()
                     _LOGGER.debug(f"Calculated today's statistics for {self.area}: {processed_result['statistics']}") # Log today's stats
                 else:
@@ -302,7 +302,7 @@ class DataProcessor:
                 if tomorrow_complete_enough:
                     stats = self._calculate_statistics(final_tomorrow_prices)
                      # Mark as complete only if all 24 hours are present
-                    stats.complete_data = tomorrow_keys.issubset(found_keys)
+                    stats.complete_data = tomorrow_complete_enough # Align with 20-hour quota
                     processed_result["tomorrow_statistics"] = stats.to_dict()
                     # Set tomorrow_valid if we have enough data for stats, even if not fully complete
                     processed_result["tomorrow_valid"] = True
