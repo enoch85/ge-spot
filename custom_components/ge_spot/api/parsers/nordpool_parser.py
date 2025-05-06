@@ -27,12 +27,15 @@ class NordpoolPriceParser(BasePriceParser):
         """
         _LOGGER.debug(f"[NordpoolPriceParser] Starting parse. Input data keys: {list(data.keys())}") # Log entry
 
-        # The actual Nordpool JSON response is nested under 'raw_data'
-        raw_api_response = data.get("raw_data")
-        if not raw_api_response or not isinstance(raw_api_response, dict):
-            _LOGGER.warning("[NordpoolPriceParser] 'raw_data' key missing or not a dictionary in input.")
-            return self._create_empty_result(data) # Return empty structure
-        _LOGGER.debug(f"[NordpoolPriceParser] Found 'raw_data'. Keys: {list(raw_api_response.keys())}") # Log raw_data structure
+        # Only accept raw API data (dict with 'raw_data' key or direct Nordpool JSON structure)
+        if not data or not isinstance(data, dict):
+            _LOGGER.warning("[NordpoolPriceParser] Input data is not a dictionary. Returning empty result.")
+            return self._create_empty_result({}, "UTC", Currency.EUR)
+        # If this is a processed/cached structure, extract the original raw API data
+        if "raw_data" in data and isinstance(data["raw_data"], dict):
+            raw_api_response = data["raw_data"]
+        else:
+            raw_api_response = data
 
         # Extract metadata provided by the API adapter
         source_timezone = data.get("timezone", "UTC") # Default to UTC if missing

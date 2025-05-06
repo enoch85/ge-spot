@@ -144,10 +144,21 @@ class DataProcessor:
             _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area}.")
             return self._generate_empty_processed_result(data, error=f"No parser for source {source_name}")
 
-        # --- Step 1: Parse Raw Data ---
+        # --- Step 1: Always Parse from Raw API Data ---
+        # If this is a cached/processed structure, extract the original raw API data
+        raw_api_data = None
+        if "raw_data" in data and data["raw_data"]:
+            raw_api_data = data["raw_data"]
+        elif "xml_responses" in data and data["xml_responses"]:
+            raw_api_data = data["xml_responses"]
+        elif "dict_response" in data and data["dict_response"]:
+            raw_api_data = data["dict_response"]
+        else:
+            # If this is a fresh API fetch, the data itself is the raw input
+            raw_api_data = data
+
         try:
-            # Pass the entire raw dictionary from FallbackManager to the parser
-            parsed_data = parser.parse(data)
+            parsed_data = parser.parse(raw_api_data)
             _LOGGER.debug(f"[{self.area}] Parser {parser.__class__.__name__} output keys: {list(parsed_data.keys())}")
         except Exception as parse_err:
             _LOGGER.error(f"[{self.area}] Error parsing data from source '{source_name}': {parse_err}", exc_info=True)
@@ -264,7 +275,7 @@ class DataProcessor:
         # --- Step 5: Calculate Statistics and Current/Next Prices ---
         try:
             # Calculate Today's Statistics and Current/Next Prices
-            if final_today_prices:
+            if final_today_prices: # Check if the dictionary itself is not empty
                 current_hour_key = self._tz_service.get_current_hour_key()
                 next_hour_key = self._tz_service.get_next_hour_key()
                 processed_result["current_hour_key"] = current_hour_key
@@ -272,48 +283,52 @@ class DataProcessor:
                 processed_result["current_price"] = final_today_prices.get(current_hour_key)
                 processed_result["next_hour_price"] = final_today_prices.get(next_hour_key)
 
-                today_keys = set(self._tz_service.get_today_range())
-                found_keys = set(final_today_prices.keys())
-                # Allow statistics if at least 20 hours are present
-                today_complete_enough = len(found_keys) >= 20 
+                today_keys = set(self._tz_service.get_today_range()) # Expected keys for today
+                
+                # Calculate statistics; completeness is determined by _calculate_statistics
+                stats = self._calculate_statistics(final_today_prices, today_keys)
+                processed_result["statistics"] = stats.to_dict()
 
-                if today_complete_enough:
-                    stats = self._calculate_statistics(final_today_prices)
-                    # Mark as complete only if all 24 hours are present
-                    stats.complete_data = today_keys.issubset(found_keys) 
-                    processed_result["statistics"] = stats.to_dict()
-                    _LOGGER.debug(f"Calculated today's statistics for {self.area}: {processed_result['statistics']}") # Log today's stats
+                if stats.complete_data:
+                    _LOGGER.debug(f"Calculated today's statistics for {self.area} (complete): {processed_result['statistics']}")
                 else:
-                    missing_keys = sorted(list(today_keys - found_keys))
-                    # Update warning message threshold
-                    _LOGGER.warning(f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need 20), skipping statistics calculation for {self.area}. Missing: {missing_keys}")
-                    processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
-            else:
+                    # Log warning if data is not complete
+                    found_keys_count = len(final_today_prices.keys())
+                    expected_keys_count = len(today_keys)
+                    _LOGGER.warning(
+                        f"Statistics for today for {self.area} are based on incomplete data "
+                        f"({found_keys_count}/{expected_keys_count} keys found). "
+                        f"Missing keys: {sorted(list(today_keys - set(final_today_prices.keys())))}"
+                    )
+            else: # if not final_today_prices (empty dict)
                 _LOGGER.warning(f"No final prices for today available after processing for area {self.area}, skipping stats.")
                 processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
 
             # Calculate Tomorrow's Statistics
             if final_tomorrow_prices:
-                tomorrow_keys = set(self._tz_service.get_tomorrow_range())
-                found_keys = set(final_tomorrow_prices.keys())
-                # Allow statistics if at least 20 hours are present
-                tomorrow_complete_enough = len(found_keys) >= 20
+                tomorrow_keys = set(self._tz_service.get_tomorrow_range()) # Expected keys for tomorrow
 
-                if tomorrow_complete_enough:
-                    stats = self._calculate_statistics(final_tomorrow_prices)
-                     # Mark as complete only if all 24 hours are present
-                    stats.complete_data = tomorrow_keys.issubset(found_keys)
-                    processed_result["tomorrow_statistics"] = stats.to_dict()
-                    # Set tomorrow_valid if we have enough data for stats, even if not fully complete
-                    processed_result["tomorrow_valid"] = True 
-                    _LOGGER.debug(f"Calculated tomorrow's statistics for {self.area}: {processed_result['tomorrow_statistics']}") # Log tomorrow's stats
+                stats_tomorrow = self._calculate_statistics(final_tomorrow_prices, tomorrow_keys)
+                processed_result["tomorrow_statistics"] = stats_tomorrow.to_dict()
+                
+                # Set tomorrow_valid if statistics could be computed (i.e., average is not None)
+                if stats_tomorrow.average is not None:
+                     processed_result["tomorrow_valid"] = True
                 else:
-                    missing_keys = sorted(list(tomorrow_keys - found_keys))
-                    # Update warning message threshold
-                    _LOGGER.warning(f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need 20), skipping statistics calculation for {self.area}. Missing: {missing_keys}")
-                    processed_result["tomorrow_statistics"] = PriceStatistics(complete_data=False).to_dict()
-            else:
-                # No tomorrow prices, ensure stats reflect incompleteness
+                     processed_result["tomorrow_valid"] = False
+
+                if stats_tomorrow.complete_data:
+                    _LOGGER.debug(f"Calculated tomorrow's statistics for {self.area} (complete): {processed_result['tomorrow_statistics']}")
+                else:
+                    found_keys_count = len(final_tomorrow_prices.keys())
+                    expected_keys_count = len(tomorrow_keys)
+                    _LOGGER.warning(
+                        f"Statistics for tomorrow for {self.area} are based on incomplete data "
+                        f"({found_keys_count}/{expected_keys_count} keys found). "
+                        f"Missing keys: {sorted(list(tomorrow_keys - set(final_tomorrow_prices.keys())))}"
+                    )
+            else: # if not final_tomorrow_prices
+                _LOGGER.warning(f"No final prices for tomorrow available after processing for area {self.area}, skipping stats.")
                 processed_result["tomorrow_statistics"] = PriceStatistics(complete_data=False).to_dict()
 
         except Exception as e:
@@ -372,30 +387,47 @@ class DataProcessor:
             return parser_class(timezone_service=self._tz_service)
         return None
 
-    def _calculate_statistics(self, hourly_prices: Dict[str, float]) -> PriceStatistics:
-        """Calculate price statistics from a dictionary of hourly prices (HH:00 keys)."""
-        prices = [p for p in hourly_prices.values() if p is not None]
-        if not prices:
+    def _calculate_statistics(self, hourly_prices: Dict[str, float], all_expected_keys: set) -> PriceStatistics:
+        """Calculate price statistics from a dictionary of hourly prices.
+        
+        The 'complete_data' flag in the returned PriceStatistics object will be True if:
+        1. All keys in 'all_expected_keys' are present in 'hourly_prices'.
+        2. There is at least one non-None price value in 'hourly_prices'.
+        """
+        actual_keys = set(hourly_prices.keys())
+        # Structural completeness: all expected hourly keys are present.
+        is_structurally_complete = all_expected_keys.issubset(actual_keys) and len(actual_keys) == len(all_expected_keys)
+
+        prices_values = [p for p in hourly_prices.values() if p is not None]
+
+        if not prices_values:
+            # If there are no actual price values, data is not meaningfully complete for statistics.
+            # complete_data is False, even if all keys might have been present (e.g., with None values).
             return PriceStatistics(complete_data=False)
 
-        prices.sort()
-        mid = len(prices) // 2
-        # Ensure indices are valid before access
-        median = None
-        if prices:
-            if len(prices) % 2 == 1:
-                median = prices[mid]
-            elif mid > 0:
-                median = (prices[mid - 1] + prices[mid]) / 2
-            else: # Only one element
-                median = prices[0]
+        # At this point, prices_values is not empty.
+        prices_values.sort()
+        
+        median_val: Optional[float] = None
+        mid = len(prices_values) // 2
+        if len(prices_values) % 2 == 1: # Odd number of elements
+            median_val = prices_values[mid]
+        elif mid > 0: # Even number of elements (at least 2)
+            median_val = (prices_values[mid - 1] + prices_values[mid]) / 2
+        else: # Single element list (len is 1, mid is 0)
+            median_val = prices_values[0]
+        
+        # Data is considered statistically complete if it's structurally complete AND has price values.
+        # The `if not prices_values:` check has passed, so price values are present.
+        # Thus, completeness hinges on structural completeness.
+        final_complete_flag = is_structurally_complete
 
         return PriceStatistics(
-            min=min(prices) if prices else None,
-            max=max(prices) if prices else None,
-            average=sum(prices) / len(prices) if prices else None,
-            median=median,
-            complete_data=True # Assume complete if this function is called
+            min=prices_values[0],             # First element of sorted list
+            max=prices_values[-1],            # Last element of sorted list
+            average=sum(prices_values) / len(prices_values),
+            median=median_val,
+            complete_data=final_complete_flag
         )
 
     def _generate_empty_processed_result(self, data, error=None):

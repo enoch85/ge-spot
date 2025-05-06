@@ -38,6 +38,10 @@ class EpexParser(BasePriceParser):
             _LOGGER.debug(f"EpexParser returning result: {result}")
             return result
 
+        # If this is a processed/cached structure, extract the original raw API data
+        if isinstance(raw_data, dict) and "raw_data" in raw_data:
+            raw_data = raw_data["raw_data"]
+
         # Parse HTML response if it's a string
         if isinstance(raw_data, str):
             try:

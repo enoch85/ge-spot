@@ -53,6 +53,16 @@ class OmieParser(BasePriceParser):
             }
         }
 
+        # Only accept raw API data (dict with 'raw_data' key or direct OMIE text structure)
+        if not data or not isinstance(data, dict):
+            _LOGGER.warning("[OmieParser] Input data is not a dictionary. Returning empty result.")
+            return result
+        # If this is a processed/cached structure, extract the original raw API data
+        if "raw_data" in data and isinstance(data["raw_data"], dict):
+            raw_data_payload = data["raw_data"]
+        else:
+            raw_data_payload = data
+
         if not raw_data_payload or not isinstance(raw_data_payload, dict):
             _LOGGER.warning("[OmieParser] No valid 'raw_data' dictionary found in input.")
             return result

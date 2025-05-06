@@ -45,6 +45,11 @@ class StromligningParser(BasePriceParser):
             _LOGGER.warning("Empty Stromligning data received")
             return result
 
+        # If this is a processed/cached structure, extract the original raw API data
+        if isinstance(raw_data, dict) and "raw_data" in raw_data:
+            if isinstance(raw_data["raw_data"], dict) or isinstance(raw_data["raw_data"], str):
+                raw_data = raw_data["raw_data"]
+
         # --- Find the list of prices --- 
         prices_list = None
         if isinstance(raw_data, dict):

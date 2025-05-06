@@ -36,10 +36,15 @@ class EnergiDataParser(BasePriceParser):
             "source_unit": EnergyUnit.MWH # Default for EDS
         }
 
-        # Check for valid data
+        # Only accept raw API data (dict with 'raw_data' key or direct EDS JSON structure)
         if not raw_data or not isinstance(raw_data, dict):
             _LOGGER.warning("Empty or invalid Energi Data Service data received")
             return result
+        # If this is a processed/cached structure, extract the original raw API data
+        if "raw_data" in raw_data and isinstance(raw_data["raw_data"], dict):
+            api_content = raw_data["raw_data"]
+        else:
+            api_content = raw_data
 
         # --- Extract records --- 
         records = []

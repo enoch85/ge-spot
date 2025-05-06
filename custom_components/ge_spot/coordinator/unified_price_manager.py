@@ -259,13 +259,25 @@ class UnifiedPriceManager:
                 cached_data = self._cache_manager.get_data(
                     area=self.area,
                     target_date=today_date, # Uses today_date calculated earlier
+                    source=self._active_source # Pass the active source
                     # No max_age here, rely on cache TTL. We just need the latest.
                 )
 
                 if cached_data:
-                    # Process the cached data to check for completeness
-                    # (Assume _process_result adds 'is_data_complete' based on DataProcessor)
-                    processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                    # Instead of re-processing the processed structure, always re-parse from raw API data
+                    raw_api_data = None
+                    if "raw_data" in cached_data and cached_data["raw_data"]:
+                        raw_api_data = cached_data["raw_data"]
+                    elif "xml_responses" in cached_data and cached_data["xml_responses"]:
+                        raw_api_data = cached_data["xml_responses"]
+                    elif "dict_response" in cached_data and cached_data["dict_response"]:
+                        raw_api_data = cached_data["dict_response"]
+                    else:
+                        raw_api_data = cached_data
+                    processed_cached_data = await self._process_result({
+                        **cached_data,
+                        "raw_data": raw_api_data
+                    }, is_cached=True)
 
                     # Check for completeness (adjust key if needed)
                     # We assume DataProcessor sets this flag if >= 20 hours data exists

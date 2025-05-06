@@ -42,6 +42,10 @@ class AemoParser(BasePriceParser):
             _LOGGER.warning("Empty AEMO data received")
             return result
 
+        # If this is a processed/cached structure, extract the original raw API data
+        if isinstance(raw_data, dict) and "raw_data" in raw_data:
+            raw_data = raw_data["raw_data"]
+
         # If raw_data is a string (CSV or JSON), parse it
         if isinstance(raw_data, str):
             try:
