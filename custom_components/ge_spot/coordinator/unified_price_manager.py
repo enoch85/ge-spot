@@ -252,6 +252,47 @@ class UnifiedPriceManager:
                         return await self._generate_empty_result(error="Rate limited, no cache available")
 
             # If not rate limited or forced, proceed to fetch
+
+            # --- Check Cache Completeness Start ---
+            # Before actually fetching, check if we have recent enough *and* complete cached data
+            if not force:
+                cached_data = self._cache_manager.get_data(
+                    area=self.area,
+                    target_date=today_date, # Uses today_date calculated earlier
+                    # No max_age here, rely on cache TTL. We just need the latest.
+                )
+
+                if cached_data:
+                    # Process the cached data to check for completeness
+                    # (Assume _process_result adds 'is_data_complete' based on DataProcessor)
+                    processed_cached_data = await self._process_result(cached_data, is_cached=True)
+
+                    # Check for completeness (adjust key if needed)
+                    # We assume DataProcessor sets this flag if >= 20 hours data exists
+                    is_complete = processed_cached_data.get("statistics", {}).get("complete_data", False)
+
+                    if is_complete:
+                        _LOGGER.info(
+                            f"Skipping fetch for area {self.area}. "
+                            f"Complete data found in cache (Source: {processed_cached_data.get('data_source', 'unknown')})."
+                        )
+                        # Return the processed cached data - no need to fetch
+                        # Do NOT update _LAST_FETCH_TIME here
+                        return processed_cached_data
+                    else:
+                        _LOGGER.info(
+                            f"Proceeding with fetch for area {self.area}. "
+                            f"Cached data found but is incomplete."
+                        )
+                else:
+                     _LOGGER.info(
+                        f"Proceeding with fetch for area {self.area}. "
+                        f"No suitable cached data found for today."
+                    )
+
+            # --- Check Cache Completeness End ---
+
+            # If we reached here, it means we need to fetch (either forced, no cache, or incomplete cache)
             _LOGGER.info(f"Fetching price data for area {self.area}")
             # Update fetch timestamp *before* the actual fetch to prevent race conditions
             _LAST_FETCH_TIME[area_key] = now
