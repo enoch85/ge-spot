@@ -29,12 +29,27 @@ class AemoParser(BasePriceParser):
             area: Optional area code to filter results for
 
         Returns:
-            Parsed data with hourly prices
+            Parsed data with hourly prices, currency, area, and timezone
         """
+        
+        # Determine timezone based on the area, similar to AemoAPI.get_timezone_for_area
+        # Default to "Australia/Sydney" if area is None or not in the specific map
+        determined_timezone = "Australia/Sydney"
+        if area:
+            timezone_map = {
+                "NSW1": "Australia/Sydney",
+                "QLD1": "Australia/Brisbane",
+                "SA1": "Australia/Adelaide",
+                "TAS1": "Australia/Hobart",
+                "VIC1": "Australia/Melbourne"
+            }
+            determined_timezone = timezone_map.get(area, "Australia/Sydney")
+
         result = {
             "hourly_raw": {},  # Changed from hourly_prices
             "currency": Currency.AUD,
-            "area": area  # Store the area if provided
+            "area": area,  # Store the area if provided
+            "timezone": determined_timezone # Add timezone to the parser's result
         }
 
         # Check for valid data

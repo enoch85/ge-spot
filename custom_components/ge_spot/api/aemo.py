@@ -107,7 +107,7 @@ class AemoAPI(BasePriceAPI):
                     "hourly_raw": hourly_raw,
                     "timezone": self.get_timezone_for_area(area),
                     "currency": Currency.AUD,
-                    "source_name": "aemo",
+                    "source": "aemo",  # Changed from source_name to source
                     "raw_data": {
                         "data": response,
                         "timestamp": now_utc.isoformat(),
