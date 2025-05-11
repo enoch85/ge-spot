@@ -48,3 +48,24 @@ def create_api(source_type: str, config: Optional[Dict[str, Any]] = None, sessio
         return ComedAPI(config, session)
     else:
         raise ValueError(f"Unknown source type: {source_type}")
+
+from .entsoe import EntsoeAdapter
+from .epex import EpexAdapter # Standard EPEX SPOT API
+from .nordpool import NordpoolAdapter
+from .omie import OmieAdapter
+from .stromligning import StromligningAdapter
+
+# New Adapters from ha_epex_spot integration
+from .awattar_adapter import AwattarAdapter
+from .epex_spot_web_adapter import EpexSpotWebAdapter # EPEX Spot Web Scraper
+from .energy_forecast_adapter import EnergyForecastAdapter
+from .smard_adapter import SmardAdapter
+from .tibber_adapter import TibberAdapter
+from .smart_energy_adapter import SmartEnergyAdapter
+
+
+# The @register_adapter decorator in each adapter file handles adding
+# them to the registry. No explicit SOURCE_MAP update needed here if
+# the dynamic registration mechanism is fully in place.
+
+# Ensure all modules are imported so decorators run.

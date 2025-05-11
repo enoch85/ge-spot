@@ -12,6 +12,12 @@ class Source:
     STROMLIGNING = "stromligning"
     COMED = "comed"
     AMBER = "amber"
+    AWATTAR = "awattar"
+    EPEX_SPOT_WEB = "epex_spot_web"
+    ENERGY_FORECAST = "energy_forecast"
+    SMARD = "smard"
+    TIBBER = "tibber"
+    SMART_ENERGY = "smart_energy"
 
     # List of all sources
     ALL = [
@@ -23,7 +29,13 @@ class Source:
         OMIE,
         STROMLIGNING,
         COMED,
-        AMBER
+        AMBER,
+        AWATTAR,
+        EPEX_SPOT_WEB,
+        ENERGY_FORECAST,
+        SMARD,
+        TIBBER,
+        SMART_ENERGY
     ]
 
     # Default source priority
@@ -49,7 +61,13 @@ class Source:
         OMIE: "OMIE",
         STROMLIGNING: "Strømligning",
         COMED: "ComEd Hourly Pricing",
-        AMBER: "Amber Electric"
+        AMBER: "Amber Electric",
+        AWATTAR: "aWATTar",
+        EPEX_SPOT_WEB: "EPEX SPOT Web",
+        ENERGY_FORECAST: "Energy Forecast",
+        SMARD: "SMARD",
+        TIBBER: "Tibber",
+        SMART_ENERGY: "Smart Energy"
     }
 
     # Source URLs
@@ -62,7 +80,13 @@ class Source:
         OMIE: "https://www.omie.es/",
         STROMLIGNING: "https://www.stromligning.no/",
         COMED: "https://hourlypricing.comed.com/",
-        AMBER: "https://amber.com.au/"
+        AMBER: "https://amber.com.au/",
+        AWATTAR: "https://www.awattar.dk/",
+        EPEX_SPOT_WEB: "https://www.epexspot.com/en/market-data/",
+        ENERGY_FORECAST: "https://www.energyforecast.eu/",
+        SMARD: "https://www.smard.de/",
+        TIBBER: "https://tibber.com/",
+        SMART_ENERGY: "https://www.smartenergy.com/"
     }
 
     @staticmethod
@@ -123,7 +147,13 @@ class SourceInfo:
         Source.AEMO: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
         Source.STROMLIGNING: ["DK1", "DK2"],
         Source.COMED: ["COMED"],
-        Source.AMBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
+        Source.AMBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
+        Source.AWATTAR: ["DK1", "DK2"],
+        Source.EPEX_SPOT_WEB: ["DE-LU", "FR", "BE", "NL", "AT"],
+        Source.ENERGY_FORECAST: ["DK1", "DK2", "DE-LU", "FR", "BE", "NL", "AT"],
+        Source.SMARD: ["DE-LU", "FR", "BE", "NL", "AT"],
+        Source.TIBBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
+        Source.SMART_ENERGY: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
     }
 
     # Map areas to recommended sources
@@ -157,11 +187,11 @@ class SourceInfo:
         "PT": [Source.ENTSOE, Source.OMIE],
 
         # Australia
-        "NSW1": [Source.AEMO, Source.AMBER],
-        "QLD1": [Source.AEMO, Source.AMBER],
-        "SA1": [Source.AEMO, Source.AMBER],
-        "TAS1": [Source.AEMO, Source.AMBER],
-        "VIC1": [Source.AEMO, Source.AMBER],
+        "NSW1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
+        "QLD1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
+        "SA1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
+        "TAS1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
+        "VIC1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
 
         # USA
         "COMED": [Source.COMED]
