@@ -1,16 +1,19 @@
 """API handler for AEMO (Australian Energy Market Operator)."""
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List # Added List
 import aiohttp
 
-from .base.api_client import ApiClient
-from ..const.sources import Source
-from ..const.api import Aemo
+# Updated imports for BaseAPIAdapter, PriceData, register_adapter, and constants
+from .base_api import BaseAPI, PriceData # PriceEntry is implicitly handled by List[PriceEntry]
+from .registry import register_adapter
+from ..const.sources import SOURCE_AEMO
+from ..const.api import Aemo # For Aemo.REGIONS and Aemo.SUMMARY_URL
+from ..const.currencies import Currency # For Currency.AUD
+from ..const.network import Network # For Network.Defaults.TIMEOUT
+
 from .parsers.aemo_parser import AemoParser
-from .base.base_price_api import BasePriceAPI
-from ..const.currencies import Currency
-from ..const.network import Network
+from .base.api_client import ApiClient # Assuming this is the intended ApiClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,91 +39,101 @@ The API provides data for five regions across Australia:
 For more information, see: https://visualisations.aemo.com.au/
 """
 
-class AemoAPI(BasePriceAPI):
+@register_adapter(
+    name=SOURCE_AEMO,
+    regions=Aemo.REGIONS, # Ensure Aemo.REGIONS is a list of strings like ["NSW1", "QLD1", ...]
+    default_priority=60
+)
+class AemoAPI(BaseAPI): # Changed base class and class name
     """API client for AEMO (Australian Energy Market Operator)."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, session: Optional[aiohttp.ClientSession] = None, timezone_service=None):
+    # Updated constructor to match BaseAPIAdapter
+    def __init__(self, config: Optional[Dict[str, Any]] = None, session: Optional[aiohttp.ClientSession] = None):
         """Initialize the API client.
 
         Args:
             config: Configuration dictionary
             session: aiohttp client session
-            timezone_service: Timezone service instance
         """
-        super().__init__(config, session, timezone_service)
+        super().__init__(config, session)
+        # timezone_service removed from super() call and as an instance variable
 
-    def _get_source_type(self) -> str:
-        """Get the source type identifier.
+    # _get_source_type method removed
 
-        Returns:
-            Source type identifier
-        """
-        return Source.AEMO
+    # _get_base_url logic will be inlined in fetch_data
 
-    def _get_base_url(self) -> str:
-        """Get the base URL for the API.
-
-        Returns:
-            Base URL as string
-        """
-        # Use constant defined in const/api.py if available, otherwise fallback
-        return getattr(Aemo, 'SUMMARY_URL', "https://visualisations.aemo.com.au/aemo/apps/api/report/ELEC_NEM_SUMMARY")
-
-    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Optional[Dict[str, Any]]:
+    # Renamed from fetch_raw_data, signature and return type changed
+    async def fetch_data(self, area: str) -> PriceData:
         """Fetch raw price data for the given area.
 
         Args:
             area: Area code (e.g., NSW1, QLD1, etc.)
-            session: Optional session for API requests
-            **kwargs: Additional parameters
 
         Returns:
-            Raw API response data as a dictionary, or None if fetch fails.
+            PriceData object containing pricing data or error information.
         """
-        # Use current UTC time as reference - AEMO provides real-time spot prices
-        # so we don't need a specific reference date
-        now_utc = datetime.now(timezone.utc)
+        now_utc = datetime.now(timezone.utc) # For metadata timestamp
 
-        client = ApiClient(session=session or self.session)
+        # ApiClient uses self.session which is passed during adapter instantiation
+        client = ApiClient(session=self.session)
+
         try:
             # Validate the area code
             if area not in Aemo.REGIONS:
                 _LOGGER.error(f"Invalid AEMO region: {area}. Must be one of {Aemo.REGIONS}")
                 raise ValueError(f"Invalid AEMO region: {area}")
 
-            # Fetch data from the AEMO API
+            # Inlined _get_base_url logic
+            base_url = getattr(Aemo, 'SUMMARY_URL', "https://visualisations.aemo.com.au/aemo/apps/api/report/ELEC_NEM_SUMMARY")
+            
             response = await client.fetch(
-                self._get_base_url(),
+                base_url,
                 timeout=Network.Defaults.TIMEOUT,
                 response_format='json'
             )
 
-            # Process the response if valid
             if response and isinstance(response, dict) and Aemo.SUMMARY_ARRAY in response:
-                # Parse the response using the appropriate parser
-                parser = self.get_parser_for_area(area)
-                parsed = parser.parse(response, area=area) # Pass area to the parser
-                hourly_raw = parsed.get("hourly_raw", {}) # Correct key
+                parser = self.get_parser_for_area(area) # This method is kept
+                parsed_content = parser.parse(response, area=area)
+                hourly_raw_dict = parsed_content.get("hourly_raw", {})
 
-                # Return standardized data structure with ISO timestamps
-                return {
-                    "hourly_raw": hourly_raw,
-                    "timezone": self.get_timezone_for_area(area),
-                    "currency": Currency.AUD,
-                    "source": "aemo",  # Changed from source_name to source
-                    "raw_data": {
-                        "data": response,
-                        "timestamp": now_utc.isoformat(),
+                price_entries: List[Dict[str, Any]] = [] # To match PriceEntry structure
+                if isinstance(hourly_raw_dict, dict):
+                    for ts_str, price_val in hourly_raw_dict.items():
+                        try:
+                            # Assuming AemoParser returns ISO string timestamps as keys.
+                            # These need to be converted to datetime objects.
+                            dt_object = datetime.fromisoformat(ts_str)
+                            price_entries.append({"start_time": dt_object, "price": float(price_val)})
+                        except (ValueError, TypeError) as e:
+                            _LOGGER.warning(f"AEMO: Could not parse timestamp or price: '{ts_str}', '{price_val}' - {e}")
+                
+                # Sort by start_time if parser doesn't guarantee order
+                price_entries.sort(key=lambda x: x['start_time'])
+
+                return PriceData(
+                    hourly_raw=price_entries,
+                    timezone=self.get_timezone_for_area(area), # This method is kept
+                    currency=Currency.AUD,
+                    source=self.api_name, # Use api_name from BaseAPI
+                    meta={
+                        "raw_data_preview": str(response)[:200], # Store a preview
+                        "fetch_timestamp_utc": now_utc.isoformat(),
                         "area": area
-                    },
-                }
+                    }
+                )
             else:
-                _LOGGER.warning(f"Invalid or empty response from AEMO for area {area}. Response: {response}")
-                return None
-        finally:
-            if session is None and client:
-                await client.close()
+                _LOGGER.warning(f"Invalid or empty response from AEMO for area {area}. Response preview: {str(response)[:200]}")
+                # Raise an exception or return PriceData with error for consistency
+                raise ValueError(f"Invalid or empty API response from AEMO for area {area}")
+        except aiohttp.ClientError as e:
+            _LOGGER.error(f"AEMO API request failed for area {area}: {e}")
+            raise # Re-raise for FallbackManager/UnifiedPriceManager to handle
+        except Exception as e:
+            _LOGGER.error(f"AEMO data processing failed for area {area}: {e}")
+            raise # Re-raise other critical errors
 
+    # get_timezone_for_area method is kept
     def get_timezone_for_area(self, area: str) -> str:
         """Get timezone for the specific AEMO area.
 
@@ -141,6 +154,7 @@ class AemoAPI(BasePriceAPI):
         # Default to Sydney if area is unknown or not provided
         return timezone_map.get(area, "Australia/Sydney")
 
+    # get_parser_for_area method is kept
     def get_parser_for_area(self, area: str) -> Any:
         """Get parser for the area.
 

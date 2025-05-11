@@ -57,3 +57,7 @@ class RetryStrategy:
     LINEAR_BACKOFF = "linear_backoff"            # Linear backoff
     CONSTANT_DELAY = "constant_delay"            # Constant delay between retries
     FIBONACCI_BACKOFF = "fibonacci_backoff"      # Fibonacci sequence backoff
+
+# Add NETWORK_TIMEOUT at module level
+NETWORK_TIMEOUT = Network.Defaults.TIMEOUT
+NETWORK_RETRY_COUNT = Network.Defaults.RETRY_COUNT

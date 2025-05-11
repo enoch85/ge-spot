@@ -27,6 +27,7 @@ class Area:
     BE = "BE"
     NL = "NL"
     CH = "CH"
+    PL = "PL" # Added
 
     # Iberia
     ES = "ES"
@@ -38,6 +39,9 @@ class Area:
     SA1 = "SA1"
     TAS1 = "TAS1"
     VIC1 = "VIC1"
+
+    # UK
+    GB = "GB" # Added
 
 
 class Timezone:
@@ -292,6 +296,9 @@ class AreaMapping:
         Area.BE: "Belgium",
         Area.NL: "Netherlands",
         Area.AT: "Austria",
+        Area.CH: "Switzerland", # Added
+        Area.GB: "Great Britain", # Added
+        Area.PL: "Poland", # Added
     }
 
     # OMIE areas
@@ -345,6 +352,8 @@ class AreaMapping:
         "comed": "5minutefeed",
     }
 
+# List of all ENTSO-E area codes we have mappings for
+ALL_ENTSOE_AREAS = list(AreaMapping.ENTSOE_MAPPING.keys())
 
 class AreaInfo:
     """Utility class for area information."""

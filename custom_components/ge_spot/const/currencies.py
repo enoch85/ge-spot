@@ -18,6 +18,16 @@ class Currency:
     CENTS = "cents"  # US cents (used by ComEd API)
 
 
+# Add CURRENCY_EUR constant at module level
+CURRENCY_EUR = Currency.EUR
+CURRENCY_DKK = Currency.DKK
+CURRENCY_NOK = Currency.NOK
+CURRENCY_SEK = Currency.SEK
+CURRENCY_GBP = Currency.GBP
+CURRENCY_AUD = Currency.AUD
+CURRENCY_USD = Currency.USD  # Added for completeness, though not directly in original error
+
+
 class CurrencyInfo:
     """Currency information including subunits and region mappings."""
 

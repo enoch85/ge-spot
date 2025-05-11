@@ -12,7 +12,7 @@ class Source:
     STROMLIGNING = "stromligning"
     COMED = "comed"
     AMBER = "amber"
-    AWATTAR = "awattar"
+    AWATTAR = "awattar"  # Added
     EPEX_SPOT_WEB = "epex_spot_web"
     ENERGY_FORECAST = "energy_forecast"
     SMARD = "smard"
@@ -48,7 +48,10 @@ class Source:
         STROMLIGNING,
         AEMO,
         AMBER,
-        COMED
+        COMED,
+        AWATTAR,  # Added
+        EPEX_SPOT_WEB, # Added
+        ENERGY_FORECAST, # Added
     ]
 
     # Source display names
@@ -63,8 +66,8 @@ class Source:
         COMED: "ComEd Hourly Pricing",
         AMBER: "Amber Electric",
         AWATTAR: "aWATTar",
-        EPEX_SPOT_WEB: "EPEX SPOT Web",
-        ENERGY_FORECAST: "Energy Forecast",
+        EPEX_SPOT_WEB: "EPEX SPOT Web", # Added
+        ENERGY_FORECAST: "Energy Forecast", # Added
         SMARD: "SMARD",
         TIBBER: "Tibber",
         SMART_ENERGY: "Smart Energy"
@@ -81,9 +84,9 @@ class Source:
         STROMLIGNING: "https://www.stromligning.no/",
         COMED: "https://hourlypricing.comed.com/",
         AMBER: "https://amber.com.au/",
-        AWATTAR: "https://www.awattar.dk/",
-        EPEX_SPOT_WEB: "https://www.epexspot.com/en/market-data/",
-        ENERGY_FORECAST: "https://www.energyforecast.eu/",
+        AWATTAR: "https://www.awattar.com/",
+        EPEX_SPOT_WEB: "https://www.epexspot.com/en/market-data/", # Added
+        ENERGY_FORECAST: "https://www.energyforecast.eu/", # Added
         SMARD: "https://www.smard.de/",
         TIBBER: "https://tibber.com/",
         SMART_ENERGY: "https://www.smartenergy.com/"
@@ -125,6 +128,22 @@ class Source:
         """
         return source in Source.ALL
 
+# Add individual source constants at module level, referencing them via the class
+SOURCE_NORDPOOL = Source.NORDPOOL
+SOURCE_ENTSOE = Source.ENTSOE
+SOURCE_ENERGI_DATA_SERVICE = Source.ENERGI_DATA_SERVICE
+SOURCE_AEMO = Source.AEMO
+SOURCE_EPEX = Source.EPEX
+SOURCE_OMIE = Source.OMIE
+SOURCE_STROMLIGNING = Source.STROMLIGNING
+SOURCE_COMED = Source.COMED
+SOURCE_AMBER = Source.AMBER
+SOURCE_AWATTAR = Source.AWATTAR
+SOURCE_EPEX_SPOT_WEB = Source.EPEX_SPOT_WEB
+SOURCE_ENERGY_FORECAST = Source.ENERGY_FORECAST
+SOURCE_SMARD = Source.SMARD
+SOURCE_TIBBER = Source.TIBBER
+SOURCE_SMART_ENERGY = Source.SMART_ENERGY
 
 class SourceInfo:
     """Utility class for source information."""
@@ -148,39 +167,45 @@ class SourceInfo:
         Source.STROMLIGNING: ["DK1", "DK2"],
         Source.COMED: ["COMED"],
         Source.AMBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
-        Source.AWATTAR: ["DK1", "DK2"],
-        Source.EPEX_SPOT_WEB: ["DE-LU", "FR", "BE", "NL", "AT"],
-        Source.ENERGY_FORECAST: ["DK1", "DK2", "DE-LU", "FR", "BE", "NL", "AT"],
-        Source.SMARD: ["DE-LU", "FR", "BE", "NL", "AT"],
-        Source.TIBBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
-        Source.SMART_ENERGY: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
+        Source.AWATTAR: ["AT", "DE-LU"],
+        Source.EPEX_SPOT_WEB: [ # Added
+            "AT", "BE", "CH", "DE-LU", "DK1", "DK2", "FI", "FR", "GB", "NL",
+            "NO1", "NO2", "NO3", "NO4", "NO5", "PL",
+            "SE1", "SE2", "SE3", "SE4"
+        ],
+        Source.ENERGY_FORECAST: ["DK1", "DK2", "DE-LU", "FR", "BE", "NL", "AT"], # Added
+        Source.SMARD: ["DE-LU", "AT"], # Corrected
+        Source.TIBBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"], # Unchanged, needs further review for European context
+        Source.SMART_ENERGY: ["AT"] # Corrected
     }
 
     # Map areas to recommended sources
     AREA_RECOMMENDED_SOURCES = {
         # Nordic countries
-        "DK1": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING],
-        "DK2": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING],
-        "SE1": [Source.NORDPOOL, Source.ENTSOE],
-        "SE2": [Source.NORDPOOL, Source.ENTSOE],
-        "SE3": [Source.NORDPOOL, Source.ENTSOE],
-        "SE4": [Source.NORDPOOL, Source.ENTSOE],
-        "FI": [Source.NORDPOOL, Source.ENTSOE],
-        "NO1": [Source.NORDPOOL, Source.ENTSOE],
-        "NO2": [Source.NORDPOOL, Source.ENTSOE],
-        "NO3": [Source.NORDPOOL, Source.ENTSOE],
-        "NO4": [Source.NORDPOOL, Source.ENTSOE],
-        "NO5": [Source.NORDPOOL, Source.ENTSOE],
+        "DK1": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
+        "DK2": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
+        "SE1": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "SE2": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "SE3": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "SE4": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "FI": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "NO1": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "NO2": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "NO3": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "NO4": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "NO5": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
         "EE": [Source.NORDPOOL, Source.ENTSOE],
         "LT": [Source.NORDPOOL, Source.ENTSOE],
         "LV": [Source.NORDPOOL, Source.ENTSOE],
 
         # Central Europe
-        "DE-LU": [Source.ENTSOE, Source.EPEX],
-        "AT": [Source.ENTSOE, Source.EPEX],
-        "FR": [Source.ENTSOE, Source.EPEX],
-        "BE": [Source.ENTSOE, Source.EPEX],
-        "NL": [Source.ENTSOE, Source.EPEX],
+        "DE-LU": [Source.ENTSOE, Source.EPEX, Source.AWATTAR, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD], # Added SMARD
+        "AT": [Source.ENTSOE, Source.EPEX, Source.AWATTAR, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD, Source.SMART_ENERGY], # Added SMARD, SMART_ENERGY
+        "FR": [Source.ENTSOE, Source.EPEX, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
+        "BE": [Source.ENTSOE, Source.EPEX, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
+        "NL": [Source.ENTSOE, Source.EPEX, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
+        "CH": [Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "PL": [Source.ENTSOE, Source.EPEX_SPOT_WEB],
 
         # Southern Europe
         "ES": [Source.ENTSOE, Source.OMIE],
@@ -194,7 +219,9 @@ class SourceInfo:
         "VIC1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
 
         # USA
-        "COMED": [Source.COMED]
+        "COMED": [Source.COMED],
+        # GB
+        "GB": [Source.EPEX_SPOT_WEB], # Added GB for EPEX_SPOT_WEB
     }
 
     @classmethod

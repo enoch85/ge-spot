@@ -55,13 +55,12 @@ from .nordpool import NordpoolAdapter
 from .omie import OmieAdapter
 from .stromligning import StromligningAdapter
 
-# New Adapters from ha_epex_spot integration
-from .awattar_adapter import AwattarAdapter
-from .epex_spot_web_adapter import EpexSpotWebAdapter # EPEX Spot Web Scraper
-from .energy_forecast_adapter import EnergyForecastAdapter
-from .smard_adapter import SmardAdapter
-from .tibber_adapter import TibberAdapter
-from .smart_energy_adapter import SmartEnergyAdapter
+from .awattar import AwattarAdapter # Changed from .awattar_adapter
+from .epex_spot_web import EpexSpotWebAdapter # Changed from .epex_spot_web_adapter
+from .energy_forecast import EnergyForecastAdapter # Changed from .energy_forecast_adapter
+from .smard import SmardAdapter # Changed from .smard_adapter
+from .tibber import TibberAdapter # Changed from .tibber_adapter
+from .smart_energy import SmartEnergyAdapter # Changed from .smart_energy_adapter
 
 
 # The @register_adapter decorator in each adapter file handles adding
