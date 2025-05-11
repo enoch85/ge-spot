@@ -133,52 +133,102 @@ class DataProcessor:
         # Expects keys: 'hourly_raw', 'timezone', 'currency', 'source_name', ...
         await self._ensure_exchange_service()
 
-        # --- Step 0: Identify Source and Get Parser ---
-        source_name = data.get("data_source") or data.get("source") # Get source name
+        source_name = data.get("data_source") or data.get("source")
+        is_cached_data = data.get("using_cached_data", False)
+        
+        input_hourly_raw: Optional[Dict[str, Any]] = None
+        input_source_timezone: Optional[str] = None
+        input_source_currency: Optional[str] = None
+        raw_api_data_for_result = data.get("raw_data") or data.get("xml_responses") or data.get("dict_response")
+
         if not source_name:
             _LOGGER.error(f"Missing 'data_source' or 'source' key in input data for area {self.area}. Cannot determine parser.")
             return self._generate_empty_processed_result(data, error="Missing source identifier")
 
-        parser = self._get_parser(source_name)
-        if not parser:
-            _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area}.")
-            return self._generate_empty_processed_result(data, error=f"No parser for source {source_name}")
+        if is_cached_data:
+            _LOGGER.debug(f"[{self.area}] Processing cached data from source '{source_name}'.")
+            # For cached data, we expect 'raw_hourly_prices_original', 'source_timezone', and 'source_currency'
+            # These represent the state *before* previous normalization and conversion.
+            if (
+                "raw_hourly_prices_original" in data
+                and "source_timezone" in data
+                and "source_currency" in data
+            ):
+                input_hourly_raw = data.get("raw_hourly_prices_original")
+                input_source_timezone = data.get("source_timezone")
+                input_source_currency = data.get("source_currency")
+                _LOGGER.debug(f"[{self.area}] Using 'raw_hourly_prices_original' from cache for reprocessing.")
+                
+                # Ensure raw_api_data_for_result is also populated from cache if it exists there
+                # The initial raw_api_data_for_result might be from the top-level cache dict, 
+                # but the more specific one might be nested if the cache stores the full processed dict.
+                if data.get("raw_data"):
+                    raw_api_data_for_result = data.get("raw_data")
 
-        # --- Step 1: Parse Raw Data ---
-        try:
-            # Pass the entire raw dictionary from FallbackManager to the parser
-            parsed_data = parser.parse(data)
-            _LOGGER.debug(f"[{self.area}] Parser {parser.__class__.__name__} output keys: {list(parsed_data.keys())}")
-        except Exception as parse_err:
-            _LOGGER.error(f"[{self.area}] Error parsing data from source '{source_name}': {parse_err}", exc_info=True)
-            return self._generate_empty_processed_result(data, error=f"Parsing error: {parse_err}")
+            else:
+                _LOGGER.warning(f"[{self.area}] Cached data for '{source_name}' is missing expected fields: 'raw_hourly_prices_original', 'source_timezone', or 'source_currency'. Attempting to re-parse, but this may lead to errors if data is already processed.")
+                # Fallback to trying to parse the main 'hourly_prices' if the original raw is missing (old cache format)
+                # This is risky and might be what was causing issues.
+                # The EntsoeParser change should make it safer as it will look for XML.
+                parser = self._get_parser(source_name)
+                if not parser:
+                    _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area} during cached data processing.")
+                    return self._generate_empty_processed_result(data, error=f"No parser for source {source_name} (cache path)")
+                try:
+                    # Pass the entire cached dictionary to the parser. 
+                    # The modified EntsoeParser will look for XML within this dict.
+                    parsed_data = parser.parse(data) 
+                    input_hourly_raw = parsed_data.get("hourly_raw")
+                    input_source_timezone = parsed_data.get("timezone")
+                    input_source_currency = parsed_data.get("currency")
+                    # If parser extracted metadata (like raw_data from within), use it
+                    if parsed_data.get("raw_data"):
+                         raw_api_data_for_result = parsed_data.get("raw_data")
+                    _LOGGER.debug(f"[{self.area}] Reparsed cached data with {parser.__class__.__name__}. Got {len(input_hourly_raw if input_hourly_raw else {})} raw prices.")
+                except Exception as parse_err:
+                    _LOGGER.error(f"[{self.area}] Error re-parsing cached data from source '{source_name}': {parse_err}", exc_info=True)
+                    return self._generate_empty_processed_result(data, error=f"Cache re-parsing error: {parse_err}")
+        else:
+            # --- Fresh Data: Step 1: Parse Raw Data ---
+            _LOGGER.debug(f"[{self.area}] Processing fresh (non-cached) data from source '{source_name}'.")
+            parser = self._get_parser(source_name)
+            if not parser:
+                _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area}.")
+                return self._generate_empty_processed_result(data, error=f"No parser for source {source_name}")
 
-        # Validate parser output
-        if not parsed_data or not isinstance(parsed_data, dict) or not parsed_data.get("hourly_raw"):
-            _LOGGER.warning(f"[{self.area}] Parser for source '{source_name}' returned invalid or empty data. Parsed keys: {list(parsed_data.keys()) if isinstance(parsed_data, dict) else 'N/A'}")
-            # Include the structure passed to the parser in the warning for better debugging
-            _LOGGER.debug(f"[{self.area}] Data passed to parser {parser.__class__.__name__}: {data}") # Log the data passed
-            return self._generate_empty_processed_result(data, error=f"Parser {source_name} returned invalid data")
+            try:
+                # Pass the entire raw dictionary from FallbackManager/API Adapter to the parser
+                parsed_data = parser.parse(data)
+                _LOGGER.debug(f"[{self.area}] Parser {parser.__class__.__name__} output keys: {list(parsed_data.keys())}")
+                input_hourly_raw = parsed_data.get("hourly_raw")
+                input_source_timezone = parsed_data.get("timezone")
+                input_source_currency = parsed_data.get("currency")
+                # If parser extracted metadata (like raw_data from within), use it
+                if parsed_data.get("raw_data"):
+                    raw_api_data_for_result = parsed_data.get("raw_data")
 
-        raw_hourly_prices = parsed_data["hourly_raw"]
-        source_timezone = parsed_data.get("timezone")
-        source_currency = parsed_data.get("currency")
-        # Keep original raw API data if available in the input `data`
-        raw_api_data = data.get("raw_data") or data.get("xml_responses") or data.get("dict_response")
+            except Exception as parse_err:
+                _LOGGER.error(f"[{self.area}] Error parsing fresh data from source '{source_name}': {parse_err}", exc_info=True)
+                return self._generate_empty_processed_result(data, error=f"Parsing error: {parse_err}")
 
-        if not source_timezone:
-            _LOGGER.error(f"Missing 'timezone' key in parsed data for source {source_name}. Cannot process.")
-            return self._generate_empty_processed_result(data, error="Missing timezone key after parsing")
-        if not source_currency:
-            _LOGGER.error(f"Missing currency for source {source_name} after parsing. Cannot process.")
-            return self._generate_empty_processed_result(data, error="Missing currency after parsing")
+        # --- Validate inputs for normalization ---
+        if not input_hourly_raw or not isinstance(input_hourly_raw, dict):
+            _LOGGER.warning(f"[{self.area}] No valid 'hourly_raw' data available for source '{source_name}' after parsing/cache handling. Cached: {is_cached_data}")
+            return self._generate_empty_processed_result(data, error=f"No hourly_raw data from {source_name}")
+
+        if not input_source_timezone:
+            _LOGGER.error(f"Missing 'timezone' for source {source_name} after parsing/cache handling. Cannot process. Cached: {is_cached_data}")
+            return self._generate_empty_processed_result(data, error="Missing timezone after parsing/cache handling")
+        if not input_source_currency:
+            _LOGGER.error(f"Missing currency for source {source_name} after parsing/cache handling. Cannot process. Cached: {is_cached_data}")
+            return self._generate_empty_processed_result(data, error="Missing currency after parsing/cache handling")
 
         # --- Step 2: Normalize Timezones ---
         try:
             # This will convert ISO timestamp keys to 'YYYY-MM-DD HH:00' format in target timezone
             normalized_prices = self._tz_converter.normalize_hourly_prices(
-                raw_hourly_prices,
-                source_timezone,
+                input_hourly_raw, # Use the determined input_hourly_raw
+                input_source_timezone, # Use the determined input_source_timezone
                 preserve_date=True  # Keep date part for today/tomorrow split
             )
 
@@ -186,9 +236,10 @@ class DataProcessor:
             normalized_today, normalized_tomorrow = self._tz_converter.split_into_today_tomorrow(normalized_prices)
 
             # Log the results of normalization and splitting
-            _LOGGER.debug(f"Normalized {len(raw_hourly_prices)} timestamps into: today({len(normalized_today)}), tomorrow({len(normalized_tomorrow)})")
+            _LOGGER.debug(f"Normalized {len(input_hourly_raw)} timestamps from {input_source_timezone} into target TZ. Today: {len(normalized_today)}, Tomorrow: {len(normalized_tomorrow)} prices.")
         except Exception as e:
-            _LOGGER.error(f"Error during timestamp normalization for {self.area}: {e}", exc_info=True)
+            _LOGGER.error(f"Error during timestamp normalization for {self.area} (source_tz: {input_source_timezone}): {e}", exc_info=True)
+            _LOGGER.debug(f"Data passed to normalize_hourly_prices that failed: {input_hourly_raw}") # Log problematic data
             return self._generate_empty_processed_result(data, error=f"Timestamp normalization error: {e}")
 
         # --- Step 3: Currency/Unit Conversion ---
@@ -196,13 +247,14 @@ class DataProcessor:
         ecb_updated = None
         final_today_prices = {}
         # Get source unit from the input data, default to MWh if not present
-        source_unit = data.get("source_unit", EnergyUnit.MWH)
+        # For cached data, this might be inside the 'data' dict, or from the original fetch context
+        source_unit = data.get("source_unit", EnergyUnit.MWH) 
         _LOGGER.debug(f"[{self.area}] Using source unit '{source_unit}' for currency conversion.")
 
         if normalized_today:
             converted_today, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
                 hourly_prices=normalized_today,
-                source_currency=source_currency,
+                source_currency=input_source_currency, # Use determined input_source_currency
                 # Pass the determined source_unit
                 source_unit=source_unit
             )
@@ -214,7 +266,7 @@ class DataProcessor:
         if normalized_tomorrow:
             converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
                 hourly_prices=normalized_tomorrow,
-                source_currency=source_currency,
+                source_currency=input_source_currency, # Use determined input_source_currency
                 # Pass the determined source_unit
                 source_unit=source_unit
             )
@@ -227,13 +279,13 @@ class DataProcessor:
         processed_result = {
             "source": source_name, # Use source_name identified earlier
             "area": self.area,
-            "source_currency": source_currency,
+            "source_currency": input_source_currency, # Store the actual source currency used
             "target_currency": self.target_currency,
-            "source_timezone": source_timezone,
+            "source_timezone": input_source_timezone, # Store the actual source timezone used
             "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None,
             "hourly_prices": final_today_prices,
             "tomorrow_hourly_prices": final_tomorrow_prices,
-            "raw_hourly_prices_original": raw_hourly_prices, # Store the output from the parser
+            "raw_hourly_prices_original": input_hourly_raw, # Store the raw prices that went INTO normalization
             "current_price": None,
             "next_hour_price": None,
             "current_hour_key": None,
@@ -243,13 +295,13 @@ class DataProcessor:
             "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,
-            "raw_data": raw_api_data, # Store original raw API data
+            "raw_data": raw_api_data_for_result, # Store original raw API data (XML, JSON, etc.)
             "ecb_rate": ecb_rate,
             "ecb_updated": ecb_updated,
             "has_tomorrow_prices": bool(final_tomorrow_prices),
             "attempted_sources": data.get("attempted_sources", []),
             "fallback_sources": data.get("fallback_sources", []),
-            "using_cached_data": data.get("using_cached_data", False),
+            "using_cached_data": is_cached_data, # Reflect if this cycle used cache
             "fetched_at": data.get("fetched_at")
         }
 
@@ -280,7 +332,7 @@ class DataProcessor:
                 if today_complete_enough:
                     stats = self._calculate_statistics(final_today_prices)
                     # Mark as complete only if all 24 hours are present
-                    stats.complete_data = today_keys.issubset(found_keys)
+                    stats.complete_data = today_complete_enough # Align with 20-hour quota
                     processed_result["statistics"] = stats.to_dict()
                     _LOGGER.debug(f"Calculated today's statistics for {self.area}: {processed_result['statistics']}") # Log today's stats
                 else:
@@ -302,7 +354,7 @@ class DataProcessor:
                 if tomorrow_complete_enough:
                     stats = self._calculate_statistics(final_tomorrow_prices)
                      # Mark as complete only if all 24 hours are present
-                    stats.complete_data = tomorrow_keys.issubset(found_keys)
+                    stats.complete_data = tomorrow_complete_enough # Align with 20-hour quota
                     processed_result["tomorrow_statistics"] = stats.to_dict()
                     # Set tomorrow_valid if we have enough data for stats, even if not fully complete
                     processed_result["tomorrow_valid"] = True
@@ -325,7 +377,7 @@ class DataProcessor:
                  _LOGGER.error(f"Failed to ensure exchange service during error handling: {init_err}")
             # Return structure with error, preserving original raw data if possible
             error_result = self._generate_empty_processed_result(data, error=str(e))
-            error_result["raw_hourly_prices_original"] = raw_hourly_prices # Keep original raw input
+            error_result["raw_hourly_prices_original"] = input_hourly_raw # Keep original raw input
             return error_result
 
         # Ensure source_timezone is always set in processed_result

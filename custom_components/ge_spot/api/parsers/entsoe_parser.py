@@ -16,109 +16,107 @@ class EntsoeParser(BasePriceParser):
 
     def __init__(self, timezone_service=None):
         """Initialize the parser."""
-        super().__init__(Source.ENTSOE, timezone_service)
+        super().__init__(timezone_service) # Pass timezone_service to base
+        # Add any ENTSO-E specific initialization here
 
     def parse(self, data: Any) -> Dict[str, Any]:
-        """Parse ENTSO-E API response.
+        _LOGGER.debug(f"ENTSOE Parser: Received data of type: {type(data)}")
+        all_hourly_prices: Dict[str, float] = {}
+        aggregated_currency: Optional[str] = None
+        aggregated_timezone: Optional[str] = None # To store timezone if found in XML
 
-        Args:
-            data: Raw API response data
-
-        Returns:
-            Parsed data with hourly prices
-        """
-        _LOGGER.debug(f"ENTSOE Parser: Input data type: {type(data).__name__}")
-        if isinstance(data, dict):
-            _LOGGER.debug(f"ENTSOE Parser: Input data keys: {list(data.keys())}")
-            log_data_summary = {k: (f'{type(v).__name__} (len={len(v)})' if isinstance(v, (str, list, dict)) else v) for k, v in data.items()}
-            _LOGGER.debug(f"ENTSOE Parser: Input data summary: {log_data_summary}")
-        elif isinstance(data, str):
-            _LOGGER.debug(f"ENTSOE Parser: Input data is string (len={len(data)})")
-
-        result = {
-            "hourly_raw": {},  # Standardized output key
-            "currency": "EUR",
-            "source": self.source
+        # Result structure
+        result: Dict[str, Any] = {
+            "hourly_raw": {},
+            "currency": None,
+            "timezone": "Etc/UTC", # Default, might be overridden by _parse_xml
+            "source": Source.ENTSOE,
+            "metadata": {} # Initialize metadata
         }
-        all_hourly_prices = {}  # Initialize aggregation dict
 
-        # Parse XML response
-        if isinstance(data, str) and "<Publication_MarketDocument" in data:
-            _LOGGER.debug("ENTSOE Parser: Parsing single XML string")
-            try:
-                parsed_prices = self._parse_xml(data)
-                if parsed_prices:
-                    all_hourly_prices.update(parsed_prices.get("hourly_prices", {}))
-                    result["currency"] = parsed_prices.get("currency", result["currency"])
-            except Exception as e:
-                _LOGGER.error(f"Failed to parse ENTSO-E XML: {e}", exc_info=True)
+        xml_to_parse: List[str] = []
+        original_input_for_metadata = data # Keep original input for metadata if no XML is parsed
 
-        # If data is a dictionary with "raw_data" key containing XML
-        elif isinstance(data, dict) and "raw_data" in data and isinstance(data["raw_data"], str):
-            _LOGGER.debug("ENTSOE Parser: Parsing XML from 'raw_data' key")
-            try:
-                if "<Publication_MarketDocument" in data["raw_data"]:
-                    parsed_prices = self._parse_xml(data["raw_data"])
-                    if parsed_prices:
-                        all_hourly_prices.update(parsed_prices.get("hourly_prices", {}))
-                        result["currency"] = parsed_prices.get("currency", result["currency"])
-            except Exception as e:
-                _LOGGER.error(f"Failed to parse ENTSO-E XML from raw_data: {e}", exc_info=True)
-
-        # If data is a dictionary with multiple XML responses
-        elif isinstance(data, dict) and "xml_responses" in data and isinstance(data["xml_responses"], list):
-            xml_list = data["xml_responses"]
-            _LOGGER.debug(f"ENTSOE Parser: Parsing list of {len(xml_list)} XML responses")
-            for i, xml_response in enumerate(xml_list):
-                _LOGGER.debug(f"ENTSOE Parser: XML content #{i+1} to parse:\n{xml_response[:1000]}...") # Log start of XML
-                _LOGGER.debug(f"Parsing XML response #{i+1}")
-                try:
-                    parsed = self._parse_xml(xml_response)
-                    _LOGGER.debug(f"ENTSOE Parser: _parse_xml result for XML #{i+1}: {parsed}")
-                    if parsed and "hourly_prices" in parsed:
-                        _LOGGER.debug(f"XML #{i+1} yielded {len(parsed['hourly_prices'])} price points")
-                        all_hourly_prices.update(parsed["hourly_prices"])
-                        if result["currency"] == "EUR" and "currency" in parsed:
-                            result["currency"] = parsed["currency"]
+        if isinstance(data, str): # Single XML string
+            _LOGGER.debug("ENTSOE Parser: Processing single XML string.")
+            xml_to_parse.append(data)
+        elif isinstance(data, list) and all(isinstance(item, str) for item in data): # List of XML strings
+            _LOGGER.debug(f"ENTSOE Parser: Processing list of {len(data)} XML responses.")
+            xml_to_parse.extend(data)
+        elif isinstance(data, dict):
+            _LOGGER.debug(f"ENTSOE Parser: Processing dict input. Keys: {list(data.keys())}")
+            # Check for 'xml_responses' (list of XML strings) - common from FallbackManager
+            if "xml_responses" in data and isinstance(data["xml_responses"], list):
+                _LOGGER.debug("ENTSOE Parser: Found 'xml_responses' in dict.")
+                for item in data["xml_responses"]:
+                    if isinstance(item, str):
+                        xml_to_parse.append(item)
                     else:
-                        _LOGGER.debug(f"XML #{i+1} yielded no price points")
+                        _LOGGER.warning(f"ENTSOE Parser: Non-string item in 'xml_responses': {type(item)}")
+            # Check for 'raw_data' (single XML string) - common from API adapters or cache
+            elif "raw_data" in data and isinstance(data["raw_data"], str):
+                _LOGGER.debug("ENTSOE Parser: Found 'raw_data' string in dict.")
+                xml_to_parse.append(data["raw_data"])
+            # Check for 'document' (single XML string) - another possible key for raw XML
+            elif "document" in data and isinstance(data["document"], str):
+                 _LOGGER.debug("ENTSOE Parser: Found 'document' string in dict.")
+                 xml_to_parse.append(data["document"])
+            else:
+                _LOGGER.warning("ENTSOE Parser: Dict input provided, but no recognized XML data found ('xml_responses', 'raw_data', or 'document').")
+        else:
+            _LOGGER.warning(f"ENTSOE Parser: Unparseable data type: {type(data)}. Cannot extract XML.")
+
+        if not xml_to_parse:
+            _LOGGER.warning("ENTSOE Parser: No XML data found to parse.")
+            # result["hourly_raw"] will be empty, which DataProcessor should handle
+        else:
+            _LOGGER.debug(f"ENTSOE Parser: Parsing {len(xml_to_parse)} XML document(s).")
+            for i, xml_doc_str in enumerate(xml_to_parse):
+                try:
+                    # _parse_xml is expected to return:
+                    # {"hourly_prices": {"YYYY-MM-DDTHH:MM:SS+ZZ:ZZ": price, ...}, "currency": "EUR", "timezone": "Etc/UTC"}
+                    parsed_single_xml = self._parse_xml(xml_doc_str)
+                    if parsed_single_xml.get("hourly_prices"):
+                        all_hourly_prices.update(parsed_single_xml["hourly_prices"])
+                        _LOGGER.debug(f"ENTSOE Parser: XML #{i+1} parsed, {len(parsed_single_xml['hourly_prices'])} price points added.")
+                        if parsed_single_xml.get("currency") and not aggregated_currency:
+                            aggregated_currency = parsed_single_xml["currency"]
+                        if parsed_single_xml.get("timezone") and not aggregated_timezone:
+                            aggregated_timezone = parsed_single_xml["timezone"]
+                    else:
+                        _LOGGER.debug(f"ENTSOE Parser: XML #{i+1} yielded no price points.")
                 except Exception as e:
-                    _LOGGER.error(f"Failed to parse XML response #{i+1} from list: {e}", exc_info=True)
+                    _LOGGER.error(f"ENTSOE Parser: Failed to parse XML document #{i+1}: {e}", exc_info=True)
 
-        # If hourly prices were already processed
-        elif isinstance(data, dict) and "hourly_prices" in data and isinstance(data["hourly_prices"], dict):
-            _LOGGER.debug("ENTSOE Parser: Using pre-existing 'hourly_prices' key")
-            all_hourly_prices = data["hourly_prices"]
-            if "currency" in data:
-                result["currency"] = data["currency"]
-
-        # Final assembly
         result["hourly_raw"] = all_hourly_prices
-        _LOGGER.debug(f"ENTSOE Parser: Final aggregated hourly_raw size: {len(all_hourly_prices)}")
-        _LOGGER.debug(f"ENTSOE Parser: Final hourly_raw content: {all_hourly_prices}")
+        if aggregated_currency:
+            result["currency"] = aggregated_currency
+        if aggregated_timezone: # Use timezone from XML if found (should be UTC for ENTSO-E)
+            result["timezone"] = aggregated_timezone
+        
+        # Metadata Extraction
+        # Use the first XML doc for metadata if multiple were parsed.
+        # If no XML was parsed but input was a dict, try to extract from that.
+        metadata_source_for_extraction = None
+        if xml_to_parse:
+            metadata_source_for_extraction = xml_to_parse[0]
+        elif isinstance(original_input_for_metadata, dict): # If input was a dict and no XML found
+             metadata_source_for_extraction = original_input_for_metadata
+        
+        if metadata_source_for_extraction is not None:
+            result["metadata"] = self.extract_metadata(metadata_source_for_extraction)
+        else:
+            result["metadata"] = self.extract_metadata({}) # Fallback to empty metadata
 
-        # Add current and next hour prices
+        # Current/Next hour prices (BasePriceParser methods expect UTC ISO keys if tz_service is UTC)
+        # Since ENTSO-E hourly_raw keys are UTC ISO, this should work correctly.
         result["current_price"] = self._get_current_price(result["hourly_raw"])
         result["next_hour_price"] = self._get_next_hour_price(result["hourly_raw"])
 
-        # Add metadata
-        metadata_source = data if isinstance(data, str) else (data.get("xml_responses", [None])[0] or data.get("raw_data"))
-        if metadata_source:
-            result["metadata"] = self.extract_metadata(metadata_source)
-        else:
-            result["metadata"] = self.extract_metadata({})
+        _LOGGER.debug(f"ENTSOE Parser: Final aggregated hourly_raw size: {len(all_hourly_prices)}")
+        _LOGGER.debug(f"ENTSOE Parser: Final currency: {result['currency']}, Final timezone: {result['timezone']}")
+        # _LOGGER.debug(f"ENTSOE Parser: Final hourly_raw content for {result['source']}: {all_hourly_prices}") # Can be too verbose
 
-        # Add timezone info
-        if isinstance(data, dict) and data.get("api_timezone"):
-            result["timezone"] = data["api_timezone"]
-        else:
-            result["timezone"] = "Etc/UTC"
-
-        # Validate the data
-        if not self.validate_parsed_data(result):
-            _LOGGER.warning(f"ENTSOE data validation failed for final result: {result}")
-
-        _LOGGER.debug(f"ENTSOE Parser: Returning parsed data with keys: {list(result.keys())}")
         return result
 
     def extract_metadata(self, data: Any) -> Dict[str, Any]:
