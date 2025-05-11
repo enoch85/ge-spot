@@ -187,35 +187,39 @@ function update_manifest {
     fi
 
     # Update README Version Badge
-    local readme_path="README.md"
-    if [[ ! -f "$readme_path" ]]; then
-        error_log "README file not found at: $readme_path"
-        # Don't exit, but log the error and skip README update
+    if [[ "$IS_BETA" == true ]]; then
+        info_log "Skipping README version badge update for beta release."
     else
-        local current_readme_version=$(grep -o 'badge/version-.*-blue.svg' "$readme_path" | sed -n 's/badge\/version-\(.*\)-blue.svg/\1/p')
-        # Remove 'v' prefix from tag for comparison if needed, badge usually doesn't have 'v'
-        local plain_version_tag="${version_tag#v}" 
-
-        if [[ "$current_readme_version" == "$plain_version_tag" ]]; then
-            info_log "Version badge is already set to ${plain_version_tag} in ${readme_path}"
+        local readme_path="README.md"
+        if [[ ! -f "$readme_path" ]]; then
+            error_log "README file not found at: $readme_path"
+            # Don't exit, but log the error and skip README update
         else
-            debug_log "Updating version badge in: ${readme_path}"
-            # Use a portable sed command that works on both Linux and macOS (Darwin)
-            # It uses a temporary file to avoid in-place editing issues across platforms.
-            local temp_readme=$(mktemp)
-            sed "s|badge/version-.*-blue.svg|badge/version-${plain_version_tag}-blue.svg|" "$readme_path" > "$temp_readme" && mv "$temp_readme" "$readme_path"
-            
-            if [[ $? -eq 0 ]]; then
-                 success_log "Version badge updated to ${plain_version_tag} in ${readme_path}"
-                 readme_changed=true
+            local current_readme_version=$(grep -o 'badge/version-.*-blue.svg' "$readme_path" | sed -n 's/badge\\/version-\\(.*\\)-blue.svg/\\1/p')
+            # Remove 'v' prefix from tag for comparison if needed, badge usually doesn't have 'v'
+            local plain_version_tag="${version_tag#v}" 
+
+            if [[ "$current_readme_version" == "$plain_version_tag" ]]; then
+                info_log "Version badge is already set to ${plain_version_tag} in ${readme_path}"
             else
-                 error_log "Failed to update version badge in ${readme_path}"
-                 # Don't exit, but log the error
+                debug_log "Updating version badge in: ${readme_path}"
+                # Use a portable sed command that works on both Linux and macOS (Darwin)
+                # It uses a temporary file to avoid in-place editing issues across platforms.
+                local temp_readme=$(mktemp)
+                sed "s|badge/version-.*-blue.svg|badge/version-${plain_version_tag}-blue.svg|" "$readme_path" > "$temp_readme" && mv "$temp_readme" "$readme_path"
+                
+                if [[ $? -eq 0 ]]; then
+                     success_log "Version badge updated to ${plain_version_tag} in ${readme_path}"
+                     readme_changed=true
+                else
+                     error_log "Failed to update version badge in ${readme_path}"
+                     # Don't exit, but log the error
+                fi
+                # Clean up temp file if it still exists (e.g., on mv failure)
+                rm -f "$temp_readme"
             fi
-            # Clean up temp file if it still exists (e.g., on mv failure)
-            rm -f "$temp_readme"
         fi
-    fi
+    fi # End of IS_BETA check for README update
 
     # Return 0 if any file changed, 1 otherwise (Bash convention: 0=success/changed, non-zero=failure/no change)
     if [[ "$manifest_changed" == true || "$readme_changed" == true ]]; then
