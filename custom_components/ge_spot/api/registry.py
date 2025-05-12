@@ -1,29 +1,28 @@
-\
 # filepath: /workspaces/ge-spot/custom_components/ge_spot/api/registry.py
 import yaml
 from pathlib import Path
 from typing import Type, List, Dict, Any
 
-from .base_adapter import BaseAPIAdapter
+from .base_api import BaseAPI # Changed from BaseAPIAdapter
 
-# Global mapping: adapter_name -> Adapter class
-ADAPTER_REGISTRY: Dict[str, Type[BaseAPIAdapter]] = {}
+# Global mapping: api_name -> API class
+API_REGISTRY: Dict[str, Type[BaseAPI]] = {} # Changed from ADAPTER_REGISTRY and BaseAPIAdapter
 
 
-def register_adapter(
+def register_api( # Changed from register_adapter
     name: str,
     regions: List[str],
     default_priority: int = 0
 ):
     """
-    Decorator to register an adapter class under a given name,
+    Decorator to register an API class under a given name,
     and annotate which regions it supports.
     """
-    def decorator(cls: Type[BaseAPIAdapter]) -> Type[BaseAPIAdapter]:
-        cls.adapter_name = name
+    def decorator(cls: Type[BaseAPI]) -> Type[BaseAPI]: # Changed from BaseAPIAdapter
+        cls.api_name = name # Changed from adapter_name
         cls.supported_regions = regions
         cls.default_priority = default_priority
-        ADAPTER_REGISTRY[name] = cls
+        API_REGISTRY[name] = cls # Changed from ADAPTER_REGISTRY
         return cls
     return decorator
 
@@ -51,31 +50,31 @@ def get_chain_for_region(region: str) -> List[str]:
         return []
 
 
-def create_adapters_for_region(
+def create_apis_for_region( # Changed from create_adapters_for_region
     region: str,
     config: Dict[str, Any], # General config for the integration
     session: Any, # HTTP session
-) -> List[BaseAPIAdapter]:
+) -> List[BaseAPI]: # Changed from BaseAPIAdapter
     """
-    Instantiates adapters in the order defined by the region's YAML.
-    Unrecognized adapter names are skipped.
-    Passes relevant parts of the config to each adapter.
+    Instantiates APIs in the order defined by the region's YAML.
+    Unrecognized API names are skipped.
+    Passes relevant parts of the config to each API.
     """
     chain = get_chain_for_region(region)
-    instances: List[BaseAPIAdapter] = []
+    instances: List[BaseAPI] = [] # Changed from BaseAPIAdapter
     for name in chain:
-        AdapterCls = ADAPTER_REGISTRY.get(name)
-        if AdapterCls:
-            # Pass the main config and session to the adapter's constructor
-            # The adapter can then pick what it needs.
-            instances.append(AdapterCls(config=config, session=session))
+        ApiCls = API_REGISTRY.get(name) # Changed from AdapterCls and ADAPTER_REGISTRY
+        if ApiCls:
+            # Pass the main config and session to the API's constructor
+            # The API can then pick what it needs.
+            instances.append(ApiCls(config=config, session=session)) # Changed from AdapterCls
     return instances
 
-def get_adapter_class(name: str) -> Type[BaseAPIAdapter] | None:
-    """Retrieve an adapter class by its registered name."""
-    return ADAPTER_REGISTRY.get(name)
+def get_api_class(name: str) -> Type[BaseAPI] | None: # Changed from get_adapter_class and BaseAPIAdapter
+    """Retrieve an API class by its registered name."""
+    return API_REGISTRY.get(name) # Changed from ADAPTER_REGISTRY
 
-def get_all_registered_adapters() -> Dict[str, Type[BaseAPIAdapter]]:
-    """Retrieve all registered adapter classes."""
-    return ADAPTER_REGISTRY.copy()
+def get_all_registered_apis() -> Dict[str, Type[BaseAPI]]: # Changed from get_all_registered_adapters and BaseAPIAdapter
+    """Retrieve all registered API classes."""
+    return API_REGISTRY.copy() # Changed from ADAPTER_REGISTRY
 

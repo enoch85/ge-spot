@@ -1,32 +1,25 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, cast
+from datetime import datetime, timezone # Removed timedelta as it's not directly used here
+from typing import Any, Dict, List
 
 import aiohttp
 
-from custom_components.ge_spot.api.base_adapter import BaseAPIAdapter, PriceData
-from custom_components.ge_spot.api.registry import register_adapter
-from custom_components.ge_spot.const import (
+from .base_api import BaseAPI, PriceData # Changed from BaseAPIAdapter
+from .registry import register_api # Changed from register_adapter
+from ..const import (
     API_RESPONSE_PRICE,
     API_RESPONSE_START_TIME,
     NETWORK_TIMEOUT,
-    SOURCE_TIBBER, # This will be added to sources.py
 )
-from custom_components.ge_spot.const.currencies import CURRENCY_EUR, CURRENCY_NOK, CURRENCY_SEK # Added currency imports
-from custom_components.ge_spot.utils.network import async_post_graphql_or_raise # Assuming a new utility for GraphQL
-from custom_components.ge_spot.utils.time import parse_iso_datetime_with_fallback
+from ..const.sources import SOURCE_TIBBER # Ensure this is defined in const.sources
+from ..utils.time import parse_iso_datetime_with_fallback
 
 _LOGGER = logging.getLogger(__name__)
 
-TIBBER_API_URL = "https://api.tibber.com/v1-beta/gql"
+TIBBER_GQL_API_URL = "https://api.tibber.com/v1-beta/gql"
 
-# Tibber API uses a GraphQL query. The market area is implicitly determined by the API token (linked to a home).
-# The currency is also returned by the API.
-# We define supported regions based on where Tibber operates and GE-Spot has areas.
-# Timezone is determined by the `startsAt` field which includes offset.
-
-# This query is from ha_epex_spot Tibber component
+# This query is from ha_epex_spot Tibber component and existing ge-spot adapter
 TIBBER_GRAPHQL_QUERY = """
 {
   viewer {
@@ -55,120 +48,125 @@ TIBBER_GRAPHQL_QUERY = """
 """
 
 # GE-Spot regions that Tibber might support. Token will determine actual availability.
-# Timezone hints are for reference; API provides offset.
-TIBBER_SUPPORTED_REGIONS_CONFIG = {
-    "DE-LU": {"default_currency": CURRENCY_EUR, "timezone_hint": "Europe/Berlin"}, # Germany
-    "NL":    {"default_currency": CURRENCY_EUR, "timezone_hint": "Europe/Amsterdam"},# Netherlands
-    "NO1":   {"default_currency": CURRENCY_NOK, "timezone_hint": "Europe/Oslo"},    # Norway (example area)
-    "NO2":   {"default_currency": CURRENCY_NOK, "timezone_hint": "Europe/Oslo"},
-    "NO3":   {"default_currency": CURRENCY_NOK, "timezone_hint": "Europe/Oslo"},
-    "NO4":   {"default_currency": CURRENCY_NOK, "timezone_hint": "Europe/Oslo"},
-    "NO5":   {"default_currency": CURRENCY_NOK, "timezone_hint": "Europe/Oslo"},
-    "SE1":   {"default_currency": CURRENCY_SEK, "timezone_hint": "Europe/Stockholm"}, # Sweden (example area)
-    "SE2":   {"default_currency": CURRENCY_SEK, "timezone_hint": "Europe/Stockholm"},
-    "SE3":   {"default_currency": CURRENCY_SEK, "timezone_hint": "Europe/Stockholm"},
-    "SE4":   {"default_currency": CURRENCY_SEK, "timezone_hint": "Europe/Stockholm"},
-    # Potentially others like AT, FR if Tibber expands and uses those currencies.
-}
+# Used for registration purposes.
+TIBBER_REGIONS_FOR_REGISTRATION = [
+    "DE-LU", "NL", "NO1", "NO2", "NO3", "NO4", "NO5", "SE1", "SE2", "SE3", "SE4", "AT", "BE", "FR"
+] # Expanded list based on common European areas
 
-@register_adapter(
+@register_api(
     name=SOURCE_TIBBER,
-    regions=list(TIBBER_SUPPORTED_REGIONS_CONFIG.keys()),
-    default_priority=80 # High, as it's often a direct user subscription
+    regions=TIBBER_REGIONS_FOR_REGISTRATION,
+    default_priority=20 # High priority as it's often user-specific and direct
 )
-class TibberAdapter(BaseAPIAdapter):
+class TibberAPI(BaseAPI): # Changed from TibberAdapter and BaseAPIAdapter
     """
-    Adapter for the Tibber API.
-    Fetches electricity prices using GraphQL. Requires an API token.
-    Tibber provides consumer prices (total, energy, tax). We will use 'energy' price.
+    API for Tibber.
+    Fetches personalized energy prices using GraphQL.
+    Requires an API token provided in the integration's configuration.
+    Tibber provides consumer prices (total); this is used for the price.
     """
 
-    def __init__(self, hass, api_key_manager, source_name: str, market_area: str, session: aiohttp.ClientSession, **kwargs):
-        super().__init__(hass, api_key_manager, source_name, market_area, session, **kwargs)
-        self._api_token = self.api_key_manager.get_api_key(self.source_name, self.market_area) # Uses source_name for key
+    def __init__(self, config: Dict[str, Any], session: aiohttp.ClientSession):
+        super().__init__(config, session)
+        # API token should be passed in the main component configuration
+        # and then into this API's config dict by the integration setup.
+        self._api_token = self._config.get("api_token") 
         if not self._api_token:
-            _LOGGER.error("API token for Tibber not found. Market area: %s", self.market_area)
+            _LOGGER.error(
+                "Tibber API token not provided in configuration for source %s.", 
+                SOURCE_TIBBER
+            )
+            # Further actions (like preventing fetch) will be handled by checks in fetch_data
 
-
-    async def async_fetch_data(self, target_datetime: datetime) -> PriceData:
+    async def fetch_data(self, area: str) -> PriceData: # area is for context/logging
         """
         Fetches Tibber data using GraphQL.
-        The API returns today's and tomorrow's prices if available.
+        The API returns today's and tomorrow's prices if available, specific to the token's home.
+        The 'area' parameter is mainly for logging and consistency with BaseAPI.
         """
-        api_token = self.api_key
-        if not api_token:
-            _LOGGER.error("Tibber API token is missing. Cannot fetch data.")
-            # Use market_area specific default currency if available, else EUR
-            default_currency = TIBBER_SUPPORTED_REGIONS_CONFIG.get(self.market_area.upper(), {}).get("default_currency", CURRENCY_EUR)
-            return PriceData(hourly_raw=[], timezone="UTC", currency=default_currency, source=self.source_name, meta={"error": "API token missing"})
+        if not self._api_token:
+            _LOGGER.warning("Cannot fetch Tibber data: API token is missing. Area: %s", area)
+            return PriceData(hourly_raw=[], timezone="UTC", currency="", source=SOURCE_TIBBER, meta={"error": "API token missing", "area": area})
 
         payload = {"query": TIBBER_GRAPHQL_QUERY}
-        auth_header = f"Bearer {api_token}"
+        headers = {"Authorization": f"Bearer {self._api_token}"}
 
-        _LOGGER.debug("Fetching Tibber data for user associated with token (market area %s for context)", self.market_area)
+        _LOGGER.debug("Fetching Tibber data (area: %s)", area)
 
         raw_response_preview = None
-        api_currency = None
+        api_currency = "" # Placeholder, determined from the first valid API response entry
+
         try:
-            json_response = await async_post_graphql_or_raise(
-                self._session, TIBBER_API_URL, payload, auth_header, timeout=NETWORK_TIMEOUT
-            )
-            raw_response_preview = str(json_response)[:300]
+            async with self._session.post(
+                TIBBER_GQL_API_URL,
+                json=payload, # GraphQL uses JSON payload
+                headers=headers,
+                timeout=NETWORK_TIMEOUT,
+            ) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    _LOGGER.error(
+                        "Error fetching Tibber data: %s - %s. Area: %s",
+                        resp.status, error_text[:200], area
+                    )
+                    resp.raise_for_status() # Let aiohttp handle non-200 as an exception
+                
+                json_response = await resp.json()
+                raw_response_preview = str(json_response)[:300]
+
+            if "errors" in json_response and json_response["errors"]:
+                _LOGGER.error("Tibber API returned GraphQL errors: %s. Area: %s", json_response["errors"], area)
+                return PriceData(hourly_raw=[], timezone="UTC", currency=api_currency, source=SOURCE_TIBBER, meta={"error": "GraphQL API error", "details": json_response["errors"], "raw_response_preview": raw_response_preview, "area": area})
 
             # Navigate through the GraphQL response structure
-            if not json_response or "data" not in json_response or not json_response["data"]:
-                _LOGGER.warning("Tibber response malformed or missing 'data': %s", raw_response_preview)
-                raise ValueError("Malformed Tibber response: no data field")
+            homes = json_response.get("data", {}).get("viewer", {}).get("homes")
+            if not homes or not isinstance(homes, list) or not homes[0]:
+                _LOGGER.warning("No homes found in Tibber response for area %s. Ensure token has access. Response: %s", area, raw_response_preview)
+                return PriceData(hourly_raw=[], timezone="UTC", currency=api_currency, source=SOURCE_TIBBER, meta={"error": "No homes data in response", "raw_response_preview": raw_response_preview, "area": area})
 
-            viewer = json_response["data"].get("viewer")
-            if not viewer or not viewer.get("homes"):
-                _LOGGER.warning("Tibber: No homes found in response for this token. Ensure token has access to a home with a subscription. Response: %s", raw_response_preview)
-                # This might mean the token is valid but has no associated home/subscription for price data.
-                # Return empty but not as a hard error that would trigger fallback to other sources if this is the *only* source.
-                default_currency = TIBBER_SUPPORTED_REGIONS_CONFIG.get(self.market_area.upper(), {}).get("default_currency", CURRENCY_EUR)
-                return PriceData(hourly_raw=[], timezone="UTC", currency=default_currency, source=self.source_name, meta={"error": "No homes with price subscription found for token", "raw_response_preview": raw_response_preview})
-            
-            # Assuming the first home is the relevant one, as per most Tibber integrations
-            home = viewer["homes"][0]
-            price_info = home.get("currentSubscription", {}).get("priceInfo")
+            price_info = homes[0].get("currentSubscription", {}).get("priceInfo")
             if not price_info:
-                _LOGGER.warning("Tibber: No currentSubscription.priceInfo found for home. Response: %s", raw_response_preview)
-                default_currency = TIBBER_SUPPORTED_REGIONS_CONFIG.get(self.market_area.upper(), {}).get("default_currency", CURRENCY_EUR)
-                return PriceData(hourly_raw=[], timezone="UTC", currency=default_currency, source=self.source_name, meta={"error": "No priceInfo found for home subscription", "raw_response_preview": raw_response_preview})
+                _LOGGER.warning("No priceInfo found in Tibber response for area %s. Response: %s", area, raw_response_preview)
+                return PriceData(hourly_raw=[], timezone="UTC", currency=api_currency, source=SOURCE_TIBBER, meta={"error": "No priceInfo in response", "raw_response_preview": raw_response_preview, "area": area})
 
             api_entries = []
-            if "today" in price_info and price_info["today"]:
+            if price_info.get("today") and isinstance(price_info["today"], list):
                 api_entries.extend(price_info["today"])
-            if "tomorrow" in price_info and price_info["tomorrow"]:
+            if price_info.get("tomorrow") and isinstance(price_info["tomorrow"], list):
                 api_entries.extend(price_info["tomorrow"])
 
             if not api_entries:
-                _LOGGER.info("No price entries (today/tomorrow) found in Tibber response for %s.", self.market_area)
-                default_currency = TIBBER_SUPPORTED_REGIONS_CONFIG.get(self.market_area.upper(), {}).get("default_currency", CURRENCY_EUR)
-                return PriceData(hourly_raw=[], timezone="UTC", currency=default_currency, source=self.source_name, meta={"error": "No price entries in API response", "raw_response_preview": raw_response_preview})
+                _LOGGER.info("No price entries (today/tomorrow) found in Tibber response for area %s.", area)
+                return PriceData(hourly_raw=[], timezone="UTC", currency=api_currency, source=SOURCE_TIBBER, meta={"info": "No price entries in API response", "raw_response_preview": raw_response_preview, "area": area})
 
             hourly_prices: List[Dict[str, Any]] = []
             processed_timestamps = set()
             
-            # Determine currency from the first valid entry
+            # Determine currency from the first valid entry that has it
             for entry in api_entries:
-                if entry and "currency" in entry:
+                if entry and isinstance(entry, dict) and entry.get("currency"):
                     api_currency = entry["currency"].upper()
                     break
-            if not api_currency: # Fallback if no currency found in entries
-                api_currency = TIBBER_SUPPORTED_REGIONS_CONFIG.get(self.market_area.upper(), {}).get("default_currency", CURRENCY_EUR)
-                _LOGGER.warning("Could not determine currency from Tibber API response, defaulting to %s for area %s", api_currency, self.market_area)
+            if not api_currency: # Fallback if no currency found in any entry
+                _LOGGER.warning("Could not determine currency from Tibber API response entries. Area: %s", area)
+                # No default currency here, PriceData will reflect empty string or rely on caller to handle.
 
             for entry in api_entries:
                 try:
-                    if not entry or "startsAt" not in entry or "total" not in entry or entry["total"] is None:
+                    if not isinstance(entry, dict) or entry.get("startsAt") is None or entry.get("total") is None:
                         _LOGGER.debug("Skipping Tibber entry with missing critical data: %s", entry)
                         continue
 
-                    start_time_str = entry["startsAt"]
-                    price_value_str = entry["total"]
+                    start_at_str = entry["startsAt"]
+                    total_price_str = entry["total"]
+                    entry_currency_str = entry.get("currency")
+
+                    # Validate currency consistency if already determined
+                    if api_currency and entry_currency_str and api_currency != entry_currency_str.upper():
+                        _LOGGER.warning("Inconsistent currency in Tibber entry. Expected %s, got %s. Entry: %s", api_currency, entry_currency_str.upper(), entry)
+                        # Potentially skip or handle as an error, for now, we log and proceed with the first currency found.
                     
-                    start_time_dt = parse_iso_datetime_with_fallback(start_time_str)
+                    start_time_dt = parse_iso_datetime_with_fallback(start_at_str)
                     if not start_time_dt:
                         _LOGGER.warning("Could not parse start time from Tibber entry: %s", entry)
                         continue
@@ -180,41 +178,41 @@ class TibberAdapter(BaseAPIAdapter):
                         continue
                     processed_timestamps.add(start_time_utc)
 
-                    # Price is total, includes tax, in the currency reported by API
-                    price_value = round(float(price_value_str), 5) 
+                    # Price is 'total', includes taxes, in the currency reported by API (per kWh)
+                    price_value = round(float(total_price_str), 5) 
 
                     hourly_prices.append({
                         API_RESPONSE_START_TIME: start_time_utc,
                         API_RESPONSE_PRICE: price_value,
                     })
                 except (ValueError, TypeError, KeyError) as e:
-                    _LOGGER.warning("Could not parse price/timestamp from Tibber entry for %s: %s (entry: %s)", self.market_area, e, entry)
+                    _LOGGER.warning("Could not parse price/timestamp from Tibber entry (area %s): %s (entry: %s)", area, e, entry)
                     continue
             
             hourly_prices.sort(key=lambda x: x[API_RESPONSE_START_TIME])
 
-            _LOGGER.info("Successfully processed %d unique price points from Tibber for %s", len(hourly_prices), self.market_area)
+            _LOGGER.info("Successfully processed %d unique hourly price points from Tibber (area: %s)", len(hourly_prices), area)
             return PriceData(
                 hourly_raw=hourly_prices,
-                timezone="UTC", # Data is converted to UTC start times
+                timezone="UTC", # All start times are converted to UTC
                 currency=api_currency, # Currency from API response
-                source=self.source_name,
-                meta={"api_url": TIBBER_API_URL, "raw_unit": f"{api_currency}/kWh", "raw_response_preview": raw_response_preview}
+                source=SOURCE_TIBBER,
+                meta={
+                    "api_url": TIBBER_GQL_API_URL, 
+                    "raw_unit_from_api": f"{api_currency}/kWh" if api_currency else "kWh", 
+                    "raw_response_preview": raw_response_preview,
+                    "area": area # Changed from area_hint
+                    }
             )
 
         except aiohttp.ClientError as e:
-            _LOGGER.error("Network error fetching Tibber data for %s: %s", self.market_area, e)
-            raise
-        except ValueError as e: # Catch specific errors like malformed JSON or structure issues
-            _LOGGER.error("Data error processing Tibber response for %s: %s. Preview: %s", self.market_area, e, raw_response_preview)
-            # For data errors that are not network related, we might not want to fall back if Tibber is the primary choice.
-            # However, returning an empty PriceData with error meta is safer.
-            default_currency = TIBBER_SUPPORTED_REGIONS_CONFIG.get(self.market_area.upper(), {}).get("default_currency", CURRENCY_EUR)
-            return PriceData(hourly_raw=[], timezone="UTC", currency=default_currency, source=self.source_name, meta={"error": str(e), "raw_response_preview": raw_response_preview})
+            _LOGGER.error("Network error fetching Tibber data (area: %s): %s", area, e)
+            raise # Re-raise for FallbackManager
+        except asyncio.TimeoutError:
+            _LOGGER.error("Timeout fetching Tibber data (area: %s)", area)
+            return PriceData(hourly_raw=[], timezone="UTC", currency=api_currency, source=SOURCE_TIBBER, meta={"error": "Timeout during API call", "api_url": TIBBER_GQL_API_URL, "area": area})
         except Exception as e:
-            _LOGGER.error("Unexpected error processing Tibber data for %s: %s. Preview: %s", self.market_area, e, raw_response_preview)
-            raise
+            _LOGGER.error("Unexpected error processing Tibber data (area: %s): %s. Preview: %s", area, e, raw_response_preview)
+            raise # Re-raise for FallbackManager
 
-    @property
-    def name(self) -> str:
-        return f"Tibber ({self.market_area})"
+    # No specific 'name' property as per BaseAPI structure.

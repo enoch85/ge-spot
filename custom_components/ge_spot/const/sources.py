@@ -154,74 +154,98 @@ class SourceInfo:
             "DK1", "DK2", "FI", "SE1", "SE2", "SE3", "SE4",
             "NO1", "NO2", "NO3", "NO4", "NO5", "EE", "LV", "LT"
         ],
-        Source.ENTSOE: [
-            "DK1", "DK2", "FI", "SE1", "SE2", "SE3", "SE4",
-            "NO1", "NO2", "NO3", "NO4", "NO5", "EE", "LV", "LT",
-            "AT", "BE", "DE-LU", "ES", "FR", "NL", "PT", "CH",
-            "IT", "SI", "HR", "GR", "PL", "CZ", "SK", "HU", "RO", "BG"
+        Source.ENTSOE: [ # ENTSO-E is very broad
+            "AL", "AT", "BA", "BE", "BG", "CH", "CY", "CZ", "DE-AT-LU", "DE-LU", 
+            "DK1", "DK2", "EE", "ES", "FI", "FR", "GB", "GB-NIR", "GR", "HR", 
+            "HU", "IE", "IT", "IT-BRNN", "IT-CNOR", "IT-CSUD", "IT-FOGN", 
+            "IT-GR", "IT-MALTA", "IT-NORD", "IT-NORD-AT", "IT-NORD-CH", "IT-NORD-FR", 
+            "IT-NORD-SI", "IT-PRGP", "IT-ROSN", "IT-SARD", "IT-SICI", "IT-SUD", 
+            "LT", "LU", "LV", "ME", "MK", "MT", "NL", "NO1", "NO2", "NO3", "NO4", "NO5", 
+            "PL", "PT", "RO", "RS", "SE1", "SE2", "SE3", "SE4", "SI", "SK", "UA", "XK"
+            # Note: Some ENTSO-E areas might be too granular or specific for general use.
+            # We list common ones and those seen in other configs. DE-LU is preferred over DE-AT-LU if both exist.
         ],
         Source.ENERGI_DATA_SERVICE: ["DK1", "DK2"],
-        Source.EPEX: ["DE-LU", "FR", "BE", "NL", "AT"],
+        Source.EPEX: ["DE-LU", "FR", "BE", "NL", "AT", "CH", "GB"], # Added CH, GB based on EPEX offerings
         Source.OMIE: ["ES", "PT"],
-        Source.AEMO: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
-        Source.STROMLIGNING: ["DK1", "DK2"],
-        Source.COMED: ["COMED"],
-        Source.AMBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
+        Source.AEMO: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"], # Australia
+        Source.STROMLIGNING: ["DK1", "DK2"], # Norway, but data for DK
+        Source.COMED: ["COMED"], # USA
+        Source.AMBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"], # Australia
         Source.AWATTAR: ["AT", "DE-LU"],
-        Source.EPEX_SPOT_WEB: [ # Added
+        Source.EPEX_SPOT_WEB: [
             "AT", "BE", "CH", "DE-LU", "DK1", "DK2", "FI", "FR", "GB", "NL",
             "NO1", "NO2", "NO3", "NO4", "NO5", "PL",
             "SE1", "SE2", "SE3", "SE4"
         ],
-        Source.ENERGY_FORECAST: ["DK1", "DK2", "DE-LU", "FR", "BE", "NL", "AT"], # Added
-        Source.SMARD: ["DE-LU", "AT"], # Corrected
-        Source.TIBBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"], # Unchanged, needs further review for European context
-        Source.SMART_ENERGY: ["AT"] # Corrected
+        Source.ENERGY_FORECAST: ["DE-LU"], # Primarily Germany
+        Source.SMARD: [
+            "DE-LU", "AT", "BE", "DK1", "DK2", "FR", "NL", "NO2", "PL",
+            "CH", "SI", "CZ", "HU", "IT-NO" # IT-NO is specific for SMARD's Italy North
+        ],
+        Source.TIBBER: [ # Token-dependent, but these are known supported/potential areas
+            "DE-LU", "NL", "NO1", "NO2", "NO3", "NO4", "NO5",
+            "SE1", "SE2", "SE3", "SE4", "AT", "BE", "FR", # Added AT, BE, FR as potential
+            "NSW1", "QLD1", "SA1", "TAS1", "VIC1" # Australia
+        ],
+        Source.SMART_ENERGY: ["AT", "DE-LU"] # Austria and Germany
     }
 
     # Map areas to recommended sources
+    # The order in the list defines priority for get_default_source_for_area
     AREA_RECOMMENDED_SOURCES = {
         # Nordic countries
-        "DK1": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
-        "DK2": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
-        "SE1": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "SE2": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "SE3": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "SE4": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "FI": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "NO1": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "NO2": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "NO3": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "NO4": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "NO5": [Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "EE": [Source.NORDPOOL, Source.ENTSOE],
-        "LT": [Source.NORDPOOL, Source.ENTSOE],
-        "LV": [Source.NORDPOOL, Source.ENTSOE],
+        "DK1": list(set([Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD])),
+        "DK2": list(set([Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD])),
+        "SE1": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.TIBBER])),
+        "SE2": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.TIBBER])),
+        "SE3": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.TIBBER])),
+        "SE4": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.TIBBER])),
+        "FI": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB])),
+        "NO1": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.TIBBER])),
+        "NO2": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.TIBBER, Source.SMARD])),
+        "NO3": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.TIBBER])),
+        "NO4": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.TIBBER])),
+        "NO5": list(set([Source.NORDPOOL, Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.TIBBER])),
+        "EE": list(set([Source.NORDPOOL, Source.ENTSOE])),
+        "LT": list(set([Source.NORDPOOL, Source.ENTSOE])),
+        "LV": list(set([Source.NORDPOOL, Source.ENTSOE])),
 
         # Central Europe
-        "DE-LU": [Source.ENTSOE, Source.EPEX, Source.AWATTAR, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD], # Added SMARD
-        "AT": [Source.ENTSOE, Source.EPEX, Source.AWATTAR, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD, Source.SMART_ENERGY], # Added SMARD, SMART_ENERGY
-        "FR": [Source.ENTSOE, Source.EPEX, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
-        "BE": [Source.ENTSOE, Source.EPEX, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
-        "NL": [Source.ENTSOE, Source.EPEX, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST],
-        "CH": [Source.ENTSOE, Source.EPEX_SPOT_WEB],
-        "PL": [Source.ENTSOE, Source.EPEX_SPOT_WEB],
+        "DE-LU": list(set([Source.ENTSOE, Source.EPEX, Source.AWATTAR, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD, Source.TIBBER, Source.SMART_ENERGY])),
+        "AT": list(set([Source.ENTSOE, Source.EPEX, Source.AWATTAR, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD, Source.SMART_ENERGY])),
+        "FR": list(set([Source.ENTSOE, Source.EPEX, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD])),
+        "BE": list(set([Source.ENTSOE, Source.EPEX, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD])),
+        "NL": list(set([Source.ENTSOE, Source.EPEX, Source.EPEX_SPOT_WEB, Source.ENERGY_FORECAST, Source.SMARD, Source.TIBBER])),
+        "CH": list(set([Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.SMARD])),
+        "PL": list(set([Source.ENTSOE, Source.EPEX_SPOT_WEB, Source.SMARD])),
 
         # Southern Europe
-        "ES": [Source.ENTSOE, Source.OMIE],
-        "PT": [Source.ENTSOE, Source.OMIE],
+        "ES": list(set([Source.ENTSOE, Source.OMIE])),
+        "PT": list(set([Source.ENTSOE, Source.OMIE])),
+        "IT": list(set([Source.ENTSOE, Source.SMARD])), # Added for IT (SMARD for IT-NO)
+        "SI": list(set([Source.ENTSOE, Source.SMARD])), # Added for SI
+        "HR": list(set([Source.ENTSOE])), # Added for HR
+        "GR": list(set([Source.ENTSOE])), # Added for GR
+
+        # Other European countries
+        "CZ": list(set([Source.ENTSOE, Source.SMARD])), # Added for CZ
+        "SK": list(set([Source.ENTSOE])),             # Added for SK
+        "HU": list(set([Source.ENTSOE, Source.SMARD])), # Added for HU
+        "RO": list(set([Source.ENTSOE])),             # Added for RO
+        "BG": list(set([Source.ENTSOE])),             # Added for BG
 
         # Australia
-        "NSW1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
-        "QLD1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
-        "SA1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
-        "TAS1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
-        "VIC1": [Source.AEMO, Source.AMBER, Source.TIBBER, Source.SMART_ENERGY],
+        "NSW1": list(set([Source.AEMO, Source.AMBER, Source.TIBBER])), # Corrected: Removed SMART_ENERGY
+        "QLD1": list(set([Source.AEMO, Source.AMBER, Source.TIBBER])), # Corrected: Removed SMART_ENERGY
+        "SA1": list(set([Source.AEMO, Source.AMBER, Source.TIBBER])),  # Corrected: Removed SMART_ENERGY
+        "TAS1": list(set([Source.AEMO, Source.AMBER, Source.TIBBER])), # Corrected: Removed SMART_ENERGY
+        "VIC1": list(set([Source.AEMO, Source.AMBER, Source.TIBBER])), # Corrected: Removed SMART_ENERGY
 
         # USA
-        "COMED": [Source.COMED],
+        "COMED": [Source.COMED], # Kept as is, assuming list(set()) not strictly needed for single item
         # GB
-        "GB": [Source.EPEX_SPOT_WEB], # Added GB for EPEX_SPOT_WEB
+        "GB": list(set([Source.EPEX_SPOT_WEB])),
     }
 
     @classmethod

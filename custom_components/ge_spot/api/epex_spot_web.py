@@ -6,19 +6,13 @@ from typing import Any, Dict, List
 import aiohttp
 from bs4 import BeautifulSoup
 
-from custom_components.ge_spot.api.base_adapter import BaseAPIAdapter, PriceData
-from custom_components.ge_spot.api.registry import register_adapter
-from custom_components.ge_spot.const import (
-    API_RESPONSE_PRICE,
-    API_RESPONSE_START_TIME,
-    CURRENCY_EUR,
-    CURRENCY_GBP,
-    NETWORK_TIMEOUT,
-    SOURCE_EPEX_SPOT_WEB, # Will be added to const/sources.py
-)
-# Assuming these utils exist and are importable
-from custom_components.ge_spot.utils.network import async_get_json_or_raise # Though this is for JSON, we'll adapt or make a new one for HTML
-from custom_components.ge_spot.utils.time import parse_iso_datetime_with_fallback, get_area_timezone
+from .base_api import BaseAPI, PriceData # Changed from BaseAPIAdapter
+from .registry import register_api # Changed from register_adapter
+from ..const.api import API_RESPONSE_PRICE, API_RESPONSE_START_TIME # Specific import
+from ..const.currencies import CURRENCY_EUR, CURRENCY_GBP # Specific import
+from ..const.network import NETWORK_TIMEOUT # Specific import
+from ..const.sources import SOURCE_EPEX_SPOT_WEB
+from ..utils.time import get_area_timezone # parse_iso_datetime_with_fallback was not used by this file.
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,20 +82,21 @@ async def _async_post_form_and_get_json_or_raise(
         _LOGGER.warning("Unexpected error posting form data to %s with params %s: %s", url, params, e)
         raise
 
-@register_adapter(
+@register_api( # Changed from register_adapter
     name=SOURCE_EPEX_SPOT_WEB,
     regions=list(EPEX_SPOT_WEB_MARKET_CONFIG.keys()),
     default_priority=60, # Arbitrary, can be adjusted
 )
-class EpexSpotWebAdapter(BaseAPIAdapter):
+class EpexSpotWebAPI(BaseAPI): # Changed from EpexSpotWebAdapter and BaseAPIAdapter
     """
-    Adapter for the EPEX Spot website scraper.
+    API for the EPEX Spot website scraper.
     Fetches day-ahead market prices by simulating form submissions.
     """
 
-    def __init__(self, hass, api_key_manager, source_name: str, market_area: str, session: aiohttp.ClientSession, **kwargs):
-        super().__init__(hass, api_key_manager, source_name, market_area, session, **kwargs)
-        self._market_config = EPEX_SPOT_WEB_MARKET_CONFIG.get(self.market_area.upper())
+    def __init__(self, config: Dict[str, Any], session: aiohttp.ClientSession): # Removed market_area from constructor
+        super().__init__(config, session) # Call to super
+        self.market_area = None # Initialize market_area to None
+        self._market_config = None # Initialize _market_config to None
 
     async def _fetch_day_data(self, delivery_date_local: datetime) -> List[Dict[str, Any]]:
         """Fetches and parses data for a single delivery day."""
@@ -112,7 +107,7 @@ class EpexSpotWebAdapter(BaseAPIAdapter):
 
         trading_date_local = delivery_date_local - timedelta(days=1)
         
-        # These parameters are based on the ha_epex_spot component's structure
+        # These parameters are based on the ha_epex_spot component\'s structure
         params_query = {
             "market_area": self._market_config["api_market_area"],
             "trading_date": _to_epex_date_string(trading_date_local),
@@ -145,7 +140,7 @@ class EpexSpotWebAdapter(BaseAPIAdapter):
 
         try:
             json_commands = await _async_post_form_and_get_json_or_raise(
-                self._session, EPEX_SPOT_WEB_API_URL, params=params_query, data=form_data_payload
+                self.session, EPEX_SPOT_WEB_API_URL, params=params_query, data=form_data_payload # Use self.session
             )
         except Exception as e:
             _LOGGER.warning("Failed to fetch EPEX Spot Web data for %s, delivery %s: %s", self.market_area, delivery_date_local.date(), e)
@@ -183,9 +178,10 @@ class EpexSpotWebAdapter(BaseAPIAdapter):
             return []
 
         hourly_prices: List[Dict[str, Any]] = []
-        # The delivery_date_local is in the market's local timezone (e.g., Europe/Paris for FR)
+        # The delivery_date_local is in the market\'s local timezone (e.g., Europe/Paris for FR)
         # We need to construct UTC timestamps for the PriceData object.
-        market_timezone = get_area_timezone(self._market_config["timezone_hint"]) # Use the hint for the market's local time
+        market_timezone_str = self._market_config["timezone_hint"]
+        market_timezone = get_area_timezone(market_timezone_str) # Use the hint for the market\'s local time
         
         current_hour_start_local = delivery_date_local.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=market_timezone)
 
@@ -237,30 +233,37 @@ class EpexSpotWebAdapter(BaseAPIAdapter):
             finally:
                 # Always advance to the next hour slot
                 current_hour_start_local += timedelta(minutes=self._market_config["duration"])
-                # Stop if we've processed 24 hours for a 60-min duration product
+                # Stop if we\'ve processed 24 hours for a 60-min duration product
                 if self._market_config["duration"] == 60 and row_idx >= 23:
                     break 
                 # Add similar logic for 30-min products if they become relevant (48 rows)
         
         return hourly_prices
 
-    async def async_fetch_data(self, target_datetime: datetime) -> PriceData:
+    async def fetch_data(self, area: str) -> PriceData: # Renamed to fetch_data, takes area
         """
         Fetches EPEX Spot Web data. It fetches for the target_datetime (today)
         and the next day, as prices are published day-ahead.
+        The 'area' parameter from BaseAPI.fetch_data is used to confirm/set market_area.
         """
-        if not self._market_config:
-            _LOGGER.error(
-                "Cannot fetch EPEX Spot Web data for %s: market area configuration is missing.", self.market_area
-            )
-            return PriceData(hourly_raw=[], timezone="UTC", currency=CURRENCY_EUR, source=self.source_name, meta={"error": f"Market area {self.market_area} not configured for EPEX Spot Web"})
+        # If market_area was not set in __init__ or needs to be confirmed/changed based on 'area'
+        if not self.market_area or self.market_area.upper() != area.upper():
+            self.market_area = area.upper()
+            self._market_config = EPEX_SPOT_WEB_MARKET_CONFIG.get(self.market_area)
+            if not self._market_config:
+                 _LOGGER.error(
+                    "Cannot fetch EPEX Spot Web data for %s: market area configuration is missing.", self.market_area
+                )
+                 return PriceData(hourly_raw=[], timezone="UTC", currency=CURRENCY_EUR, source=SOURCE_EPEX_SPOT_WEB, meta={"error": f"Market area {self.market_area} not configured for EPEX Spot Web"})
 
-        # Determine the delivery dates to fetch based on the market's local timezone
-        # target_datetime is UTC. We need to find "today" and "tomorrow" in the market's local time.
-        market_timezone = get_area_timezone(self._market_config["timezone_hint"])
+        # Determine the delivery dates to fetch based on the market\'s local timezone
+        # target_datetime is UTC. We need to find "today" and "tomorrow" in the market\'s local time.
+        market_timezone_str = self._market_config["timezone_hint"]
+        market_timezone = get_area_timezone(market_timezone_str)
         
-        # Convert target_datetime (which is effectively 'now' in UTC) to market's local time to determine 'today' for that market
-        today_local_market_time = target_datetime.astimezone(market_timezone).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Use current UTC time to determine "today" in the market's local time
+        now_utc = datetime.now(timezone.utc)
+        today_local_market_time = now_utc.astimezone(market_timezone).replace(hour=0, minute=0, second=0, microsecond=0)
         tomorrow_local_market_time = today_local_market_time + timedelta(days=1)
 
         dates_to_fetch = [today_local_market_time, tomorrow_local_market_time]
@@ -271,12 +274,12 @@ class EpexSpotWebAdapter(BaseAPIAdapter):
         for delivery_date_local in dates_to_fetch:
             daily_prices = await self._fetch_day_data(delivery_date_local)
             all_hourly_prices.extend(daily_prices)
-            # We don't have a simple raw response preview here as it's parsed HTML from JSON commands
+            # We don\'t have a simple raw response preview here as it\'s parsed HTML from JSON commands
             raw_responses_preview.append(f"Fetched for {delivery_date_local.date()}: {len(daily_prices)} prices")
 
         if not all_hourly_prices:
-            _LOGGER.warning("No price data successfully fetched from EPEX Spot Web for %s for dates around %s", self.market_area, target_datetime.date())
-            return PriceData(hourly_raw=[], timezone="UTC", currency=self._market_config["currency"], source=self.source_name, meta={"error": "No data fetched", "fetch_attempts": raw_responses_preview})
+            _LOGGER.warning("No price data successfully fetched from EPEX Spot Web for %s for dates around %s", self.market_area, now_utc.date())
+            return PriceData(hourly_raw=[], timezone="UTC", currency=self._market_config["currency"], source=SOURCE_EPEX_SPOT_WEB, meta={"error": "No data fetched", "fetch_attempts": raw_responses_preview})
         
         # Sort and de-duplicate (though _fetch_day_data should provide unique, sorted for its day)
         all_hourly_prices.sort(key=lambda x: x[API_RESPONSE_START_TIME])
@@ -292,11 +295,11 @@ class EpexSpotWebAdapter(BaseAPIAdapter):
             hourly_raw=unique_hourly_prices,
             timezone="UTC", # All data is converted to UTC start times
             currency=self._market_config["currency"],
-            source=self.source_name,
-            meta={"api_url": EPEX_SPOT_WEB_API_URL, "raw_unit": f"{self._market_config['currency']}/MWh", "fetch_details": raw_responses_preview}
+            source=SOURCE_EPEX_SPOT_WEB, # Use constant from const.sources
+            meta={"api_url": EPEX_SPOT_WEB_API_URL, "raw_unit_from_api": f"{self._market_config['currency']}/MWh", "fetch_details": raw_responses_preview}
         )
 
-    @property
-    def name(self) -> str:
-        return f"EPEX Spot Web ({self.market_area})"
+    # Removed @property name as it's not part of BaseAPI structure
+    # def name(self) -> str:
+    #     return f"EPEX Spot Web ({self.market_area})"
 

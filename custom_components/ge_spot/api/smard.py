@@ -1,176 +1,229 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 import aiohttp
 
-from custom_components.ge_spot.api.base_adapter import BaseAPIAdapter, PriceData
-from custom_components.ge_spot.api.registry import register_adapter
-from custom_components.ge_spot.const import (
-    API_RESPONSE_PRICE,
-    API_RESPONSE_START_TIME,
-    CURRENCY_EUR,
-    NETWORK_TIMEOUT,
-    SOURCE_SMARD,
-)
-# Assuming these utils exist and are importable
-from custom_components.ge_spot.utils.network import async_get_json_or_raise
-from custom_components.ge_spot.utils.time import parse_iso_datetime_with_fallback
+from .base_api import BaseAPI, PriceData
+from .registry import register_api
+from ..const.api import API_RESPONSE_PRICE, API_RESPONSE_START_TIME
+from ..const.currencies import CURRENCY_EUR
+from ..const.network import NETWORK_TIMEOUT
+from ..const.sources import SOURCE_SMARD # Ensure this is defined in const/sources.py
 
 _LOGGER = logging.getLogger(__name__)
 
-SMARD_API_URL_BASE = "https://www.smard.de/app/chart_data"
-
-# Based on ha_epex_spot/EPEXSpot/SMARD/__init__.py MARKET_AREA_MAP
-# and ge-spot's area naming conventions.
-SMARD_MARKET_CONFIG = {
-    "DE-LU": {"filter_id": 4169, "region_code": "DE-LU", "timezone_hint": "Europe/Berlin"},
-    "AT":    {"filter_id": 4170, "region_code": "AT", "timezone_hint": "Europe/Vienna"},
-    "BE":    {"filter_id": 4996, "region_code": "BE", "timezone_hint": "Europe/Brussels"},
-    "DK1":   {"filter_id": 252,  "region_code": "DK1", "timezone_hint": "Europe/Copenhagen"},
-    "DK2":   {"filter_id": 253,  "region_code": "DK2", "timezone_hint": "Europe/Copenhagen"},
-    "FR":    {"filter_id": 254,  "region_code": "FR", "timezone_hint": "Europe/Paris"},
-    "NL":    {"filter_id": 256,  "region_code": "NL", "timezone_hint": "Europe/Amsterdam"},
-    "NO2":   {"filter_id": 4997, "region_code": "NO2", "timezone_hint": "Europe/Oslo"},
-    "PL":    {"filter_id": 257,  "region_code": "PL", "timezone_hint": "Europe/Warsaw"},
-    "CH":    {"filter_id": 259,  "region_code": "CH", "timezone_hint": "Europe/Zurich"},
-    "SI":    {"filter_id": 260,  "region_code": "SI", "timezone_hint": "Europe/Ljubljana"},
-    "CZ":    {"filter_id": 261,  "region_code": "CZ", "timezone_hint": "Europe/Prague"},
-    "HU":    {"filter_id": 262,  "region_code": "HU", "timezone_hint": "Europe/Budapest"},
-    "IT-NO": {"filter_id": 255,  "region_code": "IT", "timezone_hint": "Europe/Rome"},
+# Configuration for SMARD API access
+# series_id refers to the SMARD data series for day-ahead auction results (hourly).
+# region_slug is used in the API URL structure.
+_SMARD_AREA_CONFIG = {
+    "DE": {"series_id": "416911", "region_slug": "DE", "currency": CURRENCY_EUR},
+    "AT": {"series_id": "416912", "region_slug": "AT", "currency": CURRENCY_EUR},
 }
 
-SMARD_RESOLUTION = "hour"
+# SMARD API URL template for fetching hourly day-ahead auction prices.
+# Timestamp is milliseconds since epoch for 00:00 UTC of the target day.
+_SMARD_API_URL_TEMPLATE = "https://www.smard.de/app/chart_data/{series_id}/{region_slug}/{series_id}_{region_slug}_hour_{timestamp_ms}.json"
+# Note: SMARD uses different paths for quarterhour, hour, etc.
+# For series 416911/416912 (Day-Ahead Auktion Stundenkontrakte), the data is hourly.
+# The URL segment might be specific, e.g. _hour_ or _quarterhour_ depending on the exact data module.
+# The example from Bundesnetzagentur for hourly data often looks like:
+# https://www.smard.de/app/chart_data/1223/DE/1223_DE_hour_1609459200000.json (1223 is old key for Day-Ahead Spot DE)
+# The series IDs 416911 (DE) and 416912 (AT) are more current for "Day-Ahead Auktion Stundenkontrakte".
+# Assuming the _hour_ slug is correct for these series. If issues arise, this URL might need adjustment.
 
-@register_adapter(
+
+def _to_smard_epoch_milliseconds(dt: datetime) -> int:
+    """Converts a datetime object to epoch milliseconds for the start of the day (00:00 UTC)."""
+    start_of_day_utc = dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+    return int(start_of_day_utc.timestamp() * 1000)
+
+@register_api(
     name=SOURCE_SMARD,
-    regions=list(SMARD_MARKET_CONFIG.keys()),
-    default_priority=40
+    regions=list(_SMARD_AREA_CONFIG.keys()), # ["DE", "AT"]
+    default_priority=60, # Example priority
 )
-class SmardAdapter(BaseAPIAdapter):
+class SmardAPI(BaseAPI):
     """
-    Adapter for the SMARD.de API.
-    Fetches day-ahead market prices for Germany and neighboring countries.
+    API for the SMARD.de service (German Bundesnetzagentur).
+    Fetches hourly day-ahead electricity market prices for Germany and Austria.
     """
 
-    def __init__(self, hass, api_key_manager, source_name: str, market_area: str, session: aiohttp.ClientSession, **kwargs):
-        super().__init__(hass, api_key_manager, source_name, market_area, session, **kwargs)
-        # filter_id and region_param are determined in async_fetch_data
+    def __init__(self, config: Dict[str, Any], session: aiohttp.ClientSession):
+        super().__init__(config, session)
+        # No specific config needed from 'config' dict for Smard beyond BaseAPI
 
-    async def _fetch_smard_series_data(self, timestamp_key: str, resolution: str, smard_filter_id: int, smard_region_param: str) -> List[Dict[str, Any]]:
-        """Fetches data for a specific series timestamp key."""
-        series_url = f"{SMARD_API_URL_BASE}/{smard_filter_id}/{smard_region_param}/{smard_filter_id}_{smard_region_param}_{resolution}_{timestamp_key}.json"
-        _LOGGER.debug("Fetching SMARD series data from URL: %s", series_url)
+    async def _fetch_smard_data_for_day(self, area_code: str, target_day_utc: datetime) -> List[Dict[str, Any]]:
+        """
+        Fetches SMARD data for a specific day and market area.
+        SMARD API provides data in daily files, timestamped for the start of that day.
+        """
+        current_area_config = _SMARD_AREA_CONFIG[area_code]
+        series_id = current_area_config["series_id"]
+        region_slug = current_area_config["region_slug"]
         
+        timestamp_ms = _to_smard_epoch_milliseconds(target_day_utc)
+        
+        api_url = _SMARD_API_URL_TEMPLATE.format(
+            series_id=series_id,
+            region_slug=region_slug,
+            timestamp_ms=timestamp_ms
+        )
+
+        _LOGGER.debug(
+            "Fetching SMARD data for area %s (series %s, region %s) for day %s from %s",
+            area_code, series_id, region_slug, target_day_utc.strftime('%Y-%m-%d'), api_url
+        )
+        
+        raw_response_preview = None
         try:
-            data = await async_get_json_or_raise(self._session, series_url, timeout=NETWORK_TIMEOUT)
-            if data and "series" in data and isinstance(data["series"], list):
-                return data["series"]
-            _LOGGER.warning("SMARD series data missing 'series' list or malformed for key %s, area %s: %s", timestamp_key, self.market_area, str(data)[:200])
-            return []
-        except aiohttp.ClientError as e:
-            _LOGGER.warning("Network error fetching SMARD series data for key %s, area %s: %s", timestamp_key, self.market_area, e)
-            return [] 
-        except Exception as e:
-            _LOGGER.warning("Error processing SMARD series data for key %s, area %s: %s", timestamp_key, self.market_area, e)
-            return []
+            async with self.session.get(api_url, timeout=NETWORK_TIMEOUT) as response:
+                response.raise_for_status() # Raises HTTPError for bad responses (4XX or 5XX)
+                json_response = await response.json()
+                raw_response_preview = str(json_response)[:250] # Increased preview length
 
-    async def async_fetch_data(self, target_datetime: datetime) -> PriceData:
-        """
-        Fetches SMARD data. SMARD provides data in series based on timestamps.
-        We need to get the index of available timestamps first, then fetch the relevant series.
-        """
-        market_config = SMARD_MARKET_CONFIG.get(self.market_area.upper())
-        if not market_config:
-            _LOGGER.error("Cannot fetch SMARD data for %s: market area configuration is missing.", self.market_area)
-            return PriceData(hourly_raw=[], timezone="UTC", currency=CURRENCY_EUR, source=self.source_name, meta={"error": f"Market area {self.market_area} not configured for SMARD"})
+            # Validate structure of the response
+            if not json_response or "series" not in json_response or not isinstance(json_response.get("series"), list):
+                _LOGGER.warning(
+                    "SMARD response malformed or missing 'series' list for area %s, day %s. Preview: %s",
+                    area_code, target_day_utc.strftime('%Y-%m-%d'), raw_response_preview
+                )
+                return []
 
-        smard_filter_id = market_config["filter_id"]
-        smard_region_param = market_config["region_code"] # This is the part like 'DE-LU', 'AT', 'IT'
-        resolution = SMARD_RESOLUTION
-
-        index_url = f"{SMARD_API_URL_BASE}/{smard_filter_id}/{smard_region_param}/index_{resolution}.json"
-        _LOGGER.debug("Fetching SMARD index for area %s from URL: %s", self.market_area, index_url)
-
-        raw_index_data_preview = None
-        try:
-            index_data = await async_get_json_or_raise(self._session, index_url, timeout=NETWORK_TIMEOUT)
-            raw_index_data_preview = str(index_data)[:200]
-
-            if not index_data or "timestamps" not in index_data or not isinstance(index_data["timestamps"], list) or not index_data["timestamps"]:
-                _LOGGER.error("SMARD index data malformed, missing timestamps, or empty for %s: %s", self.market_area, raw_index_data_preview)
-                return PriceData(hourly_raw=[], timezone=market_config.get("timezone_hint", "UTC"), currency=CURRENCY_EUR, source=self.source_name, meta={"api_url_base": SMARD_API_URL_BASE, "error": "Malformed or empty index data", "raw_response_preview": raw_index_data_preview})
-
-            # Fetch the last 3 series to cover today and tomorrow, as per ha_epex_spot logic and SMARD behavior.
-            num_series_to_fetch = 3 
-            if len(index_data["timestamps"]) < num_series_to_fetch:
-                timestamp_keys_to_fetch = index_data["timestamps"]
-                _LOGGER.debug("Found only %d series for %s, fetching all.", len(index_data["timestamps"]), self.market_area)
-            else:
-                timestamp_keys_to_fetch = index_data["timestamps"][-num_series_to_fetch:]
-            
-            all_series_entries: List[Dict[str, Any]] = []
-            fetch_tasks = [self._fetch_smard_series_data(key, resolution, smard_filter_id, smard_region_param) for key in timestamp_keys_to_fetch]
-            results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
-
-            for i, result_item in enumerate(results):
-                if isinstance(result_item, Exception):
-                    _LOGGER.warning(f"Error fetching SMARD series for key {timestamp_keys_to_fetch[i]}, area {self.market_area}: {result_item}")
-                elif result_item: 
-                    all_series_entries.extend(result_item)
-
-            if not all_series_entries:
-                _LOGGER.warning("No series data successfully fetched from SMARD for %s after trying %d keys.", self.market_area, len(timestamp_keys_to_fetch))
-                return PriceData(hourly_raw=[], timezone=market_config.get("timezone_hint", "UTC"), currency=CURRENCY_EUR, source=self.source_name, meta={"api_url_base": SMARD_API_URL_BASE, "error": "No series data fetched", "raw_index_preview": raw_index_data_preview})
-
-            hourly_prices: List[Dict[str, Any]] = []
-            processed_timestamps = set()
-
-            for entry in all_series_entries:
-                if not isinstance(entry, list) or len(entry) < 2 or entry[0] is None or entry[1] is None: # Price and timestamp must exist
-                    _LOGGER.warning("Skipping malformed or null price/timestamp entry from SMARD for %s: %s", self.market_area, entry)
-                    continue
+            day_prices: List[Dict[str, Any]] = []
+            for point in json_response["series"]:
+                # Each 'point' is expected to be a list: [timestamp_ms, price_eur_mwh]
+                if point is None or len(point) < 2 or point[0] is None or point[1] is None:
+                    _LOGGER.debug("Skipping malformed data point in SMARD response: %s", str(point))
+                    continue 
 
                 try:
-                    timestamp_ms = int(entry[0])
-                    price_eur_mwh = float(entry[1])
+                    entry_timestamp_ms = int(point[0])
+                    price_eur_mwh = float(point[1]) # SMARD prices are in EUR/MWh
+
+                    # Convert price from EUR/MWh to EUR/kWh
+                    price_eur_kwh = round(price_eur_mwh / 1000.0, 5)
+                    
+                    start_time_utc = datetime.fromtimestamp(entry_timestamp_ms / 1000, timezone.utc)
+
+                    # SMARD data should align with hourly intervals for these series
+                    # Double-check if the timestamp is for the target day, though API call is specific
+                    if start_time_utc.date() != target_day_utc.date():
+                        _LOGGER.debug("SMARD data point %s is outside target day %s, skipping.", start_time_utc, target_day_utc.date())
+                        continue
+
+                    day_prices.append({
+                        API_RESPONSE_START_TIME: start_time_utc,
+                        API_RESPONSE_PRICE: price_eur_kwh,
+                    })
                 except (ValueError, TypeError) as e:
-                    _LOGGER.warning("Could not parse timestamp/price from SMARD entry for %s: %s (entry: %s)", self.market_area, e, entry)
+                    _LOGGER.warning(
+                        "Could not parse price/timestamp from SMARD entry for %s, day %s: %s (entry: %s)",
+                        area_code, target_day_utc.strftime('%Y-%m-%d'), e, str(point)[:50]
+                    )
                     continue
-                
-                price_eur_kwh = round(price_eur_mwh / 1000.0, 5)
-                start_time_utc = datetime.fromtimestamp(timestamp_ms / 1000, timezone.utc)
-
-                if start_time_utc in processed_timestamps:
-                    continue
-                processed_timestamps.add(start_time_utc)
-
-                hourly_prices.append({
-                    API_RESPONSE_START_TIME: start_time_utc,
-                    API_RESPONSE_PRICE: price_eur_kwh,
-                })
             
-            hourly_prices.sort(key=lambda x: x[API_RESPONSE_START_TIME])
-            
-            _LOGGER.info("Successfully processed %d unique price points from SMARD for %s", len(hourly_prices), self.market_area)
+            _LOGGER.debug("Fetched %d price points from SMARD for area %s, day %s", len(day_prices), area_code, target_day_utc.strftime('%Y-%m-%d'))
+            return day_prices
+
+        except aiohttp.ClientResponseError as e:
+            if e.status == 404: # Data not yet available (common for future dates)
+                _LOGGER.info(
+                    "SMARD data not yet available (404) for area %s, day %s. URL: %s",
+                    area_code, target_day_utc.strftime('%Y-%m-%d'), api_url
+                )
+            else: # Other HTTP errors
+                _LOGGER.warning(
+                    "HTTP error fetching SMARD data for area %s, day %s: %s - %s. URL: %s",
+                    area_code, target_day_utc.strftime('%Y-%m-%d'), e.status, e.message, api_url
+                )
+            return [] # Return empty list on HTTP error for this day's fetch
+        except aiohttp.ClientError as e: # Includes network errors, timeouts handled by ClientTimeout
+            _LOGGER.warning("Client error (e.g., network, timeout) fetching SMARD data for area %s, day %s: %s. URL: %s", area_code, target_day_utc.strftime('%Y-%m-%d'), e, api_url)
+            return []
+        except asyncio.TimeoutError: # Explicitly catch asyncio.TimeoutError if not covered by ClientError
+            _LOGGER.warning("Timeout fetching SMARD data for area %s, day %s. URL: %s", area_code, target_day_utc.strftime('%Y-%m-%d'), api_url)
+            return []
+        except Exception as e: # Catch any other unexpected errors during processing
+            _LOGGER.error(
+                "Unexpected error processing SMARD data for area %s, day %s: %s. URL: %s, Response Preview: %s",
+                area_code, target_day_utc.strftime('%Y-%m-%d'), e, api_url, raw_response_preview,
+                exc_info=True # Include stack trace for unexpected errors
+            )
+            return []
+
+
+    async def fetch_data(self, area: str) -> PriceData:
+        """
+        Fetches SMARD market price data for the given area, covering today and tomorrow.
+        SMARD data is typically available per day.
+        """
+        area_upper = area.upper()
+        if area_upper not in _SMARD_AREA_CONFIG:
+            _LOGGER.error(
+                "Cannot fetch SMARD data for %s: area not configured or supported for SMARD API.", area
+            )
             return PriceData(
-                hourly_raw=hourly_prices,
-                timezone=market_config.get("timezone_hint", "UTC"), # Use timezone hint from config
-                currency=CURRENCY_EUR,
-                source=self.source_name,
-                meta={"api_url_base": SMARD_API_URL_BASE, "raw_unit": "EUR/MWh", "raw_index_preview": raw_index_data_preview}
+                hourly_raw=[],
+                timezone="UTC",
+                currency=CURRENCY_EUR, # Default currency
+                source=SOURCE_SMARD,
+                meta={"error": f"Area {area} not configured/supported for SMARD API."}
             )
 
-        except aiohttp.ClientError as e:
-            _LOGGER.error("Network error fetching SMARD index for %s: %s", self.market_area, e)
-            # Raise network errors for FallbackManager to handle
-            raise
-        except Exception as e:
-            _LOGGER.error("Unexpected error processing SMARD data for %s: %s. Index preview: %s", self.market_area, e, raw_index_data_preview)
-            # Raise other critical errors for FallbackManager
-            raise
+        current_area_config = _SMARD_AREA_CONFIG[area_upper]
+        
+        now_utc = datetime.now(timezone.utc)
+        # SMARD data is usually published for the current day and the next day.
+        # Fetch for "today" and "tomorrow" based on UTC.
+        today_utc = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow_utc = today_utc + timedelta(days=1)
 
-    @property
-    def name(self) -> str:
-        return f"SMARD.de ({self.market_area})"
+        all_hourly_prices: List[Dict[str, Any]] = []
+        
+        # Fetch data for today
+        prices_today = await self._fetch_smard_data_for_day(area_code=area_upper, target_day_utc=today_utc)
+        all_hourly_prices.extend(prices_today)
+        
+        # Fetch data for tomorrow
+        prices_tomorrow = await self._fetch_smard_data_for_day(area_code=area_upper, target_day_utc=tomorrow_utc)
+        all_hourly_prices.extend(prices_tomorrow)
+
+        # Sort and de-duplicate (though fetching distinct days should prevent duplicates)
+        if all_hourly_prices:
+            all_hourly_prices.sort(key=lambda x: x[API_RESPONSE_START_TIME])
+            # Basic de-duplication, just in case of any overlap or retry logic (not present here but good practice)
+            unique_prices = []
+            seen_timestamps = set()
+            for price_entry in all_hourly_prices:
+                ts = price_entry[API_RESPONSE_START_TIME]
+                if ts not in seen_timestamps:
+                    unique_prices.append(price_entry)
+                    seen_timestamps.add(ts)
+            all_hourly_prices = unique_prices
+
+        if not all_hourly_prices:
+            _LOGGER.info("No SMARD data successfully fetched for area %s for %s and %s.", 
+                         area_upper, today_utc.strftime('%Y-%m-%d'), tomorrow_utc.strftime('%Y-%m-%d'))
+            # Return PriceData with info, not an error, if fetches completed but yielded no data (e.g., all 404s)
+            return PriceData(
+                hourly_raw=[],
+                timezone="UTC", # Data is processed into UTC
+                currency=current_area_config["currency"],
+                source=SOURCE_SMARD,
+                meta={"info": f"No data available or fetched for {area_upper} for relevant period."}
+            )
+
+        _LOGGER.info("Successfully processed %d unique hourly price points from SMARD for %s.", len(all_hourly_prices), area_upper)
+        return PriceData(
+            hourly_raw=all_hourly_prices,
+            timezone="UTC", # All timestamps are UTC
+            currency=current_area_config["currency"],
+            source=SOURCE_SMARD,
+            meta={
+                "series_id": current_area_config["series_id"], 
+                "region_slug": current_area_config["region_slug"],
+                "days_fetched": [today_utc.strftime('%Y-%m-%d'), tomorrow_utc.strftime('%Y-%m-%d')]
+            }
+        )
