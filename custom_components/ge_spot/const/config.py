@@ -1,5 +1,10 @@
 """Configuration constants for GE-Spot integration."""
 
+# Module-level constants for direct import
+CONF_API_TOKEN = "api_key"  # Used as a key for fetching API token from config
+CONF_AREA = "area"          # Used as a key for fetching area from config
+CONF_SOURCE_NAME = "source" # Used as a key for fetching source name from config
+
 class Config:
     """Configuration keys used in the integration."""
     SOURCE = "source"

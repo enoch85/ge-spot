@@ -29,15 +29,15 @@ from .fallback_manager import FallbackManager # Import the new FallbackManager
 from .cache_manager import CacheManager # Import CacheManager
 
 # Import all API implementations here to have them available
-from ..api.nordpool import NordpoolAPI
-from ..api.entsoe import EntsoeAPI
-from ..api.aemo import AemoAPI
-from ..api.epex import EpexAPI
-from ..api.energi_data import EnergiDataAPI
-from ..api.amber import AmberAPI
-from ..api.comed import ComedAPI
-from ..api.omie import OmieAPI
-from ..api.stromligning import StromligningAPI
+from ..api.nordpool import NordpoolAPI # Changed from NordpoolAdapter
+from ..api.entsoe import EntsoeAPI       # Changed from EntsoeAdapter
+from ..api.aemo import AemoAPI         # Changed from AemoAdapter
+from ..api.epex import EpexAPI         # Changed from EpexAdapter
+from ..api.energi_data import EnergiDataAdapter # Remains Adapter for now
+from ..api.amber import AmberAdapter # Remains Adapter for now
+from ..api.comed import ComedAdapter # Remains Adapter for now
+from ..api.omie import OmieAPI         # Changed from OmieAdapter
+from ..api.stromligning import StromligningAPI # Changed from StromligningAdapter
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ class UnifiedPriceManager:
         # API request tracking
         self._last_api_fetch = None
         self._next_scheduled_fetch = None
-        # self._last_data = None # Replaced by CacheManager
+        # self._last_data = None # Replaced with CacheManager
         self._consecutive_failures = 0
 
         # Display settings - explicitly ensure display_unit is set from config with strong default
@@ -140,15 +140,15 @@ class UnifiedPriceManager:
 
         # Map source names to their API classes
         self._source_api_map = {
-            Source.NORDPOOL: NordpoolAPI,
-            Source.ENTSOE: EntsoeAPI,
-            Source.AEMO: AemoAPI,
-            Source.EPEX: EpexAPI,
-            Source.ENERGI_DATA_SERVICE: EnergiDataAPI,
-            Source.AMBER: AmberAPI,
-            Source.COMED: ComedAPI,
-            Source.OMIE: OmieAPI,
-            Source.STROMLIGNING: StromligningAPI,
+            Source.NORDPOOL: NordpoolAPI, # Changed from NordpoolAdapter
+            Source.ENTSOE: EntsoeAPI,       # Changed from EntsoeAdapter
+            Source.AEMO: AemoAPI,         # Changed from AemoAdapter
+            Source.EPEX: EpexAPI,         # Changed from EpexAdapter
+            Source.ENERGI_DATA_SERVICE: EnergiDataAdapter, # Remains Adapter
+            Source.AMBER: AmberAdapter, # Remains Adapter
+            Source.COMED: ComedAdapter, # Remains Adapter
+            Source.OMIE: OmieAPI,         # Changed from OmieAdapter
+            Source.STROMLIGNING: StromligningAPI, # Changed from StromligningAdapter
             # Add other API classes here
         }
 

@@ -2,9 +2,10 @@
 import logging
 from datetime import datetime, timezone, timedelta, time
 import aiohttp
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
-from .base.base_price_api import BasePriceAPI
+from .base_api import BaseAPI, PriceData # Import new base and PriceData
+from ..api.registry import register_adapter # Import register_adapter
 from .parsers.omie_parser import OmieParser
 from ..const.sources import Source
 from .base.api_client import ApiClient
@@ -19,152 +20,129 @@ _LOGGER = logging.getLogger(__name__)
 
 BASE_URL_TEMPLATE = "https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{day}_{month}_{year}_{day}_{month}_{year}.TXT"
 
-class OmieAPI(BasePriceAPI):
-    """OMIE API client - Fetches data directly from OMIE text files."""
+@register_adapter(
+    name=Source.OMIE,
+    regions=["ES", "PT"], # Supported regions for OMIE
+    default_priority=20 # Example priority
+)
+class OmieAPI(BaseAPI): # Inherit from BaseAPI, renamed class
+    """Adapter for OMIE API."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, session: Optional[aiohttp.ClientSession] = None, timezone_service=None):
-        """Initialize the API client.
+        super().__init__(config, session)
+        self.parser = OmieParser(timezone_service=timezone_service)
 
-        Args:
-            config: Configuration dictionary
-            session: aiohttp client session
-            timezone_service: Timezone service instance
-        """
-        super().__init__(config, session, timezone_service)
-        self.area = config.get("area") if config else None
-        self.error_handler = ErrorHandler(self.source_type)
-        self.parser = OmieParser(timezone_service=self.timezone_service)
-
-    def _get_source_type(self) -> str:
-        """Get the source type for this API.
-
-        Returns:
-            Source type string
-        """
-        return Source.OMIE
-
-    def _get_base_url(self) -> str:
-        """Get the base URL template for API requests.
-
-        Returns:
-            Base URL template string
-        """
-        return BASE_URL_TEMPLATE
-
-    async def _fetch_omie_file(self, client: ApiClient, target_date: datetime.date) -> Optional[str]:
-        """Fetch a single OMIE data file for a specific date."""
+    def _get_url_for_date(self, target_date: datetime.date) -> str:
         year = str(target_date.year)
         month = str.zfill(str(target_date.month), 2)
         day = str.zfill(str(target_date.day), 2)
+        return BASE_URL_TEMPLATE.format(year=year, month=month, day=day)
 
-        url = self._get_base_url().format(
-            year=year, month=month, day=day
-        )
-        _LOGGER.debug(f"[OmieAPI] Attempting to fetch OMIE data from URL: {url}")
+    async def _fetch_single_omie_file(self, client: ApiClient, target_date: datetime.date) -> Optional[str]:
+        """Fetches a single OMIE data file for a specific date."""
+        url = self._get_url_for_date(target_date)
+        _LOGGER.debug(f"OmieAPI: Attempting to fetch data from URL: {url}") # Renamed class in log
 
         response_text = await client.fetch(
             url,
             timeout=Network.Defaults.TIMEOUT,
-            encoding='iso-8859-1',
+            encoding='iso-8859-1', # OMIE files use this encoding
             response_format='text'
         )
 
         if isinstance(response_text, dict) and response_text.get("error"):
-            _LOGGER.warning(f"[OmieAPI] Client error fetching {url}: {response_text.get('message')}")
+            _LOGGER.warning(f"OmieAPI: Client error fetching {url}: {response_text.get('message')}") # Renamed class in log
             return None
 
-        if not response_text or isinstance(response_text, str) and ("<html" in response_text.lower() or "<!doctype" in response_text.lower()):
-            _LOGGER.debug(f"[OmieAPI] No valid data or HTML response from OMIE for {day}_{month}_{year}.")
+        if not response_text or (isinstance(response_text, str) and ("<html" in response_text.lower() or "<!doctype" in response_text.lower())):
+            _LOGGER.debug(f"OmieAPI: No valid data or HTML response from OMIE for {target_date.strftime('%Y-%m-%d')}.") # Renamed class in log
             return None
 
-        _LOGGER.info(f"[OmieAPI] Successfully fetched OMIE data for {day}_{month}_{year}")
+        _LOGGER.info(f"OmieAPI: Successfully fetched data for {target_date.strftime('%Y-%m-%d')}") # Renamed class in log
         return response_text
 
-    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Optional[Dict[str, Any]]:
-        """Fetch raw price data for the given area using ErrorHandler."""
-        if not self.area:
-            self.area = area
-
-        client = ApiClient(session=session or self.session)
-        try:
-            data = await self.error_handler.run_with_retry(
-                self._fetch_data,
-                client=client,
-                area=area,
-                reference_time=kwargs.get('reference_time')
-            )
-            if not data or not isinstance(data, dict) or not data.get('raw_data', {}).get('today'):
-                _LOGGER.error(f"OMIE API fetch ultimately failed for area {area} after retries or returned invalid data.")
-                return None
-            return data
-        finally:
-            if session is None and client:
-                await client.close()
-
-    async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
-        """Internal method to fetch data, called by ErrorHandler."""
-        if reference_time is None:
-            reference_time = datetime.now(timezone.utc)
-
-        today_date = reference_time.date()
-        tomorrow_date = today_date + timedelta(days=1)
-
-        raw_today = await self._fetch_omie_file(client, today_date)
-
-        if not raw_today:
-            _LOGGER.warning(f"[OmieAPI] Today's ({today_date}) data missing or invalid. Signaling failure.")
-            return None
-
-        raw_tomorrow = None
-        local_tz_name = self.get_timezone_for_area(area)
-        local_tz = get_timezone_object(local_tz_name)
-        if not local_tz:
-            _LOGGER.warning(f"[OmieAPI] Could not get timezone object for {local_tz_name}, defaulting to UTC for time check.")
-            local_tz = timezone.utc
-
-        now_local = reference_time.astimezone(local_tz)
-        release_hour_local = 14
-        failure_check_hour_local = 16
-
-        should_fetch_tomorrow = now_local.hour >= release_hour_local
-
-        if should_fetch_tomorrow:
-            _LOGGER.debug(f"[OmieAPI] Attempting to fetch tomorrow's ({tomorrow_date}) data as it's after {release_hour_local}:00 {local_tz_name}.")
-            raw_tomorrow = await self._fetch_omie_file(client, tomorrow_date)
-
-            if now_local.hour >= failure_check_hour_local and not raw_tomorrow:
-                _LOGGER.warning(
-                    f"[OmieAPI] Fetch failed for area {area}: Tomorrow's ({tomorrow_date}) data expected after "
-                    f"{failure_check_hour_local}:00 {local_tz_name} but was not available or invalid. Triggering fallback."
-                )
-                return None
-        else:
-            _LOGGER.debug(f"[OmieAPI] Not attempting to fetch tomorrow's ({tomorrow_date}) data yet (before {release_hour_local}:00 {local_tz_name}).")
-
-        raw_data_payload = {
-            "today": raw_today,
-            "tomorrow": raw_tomorrow,
-        }
-
-        return {
-            "raw_data": raw_data_payload,
-            "area": area,
-            "timezone": local_tz_name,
-            "currency": Currency.EUR,
-            "source": self.source_type,
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-        }
-
     def get_timezone_for_area(self, area: str) -> str:
-        """Get the timezone name string for a specific area.
+        """Determines the timezone based on the OMIE area."""
+        return TimezoneName.EUROPE_LISBON if area and area.upper() == "PT" else TimezoneName.EUROPE_MADRID
 
-        Args:
-            area: Area code
+    async def fetch_data(self, area: str) -> PriceData:
+        """Fetch and parse data from OMIE, returning a PriceData object."""
+        _LOGGER.debug(f"OmieAPI: Fetching data for area {area}") # Renamed class in log
+        client = ApiClient(session=self.session)
+        try:
+            reference_time = datetime.now(timezone.utc)
+            today_date = reference_time.date()
+            tomorrow_date = today_date + timedelta(days=1)
 
-        Returns:
-            Timezone string
-        """
-        if area and area.upper() == "PT":
-            return TimezoneName.EUROPE_LISBON
-        else:
-            return TimezoneName.EUROPE_MADRID
+            raw_today = await self._fetch_single_omie_file(client, today_date)
+
+            if not raw_today:
+                _LOGGER.warning(f"OMIE: Today's ({today_date}) data missing or invalid for area {area}.")
+                return PriceData(source=self.api_name, meta={"error": f"Today's data missing/invalid for {area}"}) # Use self.api_name
+
+            raw_tomorrow = None
+            area_timezone_str = self.get_timezone_for_area(area)
+            area_tz = get_timezone_object(area_timezone_str)
+            if not area_tz: # Should not happen if TimezoneName constants are valid
+                _LOGGER.error(f"OMIE: Could not get timezone object for {area_timezone_str}, defaulting to UTC.")
+                area_tz = timezone.utc 
+            
+            now_local = reference_time.astimezone(area_tz)
+            release_hour_local = 14 # OMIE data typically available after 14:00 local time
+            failure_check_hour_local = 16 # If still not available by 16:00, consider it an issue
+
+            should_fetch_tomorrow = now_local.hour >= release_hour_local
+
+            if should_fetch_tomorrow:
+                _LOGGER.debug(f"OMIE: Attempting to fetch tomorrow's ({tomorrow_date}) data for {area}.")
+                raw_tomorrow = await self._fetch_single_omie_file(client, tomorrow_date)
+                if now_local.hour >= failure_check_hour_local and not raw_tomorrow:
+                    _LOGGER.warning(f"OMIE: Tomorrow's data for {area} ({tomorrow_date}) not available/valid after {failure_check_hour_local}:00 {area_timezone_str}.")
+                    # Proceed with today's data, but log the absence of tomorrow's
+
+            # --- Parsing --- # 
+            # The parser expects a dict similar to the old fetch_raw_data output.
+            parser_input = {
+                "raw_data": {"today": raw_today, "tomorrow": raw_tomorrow},
+                "area": area,
+                "timezone": area_timezone_str, # Pass the determined area timezone
+                "currency": Currency.EUR, # OMIE is always EUR
+                "source": self.api_name, # Use self.api_name
+                "fetched_at": reference_time.isoformat()
+            }
+
+            parsed_result = self.parser.parse(parser_input)
+            hourly_prices_from_parser = parsed_result.get("hourly_raw", {}) # dict: {iso_timestamp_str: price}
+            final_hourly_prices: List[Dict[str, Any]] = []
+
+            for ts_str, price_value in hourly_prices_from_parser.items():
+                try:
+                    dt_obj = datetime.fromisoformat(ts_str)
+                    final_hourly_prices.append({"start_time": dt_obj, "price": float(price_value)})
+                except (ValueError, TypeError) as e:
+                    _LOGGER.warning(f"OMIE: Could not parse/convert entry: {ts_str}, {price_value}. Error: {e}")
+            
+            final_hourly_prices.sort(key=lambda x: x["start_time"]) # Ensure sorted order
+
+            if not final_hourly_prices and raw_tomorrow: # If tomorrow's data was fetched but parsing yielded nothing
+                 _LOGGER.warning(f"OMIE: Parsing resulted in no prices for {area}, though raw data (inc. tomorrow) seemed available.")
+
+            return PriceData(
+                hourly_raw=final_hourly_prices,
+                timezone=parsed_result.get("timezone", area_timezone_str),
+                currency=parsed_result.get("currency", Currency.EUR),
+                source=self.api_name, # Use self.api_name
+                meta={
+                    "omie_area": area,
+                    "parser_meta": parsed_result.get("meta", {}),
+                    "raw_today_fetched": bool(raw_today),
+                    "raw_tomorrow_fetched": bool(raw_tomorrow)
+                }
+            )
+
+        except Exception as e:
+            _LOGGER.exception(f"General error in OmieAPI fetch_data for {area}: {e}") # Renamed class in log
+            return PriceData(source=self.api_name, meta={"error": f"General fetch error for {area}: {str(e)}"}) # Use self.api_name
+        finally:
+            # ApiClient manages its session if it created it.
+            pass

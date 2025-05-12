@@ -4,6 +4,9 @@ from .areas import Area
 from ..const.sources import Source
 from ..const.time import TimezoneName
 
+# Define API response constants at the module level
+API_RESPONSE_PRICE = "price"
+API_RESPONSE_START_TIME = "start_time"
 
 class EntsoE:
     """Constants for ENTSO-E API."""
