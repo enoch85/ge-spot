@@ -180,6 +180,55 @@ class BaseElectricityPriceSensor(SensorEntity):
         if "error" in self.coordinator.data and self.coordinator.data["error"]:
             attrs["error"] = self.coordinator.data["error"]
 
+        # Add EV Smart Charging compatibility attributes
+        # Only add these for the current_price sensor
+        if self._sensor_type == "current_price":
+            # Add current_price attribute (the sensor's state value)
+            if self.native_value is not None:
+                attrs["current_price"] = self.native_value
+            
+            # Convert interval_prices dict to raw_today array format
+            if "interval_prices" in self.coordinator.data:
+                interval_prices = self.coordinator.data["interval_prices"]
+                if isinstance(interval_prices, dict):
+                    raw_today = []
+                    for timestamp_str, price in sorted(interval_prices.items()):
+                        try:
+                            # Parse the timestamp string
+                            from datetime import datetime
+                            dt = datetime.fromisoformat(timestamp_str)
+                            raw_today.append({
+                                "time": timestamp_str,
+                                "price": round(price, 4) if isinstance(price, float) else price
+                            })
+                        except (ValueError, TypeError):
+                            continue
+                    if raw_today:
+                        attrs["raw_today"] = raw_today
+            
+            # Convert tomorrow_interval_prices dict to raw_tomorrow array format
+            if "tomorrow_interval_prices" in self.coordinator.data:
+                tomorrow_interval_prices = self.coordinator.data["tomorrow_interval_prices"]
+                if isinstance(tomorrow_interval_prices, dict) and tomorrow_interval_prices:
+                    raw_tomorrow = []
+                    for timestamp_str, price in sorted(tomorrow_interval_prices.items()):
+                        try:
+                            from datetime import datetime
+                            dt = datetime.fromisoformat(timestamp_str)
+                            raw_tomorrow.append({
+                                "time": timestamp_str,
+                                "price": round(price, 4) if isinstance(price, float) else price
+                            })
+                        except (ValueError, TypeError):
+                            continue
+                    if raw_tomorrow:
+                        attrs["raw_tomorrow"] = raw_tomorrow
+                else:
+                    # Set to None if tomorrow prices aren't available yet
+                    attrs["raw_tomorrow"] = None
+            else:
+                attrs["raw_tomorrow"] = None
+
         return attrs
 
     async def async_added_to_hass(self):

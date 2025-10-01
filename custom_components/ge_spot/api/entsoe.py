@@ -335,9 +335,11 @@ class EntsoeAPI(BasePriceAPI):
             # Include the original raw data for potential debugging/caching
             parsed_data["raw_data"] = raw_data
 
-            # Remove the deprecated key if it exists
-            if "hourly_prices" in parsed_data:
-                del parsed_data["hourly_prices"]
+            # Remove any legacy keys if they exist (backward compatibility cleanup)
+            legacy_keys = ["hourly_prices", "hourly_raw"]
+            for key in legacy_keys:
+                if key in parsed_data:
+                    del parsed_data[key]
 
             return parsed_data
 

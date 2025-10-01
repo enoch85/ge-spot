@@ -1,4 +1,4 @@
-"""API handler for ComEd Hourly Pricing."""
+"""API handler for ComEd 5-Minute Pricing."""
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
@@ -19,7 +19,7 @@ from .base.base_price_api import BasePriceAPI
 _LOGGER = logging.getLogger(__name__)
 
 class ComedAPI(BasePriceAPI):
-    """API client for ComEd Hourly Pricing."""
+    """API client for ComEd 5-Minute Pricing (aggregated to 15-minute intervals)."""
 
     def _get_source_type(self) -> str:
         """Get the source type identifier.
@@ -103,7 +103,7 @@ class ComedAPI(BasePriceAPI):
         return ComedParser()
 
     async def _fetch_data(self, client, area, reference_time):
-        """Fetch data from ComEd Hourly Pricing API.
+        """Fetch data from ComEd 5-Minute Pricing API.
 
         Args:
             client: API client

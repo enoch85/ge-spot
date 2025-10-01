@@ -118,7 +118,7 @@ class EpexAPI(BasePriceAPI):
 
             # Ensure we have at least some prices before returning success
             if not interval_raw:
-                _LOGGER.error(f"EPEX parsing failed for area {area}: No hourly prices extracted from valid raw data.")
+                _LOGGER.error(f"EPEX parsing failed for area {area}: No interval prices extracted from valid raw data.")
                 return None
 
             # Construct the final dictionary for the DataProcessor
@@ -188,18 +188,26 @@ class EpexAPI(BasePriceAPI):
             return None
 
     async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse raw EPEX data for reprocessing from cache.
+        
+        Args:
+            raw_data: Raw data dictionary
+            
+        Returns:
+            Parsed data with interval_raw
+        """
         parser = self.get_parser_for_area(raw_data.get("raw_data", {}).get("area") or raw_data.get("area") or "FR")
-        hourly_prices = {}
+        interval_raw = {}
         timezone = raw_data.get("timezone", "Europe/Paris")
         currency = raw_data.get("currency", "EUR")
         for key in ("today", "tomorrow"):
             html = raw_data.get("raw_data", {}).get(key)
             if html:
                 parsed = parser.parse(html)
-                if parsed and "hourly_prices" in parsed:
-                    hourly_prices.update(parsed["hourly_prices"])
+                if parsed and "interval_raw" in parsed:
+                    interval_raw.update(parsed["interval_raw"])
         return {
-            "hourly_prices": hourly_prices,
+            "interval_raw": interval_raw,
             "currency": currency,
             "api_timezone": timezone,
             "source": "epex",
@@ -207,3 +215,5 @@ class EpexAPI(BasePriceAPI):
             "fetched_at": raw_data.get("raw_data", {}).get("timestamp"),
         }
 
+
+```
