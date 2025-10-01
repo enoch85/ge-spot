@@ -76,7 +76,7 @@ def timezone_service_area_mode(mock_hass_instance_sthlm):
 
 # --- Test Cases ---
 
-def test_normalize_hourly_prices_basic(timezone_service_ha_mode):
+def test_normalize_interval_prices_basic(timezone_service_ha_mode):
     """Test basic timezone normalization from UTC to HA time."""
     raw_prices_utc = {
         "2024-01-15T10:00:00+00:00": 20.0,
@@ -95,12 +95,12 @@ def test_normalize_hourly_prices_basic(timezone_service_ha_mode):
     
     # Freeze time to ensure reference date is predictable
     with freeze_time("2024-01-15 12:00:00"):
-        normalized = timezone_service_ha_mode.normalize_hourly_prices(raw_prices_utc, source_tz_str)
+        normalized = timezone_service_ha_mode.normalize_interval_prices(raw_prices_utc, source_tz_str)
         
     assert normalized.get("today") == expected_today
     assert normalized.get("tomorrow") == expected_tomorrow
 
-def test_normalize_hourly_prices_dst_fallback(timezone_service_ha_mode):
+def test_normalize_interval_prices_dst_fallback(timezone_service_ha_mode):
     """Test normalization during DST fallback (extra hour)."""
     source_tz_str = "Europe/Berlin"
     # Current implementation maps these values differently
@@ -115,12 +115,12 @@ def test_normalize_hourly_prices_dst_fallback(timezone_service_ha_mode):
 
     # Freeze time to ensure reference date is predictable
     with freeze_time("2023-10-29 12:00:00"): # Set time to noon on the transition day
-        normalized = timezone_service_ha_mode.normalize_hourly_prices(RAW_PRICES_CET_DST_FALLBACK, source_tz_str)
+        normalized = timezone_service_ha_mode.normalize_interval_prices(RAW_PRICES_CET_DST_FALLBACK, source_tz_str)
 
     assert normalized.get("today") == expected_today
     assert normalized.get("tomorrow") == expected_tomorrow
 
-def test_normalize_hourly_prices_dst_springforward(timezone_service_ha_mode):
+def test_normalize_interval_prices_dst_springforward(timezone_service_ha_mode):
     """Test normalization during DST spring forward (missing hour)."""
     source_tz_str = "Europe/Berlin"
     # Target HA Timezone: Europe/Stockholm (same offset as Berlin)
@@ -141,13 +141,13 @@ def test_normalize_hourly_prices_dst_springforward(timezone_service_ha_mode):
     
     # Freeze time to ensure reference date is predictable
     with freeze_time("2023-03-26 12:00:00"): # Set time to noon on the transition day
-        normalized = timezone_service_ha_mode.normalize_hourly_prices(RAW_PRICES_CET_DST_SPRINGFORWARD, source_tz_str)
+        normalized = timezone_service_ha_mode.normalize_interval_prices(RAW_PRICES_CET_DST_SPRINGFORWARD, source_tz_str)
         
     assert normalized.get("today") == expected_today
     assert normalized.get("tomorrow") == expected_tomorrow
     assert "02:00" not in normalized.get("today") # Ensure the skipped hour is not present
 
-def test_normalize_hourly_prices_midnight_cross(timezone_service_ha_mode):
+def test_normalize_interval_prices_midnight_cross(timezone_service_ha_mode):
     """Test normalization where source hours cross midnight into target's next day."""
     source_tz_str = "Europe/Berlin" # UTC+1
     # Target HA Timezone: Europe/Stockholm # UTC+1
@@ -166,27 +166,27 @@ def test_normalize_hourly_prices_midnight_cross(timezone_service_ha_mode):
 
     # Freeze time to ensure reference date is predictable
     with freeze_time("2024-01-16 12:00:00"): 
-        normalized = timezone_service_ha_mode.normalize_hourly_prices(RAW_PRICES_CET_MIDNIGHT_CROSS, source_tz_str)
+        normalized = timezone_service_ha_mode.normalize_interval_prices(RAW_PRICES_CET_MIDNIGHT_CROSS, source_tz_str)
 
     assert normalized.get("today") == expected_today
     assert normalized.get("tomorrow") == expected_tomorrow
 
 # Use freezegun to control current time
 @freeze_time("2024-07-10 14:30:00+02:00") # Time is 14:30 Stockholm time (CEST)
-def test_get_current_hour_key_ha_mode(timezone_service_ha_mode):
-    """Test get_current_hour_key in HA mode."""
+def test_get_current_interval_key_ha_mode(timezone_service_ha_mode):
+    """Test get_current_interval_key in HA mode."""
     # HA time is Stockholm (UTC+2 in July) -> 14:30
     # The implementation now applies a timezone compensation of -1 hours
     # due to the 1-hour difference between Stockholm and Helsinki
-    assert timezone_service_ha_mode.get_current_hour_key() == "13:00"
+    assert timezone_service_ha_mode.get_current_interval_key() == "13:00"
 
 @freeze_time("2024-07-10 14:30:00+02:00") # Time is 14:30 Stockholm time (CEST)
-def test_get_current_hour_key_area_mode(timezone_service_area_mode):
-    """Test get_current_hour_key in Area mode."""
+def test_get_current_interval_key_area_mode(timezone_service_area_mode):
+    """Test get_current_interval_key in Area mode."""
     # Area time is Helsinki (UTC+3 in July). HA time is Stockholm (UTC+2)
     # 14:30 Stockholm time is 15:30 Helsinki time.
-    # HourCalculator uses Area timezone in Area mode
-    assert timezone_service_area_mode.get_current_hour_key() == "15:00"
+    # IntervalCalculator uses Area timezone in Area mode
+    assert timezone_service_area_mode.get_current_interval_key() == "15:00"
 
 def test_invalid_source_timezone(timezone_service_ha_mode):
     """Test that using an invalid source timezone raises ValueError."""
@@ -194,37 +194,37 @@ def test_invalid_source_timezone(timezone_service_ha_mode):
     invalid_tz = "Invalid/Timezone"
     # Check for the specific error from get_timezone_object or get_source_timezone
     with pytest.raises(ValueError, match="Invalid source timezone identifier"): 
-        timezone_service_ha_mode.normalize_hourly_prices(raw_prices, invalid_tz)
+        timezone_service_ha_mode.normalize_interval_prices(raw_prices, invalid_tz)
 
 # Freeze time to 02:30 CEST on the fallback day (first occurrence)
 @freeze_time("2023-10-29 02:30:00+02:00") 
-def test_get_next_hour_key_dst_fallback_first(timezone_service_ha_mode):
-    """Test get_next_hour_key during the first pass of DST fallback hour."""
+def test_get_next_interval_key_dst_fallback_first(timezone_service_ha_mode):
+    """Test get_next_interval_key during the first pass of DST fallback hour."""
     # The current implementation returns "02:00" 
-    assert timezone_service_ha_mode.get_next_hour_key() == "02:00"
+    assert timezone_service_ha_mode.get_next_interval_key() == "02:00"
 
 # Freeze time to 02:30 CET on the fallback day (second occurrence)
 @freeze_time("2023-10-29 02:30:00+01:00") 
-def test_get_current_hour_key_dst_fallback_second(timezone_service_ha_mode):
-    """Test get_current_hour_key during the second pass of DST fallback hour."""
+def test_get_current_interval_key_dst_fallback_second(timezone_service_ha_mode):
+    """Test get_current_interval_key during the second pass of DST fallback hour."""
     # The implementation now applies a timezone compensation of -1 hours
-    assert timezone_service_ha_mode.get_current_hour_key() == "01:00"
+    assert timezone_service_ha_mode.get_current_interval_key() == "01:00"
 
 @freeze_time("2024-07-10 14:30:00+02:00") # Time is 14:30 Stockholm time (CEST)
-def test_get_next_hour_key_normal(timezone_service_ha_mode):
-    """Test get_next_hour_key in normal conditions."""
+def test_get_next_interval_key_normal(timezone_service_ha_mode):
+    """Test get_next_interval_key in normal conditions."""
     # Current hour 14:00 -> Next hour 15:00
-    assert timezone_service_ha_mode.get_next_hour_key() == "15:00" 
+    assert timezone_service_ha_mode.get_next_interval_key() == "15:00" 
 
 @freeze_time("2023-03-26 01:30:00+01:00") # Time is 01:30 CET before spring forward
-def test_get_next_hour_key_dst_springforward(timezone_service_ha_mode):
-    """Test get_next_hour_key during DST spring forward (skipping 02:00)."""
+def test_get_next_interval_key_dst_springforward(timezone_service_ha_mode):
+    """Test get_next_interval_key during DST spring forward (skipping 02:00)."""
     # Current hour 01:00 -> Next hour should skip 02:00 and be 03:00
-    assert timezone_service_ha_mode.get_next_hour_key() == "03:00" 
+    assert timezone_service_ha_mode.get_next_interval_key() == "03:00" 
 
 @freeze_time("2023-10-29 02:30:00+02:00") # Time is 02:30 CEST during fallback (first 2am)
-def test_get_next_hour_key_dst_fallback_first(timezone_service_ha_mode):
-    """Test get_next_hour_key during the first pass of DST fallback hour."""
+def test_get_next_interval_key_dst_fallback_first(timezone_service_ha_mode):
+    """Test get_next_interval_key during the first pass of DST fallback hour."""
     # Current hour 02:00 (first) -> Next hour should be 03:00 (representing second 2am -> 3am)
-    # Based on HourCalculator logic, it should return "03:00"
-    assert timezone_service_ha_mode.get_next_hour_key() == "03:00"
+    # Based on IntervalCalculator logic, it should return "03:00"
+    assert timezone_service_ha_mode.get_next_interval_key() == "03:00"

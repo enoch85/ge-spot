@@ -71,7 +71,27 @@ hourly_prices, hour_key, HourCalculator (old)
 fifteen_min_prices, 15min_key (too specific)
 ```
 
-### Rule 7: Validate After Each Change
+### Rule 7: No Backward Compatibility - Clean Renames Only
+**All functions and variables must be renamed completely:**
+- ❌ **NEVER** keep old function names as aliases
+- ❌ **NEVER** create wrapper functions for backward compatibility
+- ✅ **ALWAYS** rename the function/class directly
+- ✅ **ALWAYS** update ALL callers to use the new name
+- ✅ **ALWAYS** update ALL tests to use the new name
+
+```python
+# ❌ WRONG - Don't create aliases:
+def normalize_hourly_prices(self, *args, **kwargs):
+    """Backward compatibility alias."""
+    return self.normalize_interval_prices(*args, **kwargs)
+
+# ✅ CORRECT - Just rename it:
+def normalize_interval_prices(self, interval_prices, ...):
+    """Normalizes timestamps in interval price dictionary."""
+    # ... implementation
+```
+
+### Rule 8: Validate After Each Change
 After editing a file:
 - Check for import errors
 - Check for syntax errors

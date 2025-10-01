@@ -71,7 +71,7 @@ def mock_timezone_service():
     mock_tz_service = MagicMock()
     mock_tz_service.target_timezone = "Europe/Stockholm"
     mock_tz_service.area_timezone = "Europe/Stockholm"
-    mock_tz_service.get_current_hour_key.return_value = "10:00"
+    mock_tz_service.get_current_interval_key.return_value = "10:00"
     mock_tz_service.get_next_hour_key.return_value = "11:00"
     # Only return the keys we have in our test data
     mock_tz_service.get_today_range.return_value = ["10:00", "11:00"]
@@ -365,7 +365,7 @@ class TestDataProcessor:
             with patch('custom_components.ge_spot.utils.timezone_converter.TimezoneConverter', spec=True) as mock_tz_converter_cls:
                 mock_tz_converter = mock_tz_converter_cls.return_value
                 # FIX: Return datetime keys localized to the target timezone
-                mock_tz_converter.normalize_hourly_prices.return_value = {
+                mock_tz_converter.normalize_interval_prices.return_value = {
                     datetime(2024, 1, 1, 10, 0, tzinfo=target_tz): 1.5,
                     datetime(2024, 1, 1, 11, 0, tzinfo=target_tz): 2.0
                 }

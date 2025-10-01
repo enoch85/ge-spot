@@ -235,7 +235,7 @@ class TimezoneService:
             _LOGGER.error("Unexpected error parsing timestamp '%s': %s", timestamp_str, e)
             return None
 
-    def get_current_hour_key(self):
+    def get_current_interval_key(self):
         """Get the current interval key in the appropriate timezone based on the timezone reference setting."""
         # Get current time in different timezones for debugging
         # Use pytz.utc instead of undefined timezone.utc
@@ -260,15 +260,11 @@ class TimezoneService:
         _LOGGER.debug(f"Current interval key from calculator: {interval_key} (timezone: {used_tz}, area: {self.area})")
         return interval_key
 
-    def get_current_interval_key(self):
-        """Get the current interval key - alias for get_current_hour_key for consistency."""
-        return self.get_current_hour_key()
-
     def is_dst_transition_day(self, dt=None):
         """Check if today is a DST transition day."""
         return self.dst_handler.is_dst_transition_day(dt)
 
-    def get_next_hour_key(self) -> str:
+    def get_next_interval_key(self) -> str:
         """Get key for the next interval in target timezone.
 
         Returns:
@@ -281,10 +277,6 @@ class TimezoneService:
 
         # Use the interval calculator for consistent timezone handling based on timezone_reference
         return self.interval_calculator.get_interval_key_for_datetime(next_interval)
-
-    def get_next_interval_key(self) -> str:
-        """Get key for the next interval - alias for get_next_hour_key for consistency."""
-        return self.get_next_hour_key()
 
     def get_today_range(self) -> List[str]:
         """Get list of interval keys for today."""
