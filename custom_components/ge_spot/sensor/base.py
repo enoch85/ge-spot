@@ -154,27 +154,27 @@ class BaseElectricityPriceSensor(SensorEntity):
         if "source_timezone" in self.coordinator.data:
             attrs["api_timezone"] = self.coordinator.data["source_timezone"]
 
-        # Add hourly prices if available, rounding float values
-        if "hourly_prices" in self.coordinator.data:
-            hourly_prices = self.coordinator.data["hourly_prices"]
-            if isinstance(hourly_prices, dict):
-                attrs["hourly_prices"] = {
+        # Add interval prices if available, rounding float values
+        if "interval_prices" in self.coordinator.data:
+            interval_prices = self.coordinator.data["interval_prices"]
+            if isinstance(interval_prices, dict):
+                attrs["interval_prices"] = {
                     k: round(v, 4) if isinstance(v, float) else v
-                    for k, v in hourly_prices.items()
+                    for k, v in interval_prices.items()
                 }
             else:
-                attrs["hourly_prices"] = hourly_prices # Keep original if not a dict
+                attrs["interval_prices"] = interval_prices # Keep original if not a dict
 
-        # Add tomorrow hourly prices if available, rounding float values
-        if "tomorrow_hourly_prices" in self.coordinator.data:
-            tomorrow_hourly_prices = self.coordinator.data["tomorrow_hourly_prices"]
-            if isinstance(tomorrow_hourly_prices, dict):
-                attrs["tomorrow_hourly_prices"] = {
+        # Add tomorrow interval prices if available, rounding float values
+        if "tomorrow_interval_prices" in self.coordinator.data:
+            tomorrow_interval_prices = self.coordinator.data["tomorrow_interval_prices"]
+            if isinstance(tomorrow_interval_prices, dict):
+                attrs["tomorrow_interval_prices"] = {
                     k: round(v, 4) if isinstance(v, float) else v
-                    for k, v in tomorrow_hourly_prices.items()
+                    for k, v in tomorrow_interval_prices.items()
                 }
             else:
-                attrs["tomorrow_hourly_prices"] = tomorrow_hourly_prices # Keep original if not a dict
+                attrs["tomorrow_interval_prices"] = tomorrow_interval_prices # Keep original if not a dict
 
         # Add error message if available
         if "error" in self.coordinator.data and self.coordinator.data["error"]:

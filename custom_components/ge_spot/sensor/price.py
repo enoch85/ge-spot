@@ -74,14 +74,14 @@ class PriceValueSensor(BaseElectricityPriceSensor):
 
         # Add formatted timestamps with prices for current price sensor
         if self._sensor_type == "current_price" and self.coordinator.data:
-            # Use processed hourly prices from coordinator data
-            today_prices = self.coordinator.data.get("hourly_prices")
+            # Use processed interval prices from coordinator data
+            today_prices = self.coordinator.data.get("interval_prices")
             if today_prices:
                 attrs["today_with_timestamps"] = self._format_timestamp_display(today_prices)
 
             # Add tomorrow prices if valid and available
             if self.coordinator.data.get("tomorrow_valid", False):
-                tomorrow_prices = self.coordinator.data.get("tomorrow_hourly_prices")
+                tomorrow_prices = self.coordinator.data.get("tomorrow_interval_prices")
                 if tomorrow_prices:
                     attrs["tomorrow_with_timestamps"] = self._format_timestamp_display(tomorrow_prices)
 
@@ -97,6 +97,8 @@ class PriceValueSensor(BaseElectricityPriceSensor):
                 attrs.update(essential_attrs)
 
         return attrs
+
+```
 
 
 class ExtremaPriceSensor(PriceValueSensor):
