@@ -130,18 +130,19 @@ async def main():
         source_timezone = parsed_data.get('timezone')
         logger.info(f"API Timezone: {source_timezone}")
         
-        raw_prices = parsed_data.get("hourly_raw", {})
+        raw_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
         if not raw_prices:
             logger.error("Error: No raw prices found in the parsed data after parsing step.")
+            logger.error(f"Available keys: {list(parsed_data.keys())}")
             if 'raw_data' in parsed_data and 'data' in parsed_data['raw_data']:
                  logger.debug(f"--- Raw API Response --- START ---")
                  logger.debug(json.dumps(parsed_data['raw_data']['data'], indent=2))
                  logger.debug(f"--- Raw API Response --- END ---")
             return 1
             
-        logger.info(f"Found {len(raw_prices)} raw price points (before timezone normalization)")
+        logger.info(f"Found {len(raw_prices)} raw interval price points (before timezone normalization)")
         is_five_minute = parsed_data.get('is_five_minute', True)
-        logger.info(f"Data interval: {'5-minute' if is_five_minute else 'Hourly'}")
+        logger.info(f"Data interval: {'5-minute (aggregated to 15-min)' if is_five_minute else 'Hourly'}")
         logger.debug(f"Raw prices sample: {dict(list(raw_prices.items())[:5])}")
 
         # Define expected intervals based on data type
@@ -149,13 +150,18 @@ async def main():
 
         # Step 3: Normalize Timezones
         logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
-        normalized_prices = tz_service.normalize_hourly_prices(
-            hourly_prices=raw_prices, 
-            source_tz_str=source_timezone,
-            is_five_minute=is_five_minute # Pass the flag
+        # Import TimezoneConverter to use normalize_interval_prices
+        from custom_components.ge_spot.timezone.timezone_converter import TimezoneConverter
+        tz_converter = TimezoneConverter(tz_service)
+        
+        normalized_prices = tz_converter.normalize_interval_prices(
+            interval_prices=raw_prices, 
+            source_timezone_str=source_timezone,
+            preserve_date=True
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
-        normalized_prices_sample = {k.isoformat(): v for k, v in list(normalized_prices.items())[:5]}
+        logger.info(f"Expected: {expected_intervals_per_day * 2} intervals for 2 days (5-min aggregated to 15-min)")
+        normalized_prices_sample = dict(list(normalized_prices.items())[:5])
         logger.debug(f"Normalized prices sample: {normalized_prices_sample}")
 
         # Step 4: Unit conversion (MWh -> kWh)

@@ -101,13 +101,14 @@ async def main():
         logger.info(f"Currency: {parsed_data.get('currency')}")
         logger.info(f"API Timezone: {parsed_data.get('api_timezone')}")
         
-        # Check if hourly prices are available
-        hourly_prices = parsed_data.get("hourly_raw", {}) # Corrected key from hourly_prices to hourly_raw
-        if not hourly_prices:
-            logger.error("Error: No hourly prices found in the parsed data")
+        # Check if interval prices are available
+        interval_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
+        if not interval_prices:
+            logger.error("Error: No interval prices found in the parsed data")
+            logger.error(f"Available keys: {list(parsed_data.keys())}")
             return 1
             
-        logger.info(f"Found {len(hourly_prices)} hourly prices")
+        logger.info(f"Found {len(interval_prices)} interval prices")
         
         # Step 3: Currency conversion (DKK -> EUR)
         logger.info(f"\nConverting prices from {parsed_data.get('currency', Currency.DKK)} to {Currency.EUR}...")
@@ -116,7 +117,7 @@ async def main():
         
         # Convert prices from DKK to EUR and from MWh to kWh
         converted_prices = {}
-        for ts, price in hourly_prices.items():
+        for ts, price in interval_prices.items():  # Changed from hourly_prices
             # Convert from DKK to EUR
             price_eur = await exchange_service.convert(
                 price, 

@@ -29,10 +29,10 @@ class ComedParser(BasePriceParser):
             raw_data: Raw API response data
 
         Returns:
-            Parsed data with hourly prices
+            Parsed data with interval prices
         """
         result = {
-            "hourly_raw": {},  # Changed from hourly_prices
+            "interval_raw": {},  # Changed from interval_prices
             "currency": Currency.CENTS  # ComEd API returns prices in cents/kWh, not USD/kWh
         }
 
@@ -47,22 +47,26 @@ class ComedParser(BasePriceParser):
             if json_data:
                 endpoint = ComEd.FIVE_MINUTE_FEED
                 self._parse_price_data(json_data, endpoint, result)
+        # Handle list of price data directly
+        elif isinstance(raw_data, list):
+            endpoint = ComEd.FIVE_MINUTE_FEED
+            self._parse_price_data(raw_data, endpoint, result)
         # Handle pre-processed data
         elif isinstance(raw_data, dict):
-            if "hourly_raw" in raw_data and isinstance(raw_data["hourly_raw"], dict):  # Changed from hourly_prices
-                result["hourly_raw"] = raw_data["hourly_raw"]  # Changed from hourly_prices
+            if "interval_raw" in raw_data and isinstance(raw_data["interval_raw"], dict):  # Changed from interval_prices
+                result["interval_raw"] = raw_data["interval_raw"]  # Changed from interval_prices
             elif "raw_data" in raw_data:
                 json_data = self._fix_and_parse_json(raw_data["raw_data"])
                 if json_data:
                     endpoint = raw_data.get("endpoint", ComEd.FIVE_MINUTE_FEED)
                     self._parse_price_data(json_data, endpoint, result)
 
-        # Calculate current and next hour prices
+        # Calculate current and next interval prices
         if not result.get("current_price"):
-            result["current_price"] = self._get_current_price(result["hourly_raw"])  # Changed from hourly_prices
+            result["current_price"] = self._get_current_price(result["interval_raw"])  # Changed from interval_prices
 
-        if not result.get("next_hour_price"):
-            result["next_hour_price"] = self._get_next_hour_price(result["hourly_raw"])  # Changed from hourly_prices
+        if not result.get("next_interval_price"):
+            result["next_interval_price"] = self._get_next_interval_price(result["interval_raw"])  # Changed from interval_prices
 
         return result
 
@@ -152,12 +156,12 @@ class ComedParser(BasePriceParser):
         if not isinstance(data, list) or not data:
             return
 
-        hourly_prices = {}
+        interval_prices = {}
 
-        # For 5-minute feed, we need to group by hour
+        # For 5-minute feed, we need to aggregate to 15-minute intervals
         if endpoint == ComEd.FIVE_MINUTE_FEED:
-            # Use defaultdict to automatically create empty lists for new hour keys
-            hour_prices = defaultdict(list)
+            # Use defaultdict to automatically create empty lists for new 15-minute interval keys
+            interval_15min_prices = defaultdict(list)
 
             for item in data:
                 if "price" in item and "millisUTC" in item:
@@ -166,24 +170,26 @@ class ComedParser(BasePriceParser):
                         millis = int(item["millisUTC"])
                         timestamp = datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
                         price = float(item["price"])
-                        # Create ISO timestamp for hourly price
-                        hour_dt = timestamp.replace(minute=0, second=0, microsecond=0)
-                        hour_key = hour_dt.isoformat()
-                        price_date = hour_dt.date().isoformat()
-                        # Add to hour prices
-                        hour_prices[hour_key].append(price)
+                        # Create ISO timestamp for 15-minute interval aggregation from 5-min data
+                        # Round down to nearest 15-minute interval: 00, 15, 30, 45
+                        minute_rounded = (timestamp.minute // 15) * 15
+                        interval_dt = timestamp.replace(minute=minute_rounded, second=0, microsecond=0)
+                        interval_key = interval_dt.isoformat()
+                        price_date = interval_dt.date().isoformat()
+                        # Add to 15-minute interval prices
+                        interval_15min_prices[interval_key].append(price)
                         # Extract current price from first item if it's the most recent
                         if item == data[0]:
                             result["current_price"] = price
                     except (ValueError, TypeError) as e:
                         _LOGGER.debug(f"Skipping invalid data point: {e}")
                         continue
-            # Calculate average price for each hour
-            for hour_key, prices in hour_prices.items():
+            # Calculate average price for each 15-minute interval (averages 3x 5-min prices)
+            for interval_key, prices in interval_15min_prices.items():
                 if prices:
-                    # Simple average
+                    # Simple average of all 5-minute prices within the 15-minute interval
                     avg_price = sum(prices) / len(prices)
-                    result["hourly_raw"][hour_key] = avg_price  # Changed from hourly_prices
+                    result["interval_raw"][interval_key] = avg_price  # Changed from interval_prices
 
         # For current hour average, just use the current price
         else:
@@ -197,46 +203,51 @@ class ComedParser(BasePriceParser):
                     else:
                         timestamp = datetime.now(timezone.utc)
                     hour_dt = timestamp.replace(minute=0, second=0, microsecond=0)
-                    hour_key = hour_dt.isoformat()
-                    result["hourly_raw"][hour_key] = current_price  # Changed from hourly_prices
+                    interval_key = hour_dt.isoformat()
+                    result["interval_raw"][interval_key] = current_price  # Changed from interval_prices
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning(f"Failed to parse current hour price: {e}")
 
-        # Update result with hourly prices
-        result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
+        # Update result with interval prices
+        result["interval_raw"].update(interval_prices)  # Changed from interval_prices
 
-    def _get_current_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:  # Changed from hourly_prices
-        """Get current hour price.
+    def _get_current_price(self, interval_raw: Dict[str, float]) -> Optional[float]:  # Changed from interval_prices
+        """Get current interval price.
 
         Args:
-            hourly_raw: Dictionary of hourly prices
+            interval_raw: Dictionary of interval prices
 
         Returns:
-            Current hour price or None if not available
+            Current interval price or None if not available
         """
-        if not hourly_raw:
+        if not interval_raw:
             return None
 
         now = datetime.now(timezone.utc)
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
-        current_hour_key = current_hour.isoformat()
+        # Round down to nearest 15-minute interval
+        minute_rounded = (now.minute // 15) * 15
+        current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
+        current_interval_key = current_interval.isoformat()
 
-        return hourly_raw.get(current_hour_key)  # Changed from hourly_prices
+        return interval_raw.get(current_interval_key)  # Changed from interval_prices
 
-    def _get_next_hour_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:  # Changed from hourly_prices
-        """Get next hour price.
+    def _get_next_interval_price(self, interval_raw: Dict[str, float]) -> Optional[float]:  # Changed from interval_prices
+        """Get next interval price.
 
         Args:
-            hourly_raw: Dictionary of hourly prices
+            interval_raw: Dictionary of interval prices
 
         Returns:
-            Next hour price or None if not available
+            Next interval price or None if not available
         """
-        if not hourly_raw:
+        if not interval_raw:
             return None
 
         now = datetime.now(timezone.utc)
-        next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        next_hour_key = next_hour.isoformat()
+        # Round down to current 15-minute interval, then add 15 minutes
+        minute_rounded = (now.minute // 15) * 15
+        current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
+        next_interval = current_interval + timedelta(minutes=15)
+        next_interval_key = next_interval.isoformat()
 
-        return hourly_raw.get(next_hour_key)  # Changed from hourly_prices
+        return interval_raw.get(next_interval_key)  # Changed from interval_prices

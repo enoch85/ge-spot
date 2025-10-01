@@ -89,14 +89,14 @@ class EpexAPI(BasePriceAPI):
             # --- Parsing and Structuring ---
             # (Moved parsing logic down to ensure checks happen first)
             parser = self.get_parser_for_area(area)
-            hourly_raw = {}
+            interval_raw = {}
             metadata = {}
 
             # Parse today's data (already validated by is_data_available)
             try:
                 parsed_today = parser.parse(raw_today)
-                if parsed_today and "hourly_prices" in parsed_today:
-                    hourly_raw.update(parsed_today["hourly_prices"])
+                if parsed_today and "interval_raw" in parsed_today:
+                    interval_raw.update(parsed_today["interval_raw"])
                 # Extract metadata primarily from today's data
                 metadata = parser.extract_metadata(raw_today)
             except Exception as e:
@@ -108,8 +108,8 @@ class EpexAPI(BasePriceAPI):
             if is_data_available(raw_tomorrow):
                 try:
                     parsed_tomorrow = parser.parse(raw_tomorrow)
-                    if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
-                        hourly_raw.update(parsed_tomorrow["hourly_prices"])
+                    if parsed_tomorrow and "interval_raw" in parsed_tomorrow:
+                        interval_raw.update(parsed_tomorrow["interval_raw"])
                     # Optionally update metadata if today's failed, though less likely
                     if not metadata:
                          metadata = parser.extract_metadata(raw_tomorrow)
@@ -117,7 +117,7 @@ class EpexAPI(BasePriceAPI):
                     _LOGGER.warning(f"Failed to parse tomorrow's EPEX data, proceeding without it: {e}")
 
             # Ensure we have at least some prices before returning success
-            if not hourly_raw:
+            if not interval_raw:
                 _LOGGER.error(f"EPEX parsing failed for area {area}: No hourly prices extracted from valid raw data.")
                 return None
 
@@ -131,7 +131,7 @@ class EpexAPI(BasePriceAPI):
             }
 
             return {
-                "hourly_raw": hourly_raw,
+                "interval_raw": interval_raw,
                 "timezone": metadata.get("timezone", "Europe/Berlin"),
                 "currency": metadata.get("currency", "EUR"),
                 "source_name": Source.EPEX, # Use constant

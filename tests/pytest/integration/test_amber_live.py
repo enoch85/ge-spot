@@ -77,21 +77,21 @@ async def test_amber_live_fetch_parse():
         assert api_timezone is not None and api_timezone, f"api_timezone should have a value, got {api_timezone}"
         assert "Australia" in api_timezone or "UTC" in api_timezone, f"Expected Australian timezone or UTC, got {api_timezone}"
         
-        # Hourly prices validation
-        assert "hourly_prices" in parsed_data, "hourly_prices missing from parsed data"
-        hourly_prices = parsed_data["hourly_prices"]
-        assert isinstance(hourly_prices, dict), f"hourly_prices should be a dictionary, got {type(hourly_prices)}"
+        # Interval prices validation
+        assert "interval_raw" in parsed_data, "interval_raw missing from parsed data"
+        interval_prices = parsed_data["interval_raw"]
+        assert isinstance(interval_prices, dict), f"interval_raw should be a dictionary, got {type(interval_prices)}"
         
         # Real-world validation: Amber should return price data
-        assert hourly_prices, "No hourly prices found - this indicates a real issue with the API or parser"
+        assert interval_prices, "No interval prices found - this indicates a real issue with the API or parser"
         
         # Real-world validation: Amber should provide reasonable number of price entries
-        # Amber typically provides 5-minute data, but our API might consolidate to hourly
-        min_expected_entries = 6  # At minimum, expecting a few hours of data
-        assert len(hourly_prices) >= min_expected_entries, f"Expected at least {min_expected_entries} price entries, got {len(hourly_prices)}"
+        # Amber may provide various interval data (5-min, 15-min, 30-min depending on API)
+        min_expected_entries = 6  # At minimum, expecting a few intervals of data
+        assert len(interval_prices) >= min_expected_entries, f"Expected at least {min_expected_entries} interval entries, got {len(interval_prices)}"
         
         # Validate timestamp format and price values
-        for timestamp, price in hourly_prices.items():
+        for timestamp, price in interval_prices.items():
             # Validate timestamp format
             try:
                 dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -113,8 +113,8 @@ async def test_amber_live_fetch_parse():
             # Converting to cents/kWh, which is how Amber reports:
             assert -50 <= price <= 1500, f"Price {price} cents/kWh for {timestamp} is outside reasonable range"
         
-        # Check for sequential timestamps (Amber may have 5-minute or 30-minute intervals)
-        timestamps = sorted(hourly_prices.keys())
+        # Check for sequential timestamps (Amber may have 5-minute, 15-minute or 30-minute intervals)
+        timestamps = sorted(interval_prices.keys())
         for i in range(1, len(timestamps)):
             prev_dt = datetime.fromisoformat(timestamps[i-1].replace("Z", "+00:00"))
             curr_dt = datetime.fromisoformat(timestamps[i].replace("Z", "+00:00"))
@@ -125,8 +125,8 @@ async def test_amber_live_fetch_parse():
             is_valid = any(abs(minutes_diff - interval) < 1 for interval in valid_intervals)
             assert is_valid, f"Unexpected time gap between {timestamps[i-1]} and {timestamps[i]}: {minutes_diff} minutes"
         
-        logger.info(f"Amber Live Test: PASS - Found {len(hourly_prices)} prices. "
-                  f"Range: {min(hourly_prices.values()):.2f} to {max(hourly_prices.values()):.2f} cents/kWh")
+        logger.info(f"Amber Live Test: PASS - Found {len(interval_prices)} interval prices. "
+                  f"Range: {min(interval_prices.values()):.2f} to {max(interval_prices.values()):.2f} cents/kWh")
 
     except AssertionError as ae:
         # Let assertion errors propagate - these are test failures that should be fixed in the code, not the test

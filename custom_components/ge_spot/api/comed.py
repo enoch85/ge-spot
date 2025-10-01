@@ -58,15 +58,15 @@ class ComedAPI(BasePriceAPI):
             if not raw_data:
                 return {}
 
-            # Parse the data
-            parser = self.get_parser_for_area(area)
-            parsed = parser.parse(raw_data)
-            hourly_raw = parsed.get("hourly_prices", {})
+            # Parse the response
+            parser = self.get_parser_for_area(None)
+            parsed = parser.parse(response, endpoint)
+            interval_raw = parsed.get("interval_raw", {})
             metadata = parser.extract_metadata(raw_data)
 
             # Return standardized data structure with ISO timestamps
             return {
-                "hourly_raw": hourly_raw,
+                "interval_raw": interval_raw,
                 "timezone": metadata.get("timezone", "America/Chicago"),
                 "currency": metadata.get("currency", "cents"),
                 "source_name": "comed",

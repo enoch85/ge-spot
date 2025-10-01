@@ -167,13 +167,14 @@ async def main():
 
         # Step 3: Normalize Timezones
         logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
-        # Use the timezone converter
-        normalized_prices = tz_converter.normalize_hourly_prices(
-            hourly_prices=raw_prices, # Pass the raw prices
+        # Use normalize_interval_prices to preserve 15-minute intervals
+        normalized_prices = tz_converter.normalize_interval_prices(
+            interval_prices=raw_prices, # Pass the raw prices
             source_timezone_str=source_timezone,
             preserve_date=True # Keep original date context
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
+        logger.info(f"Expected: Depends on Amber API interval (possibly 30-min or hourly)")
         logger.debug(f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}")
 
         # Step 4: Unit/Currency conversion (Amber is usually AUD/kWh, so only structure adjustment needed)

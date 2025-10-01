@@ -22,14 +22,10 @@ class AemoParser(BasePriceParser):
         super().__init__(Source.AEMO, timezone_service)
 
     def parse(self, raw_data: Any, area: Optional[str] = None) -> Dict[str, Any]:
-        """Parse AEMO API response.
-
-        Args:
-            raw_data: Raw API response data
-            area: Optional area code to filter results for
+        """Parse AEMO price data.
 
         Returns:
-            Parsed data with hourly prices, currency, area, and timezone
+            Parsed data with interval prices, currency, area, and timezone
         """
         
         # Determine timezone based on the area, similar to AemoAPI.get_timezone_for_area
@@ -46,7 +42,7 @@ class AemoParser(BasePriceParser):
             determined_timezone = timezone_map.get(area, "Australia/Sydney")
 
         result = {
-            "hourly_raw": {},  # Changed from hourly_prices
+            "interval_raw": {},  # Changed from interval_prices
             "currency": Currency.AUD,
             "area": area,  # Store the area if provided
             "timezone": determined_timezone # Add timezone to the parser's result
@@ -71,9 +67,9 @@ class AemoParser(BasePriceParser):
                     _LOGGER.warning(f"Failed to parse AEMO data as CSV: {e}")
         # If raw_data is a dictionary, extract data directly
         elif isinstance(raw_data, dict):
-            # If hourly prices were already processed
-            if "hourly_raw" in raw_data and isinstance(raw_data["hourly_raw"], dict):  # Changed from hourly_prices
-                result["hourly_raw"] = raw_data["hourly_raw"]  # Changed from hourly_prices
+            # If interval prices were already processed
+            if "interval_raw" in raw_data and isinstance(raw_data["interval_raw"], dict):  # Changed from interval_prices
+                result["interval_raw"] = raw_data["interval_raw"]  # Changed from interval_prices
             elif "raw_data" in raw_data:
                 # Try to parse raw_data entry
                 self._parse_json(raw_data, result, area)  # Pass area
@@ -81,12 +77,12 @@ class AemoParser(BasePriceParser):
                 # Try parsing the dict directly as if it's the JSON response
                 self._parse_json(raw_data, result, area)  # Pass area
 
-        # Calculate current and next hour prices if not provided
+        # Calculate current and next interval prices if not provided
         if not result.get("current_price"):
-            result["current_price"] = self._get_current_price(result["hourly_raw"])  # Changed from hourly_prices
+            result["current_price"] = self._get_current_price(result["interval_raw"])  # Changed from interval_prices
 
-        if not result.get("next_hour_price"):
-            result["next_hour_price"] = self._get_next_hour_price(result["hourly_raw"])  # Changed from hourly_prices
+        if not result.get("next_interval_price"):
+            result["next_interval_price"] = self._get_next_interval_price(result["interval_raw"])  # Changed from interval_prices
 
         return result
 
@@ -125,11 +121,11 @@ class AemoParser(BasePriceParser):
 
         metadata.update({
             "source": self.source,
-            "price_count": len(data.get("hourly_raw", {})),  # Changed from hourly_prices
+            "price_count": len(data.get("interval_raw", {})),  # Changed from interval_prices
             "currency": data.get("currency", "AUD"),  # Changed default
             "area": data.get("area", "NSW1"),  # Use area from parsed data
             "has_current_price": "current_price" in data and data["current_price"] is not None,
-            "has_next_hour_price": "next_hour_price" in data and data["next_hour_price"] is not None,
+            "has_next_interval_price": "next_interval_price" in data and data["next_interval_price"] is not None,
             "parser_version": "2.1",  # Updated version
             "parsed_at": datetime.now(timezone.utc).isoformat()
         })
@@ -146,7 +142,7 @@ class AemoParser(BasePriceParser):
         """
         # Check if we're using the consolidated endpoint
         from ...const.api import Aemo
-        hourly_prices = {}
+        interval_prices_5min = {}
 
         if Aemo.SUMMARY_ARRAY in json_data:
             # Process data from the main summary array
@@ -160,19 +156,23 @@ class AemoParser(BasePriceParser):
                         # Parse timestamp
                         timestamp_str = entry[Aemo.SETTLEMENT_DATE_FIELD]
                         try:
-                            # AEMO timestamps are typically in ISO format
+                            # AEMO timestamps are typically in ISO format with 5-minute intervals
                             dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                            hour_key = dt.isoformat()
+                            # Store 5-minute prices as-is for now
+                            interval_key = dt.isoformat()
                             # Parse price
                             price = float(entry[Aemo.PRICE_FIELD])
-                            hourly_prices[hour_key] = price
+                            interval_prices_5min[interval_key] = price
                         except (ValueError, TypeError):
                             _LOGGER.debug(f"Failed to parse AEMO timestamp: {timestamp_str}")
                     except (KeyError, TypeError):
                         continue
 
-        # Update result with parsed hourly prices
-        result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
+        # Aggregate 5-minute prices to 15-minute intervals
+        interval_prices_15min = self._aggregate_to_15min(interval_prices_5min)
+        
+        # Update result with aggregated 15-minute interval prices
+        result["interval_raw"].update(interval_prices_15min)  # Changed from interval_prices
 
     def _parse_csv(self, csv_data: str, result: Dict[str, Any], area: Optional[str] = None) -> None:
         """Parse CSV formatted data from AEMO.
@@ -182,7 +182,7 @@ class AemoParser(BasePriceParser):
             result: Result dictionary to update
             area: Optional area code to filter results for
         """
-        hourly_prices = {}
+        interval_prices_5min = {}
 
         try:
             # Read CSV data
@@ -201,9 +201,10 @@ class AemoParser(BasePriceParser):
                         timestamp_str = row["SETTLEMENTDATE"]
                         try:
                             dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                            hour_key = dt.isoformat()
+                            # Store 5-minute prices as-is for now
+                            interval_key = dt.isoformat()
                             price = float(row["RRP"])
-                            hourly_prices[hour_key] = price
+                            interval_prices_5min[interval_key] = price
                         except (ValueError, TypeError):
                             _LOGGER.debug(f"Failed to parse AEMO CSV timestamp: {timestamp_str}")
                     except (KeyError, TypeError):
@@ -211,8 +212,52 @@ class AemoParser(BasePriceParser):
         except Exception as e:
             _LOGGER.warning(f"Error parsing AEMO CSV data: {e}")
 
-        # Update result with parsed hourly prices
-        result["hourly_raw"].update(hourly_prices)  # Changed from hourly_prices
+        # Aggregate 5-minute prices to 15-minute intervals
+        interval_prices_15min = self._aggregate_to_15min(interval_prices_5min)
+        
+        # Update result with aggregated 15-minute interval prices
+        result["interval_raw"].update(interval_prices_15min)  # Changed from interval_prices
+
+    def _aggregate_to_15min(self, prices_5min: Dict[str, float]) -> Dict[str, float]:
+        """Aggregate 5-minute prices to 15-minute intervals.
+        
+        AEMO provides 5-minute dispatch prices, but we aggregate them to 15-minute intervals
+        to match our target resolution. Each 15-minute interval is the average of 3x 5-minute prices.
+        
+        Args:
+            prices_5min: Dictionary of 5-minute interval prices with ISO timestamp keys
+            
+        Returns:
+            Dictionary of 15-minute interval prices (averaged from 5-min data)
+        """
+        from collections import defaultdict
+        
+        interval_15min_prices = defaultdict(list)
+        
+        for interval_key, price in prices_5min.items():
+            try:
+                # Parse the timestamp
+                dt = datetime.fromisoformat(interval_key)
+                # Round down to nearest 15-minute interval: 00, 15, 30, 45
+                minute_rounded = (dt.minute // 15) * 15
+                interval_dt = dt.replace(minute=minute_rounded, second=0, microsecond=0)
+                interval_key_15min = interval_dt.isoformat()
+                # Add to the 15-minute interval bucket
+                interval_15min_prices[interval_key_15min].append(price)
+            except (ValueError, TypeError) as e:
+                _LOGGER.debug(f"Failed to parse timestamp for aggregation: {interval_key}, error: {e}")
+                continue
+        
+        # Calculate average for each 15-minute interval
+        result = {}
+        for interval_key_15min, prices in interval_15min_prices.items():
+            if prices:
+                # Average of all 5-minute prices within the 15-minute interval (typically 3 values)
+                avg_price = sum(prices) / len(prices)
+                result[interval_key_15min] = avg_price
+                _LOGGER.debug(f"Aggregated {len(prices)} 5-min prices to 15-min interval {interval_key_15min}: {avg_price:.2f}")
+        
+        return result
 
     def _parse_timestamp(self, timestamp_str: str) -> Optional[datetime]:
         """Parse timestamp from AEMO format.
@@ -245,73 +290,63 @@ class AemoParser(BasePriceParser):
             _LOGGER.warning(f"Failed to parse timestamp: {timestamp_str}")
             return None
 
-    def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get current hour price.
+    def _get_current_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+        """Get current interval price.
 
         Args:
-            hourly_prices: Dictionary of hourly prices
+            interval_prices: Dictionary of interval prices
 
         Returns:
-            Current hour price or None if not available
+            Current interval price or None if not available
         """
-        if not hourly_prices:
+        if not interval_prices:
             return None
 
         now = datetime.now()
 
-        # Try both formats - full ISO and simple HH:00
-        current_hour = now.replace(minute=0, second=0, microsecond=0)
-        current_hour_key_full = current_hour.strftime("%Y-%m-%dT%H:00:00")
-        current_hour_key_simple = f"{now.hour:02d}:00"
+        # Round down to nearest 15-minute interval
+        minute_rounded = (now.minute // 15) * 15
+        current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
+        current_interval_key = current_interval.isoformat()
 
-        _LOGGER.debug(f"Looking for current hour price with keys: {current_hour_key_simple} or {current_hour_key_full}")
+        _LOGGER.debug(f"Looking for current interval price with key: {current_interval_key}")
+        
+        return interval_prices.get(current_interval_key)
 
-        # Try simple format first (which is what we're storing in our parser updates)
-        if current_hour_key_simple in hourly_prices:
-            return hourly_prices[current_hour_key_simple]
-
-        # Fall back to full format (legacy)
-        return hourly_prices.get(current_hour_key_full)
-
-    def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get next hour price.
+    def _get_next_interval_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+        """Get next interval price.
 
         Args:
-            hourly_prices: Dictionary of hourly prices
+            interval_prices: Dictionary of interval prices
 
         Returns:
-            Next hour price or None if not available
+            Next interval price or None if not available
         """
-        if not hourly_prices:
+        if not interval_prices:
             return None
 
         now = datetime.now()
-        next_hour = (now.hour + 1) % 24
+        
+        # Round down to current 15-minute interval, then add 15 minutes
+        minute_rounded = (now.minute // 15) * 15
+        current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
+        next_interval = current_interval + timedelta(minutes=15)
+        next_interval_key = next_interval.isoformat()
 
-        # Try both formats - full ISO and simple HH:00
-        next_dt = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        next_hour_key_full = next_dt.strftime("%Y-%m-%dT%H:00:00")
-        next_hour_key_simple = f"{next_hour:02d}:00"
+        _LOGGER.debug(f"Looking for next interval price with key: {next_interval_key}")
 
-        _LOGGER.debug(f"Looking for next hour price with keys: {next_hour_key_simple} or {next_hour_key_full}")
+        return interval_prices.get(next_interval_key)
 
-        # Try simple format first (which is what we're storing in our parser updates)
-        if next_hour_key_simple in hourly_prices:
-            return hourly_prices[next_hour_key_simple]
-
-        # Fall back to full format (legacy)
-        return hourly_prices.get(next_hour_key_full)
-
-    def _calculate_day_average(self, hourly_prices: Dict[str, float]) -> Optional[float]:
+    def _calculate_day_average(self, interval_prices: Dict[str, float]) -> Optional[float]:
         """Calculate day average price.
 
         Args:
-            hourly_prices: Dictionary of hourly prices
+            interval_prices: Dictionary of interval prices
 
         Returns:
             Day average price or None if not enough data
         """
-        if not hourly_prices:
+        if not interval_prices:
             return None
 
         # Get today's date
@@ -319,9 +354,9 @@ class AemoParser(BasePriceParser):
 
         # Filter prices for today
         today_prices = []
-        for hour_key, price in hourly_prices.items():
+        for interval_key, price in interval_prices.items():
             try:
-                hour_dt = datetime.fromisoformat(hour_key)
+                hour_dt = datetime.fromisoformat(interval_key)
                 if hour_dt.date() == today:
                     today_prices.append(price)
             except (ValueError, TypeError):

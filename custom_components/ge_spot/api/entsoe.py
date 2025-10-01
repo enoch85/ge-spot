@@ -322,8 +322,8 @@ class EntsoeAPI(BasePriceAPI):
             # Pass the entire raw_data dictionary directly to the parser instance
             parsed_data = self.parser.parse(raw_data)
 
-            if not parsed_data or not parsed_data.get("hourly_raw"):
-                 _LOGGER.warning("ENTSOE API: Parser returned no hourly_raw data.")
+            if not parsed_data or not parsed_data.get("interval_raw"):
+                 _LOGGER.warning("ENTSOE API: Parser returned no interval_raw data.")
                  return {}
 
             _LOGGER.debug(f"ENTSOE API: Parser returned keys: {list(parsed_data.keys())}")

@@ -348,9 +348,9 @@ class UnifiedPriceManager:
                 # Process the raw result (this is where parsing happens)
                 processed_data = await self._process_result(result)
 
-                # NOW check if processing yielded hourly_prices data and has_data flag is true
-                if processed_data and processed_data.get("has_data") and processed_data.get("hourly_prices"): # Check for hourly_prices *after* processing
-                    _LOGGER.info(f"[{self.area}] Successfully processed data, found 'hourly_prices'.")
+                # NOW check if processing yielded interval_prices data and has_data flag is true
+                if processed_data and processed_data.get("has_data") and processed_data.get("interval_prices"): # Check for interval_prices *after* processing
+                    _LOGGER.info(f"[{self.area}] Successfully processed data, found 'interval_prices'.")
                     self._consecutive_failures = 0
                     self._active_source = processed_data.get("data_source", "unknown") # Use source from processed data
                     self._attempted_sources = processed_data.get("attempted_sources", [])
@@ -367,7 +367,7 @@ class UnifiedPriceManager:
                     )
                     return processed_data
                 else:
-                    # Processing failed to produce hourly_raw or marked as no data
+                    # Processing failed to produce interval_raw or marked as no data
                     error_info = processed_data.get("error", "Processing failed to produce valid data") if processed_data else "Processing returned None or empty"
                     _LOGGER.error(f"[{self.area}] Failed to process fetched data. Error: {error_info}")
                     # Fall through to failure handling (try cache)
@@ -461,7 +461,7 @@ class UnifiedPriceManager:
         # Use data processor to generate final result
         try:
             processed_data = await self._data_processor.process(result)
-            processed_data["has_data"] = bool(processed_data.get("hourly_prices")) # Add a simple flag
+            processed_data["has_data"] = bool(processed_data.get("interval_prices")) # Add a simple flag
             processed_data["last_update"] = dt_util.now().isoformat() # Timestamp the processing time
 
             # Get source info directly from the input result dictionary
@@ -503,7 +503,7 @@ class UnifiedPriceManager:
             "area": self.area,
             "currency": self.currency,
             "target_currency": self.currency,
-            "hourly_prices": {},
+            "interval_prices": {},
             "raw_data": None,
             "source_timezone": None,
             "attempted_sources": self._attempted_sources,

@@ -166,9 +166,10 @@ async def main():
         source_timezone = parsed_data.get('timezone')
         logger.info(f"API Timezone: {source_timezone}")
         
-        hourly_raw_prices = parsed_data.get("hourly_raw", {})
-        if not hourly_raw_prices:
-            logger.error("Error: No hourly prices found in the parsed data after parsing step.")
+        interval_raw_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
+        if not interval_raw_prices:
+            logger.error("Error: No interval prices found in the parsed data after parsing step.")
+            logger.error(f"Available keys: {list(parsed_data.keys())}")
             if 'xml_responses' in raw_data:
                  for i, xml in enumerate(raw_data['xml_responses']):
                      logger.debug(f"--- Raw XML Response {i+1} --- START ---")
@@ -176,17 +177,19 @@ async def main():
                      logger.debug(f"--- Raw XML Response {i+1} --- END ---")
             return 1
             
-        logger.info(f"Found {len(hourly_raw_prices)} raw hourly prices (before timezone normalization)")
-        logger.debug(f"Raw hourly prices sample: {dict(list(hourly_raw_prices.items())[:5])}")
+        logger.info(f"Found {len(interval_raw_prices)} raw interval prices (before timezone normalization)")
+        logger.debug(f"Raw interval prices sample: {dict(list(interval_raw_prices.items())[:5])}")
 
         # Step 3: Normalize Timezones
         logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
-        normalized_prices = tz_converter.normalize_hourly_prices(
-            hourly_prices=hourly_raw_prices,
+        # Use normalize_interval_prices to preserve 15-minute intervals
+        normalized_prices = tz_converter.normalize_interval_prices(
+            interval_prices=interval_raw_prices,  # Changed from hourly_raw_prices
             source_timezone_str=source_timezone,
             preserve_date=True
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
+        logger.info(f"Expected: ~192 intervals (15-min for 2 days)")
         logger.debug(f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}")
 
         # Step 4: Currency conversion (EUR -> Local currency if needed)

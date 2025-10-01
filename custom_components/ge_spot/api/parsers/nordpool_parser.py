@@ -22,7 +22,7 @@ class NordpoolPriceParser(BasePriceParser):
         """Parse the raw data dictionary from NordpoolAPI.
 
         Expects input `data` to be the dictionary returned by NordpoolAPI.fetch_raw_data,
-        which includes keys like 'hourly_raw', 'timezone', 'currency', 'raw_data', etc.
+        which includes keys like 'interval_raw', 'timezone', 'currency', 'raw_data', etc.
         The actual Nordpool JSON response is expected under the 'raw_data' key.
         """
         _LOGGER.debug(f"[NordpoolPriceParser] Starting parse. Input data keys: {list(data.keys())}") # Log entry
@@ -121,6 +121,7 @@ class NordpoolPriceParser(BasePriceParser):
         result = {
             "interval_raw": interval_raw,
             "currency": source_currency,
+            "area": area,  # Include the area in the result
             "timezone": source_timezone, # Pass through the timezone from the API adapter
             "source": Source.NORDPOOL, # Add source identifier
             "source_unit": EnergyUnit.MWH # Added source unit
@@ -150,10 +151,10 @@ class NordpoolPriceParser(BasePriceParser):
         return parsed_data.get("interval_raw", {})
 
     def parse_tomorrow_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
-        """Parse tomorrow's hourly prices from Nordpool data."""
+        """Parse tomorrow's interval prices from Nordpool data."""
         _LOGGER.warning("[NordpoolPriceParser] parse_tomorrow_prices might be outdated.")
         parsed_data = self.parse({"raw_data": data, "area": area})  # Simulate input
-        return parsed_data.get("hourly_raw", {})
+        return parsed_data.get("interval_raw", {})
 
     def validate(self, data: Dict[str, Any]) -> bool:
         """Validate the structure and content of the parsed data."""
@@ -163,8 +164,8 @@ class NordpoolPriceParser(BasePriceParser):
         if not isinstance(data, dict):
             _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Data is not a dictionary.")
             return False
-        if "hourly_raw" not in data or not isinstance(data["hourly_raw"], dict):
-            _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'hourly_raw'")
+        if "interval_raw" not in data or not isinstance(data["interval_raw"], dict):
+            _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'interval_raw'")
             return False
         if "currency" not in data or not data["currency"]:
             _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'currency'")
@@ -175,20 +176,20 @@ class NordpoolPriceParser(BasePriceParser):
         if "source_unit" not in data or not data["source_unit"]: # Added validation for source_unit
              _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'source_unit'")
              return False
-        if not data["hourly_raw"]:
-            _LOGGER.debug(f"[{self.__class__.__name__}] Validation warning: 'hourly_raw' is empty.")
-            # Allow empty hourly_raw to pass validation, but log it.
+        if not data["interval_raw"]:
+            _LOGGER.debug(f"[{self.__class__.__name__}] Validation warning: 'interval_raw' is empty.")
+            # Allow empty interval_raw to pass validation, but log it.
             # The check in the test script handles the "no prices found" case.
 
-        for key, value in data["hourly_raw"].items():
+        for key, value in data["interval_raw"].items():
             try:
                 # Test timestamp parsing
                 datetime.fromisoformat(key.replace('Z', '+00:00'))
             except ValueError:
-                _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Invalid ISO timestamp key '{key}' in 'hourly_raw'")
+                _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Invalid ISO timestamp key '{key}' in 'interval_raw'")
                 return False
             if not isinstance(value, (float, int)):
-                _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Non-numeric price value '{value}' for key '{key}' in 'hourly_raw'")
+                _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Non-numeric price value '{value}' for key '{key}' in 'interval_raw'")
                 return False
         _LOGGER.debug(f"[{self.__class__.__name__}] Validation successful.") # Add success log
         return True

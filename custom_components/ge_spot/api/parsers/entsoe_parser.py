@@ -397,7 +397,17 @@ class EntsoeParser(BasePriceParser):
 
     def _get_next_interval_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
         """Get the next interval's price from the interval_raw data."""
-        return super()._get_next_interval_price(interval_raw)
+        if not interval_raw:
+            return None
+
+        now = datetime.now(timezone.utc)
+        # Round down to current 15-minute interval, then add 15 minutes
+        minute_rounded = (now.minute // 15) * 15
+        current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
+        next_interval = current_interval + timedelta(minutes=15)
+        next_interval_key = next_interval.isoformat()
+
+        return interval_raw.get(next_interval_key)
 
     def _calculate_day_average(self, interval_prices: Dict[str, float]) -> Optional[float]:
         """Calculate day average price.

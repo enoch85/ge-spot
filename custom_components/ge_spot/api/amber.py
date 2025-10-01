@@ -95,11 +95,11 @@ class AmberAPI(BasePriceAPI):
             # Parse the response
             parser = self.get_parser_for_area(None)
             parsed = parser.parse(data) if data else {}
-            hourly_raw = parsed.get("hourly_prices", {})
+            interval_raw = parsed.get("interval_raw", {})
 
             # Return standardized data structure with ISO timestamps
             return {
-                "hourly_raw": hourly_raw,
+                "interval_raw": interval_raw,
                 "timezone": self.get_timezone_for_area(None),
                 "currency": Currency.AUD,
                 "source_name": "amber",

@@ -128,8 +128,9 @@ async def main():
         parser = OmieParser() # Instantiate the parser
         parsed_data = parser.parse(raw_data_dict) # Call the parser's parse method
 
-        if not parsed_data or not parsed_data.get("hourly_raw"):
-             logger.error("Error: Parser did not return valid data or hourly_raw prices.")
+        if not parsed_data or not parsed_data.get("interval_raw"):  # Changed from hourly_raw
+             logger.error("Error: Parser did not return valid data or interval_raw prices.")
+             logger.error(f"Available keys: {list(parsed_data.keys()) if parsed_data else 'None'}")
              # Log raw response if helpful
              if 'raw_data' in raw_data_dict:
                  logger.debug(f"--- Raw Text Data --- START ---\n{raw_data_dict['raw_data']}\n--- Raw Text Data --- END ---")
@@ -145,25 +146,27 @@ async def main():
         source_timezone = parsed_data.get('timezone')
         logger.info(f"API Timezone: {source_timezone}")
         
-        # OMIE provides prices per MWh, usually hourly
-        hourly_raw_prices = parsed_data.get("hourly_raw", {}) # Assuming parser returns raw prices here
+        # OMIE provides hourly interval prices
+        interval_raw_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
         # This check should now reflect the parser's output
-        if not hourly_raw_prices:
-            logger.error("Error: No hourly prices found in the parsed data *after parsing step*.")
+        if not interval_raw_prices:
+            logger.error("Error: No interval prices found in the parsed data *after parsing step*.")
             return 1
             
-        logger.info(f"Found {len(hourly_raw_prices)} raw hourly prices (before timezone normalization)")
-        logger.debug(f"Raw hourly prices sample: {dict(list(hourly_raw_prices.items())[:5])}")
+        logger.info(f"Found {len(interval_raw_prices)} raw interval prices (before timezone normalization)")
+        logger.debug(f"Raw interval prices sample: {dict(list(interval_raw_prices.items())[:5])}")
 
         # Step 3: Normalize Timezones
         logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
-        # Use the timezone converter instance via the service
-        normalized_prices = tz_service.converter.normalize_hourly_prices(
-            hourly_prices=hourly_raw_prices,
+        # Use normalize_interval_prices to handle intervals consistently
+        # Note: OMIE is hourly only, so this will show 24 intervals per day
+        normalized_prices = tz_service.converter.normalize_interval_prices(
+            interval_prices=interval_raw_prices,  # Changed from hourly_raw_prices
             source_timezone_str=source_timezone,
             preserve_date=True # Ensure date is included in keys for split_into_today_tomorrow
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
+        logger.info(f"Expected: ~48 intervals (OMIE provides hourly data only)")
         logger.debug(f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}")
 
         # Step 4: Currency and Unit conversion (EUR/MWh -> EUR/kWh)

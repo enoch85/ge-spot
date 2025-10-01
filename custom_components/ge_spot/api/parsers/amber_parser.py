@@ -26,7 +26,7 @@ class AmberParser(BasePriceParser):
             Standardized price data dictionary
         """
         result = {
-            "hourly_raw": {},
+            "interval_raw": {},
             "currency": Currency.AUD,
             "timezone": "Australia/Sydney" # Default timezone for Amber
         }
@@ -46,19 +46,19 @@ class AmberParser(BasePriceParser):
             _LOGGER.warning("No valid price list found in Amber data to parse")
             return result # Return default empty structure
 
-        hourly_raw = self._parse_price_list(price_list)
-        result["hourly_raw"] = hourly_raw
+        interval_raw = self._parse_price_list(price_list)
+        result["interval_raw"] = interval_raw
 
         # Add area if available in the input dict (though Amber usually doesn't provide it)
         if isinstance(raw_data, dict) and "area" in raw_data:
              result["area"] = raw_data["area"]
 
-        _LOGGER.debug(f"Amber parser found {len(result['hourly_raw'])} hourly prices")
+        _LOGGER.debug(f"Amber parser found {len(result['interval_raw'])} interval prices")
         return result
 
     def _parse_price_list(self, price_list: List[Dict[str, Any]]) -> Dict[str, float]:
         """Helper to parse the list of price entries."""
-        hourly_raw = {}
+        interval_raw = {}
         for entry in price_list:
             try:
                 # Amber timestamps are usually ISO format UTC
@@ -69,7 +69,7 @@ class AmberParser(BasePriceParser):
 
                 # Parse timestamp, assuming UTC
                 dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                hour_key = dt.isoformat() # Use ISO format UTC key
+                interval_key = dt.isoformat() # Use ISO format UTC key
 
                 # Amber price is usually in cents per kWh ('perKwh')
                 price_cents = entry.get('perKwh')
@@ -80,7 +80,7 @@ class AmberParser(BasePriceParser):
                          try:
                              # Convert $/MWh to Cents/kWh: ($/MWh / 1000) * 100 = $/kWh * 100 = Cents/kWh
                              price_cents = float(price_dollars_mwh) / 10.0
-                             _LOGGER.debug(f"Using Amber 'rrp' {price_dollars_mwh} $/MWh, converted to {price_cents} Cents/kWh for {hour_key}")
+                             _LOGGER.debug(f"Using Amber 'rrp' {price_dollars_mwh} $/MWh, converted to {price_cents} Cents/kWh for {interval_key}")
                          except (ValueError, TypeError):
                              _LOGGER.debug(f"Could not parse Amber 'rrp' value: {price_dollars_mwh}")
                              continue
@@ -95,13 +95,13 @@ class AmberParser(BasePriceParser):
                     _LOGGER.debug(f"Could not parse Amber price value: {price_cents}")
                     continue
 
-                hourly_raw[hour_key] = price # Store price in Cents/kWh
-                _LOGGER.debug(f"Storing raw Amber price for {hour_key}: {price} Cents/kWh")
+                interval_raw[interval_key] = price # Store price in Cents/kWh
+                _LOGGER.debug(f"Storing raw Amber price for {interval_key}: {price} Cents/kWh")
 
             except (ValueError, TypeError, KeyError) as e:
                 _LOGGER.warning(f"Failed to parse Amber entry: {entry}. Error: {e}")
                 continue
-        return hourly_raw
+        return interval_raw
 
     def extract_metadata(self, data: Any) -> Dict[str, Any]:
         """Extract metadata from Amber API response.
@@ -133,6 +133,6 @@ class AmberParser(BasePriceParser):
         metadata["parser_version"] = "2.1" # Updated version
         metadata["parsed_at"] = datetime.now(timezone.utc).isoformat()
         # Price count will be calculated by the base class or DataProcessor later
-        # based on the returned 'hourly_raw'
+        # based on the returned 'interval_raw'
 
         return metadata

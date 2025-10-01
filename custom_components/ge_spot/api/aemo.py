@@ -100,11 +100,11 @@ class AemoAPI(BasePriceAPI):
                 # Parse the response using the appropriate parser
                 parser = self.get_parser_for_area(area)
                 parsed = parser.parse(response, area=area) # Pass area to the parser
-                hourly_raw = parsed.get("hourly_raw", {}) # Correct key
+                interval_raw = parsed.get("interval_raw", {}) # Correct key
 
                 # Return standardized data structure with ISO timestamps
                 return {
-                    "hourly_raw": hourly_raw,
+                    "interval_raw": interval_raw,
                     "timezone": self.get_timezone_for_area(area),
                     "currency": Currency.AUD,
                     "source": "aemo",  # Changed from source_name to source

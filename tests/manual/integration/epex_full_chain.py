@@ -147,10 +147,11 @@ async def main():
         source_timezone = parsed_data.get('timezone') # Parser should determine this
         logger.info(f"API Timezone: {source_timezone}")
         
-        # EPEX provides prices per MWh, usually hourly
-        hourly_raw_prices = parsed_data.get("hourly_raw", {}) # Assuming parser returns raw prices here
-        if not hourly_raw_prices:
-            logger.error("Error: No hourly prices found in the parsed data after parsing step.")
+        # EPEX provides 15-minute interval prices
+        interval_raw_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
+        if not interval_raw_prices:
+            logger.error("Error: No interval prices found in the parsed data after parsing step.")
+            logger.error(f"Available keys: {list(parsed_data.keys())}")
             # Log raw response if helpful
             if 'api_response' in raw_data:
                  logger.debug(f"--- Raw API Response --- START ---")
@@ -158,18 +159,19 @@ async def main():
                  logger.debug(f"--- Raw API Response --- END ---")
             return 1
             
-        logger.info(f"Found {len(hourly_raw_prices)} raw hourly prices (before timezone normalization)")
-        logger.debug(f"Raw hourly prices sample: {dict(list(hourly_raw_prices.items())[:5])}")
+        logger.info(f"Found {len(interval_raw_prices)} raw interval prices (before timezone normalization)")
+        logger.debug(f"Raw interval prices sample: {dict(list(interval_raw_prices.items())[:5])}")
 
         # Step 3: Normalize Timezones
         logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
-        # Use the timezone converter
-        normalized_prices = tz_converter.normalize_hourly_prices(
-            hourly_prices=hourly_raw_prices,
+        # Use normalize_interval_prices to preserve 15-minute intervals
+        normalized_prices = tz_converter.normalize_interval_prices(
+            interval_prices=interval_raw_prices,  # Changed from hourly_raw_prices
             source_timezone_str=source_timezone,
             preserve_date=True # Keep original date context
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
+        logger.info(f"Expected: ~192 intervals (15-min for 2 days)")
         logger.debug(f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}")
 
         # Step 4: Currency and Unit conversion (e.g., EUR/MWh -> EUR/kWh or GBP/MWh -> GBP/kWh)

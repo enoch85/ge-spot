@@ -56,20 +56,20 @@ async def test_epex_live_fetch_parse(area):
         assert "api_timezone" in parsed_data, "api_timezone missing from parsed data"
         assert parsed_data.get("api_timezone"), f"api_timezone should have a value, got {parsed_data.get('api_timezone')}"
         
-        # Hourly prices validation
-        assert "hourly_prices" in parsed_data, "hourly_prices missing from parsed data"
-        assert isinstance(parsed_data["hourly_prices"], dict), f"hourly_prices should be a dictionary, got {type(parsed_data.get('hourly_prices'))}"
+        # Interval prices validation (15-minute intervals)
+        assert "interval_raw" in parsed_data, "interval_raw missing from parsed data"
+        assert isinstance(parsed_data["interval_raw"], dict), f"interval_raw should be a dictionary, got {type(parsed_data.get('interval_raw'))}"
         
-        # Validate hourly prices - real data should be available
-        hourly_prices = parsed_data["hourly_prices"]
-        assert hourly_prices, f"No hourly prices found for {area} - this indicates a real issue with the API or parser"
+        # Validate interval prices - real data should be available
+        interval_prices = parsed_data["interval_raw"]
+        assert interval_prices, f"No interval prices found for {area} - this indicates a real issue with the API or parser"
         
-        # Real-world validation: EPEX should provide at least some price entries (typically 24 hours)
-        min_expected_hours = 12  # At minimum, should have half a day of data
-        assert len(hourly_prices) >= min_expected_hours, f"Expected at least {min_expected_hours} price entries, got {len(hourly_prices)}"
+        # Real-world validation: EPEX provides 15-minute intervals (96 per day)
+        min_expected_intervals = 50  # At minimum, should have partial day data
+        assert len(interval_prices) >= min_expected_intervals, f"Expected at least {min_expected_intervals} interval entries, got {len(interval_prices)}"
         
         # Validate timestamp format and price values
-        for timestamp, price in hourly_prices.items():
+        for timestamp, price in interval_prices.items():
             # Validate timestamp format
             try:
                 dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -89,20 +89,19 @@ async def test_epex_live_fetch_parse(area):
             # Historical EPEX price range is approximately -500 to 3000 EUR/MWh in extreme events
             assert -1000 <= price <= 5000, f"Price {price} for {timestamp} is outside reasonable range for {area}"
         
-        # Check for sequential hourly timestamps
-        timestamps = sorted(hourly_prices.keys())
-        for i in range(1, len(timestamps)):
+        # Check for sequential 15-minute intervals
+        timestamps = sorted(interval_prices.keys())
+        for i in range(1, min(97, len(timestamps))):  # Check first 96 intervals (1 day)
             prev_dt = datetime.fromisoformat(timestamps[i-1].replace("Z", "+00:00"))
             curr_dt = datetime.fromisoformat(timestamps[i].replace("Z", "+00:00"))
-            hour_diff = (curr_dt - prev_dt).total_seconds() / 3600
+            interval_diff = (curr_dt - prev_dt).total_seconds() / 60  # Minutes
             
-            # Allow for hourly gaps in some cases, but most should be hourly
-            # Some markets might have half-hourly values, so check for multiples of 0.5
-            valid_interval = abs(hour_diff - 1.0) < 0.1 or abs(hour_diff - 0.5) < 0.1
-            assert valid_interval, f"Unexpected time gap between {timestamps[i-1]} and {timestamps[i]} for {area}: {hour_diff} hours"
+            # EPEX provides 15-minute intervals
+            valid_interval = abs(interval_diff - 15.0) < 1.0  # Within 1 minute of 15 minutes
+            assert valid_interval, f"Unexpected time gap between {timestamps[i-1]} and {timestamps[i]} for {area}: {interval_diff} minutes (expected 15)"
         
-        logger.info(f"EPEX Live Test ({area}): PASS - Found {len(hourly_prices)} prices. " 
-                 f"Range: {min(hourly_prices.values()):.2f} to {max(hourly_prices.values()):.2f} {parsed_data.get('currency')}")
+        logger.info(f"EPEX Live Test ({area}): PASS - Found {len(interval_prices)} interval prices. " 
+                 f"Range: {min(interval_prices.values()):.2f} to {max(interval_prices.values()):.2f} {parsed_data.get('currency')}")
 
     except AssertionError as ae:
         # Let assertion errors propagate - these are test failures that should be fixed in the code, not the test
