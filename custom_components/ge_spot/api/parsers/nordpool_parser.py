@@ -40,7 +40,7 @@ class NordpoolPriceParser(BasePriceParser):
         area = data.get("area") # Get area if provided by API adapter
         _LOGGER.debug(f"[NordpoolPriceParser] Metadata - Area: {area}, Timezone: {source_timezone}, Currency: {source_currency}") # Log metadata
 
-        hourly_raw = {}
+        interval_raw = {}
 
         # Nordpool data often comes in days (today, tomorrow)
         days_to_process = []
@@ -104,22 +104,22 @@ class NordpoolPriceParser(BasePriceParser):
                 try:
                     # Parse timestamp (assuming UTC from Nordpool)
                     dt_utc = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
-                    hour_key_iso = dt_utc.isoformat() # Use ISO format with UTC offset
+                    interval_key_iso = dt_utc.isoformat() # Use ISO format with UTC offset
 
                     # Parse price
                     price = float(str(price_str).replace(',', '.')) # Handle comma decimal separator
-                    _LOGGER.debug(f"[NordpoolPriceParser] Entry {j+1}: Parsed timestamp: {hour_key_iso}, Parsed price: {price}") # Log parsed values
+                    _LOGGER.debug(f"[NordpoolPriceParser] Entry {j+1}: Parsed timestamp: {interval_key_iso}, Parsed price: {price}") # Log parsed values
 
-                    hourly_raw[hour_key_iso] = price
+                    interval_raw[interval_key_iso] = price
                 except (ValueError, TypeError) as e:
                     _LOGGER.error(f"[NordpoolPriceParser] Entry {j+1}: Failed to parse timestamp '{ts_str}' or price '{price_str}': {e}")
                     continue
 
-        _LOGGER.debug(f"[NordpoolPriceParser] Parsed {len(hourly_raw)} prices. Keys example: {list(hourly_raw.keys())[:3]}")
+        _LOGGER.debug(f"[NordpoolPriceParser] Parsed {len(interval_raw)} prices. Keys example: {list(interval_raw.keys())[:3]}")
 
         # Construct the final result dictionary expected by DataProcessor
         result = {
-            "hourly_raw": hourly_raw,
+            "interval_raw": interval_raw,
             "currency": source_currency,
             "timezone": source_timezone, # Pass through the timezone from the API adapter
             "source": Source.NORDPOOL, # Add source identifier
@@ -136,18 +136,18 @@ class NordpoolPriceParser(BasePriceParser):
     def _create_empty_result(self, original_data: Dict[str, Any], timezone: str = "UTC", currency: str = Currency.EUR) -> Dict[str, Any]:
         """Helper to create a standard empty result structure."""
         return {
-            "hourly_raw": {},
+            "interval_raw": {},
             "currency": original_data.get("currency", currency),
             "timezone": original_data.get("timezone", timezone),
             "source": Source.NORDPOOL,
             "source_unit": EnergyUnit.MWH  # Added source unit
         }
 
-    def parse_hourly_prices(self, data: Dict[str, Any], area: str) -> Dict[str, Any]:
-        """Parse hourly prices from Nordpool data."""
-        _LOGGER.warning("[NordpoolPriceParser] parse_hourly_prices might be outdated.")
+    def parse_interval_prices(self, data: Dict[str, Any], area: str) -> Dict[str, Any]:
+        """Parse interval prices from Nordpool data."""
+        _LOGGER.warning("[NordpoolPriceParser] parse_interval_prices might be outdated.")
         parsed_data = self.parse({"raw_data": data, "area": area})  # Simulate input
-        return parsed_data.get("hourly_raw", {})
+        return parsed_data.get("interval_raw", {})
 
     def parse_tomorrow_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
         """Parse tomorrow's hourly prices from Nordpool data."""
