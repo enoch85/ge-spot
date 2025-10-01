@@ -47,10 +47,10 @@ class BasePriceParser(ABC):
         """
         metadata = {
             "source": self.source,
-            "price_count": len(data.get("hourly_prices", {})),
+            "price_count": len(data.get("interval_raw", {})),
             "currency": data.get("currency", "EUR"),
             "has_current_price": "current_price" in data and data["current_price"] is not None,
-            "has_next_hour_price": "next_hour_price" in data and data["next_hour_price"] is not None,
+            "has_next_interval_price": "next_interval_price" in data and data["next_interval_price"] is not None,
             "parser_version": "2.0",  # Add version for tracking changes
             "parsed_at": datetime.now(timezone.utc).isoformat()
         }
@@ -308,13 +308,13 @@ class BasePriceParser(ABC):
 
                 # Convert UTC time to target timezone
                 dt_target = dt_utc.astimezone(target_timezone)
-                hour_key = dt_target.strftime("%H:%M")
+                interval_key = dt_target.strftime("%H:%M")
 
                 # Check for duplicates before assigning
-                if hour_key in normalized_prices[day_type]:
-                     _LOGGER.warning(f"Duplicate hour key '{hour_key}' encountered for '{day_type}'. Overwriting with value for {timestamp_key}.")
+                if interval_key in normalized_prices[day_type]:
+                     _LOGGER.warning(f"Duplicate interval key '{interval_key}' encountered for '{day_type}'. Overwriting with value for {timestamp_key}.")
 
-                normalized_prices[day_type][hour_key] = price
+                normalized_prices[day_type][interval_key] = price
 
             except ValueError as e:
                 _LOGGER.warning(f"Skipping invalid timestamp key '{timestamp_key}': {e}")
@@ -413,12 +413,30 @@ class BasePriceParser(ABC):
 
         return sum(day_prices) / len(day_prices)
 
-    def calculate_peak_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-         if not hourly_prices:
+    def calculate_peak_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+         """Calculate the peak (maximum) price from interval prices.
+         
+         Args:
+             interval_prices: Dictionary of interval prices
+             
+         Returns:
+             Maximum price value or None
+         """
+         if not interval_prices:
              return None
-         return max(hourly_prices.values()) if hourly_prices else None
+         return max(interval_prices.values()) if interval_prices else None
 
-    def calculate_off_peak_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-         if not hourly_prices:
+    def calculate_off_peak_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+         """Calculate the off-peak (minimum) price from interval prices.
+         
+         Args:
+             interval_prices: Dictionary of interval prices
+             
+         Returns:
+             Minimum price value or None
+         """
+         if not interval_prices:
              return None
-         return min(hourly_prices.values()) if hourly_prices else None
+         return min(interval_prices.values()) if interval_prices else None
+
+```

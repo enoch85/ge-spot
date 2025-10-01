@@ -201,7 +201,7 @@ class TimezoneConverter:
         self,
         normalized_prices: Dict[str, Any]
     ) -> tuple[Dict[str, Any], Dict[str, Any]]:
-        """Split normalized hourly prices into today and tomorrow buckets.
+        """Split normalized interval prices into today and tomorrow buckets.
 
         Args:
             normalized_prices: Dictionary of prices already normalized to target timezone
@@ -255,7 +255,7 @@ class TimezoneConverter:
                 elif hour_key in tomorrow_hours:
                     tomorrow_prices[hour_key] = price
 
-        _LOGGER.debug(f"Split prices into today ({len(today_prices)} hours) and tomorrow ({len(tomorrow_prices)} hours)")
+        _LOGGER.debug(f"Split prices into today ({len(today_prices)} intervals) and tomorrow ({len(tomorrow_prices)} intervals)")
         return today_prices, tomorrow_prices
 
     def normalize_today_and_tomorrow_prices(
@@ -271,18 +271,18 @@ class TimezoneConverter:
 
         if today_prices_raw:
             _LOGGER.debug("Normalizing today's prices...")
-            final_today_prices = self.normalize_hourly_prices(today_prices_raw, source_timezone_str)
+            final_today_prices = self.normalize_interval_prices(today_prices_raw, source_timezone_str)
 
         if tomorrow_prices_raw:
             _LOGGER.debug("Normalizing tomorrow's prices...")
-            final_tomorrow_prices = self.normalize_hourly_prices(tomorrow_prices_raw, source_timezone_str)
+            final_tomorrow_prices = self.normalize_interval_prices(tomorrow_prices_raw, source_timezone_str)
 
         return final_today_prices, final_tomorrow_prices
 
 # Example usage (would be in DataProcessor):
 # tz_converter = TimezoneConverter(self._tz_service)
 # final_today, final_tomorrow = tz_converter.normalize_today_and_tomorrow_prices(
-#     raw_data.get("hourly_prices"), # Assuming raw data structure
-#     raw_data.get("tomorrow_hourly_prices_raw"), # Assuming raw data structure
+#     raw_data.get("interval_prices"), # Assuming raw data structure
+#     raw_data.get("tomorrow_interval_prices_raw"), # Assuming raw data structure
 #     raw_data.get("api_timezone")
 # )

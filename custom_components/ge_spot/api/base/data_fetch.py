@@ -197,7 +197,7 @@ class PriceDataFetcher:
                 )
 
                 # Check if we got valid data
-                if source_result and "hourly_prices" in source_result and source_result["hourly_prices"]:
+                if source_result and "interval_prices" in source_result and source_result["interval_prices"]:
                     _LOGGER.info(f"Successfully fetched data from {source_name} for area {area}")
 
                     # If this isn't the primary source, record as fallback

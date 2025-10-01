@@ -418,15 +418,15 @@ class EntsoeParser(BasePriceParser):
         Returns:
             Day average price or None if not enough data
         """
-        if not hourly_prices:
+        if not interval_prices:
             return None
 
         today = datetime.now(timezone.utc).date()
         today_prices = []
-        for hour_key, price in hourly_prices.items():
+        for interval_key, price in interval_prices.items():
             try:
-                hour_dt = datetime.fromisoformat(hour_key)
-                if hour_dt.date() == today:
+                interval_dt = datetime.fromisoformat(interval_key)
+                if interval_dt.date() == today:
                     today_prices.append(price)
             except (ValueError, TypeError):
                 continue

@@ -44,39 +44,39 @@ class ApiValidator:
 
         # Additional checks specific to this validator
 
-        # Check number of hours available
-        hour_count = len(data.get("hourly_prices", {}))
+        # Check number of intervals available
+        interval_count = len(data.get("interval_prices", {}))
 
         # Special handling for sources with different data availability patterns
         if source_name.lower() == Source.AEMO.lower():
-            # For AEMO, we only require at least 1 hour of data
-            # Missing hours will be filled from fallback sources if available
-            if hour_count < 1:
-                _LOGGER.warning(f"No hourly prices from {source_name}: {hour_count}/1")
+            # For AEMO, we only require at least 4 intervals of data (1 hour)
+            # Missing intervals will be filled from fallback sources if available
+            if interval_count < 4:
+                _LOGGER.warning(f"No interval prices from {source_name}: {interval_count}/4")
                 return False
         elif source_name.lower() == Source.ENTSOE.lower():
-            # For ENTSO-E, we only require at least 6 hours of data
+            # For ENTSO-E, we only require at least 24 intervals of data (6 hours)
             # This is because ENTSO-E sometimes only provides partial data
-            if hour_count < 6:
-                _LOGGER.warning(f"Insufficient hourly prices from {source_name}: {hour_count}/6")
+            if interval_count < 24:
+                _LOGGER.warning(f"Insufficient interval prices from {source_name}: {interval_count}/24")
                 return False
-        elif hour_count < min_hours:
-            _LOGGER.warning(f"Insufficient hourly prices from {source_name}: {hour_count}/{min_hours}")
+        elif interval_count < min_hours:
+            _LOGGER.warning(f"Insufficient interval prices from {source_name}: {interval_count}/{min_hours}")
             return False
 
-        # Check for current hour price if required
+        # Check for current interval price if required
         if require_current_hour:
             try:
                 tz_service = TimezoneService()
-                current_hour_key = tz_service.get_current_hour_key()
+                current_interval_key = tz_service.get_current_interval_key()
 
-                if current_hour_key not in data.get("hourly_prices", {}):
-                    _LOGGER.warning(f"Current hour {current_hour_key} missing from {source_name}")
+                if current_interval_key not in data.get("interval_prices", {}):
+                    _LOGGER.warning(f"Current interval {current_interval_key} missing from {source_name}")
                     return False
 
-                current_price = data["hourly_prices"][current_hour_key]
+                current_price = data["interval_prices"][current_interval_key]
                 if current_price is None or not isinstance(current_price, (int, float)):
-                    _LOGGER.warning(f"Invalid current hour price from {source_name}: {current_price}")
+                    _LOGGER.warning(f"Invalid current interval price from {source_name}: {current_price}")
                     return False
             except ValueError as e:
                 _LOGGER.error(f"Timezone error checking current hour price: {e}")

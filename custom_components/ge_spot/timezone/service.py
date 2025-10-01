@@ -156,18 +156,27 @@ class TimezoneService:
         return self.converter.convert(dt, self.target_timezone)
 
 
-    def normalize_hourly_prices(self, hourly_prices: Dict[str, float], source_tz_str: Optional[str] = None, is_five_minute: bool = False) -> Dict[datetime, float]:
-        """Normalizes price timestamps to the target timezone, optionally using a source timezone hint and handling 5-minute intervals."""
+    def normalize_interval_prices(self, interval_prices: Dict[str, float], source_tz_str: Optional[str] = None, is_five_minute: bool = False) -> Dict[datetime, float]:
+        """Normalizes price timestamps to the target timezone, optionally using a source timezone hint and handling 5-minute intervals.
+        
+        Args:
+            interval_prices: Dictionary of prices with timestamp keys
+            source_tz_str: Optional source timezone hint
+            is_five_minute: Whether data is in 5-minute intervals
+            
+        Returns:
+            Dictionary with normalized datetime keys
+        """
         _LOGGER.debug(
             "Normalizing %d price timestamps using target timezone: %s%s%s",
-            len(hourly_prices),
+            len(interval_prices),
             self.target_timezone,
             f" (with source hint: {source_tz_str})" if source_tz_str else "",
-            " (5-minute intervals)" if is_five_minute else " (hourly intervals)"
+            " (5-minute intervals)" if is_five_minute else " (standard intervals)"
         )
         normalized_prices = {}
 
-        for timestamp_str, price in hourly_prices.items():
+        for timestamp_str, price in interval_prices.items():
             try:
                 aware_dt = self._parse_timestamp(timestamp_str, source_hint=source_tz_str)
 
