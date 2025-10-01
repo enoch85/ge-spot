@@ -53,7 +53,6 @@ class TimezoneConverter:
                 return None
 
             return dt
-        return dt
         except (ValueError, TypeError) as e:
             _LOGGER.error(f"Error parsing datetime '{iso_datetime_str}': {e}")
             return None
