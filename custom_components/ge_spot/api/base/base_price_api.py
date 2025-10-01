@@ -103,8 +103,8 @@ class BasePriceAPI(ABC):
             # Ensure basic structure exists even if parser returns None/empty
             if not parsed_data:
                 parsed_data = {}
-            if "hourly_prices" not in parsed_data:
-                parsed_data["hourly_prices"] = {}
+            if "interval_prices" not in parsed_data:
+                parsed_data["interval_prices"] = {}
             if "currency" not in parsed_data or not parsed_data["currency"]:
                 # Use const.currencies mapping for area
                 from ...const.currencies import CurrencyInfo
@@ -134,7 +134,7 @@ class BasePriceAPI(ABC):
                 "source": self.source_type,
                 "area": area,
                 "currency": currency,
-                "hourly_prices": {},
+                "interval_prices": {},
                 "error": str(e)
             }
 

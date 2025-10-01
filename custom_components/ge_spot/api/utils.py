@@ -97,16 +97,69 @@ def format_result(data, source_name, currency):
 
     return data
 
-def check_prices_count(hourly_prices):
-    """Check if we have the expected 24 hourly prices.
+def check_prices_count(interval_prices):
+    """Check if we have the expected number of interval prices.
 
     Args:
-        hourly_prices: Dictionary of hourly prices
+        interval_prices: Dictionary of interval prices
 
     Returns:
-        True if count is correct, False otherwise
+        True if count is reasonable, False otherwise
     """
-    if len(hourly_prices) != 24 and len(hourly_prices) > 0:
-        _LOGGER.warning(f"Expected 24 hourly prices, got {len(hourly_prices)}. Prices may be incomplete.")
+    from ..const.time import TimeInterval
+    expected_count = TimeInterval.get_intervals_per_day()
+    
+    if len(interval_prices) != expected_count and len(interval_prices) > 0:
+        _LOGGER.warning(f"Expected {expected_count} interval prices, got {len(interval_prices)}. Prices may be incomplete.")
         return False
     return True
+
+
+def expand_to_intervals(hourly_data: Dict[str, float]) -> Dict[str, float]:
+    """
+    Expand hourly prices to match configured interval.
+    
+    Generic implementation - automatically adapts to TimeInterval.DEFAULT.
+    For APIs that provide hourly data but system needs finer granularity,
+    duplicate the hourly price across all intervals in that hour.
+    
+    Args:
+        hourly_data: Dictionary with hour keys (HH:00 format) and prices
+        
+    Returns:
+        Dictionary with interval keys (HH:MM format) and prices
+        
+    Example:
+        >>> expand_to_intervals({"14:00": 50.0, "15:00": 55.0})
+        {"14:00": 50.0, "14:15": 50.0, "14:30": 50.0, "14:45": 50.0,
+         "15:00": 55.0, "15:15": 55.0, "15:30": 55.0, "15:45": 55.0}
+    """
+    from ..const.time import TimeInterval
+    
+    interval_minutes = TimeInterval.get_interval_minutes()
+    
+    if interval_minutes == 60:
+        return hourly_data  # Already hourly, no expansion needed
+    
+    intervals_per_hour = TimeInterval.get_intervals_per_hour()
+    expanded = {}
+    
+    for hour_key, price in hourly_data.items():
+        try:
+            # Extract hour from key (handles "HH:00" or "HH:MM" format)
+            hour = int(hour_key.split(':')[0])
+        except (ValueError, IndexError):
+            # If key isn't in expected format, keep as-is
+            _LOGGER.warning(f"Unexpected key format during expansion: {hour_key}")
+            expanded[hour_key] = price
+            continue
+            
+        # Create all intervals for this hour
+        for i in range(intervals_per_hour):
+            minute = i * interval_minutes
+            interval_key = f"{hour:02d}:{minute:02d}"
+            expanded[interval_key] = price
+    
+    _LOGGER.debug(f"Expanded {len(hourly_data)} hourly prices to {len(expanded)} interval prices")
+    return expanded
+
