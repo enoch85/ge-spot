@@ -84,10 +84,6 @@ class TimezoneConverter:
             preserve_date
         )
 
-```
-
-        )
-
         normalized_prices = {}
         try:
             # Process each ISO timestamp to target timezone interval format
@@ -129,8 +125,6 @@ class TimezoneConverter:
                 exc_info=True
             )
             return {}
-
-```
 
         return normalized_prices
 
@@ -222,8 +216,6 @@ class TimezoneConverter:
 #     raw_data.get("tomorrow_interval_raw"), # Tomorrow's raw interval data
 #     raw_data.get("api_timezone")
 # )
-
-```
 
 # Example usage (would be in DataProcessor):
 # tz_converter = TimezoneConverter(self._tz_service)

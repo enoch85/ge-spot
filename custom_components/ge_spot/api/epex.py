@@ -214,6 +214,3 @@ class EpexAPI(BasePriceAPI):
             "area": raw_data.get("raw_data", {}).get("area") or raw_data.get("area") or "FR",
             "fetched_at": raw_data.get("raw_data", {}).get("timestamp"),
         }
-
-
-```

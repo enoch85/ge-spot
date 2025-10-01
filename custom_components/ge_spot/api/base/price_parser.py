@@ -438,5 +438,3 @@ class BasePriceParser(ABC):
          if not interval_prices:
              return None
          return min(interval_prices.values()) if interval_prices else None
-
-```

@@ -98,8 +98,6 @@ class PriceValueSensor(BaseElectricityPriceSensor):
 
         return attrs
 
-```
-
 
 class ExtremaPriceSensor(PriceValueSensor):
     """Base class for min/max price sensors."""
