@@ -176,7 +176,7 @@ class CacheManager:
                         entry_data = self._price_cache.get(key)
 
                         # Check if this entry has tomorrow's prices that we can use for today
-                        if entry_data and "tomorrow_hourly_prices" in entry_data and entry_data["tomorrow_hourly_prices"]:
+                        if entry_data and "tomorrow_interval_prices" in entry_data and entry_data["tomorrow_interval_prices"]:
                             found_source = metadata.get("source", "unknown")
                             _LOGGER.info(
                                 "Found yesterday's cached data from %s with tomorrow's prices for area %s. "
@@ -188,8 +188,8 @@ class CacheManager:
                             data_copy = dict(entry_data)
 
                             # Move tomorrow's prices to today's prices
-                            data_copy["hourly_prices"] = data_copy["tomorrow_hourly_prices"]
-                            data_copy["tomorrow_hourly_prices"] = {}
+                            data_copy["interval_prices"] = data_copy["tomorrow_interval_prices"]
+                            data_copy["tomorrow_interval_prices"] = {}
 
                             # Mark as migrated for debugging purposes
                             data_copy["migrated_from_tomorrow"] = True
@@ -263,21 +263,31 @@ class CacheManager:
             target_tz_obj = target_timezone
 
         now_in_target_tz = dt_util.now(target_tz_obj)
-        current_hour_key = f"{now_in_target_tz.hour:02d}:00" # Corrected f-string quotes
+        # Get current interval key (HH:MM format)
+        interval_calculator = self._timezone_service.interval_calculator if self._timezone_service else None
+        if interval_calculator:
+            current_interval_key = interval_calculator.get_current_interval_key()
+        else:
+            # Fallback if interval_calculator not available
+            from ..const.time import TimeInterval
+            interval_minutes = TimeInterval.get_interval_minutes()
+            minute = (now_in_target_tz.minute // interval_minutes) * interval_minutes
+            current_interval_key = f"{now_in_target_tz.hour:02d}:{minute:02d}"
+        
         target_date = now_in_target_tz.date()
 
         latest_entry = self.get_data(area, target_date=target_date) # Use get_data to find newest valid entry
 
         if not latest_entry:
-            _LOGGER.debug(f"No valid cache entry found for area {area} and date {target_date} to get current hour price.")
+            _LOGGER.debug(f"No valid cache entry found for area {area} and date {target_date} to get current interval price.")
             return None
 
         cached_data = latest_entry.get("data", {})
-        hourly_prices = cached_data.get("hourly_prices", {})
-        current_price = hourly_prices.get(current_hour_key)
+        interval_prices = cached_data.get("interval_prices", {})
+        current_price = interval_prices.get(current_interval_key)
 
         if current_price is None:
-            _LOGGER.debug(f"Current hour key '{current_hour_key}' not found in cached hourly prices for {area}.")
+            _LOGGER.debug(f"Current interval key '{current_interval_key}' not found in cached interval prices for {area}.")
             return None
 
         # Determine the timezone of the *cached data* itself if needed for context
@@ -294,7 +304,7 @@ class CacheManager:
 
         return {
             "price": current_price,
-            "hour_key": current_hour_key,
+            "interval_key": current_interval_key,
             "timestamp": latest_entry.get("timestamp"),
             "source": data_source, # Use determined source name
             "area_timezone": area_tz_str # Include the determined timezone string if found

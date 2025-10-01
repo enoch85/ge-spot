@@ -111,13 +111,13 @@ class FetchDecisionMaker:
             _LOGGER.info(reason)
             need_api_fetch = True
 
-        # If we have no cached data for the current hour, this is a critical reason to fetch.
+        # If we have no cached data for the current interval, this is a critical reason to fetch.
         if not has_current_hour_price:
-            current_hour_key = self._tz_service.get_current_hour_key()
-            reason = f"No cached data for current hour {current_hour_key}, fetching from API (overrides complete_data check if necessary)"
+            current_interval_key = self._tz_service.get_current_interval_key()
+            reason = f"No cached data for current interval {current_interval_key}, fetching from API (overrides complete_data check if necessary)"
             _LOGGER.info(reason)
             need_api_fetch = True
-        # If we decided to fetch because complete_data quota was not met, but we DO have current hour price,
+        # If we decided to fetch because complete_data quota was not met, but we DO have current interval price,
         # and the rate limiter didn't say to skip, then proceed with the fetch.
         elif need_api_fetch and has_current_hour_price:
             _LOGGER.debug(
