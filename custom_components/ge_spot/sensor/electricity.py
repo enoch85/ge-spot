@@ -105,7 +105,7 @@ async def async_setup_entry(
             config_data, # Pass config_data
             "average_price", # Pass only the sensor type
             "Average Price",
-            "avg" 
+            "avg"
         )
     )
 

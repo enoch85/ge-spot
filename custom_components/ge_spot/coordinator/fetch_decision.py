@@ -58,10 +58,10 @@ class FetchDecisionMaker:
         # CRITICAL CHECK: Do we have data for the current interval?
         if not data_validity.has_current_interval:
             current_interval_key = self._tz_service.get_current_interval_key()
-            reason = f"CRITICAL: No data for current interval ({current_interval_key}) - immediate fetch required"
-            _LOGGER.warning(reason)
+            reason = f"No data for current interval ({current_interval_key}) - fetching data immediately"
+            _LOGGER.info(reason)  # INFO level: expected on reload, not an error
             
-            # Even in critical situations, respect rate limiting to avoid hammering the API
+            # Respect rate limiting to avoid hammering the API
             if last_fetch:
                 from ..utils.rate_limiter import RateLimiter
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
@@ -71,8 +71,8 @@ class FetchDecisionMaker:
                 )
                 
                 if should_skip:
-                    reason = f"CRITICAL: No current interval data, but rate limited ({skip_reason})"
-                    _LOGGER.error(reason)
+                    reason = f"No current interval data, but rate limited ({skip_reason})"
+                    _LOGGER.warning(reason)
                     return False, reason
             
             return True, reason
