@@ -20,14 +20,14 @@ class ApiValidator:
     @staticmethod
     def is_data_adequate(data: Dict[str, Any], source_name: str = "unknown",
                         require_current_hour: bool = True,
-                        min_hours: int = 12) -> bool:
+                        min_intervals: int = 48) -> bool:
         """Check if the data is adequate for use.
 
         Args:
             data: API response data
             source_name: Name of the API source
-            require_current_hour: Whether current hour price is required
-            min_hours: Minimum number of hourly prices required
+            require_current_hour: Whether current interval price is required
+            min_intervals: Minimum number of interval prices required
 
         Returns:
             True if data is valid and usable
@@ -49,19 +49,19 @@ class ApiValidator:
 
         # Special handling for sources with different data availability patterns
         if source_name.lower() == Source.AEMO.lower():
-            # For AEMO, we only require at least 4 intervals of data (1 hour)
+            # For AEMO, we only require at least 16 intervals of data (4 hours with 15-min intervals)
             # Missing intervals will be filled from fallback sources if available
-            if interval_count < 4:
-                _LOGGER.warning(f"No interval prices from {source_name}: {interval_count}/4")
+            if interval_count < 16:
+                _LOGGER.warning(f"No interval prices from {source_name}: {interval_count}/16")
                 return False
         elif source_name.lower() == Source.ENTSOE.lower():
-            # For ENTSO-E, we only require at least 24 intervals of data (6 hours)
+            # For ENTSO-E, we only require at least 24 intervals of data (6 hours with 15-min intervals)
             # This is because ENTSO-E sometimes only provides partial data
             if interval_count < 24:
                 _LOGGER.warning(f"Insufficient interval prices from {source_name}: {interval_count}/24")
                 return False
-        elif interval_count < min_hours:
-            _LOGGER.warning(f"Insufficient interval prices from {source_name}: {interval_count}/{min_hours}")
+        elif interval_count < min_intervals:
+            _LOGGER.warning(f"Insufficient interval prices from {source_name}: {interval_count}/{min_intervals}")
             return False
 
         # Check for current interval price if required

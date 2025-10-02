@@ -41,7 +41,7 @@ class FetchDecisionMaker:
 
         Decision logic:
         1. CRITICAL: No data for current interval → FETCH IMMEDIATELY
-        2. Running out: Less than safety buffer hours remaining → FETCH
+        2. Running out: Less than safety buffer intervals remaining → FETCH
         3. Special window: 13:00-14:00 and missing tomorrow's data → FETCH
         4. Initial fetch: Never fetched before → FETCH
         5. Otherwise: SKIP (we have enough future data)

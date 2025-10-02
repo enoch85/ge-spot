@@ -39,7 +39,7 @@ class TimezoneConverter:
                 source_tz = get_timezone_object(source_timezone_str)
                 if source_tz:
                     try:
-                        dt = source_tz.localize(dt)
+                        dt = source_tz.localize(dt)  # type: ignore[attr-defined]  # pytz has localize, zoneinfo doesn't
                     except AttributeError:
                         # If timezone object doesn't have localize method (e.g., zoneinfo)
                         dt = dt.replace(tzinfo=source_tz)
@@ -168,32 +168,32 @@ class TimezoneConverter:
             # Keys already have date info, we can directly separate today and tomorrow
             for key, price in normalized_prices.items():
                 date_part = key.split(" ")[0]
-                hour_part = key.split(" ")[1]
+                interval_part = key.split(" ")[1]
 
                 if date_part == today_date_str:
-                    today_prices[hour_part] = price
+                    today_prices[interval_part] = price
                 elif date_part == tomorrow_date_str:
-                    tomorrow_prices[hour_part] = price
+                    tomorrow_prices[interval_part] = price
         else:
-            # Use the original logic with hour ranges
-            today_hours = self._tz_service.get_today_range()
-            tomorrow_hours = self._tz_service.get_tomorrow_range()
+            # Use the original logic with interval ranges
+            today_intervals = self._tz_service.get_today_range()
+            tomorrow_intervals = self._tz_service.get_tomorrow_range()
 
             # Since we can't differentiate by date, use the API price date if available
-            for hour_key, price in normalized_prices.items():
+            for interval_key, price in normalized_prices.items():
                 if isinstance(price, dict) and "date" in price:
                     price_date = price["date"]
                     price_without_date = price.copy()
                     price_without_date.pop("date", None)
 
                     if price_date == today_date_str:
-                        today_prices[hour_key] = price_without_date
+                        today_prices[interval_key] = price_without_date
                     elif price_date == tomorrow_date_str:
-                        tomorrow_prices[hour_key] = price_without_date
-                elif hour_key in today_hours:
-                    today_prices[hour_key] = price
-                elif hour_key in tomorrow_hours:
-                    tomorrow_prices[hour_key] = price
+                        tomorrow_prices[interval_key] = price_without_date
+                elif interval_key in today_intervals:
+                    today_prices[interval_key] = price
+                elif interval_key in tomorrow_intervals:
+                    tomorrow_prices[interval_key] = price
 
         _LOGGER.debug(f"Split prices into today ({len(today_prices)} intervals) and tomorrow ({len(tomorrow_prices)} intervals)")
         return today_prices, tomorrow_prices

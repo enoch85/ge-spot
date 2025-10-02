@@ -115,21 +115,22 @@ def check_prices_count(interval_prices):
     return True
 
 
-def expand_to_intervals(hourly_data: Dict[str, float]) -> Dict[str, float]:
+def expand_to_intervals(source_data: Dict[str, float]) -> Dict[str, float]:
     """
-    Expand hourly prices to match configured interval.
+    Expand coarse-grained prices to match configured interval granularity.
 
     Generic implementation - automatically adapts to TimeInterval.DEFAULT.
-    For APIs that provide hourly data but system needs finer granularity,
-    duplicate the hourly price across all intervals in that hour.
+    For APIs that provide coarser data (e.g., hourly) but system needs finer granularity,
+    duplicate the source price across all intervals within that period.
 
     Args:
-        hourly_data: Dictionary with hour keys (HH:00 format) and prices
+        source_data: Dictionary with time keys (HH:00 format for hourly) and prices
 
     Returns:
         Dictionary with interval keys (HH:MM format) and prices
 
     Example:
+        With 15-minute intervals:
         >>> expand_to_intervals({"14:00": 50.0, "15:00": 55.0})
         {"14:00": 50.0, "14:15": 50.0, "14:30": 50.0, "14:45": 50.0,
          "15:00": 55.0, "15:15": 55.0, "15:30": 55.0, "15:45": 55.0}
@@ -139,27 +140,27 @@ def expand_to_intervals(hourly_data: Dict[str, float]) -> Dict[str, float]:
     interval_minutes = TimeInterval.get_interval_minutes()
 
     if interval_minutes == 60:
-        return hourly_data  # Already hourly, no expansion needed
+        return source_data  # Source granularity matches target, no expansion needed
 
     intervals_per_hour = TimeInterval.get_intervals_per_hour()
     expanded = {}
 
-    for hour_key, price in hourly_data.items():
+    for source_key, price in source_data.items():
         try:
             # Extract hour from key (handles "HH:00" or "HH:MM" format)
-            hour = int(hour_key.split(':')[0])
+            hour = int(source_key.split(':')[0])
         except (ValueError, IndexError):
             # If key isn't in expected format, keep as-is
-            _LOGGER.warning(f"Unexpected key format during expansion: {hour_key}")
-            expanded[hour_key] = price
+            _LOGGER.warning(f"Unexpected key format during expansion: {source_key}")
+            expanded[source_key] = price
             continue
 
-        # Create all intervals for this hour
+        # Create all target intervals for this source period
         for i in range(intervals_per_hour):
             minute = i * interval_minutes
             interval_key = f"{hour:02d}:{minute:02d}"
             expanded[interval_key] = price
 
-    _LOGGER.debug(f"Expanded {len(hourly_data)} hourly prices to {len(expanded)} interval prices")
+    _LOGGER.debug(f"Expanded {len(source_data)} source prices to {len(expanded)} interval prices")
     return expanded
 
