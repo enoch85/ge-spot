@@ -69,16 +69,17 @@ class UnifiedPriceManager:
         self.currency = currency
         self.config = config
         
-        # Get timezone reference from config
-        timezone_reference = config.get(Config.TIMEZONE_REFERENCE, Defaults.TIMEZONE_REFERENCE)
+        # Debug: Log config keys to diagnose API key issue
+        _LOGGER.debug(
+            f"UnifiedPriceManager init for {area}: config keys={list(config.keys())}, "
+            f"api_key={'PRESENT' if config.get(Config.API_KEY) or config.get('api_key') else 'MISSING'}"
+        )
         
         self.timezone_service = TimezoneService(
             hass=hass,
             area=area,
-            timezone_reference=timezone_reference
+            config=config
         )
-
-        # Currency and formatting setup
 
         # API sources and tracking
         self._supported_sources = get_sources_for_region(area)
