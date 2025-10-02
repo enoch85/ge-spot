@@ -135,7 +135,7 @@ class DataProcessor:
 
         source_name = data.get("data_source") or data.get("source")
         is_cached_data = data.get("using_cached_data", False)
-        
+
         input_interval_raw: Optional[Dict[str, Any]] = None
         input_source_timezone: Optional[str] = None
         input_source_currency: Optional[str] = None
@@ -158,9 +158,9 @@ class DataProcessor:
                 input_source_timezone = data.get("source_timezone")
                 input_source_currency = data.get("source_currency")
                 _LOGGER.debug(f"[{self.area}] Using 'raw_interval_prices_original' from cache for reprocessing.")
-                
+
                 # Ensure raw_api_data_for_result is also populated from cache if it exists there
-                # The initial raw_api_data_for_result might be from the top-level cache dict, 
+                # The initial raw_api_data_for_result might be from the top-level cache dict,
                 # but the more specific one might be nested if the cache stores the full processed dict.
                 if data.get("raw_data"):
                     raw_api_data_for_result = data.get("raw_data")
@@ -175,9 +175,9 @@ class DataProcessor:
                     _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area} during cached data processing.")
                     return self._generate_empty_processed_result(data, error=f"No parser for source {source_name} (cache path)")
                 try:
-                    # Pass the entire cached dictionary to the parser. 
+                    # Pass the entire cached dictionary to the parser.
                     # The modified EntsoeParser will look for XML within this dict.
-                    parsed_data = parser.parse(data) 
+                    parsed_data = parser.parse(data)
                     input_interval_raw = parsed_data.get("interval_raw")
                     input_source_timezone = parsed_data.get("timezone")
                     input_source_currency = parsed_data.get("currency")
@@ -248,7 +248,7 @@ class DataProcessor:
         final_today_prices = {}
         # Get source unit from the input data, default to MWh if not present
         # For cached data, this might be inside the 'data' dict, or from the original fetch context
-        source_unit = data.get("source_unit", EnergyUnit.MWH) 
+        source_unit = data.get("source_unit", EnergyUnit.MWH)
         _LOGGER.debug(f"[{self.area}] Using source unit '{source_unit}' for currency conversion.")
 
         if normalized_today:

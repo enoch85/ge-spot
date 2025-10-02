@@ -189,10 +189,10 @@ class EpexAPI(BasePriceAPI):
 
     async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse raw EPEX data for reprocessing from cache.
-        
+
         Args:
             raw_data: Raw data dictionary
-            
+
         Returns:
             Parsed data with interval_raw
         """

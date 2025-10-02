@@ -186,7 +186,7 @@ class BaseElectricityPriceSensor(SensorEntity):
             # Add current_price attribute (the sensor's state value)
             if self.native_value is not None:
                 attrs["current_price"] = self.native_value
-            
+
             # Convert interval_prices dict to raw_today array format
             if "interval_prices" in self.coordinator.data:
                 interval_prices = self.coordinator.data["interval_prices"]
@@ -205,7 +205,7 @@ class BaseElectricityPriceSensor(SensorEntity):
                             continue
                     if raw_today:
                         attrs["raw_today"] = raw_today
-            
+
             # Convert tomorrow_interval_prices dict to raw_tomorrow array format
             if "tomorrow_interval_prices" in self.coordinator.data:
                 tomorrow_interval_prices = self.coordinator.data["tomorrow_interval_prices"]

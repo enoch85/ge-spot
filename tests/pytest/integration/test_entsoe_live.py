@@ -148,15 +148,15 @@ SAMPLE_ENTSOE_RESPONSES = {
 @pytest.fixture
 def entsoe_api(monkeypatch):
     """Provides a mocked EntsoeAPI instance that returns sample data."""
-    
+
     async def mock_fetch_day_ahead_prices(self, area, **kwargs):
         """Mock implementation that returns sample data."""
         # Return our sample data for the given area or default to DE-LU data if area not in our samples
         return SAMPLE_ENTSOE_RESPONSES.get(area, SAMPLE_ENTSOE_RESPONSES["DE-LU"])
-    
+
     # Patch the method in the EntsoeAPI class
     monkeypatch.setattr(EntsoeAPI, "fetch_day_ahead_prices", mock_fetch_day_ahead_prices)
-    
+
     # Return a simple instance - the methods are mocked so config doesn't matter
     return EntsoeAPI(config={})
 
@@ -174,24 +174,24 @@ async def test_entsoe_live_fetch_parse(entsoe_api, area):
         assert isinstance(parsed_data, dict), f"Parsed data for {area} should be a dictionary"
         assert parsed_data.get("source") == Source.ENTSOE, f"Source should be {Source.ENTSOE}, got {parsed_data.get('source')}"
         assert parsed_data.get("area") == area, f"Area should be {area}, got {parsed_data.get('area')}"
-        
+
         # Stricter validation of required fields
         required_fields = ["currency", "api_timezone", "interval_prices"]
         for field in required_fields:
             assert field in parsed_data, f"Required field '{field}' missing from parsed data for {area}"
-        
+
         assert isinstance(parsed_data["interval_prices"], dict), f"interval_prices should be a dictionary, got {type(parsed_data['interval_prices'])}"
 
         # Validate interval prices content
         interval_prices = parsed_data["interval_prices"]
-        
+
         # Check for expected data presence
         assert interval_prices, f"No interval prices found for {area} - this is a real issue that should be investigated"
-        
+
         # Validate number of intervals - should typically have at least 24 intervals (could be more with 15-min data)
         min_expected_intervals = 24
         assert len(interval_prices) >= min_expected_intervals, f"Expected at least {min_expected_intervals} intervals of data, got {len(interval_prices)} for {area}"
-        
+
         # Verify all timestamps follow ISO format
         for timestamp, price in interval_prices.items():
             try:
@@ -203,11 +203,11 @@ async def test_entsoe_live_fetch_parse(entsoe_api, area):
                 assert three_days_ago <= dt <= five_days_ahead, f"Timestamp {timestamp} is outside reasonable range for {area}"
             except ValueError:
                 pytest.fail(f"Invalid timestamp format: '{timestamp}' for {area}")
-            
+
             # Price validation
             assert isinstance(price, float), f"Price should be a float, got {type(price)} for timestamp {timestamp}"
             assert -1000 <= price <= 5000, f"Price {price} for {timestamp} is outside reasonable range for {area}"
-        
+
         # Verify timestamps are contiguous (hourly or 15-minute intervals)
         timestamps = sorted(interval_prices.keys())
         for i in range(1, len(timestamps)):
@@ -216,12 +216,12 @@ async def test_entsoe_live_fetch_parse(entsoe_api, area):
             time_diff_minutes = (curr_dt - prev_dt).total_seconds() / 60
             # Allow 15-min, 30-min, or 60-min intervals
             assert time_diff_minutes in [15, 30, 60], f"Unexpected time gap of {time_diff_minutes} minutes between {timestamps[i-1]} and {timestamps[i]} for {area}"
-        
+
         # Validate currency is appropriate for the area
         currency = parsed_data["currency"]
         # Real-world validation: ENTSO-E should return EUR for European countries
         assert currency in ["EUR"], f"Expected currency EUR for {area}, got {currency}"
-        
+
         logger.info(f"ENTSO-E Test ({area}): PASS - Found {len(interval_prices)} prices. Range: {min(interval_prices.values()):.2f} to {max(interval_prices.values()):.2f} {currency}")
 
     except AssertionError as ae:

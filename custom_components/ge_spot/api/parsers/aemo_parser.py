@@ -27,7 +27,7 @@ class AemoParser(BasePriceParser):
         Returns:
             Parsed data with interval prices, currency, area, and timezone
         """
-        
+
         # Determine timezone based on the area, similar to AemoAPI.get_timezone_for_area
         # Default to "Australia/Sydney" if area is None or not in the specific map
         determined_timezone = "Australia/Sydney"
@@ -170,7 +170,7 @@ class AemoParser(BasePriceParser):
 
         # Aggregate 5-minute prices to 15-minute intervals
         interval_prices_15min = self._aggregate_to_15min(interval_prices_5min)
-        
+
         # Update result with aggregated 15-minute interval prices
         result["interval_raw"].update(interval_prices_15min)  # Changed from interval_prices
 
@@ -214,26 +214,26 @@ class AemoParser(BasePriceParser):
 
         # Aggregate 5-minute prices to 15-minute intervals
         interval_prices_15min = self._aggregate_to_15min(interval_prices_5min)
-        
+
         # Update result with aggregated 15-minute interval prices
         result["interval_raw"].update(interval_prices_15min)  # Changed from interval_prices
 
     def _aggregate_to_15min(self, prices_5min: Dict[str, float]) -> Dict[str, float]:
         """Aggregate 5-minute prices to 15-minute intervals.
-        
+
         AEMO provides 5-minute dispatch prices, but we aggregate them to 15-minute intervals
         to match our target resolution. Each 15-minute interval is the average of 3x 5-minute prices.
-        
+
         Args:
             prices_5min: Dictionary of 5-minute interval prices with ISO timestamp keys
-            
+
         Returns:
             Dictionary of 15-minute interval prices (averaged from 5-min data)
         """
         from collections import defaultdict
-        
+
         interval_15min_prices = defaultdict(list)
-        
+
         for interval_key, price in prices_5min.items():
             try:
                 # Parse the timestamp
@@ -247,7 +247,7 @@ class AemoParser(BasePriceParser):
             except (ValueError, TypeError) as e:
                 _LOGGER.debug(f"Failed to parse timestamp for aggregation: {interval_key}, error: {e}")
                 continue
-        
+
         # Calculate average for each 15-minute interval
         result = {}
         for interval_key_15min, prices in interval_15min_prices.items():
@@ -256,7 +256,7 @@ class AemoParser(BasePriceParser):
                 avg_price = sum(prices) / len(prices)
                 result[interval_key_15min] = avg_price
                 _LOGGER.debug(f"Aggregated {len(prices)} 5-min prices to 15-min interval {interval_key_15min}: {avg_price:.2f}")
-        
+
         return result
 
     def _parse_timestamp(self, timestamp_str: str) -> Optional[datetime]:
@@ -310,7 +310,7 @@ class AemoParser(BasePriceParser):
         current_interval_key = current_interval.isoformat()
 
         _LOGGER.debug(f"Looking for current interval price with key: {current_interval_key}")
-        
+
         return interval_prices.get(current_interval_key)
 
     def _get_next_interval_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
@@ -326,7 +326,7 @@ class AemoParser(BasePriceParser):
             return None
 
         now = datetime.now()
-        
+
         # Round down to current 15-minute interval, then add 15 minutes
         minute_rounded = (now.minute // 15) * 15
         current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)

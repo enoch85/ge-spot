@@ -93,7 +93,7 @@ class EntsoeParser(BasePriceParser):
             result["currency"] = aggregated_currency
         if aggregated_timezone: # Use timezone from XML if found (should be UTC for ENTSO-E)
             result["timezone"] = aggregated_timezone
-        
+
         # Metadata Extraction
         # Use the first XML doc for metadata if multiple were parsed.
         # If no XML was parsed but input was a dict, try to extract from that.
@@ -102,7 +102,7 @@ class EntsoeParser(BasePriceParser):
             metadata_source_for_extraction = xml_to_parse[0]
         elif isinstance(original_input_for_metadata, dict): # If input was a dict and no XML found
              metadata_source_for_extraction = original_input_for_metadata
-        
+
         if metadata_source_for_extraction is not None:
             result["metadata"] = self.extract_metadata(metadata_source_for_extraction)
         else:
@@ -358,13 +358,13 @@ class EntsoeParser(BasePriceParser):
                         start_time = datetime.fromisoformat(start_str.text.replace('Z', '+00:00'))
                         resolution_elem = period.find(".//ns:resolution", ns)
                         interval_hours = 1  # Default to hourly
-                        
+
                         if resolution_elem is not None and resolution_elem.text:
                             if resolution_elem.text == "PT15M":
                                 interval_hours = 0.25
                             elif resolution_elem.text == "PT30M":
                                 interval_hours = 0.5
-                        
+
                         points = ts.findall(".//ns:Point", ns)
 
                         for point in points:

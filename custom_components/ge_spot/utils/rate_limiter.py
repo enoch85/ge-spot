@@ -11,7 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class RateLimiter:
     """Rate limiter for API fetch operations.
-    
+
     All methods are static as rate limiting is coordinated globally
     through shared state in UnifiedPriceManager.
     """
@@ -28,7 +28,7 @@ class RateLimiter:
         area: str = None
     ) -> Tuple[bool, str]:
         """Determine if we should skip fetching based on rate limiting rules.
-        
+
         Priority order (highest to lowest):
         1. Never fetched → always fetch
         2. Failure backoff → prevent hammering during issues
@@ -54,7 +54,7 @@ class RateLimiter:
                     min_interval = SourceIntervals.get_interval(source)
                 else:
                     min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
-            
+
             backoff_minutes = min(60, 2 ** (consecutive_failures - 1) * min_interval)
             if last_failure_time and (current_time - last_failure_time).total_seconds() / 60 < backoff_minutes:
                 next_retry = last_failure_time + datetime.timedelta(minutes=backoff_minutes)
@@ -97,16 +97,16 @@ class RateLimiter:
         # This runs last so it respects all the above constraints
         from ..const.time import TimeInterval
         interval_minutes = TimeInterval.get_interval_minutes()
-        
+
         # Calculate interval keys for both timestamps
         def get_interval_key(dt: datetime.datetime) -> str:
             """Get interval key (HH:MM) for a datetime."""
             minute = (dt.minute // interval_minutes) * interval_minutes
             return f"{dt.hour:02d}:{minute:02d}"
-        
+
         last_interval_key = get_interval_key(last_fetched)
         current_interval_key = get_interval_key(current_time)
-        
+
         if last_interval_key != current_interval_key:
             reason = f"Interval boundary crossed (from {last_interval_key} to {current_interval_key}), forcing update"
             log_rate_limiting(area or "unknown", False, reason, source)

@@ -10,7 +10,7 @@ This script performs an end-to-end test of the Energi Data Service API integrati
 
 Usage:
     python energi_data_full_chain.py [area]
-    
+
     area: Optional area code (DK1, DK2)
           Defaults to DK1 if not provided
 """
@@ -42,17 +42,17 @@ _LOGGER = logging.getLogger(__name__)
 async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Test Energi Data Service API integration')
-    parser.add_argument('area', nargs='?', default='DK1', 
+    parser.add_argument('area', nargs='?', default='DK1',
                         choices=DANISH_AREAS,
                         help='Area code (DK1, DK2)')
     args = parser.parse_args()
     area = args.area
-    
+
     print(f"\n===== Energi Data Service API Full Chain Test for {area} =====\n")
-    
+
     # Initialize the API client
     api = EnergiDataAPI()
-    
+
     try:
         # Step 1: Fetch raw data
         _LOGGER.info(f"Fetching Energi Data Service data for area: {area}")
@@ -190,14 +190,14 @@ async def main():
                     print("⚠ No price variation detected - suspicious for real market data")
 
         print("\nTest completed successfully!")
-        
+
     except Exception as e:
         _LOGGER.error(f"Error during test: {e}", exc_info=True)
         print(f"Error during test: {e}")
         import traceback
         traceback.print_exc()
         return 1
-    
+
     return 0
 
 if __name__ == "__main__":

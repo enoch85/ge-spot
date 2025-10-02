@@ -186,20 +186,20 @@ class TestUnifiedPriceManager:
         # Core attributes
         assert manager.area == "SE1", f"Expected area 'SE1', got '{manager.area}'"
         assert manager.currency == "SEK", f"Expected currency 'SEK', got '{manager.currency}'"
-        
+
         # Initial state
         assert manager._active_source is None, "Active source should be None on initialization"
         assert manager._attempted_sources == [], "Attempted sources should be empty on initialization"
         assert manager._fallback_sources == [], "Fallback sources should be empty on initialization"
         assert manager._using_cached_data is False, "using_cached_data should be False on initialization"
         assert manager._consecutive_failures == 0, "Consecutive failures should be 0 on initialization"
-        
+
         # Dependencies
         assert manager._tz_service is auto_mock_core_dependencies["tz_service"].return_value, "TimezoneService not properly initialized"
         assert manager._fallback_manager is auto_mock_core_dependencies["fallback_manager"].return_value, "FallbackManager not properly initialized"
         assert manager._cache_manager is auto_mock_core_dependencies["cache_manager"].return_value, "CacheManager not properly initialized"
         assert manager._data_processor is auto_mock_core_dependencies["data_processor"].return_value, "DataProcessor not properly initialized"
-        
+
         # Source configuration
         assert manager._source_priority == [Source.NORDPOOL, Source.ENTSOE], "Source priority not correctly initialized"
         assert len(manager._api_classes) == 2, f"Expected 2 API classes, got {len(manager._api_classes)}"
@@ -218,21 +218,21 @@ class TestUnifiedPriceManager:
 
         # Assert
         mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallbacks should be called once"
-        
+
         # Verify processor called with correct raw data
         mock_processor.assert_awaited_once(), \
             f"DataProcessor.process should be called with raw data, got {mock_processor.call_args}"
-            
+
         # Verify cache stored with processed data
         mock_cache_store.assert_called_once(), \
             f"CacheManager.store should be called with processed data, got {mock_cache_store.call_args}"
-            
+
         # Cache get may be called during decision making
         # mock_cache_get.assert_not_called(), "CacheManager.get_data should not be called on successful fetch"
-        
+
         # Check returned data
         assert result == MOCK_PROCESSED_RESULT, f"Expected processed result, got {json.dumps(result, indent=2)}"
-        
+
         # Check manager state updates
         assert manager._active_source == Source.NORDPOOL, f"Active source should be NORDPOOL, got {manager._active_source}"
         assert manager._attempted_sources == [Source.NORDPOOL], f"Attempted sources should be [NORDPOOL], got {manager._attempted_sources}"
@@ -344,21 +344,21 @@ class TestUnifiedPriceManager:
 
         # Assert
         mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallbacks should be called once"
-        
+
         # Verify processor called with fallback data
         mock_processor.assert_awaited_once_with(fallback_success_result), \
             f"DataProcessor.process should be called with fallback data, got {mock_processor.call_args}"
-            
+
         # Verify cache updated with processed fallback data - store() uses keyword args
         mock_cache_update.assert_called_once()
         call_kwargs = mock_cache_update.call_args[1]
         assert call_kwargs['area'] == 'SE1'
         assert call_kwargs['source'] == Source.ENTSOE
         assert 'data' in call_kwargs
-        
+
         # Check returned data
         assert result == processed_fallback_result, f"Expected processed fallback result, got {json.dumps(result, indent=2)}"
-        
+
         # Check manager state updates
         assert manager._active_source == Source.ENTSOE, f"Active source should be ENTSOE, got {manager._active_source}"
         assert manager._attempted_sources == [Source.NORDPOOL, Source.ENTSOE], \
@@ -640,7 +640,7 @@ class TestUnifiedPriceManager:
         # Arrange
         mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        
+
         # Normal result structure but with extreme prices at 15-minute intervals
         extreme_price_result = {
             "data_source": Source.NORDPOOL,
@@ -654,7 +654,7 @@ class TestUnifiedPriceManager:
             "attempted_sources": [Source.NORDPOOL],
         }
         mock_fallback.return_value = extreme_price_result
-        
+
         # Configure processor to pass through extreme prices
         # In real implementation, processor should validate but not clip these values
         extreme_processed_result = {
@@ -666,20 +666,20 @@ class TestUnifiedPriceManager:
             }
         }
         mock_processor.return_value = extreme_processed_result
-        
+
         # Act
         result = await manager.fetch_data()
-        
+
         # Assert - Extreme prices should be preserved, not clipped
         assert result["interval_prices"]["2025-04-26T10:00:00+02:00"] == 9999.99, \
             f"Extreme high price should not be clipped, got {result['interval_prices']['2025-04-26T10:00:00+02:00']}"
         assert result["interval_prices"]["2025-04-26T10:15:00+02:00"] == -500.0, \
             f"Negative price should not be clipped, got {result['interval_prices']['2025-04-26T10:15:00+02:00']}"
-        
+
         # Both normal and extreme prices should be present
         assert len(result["interval_prices"]) == 3, \
             f"All price points should be preserved, got {len(result['interval_prices'])}"
-        
+
         # Result should indicate successful fetch despite extreme prices
         assert result["has_data"] is True, "has_data should be True despite extreme prices"
         assert not result.get("error"), f"No error should be present for extreme prices, got {result.get('error')}"
@@ -691,7 +691,7 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_exchange_service = auto_mock_core_dependencies["get_exchange_service"].return_value
-        
+
         # Create result with EUR as source currency but SEK as target (15-minute intervals)
         eur_result = {
             "data_source": Source.ENTSOE,
@@ -704,10 +704,10 @@ class TestUnifiedPriceManager:
             "attempted_sources": [Source.ENTSOE],
         }
         mock_fallback.return_value = eur_result
-        
+
         # Configure exchange service to simulate conversion
         mock_exchange_service.convert_currency = AsyncMock(return_value=10.5)  # 1 EUR = 10.5 SEK
-        
+
         # Expected processed result with converted currency
         converted_result = {
             **MOCK_PROCESSED_RESULT,
@@ -721,10 +721,10 @@ class TestUnifiedPriceManager:
             "exchange_rate": 10.5,
         }
         mock_processor.return_value = converted_result
-        
+
         # Act
         result = await manager.fetch_data()
-        
+
         # Assert
         assert result["source_currency"] == Currency.EUR, \
             f"Source currency should be EUR, got {result.get('source_currency')}"
@@ -732,21 +732,21 @@ class TestUnifiedPriceManager:
             f"Target currency should be SEK, got {result.get('target_currency')}"
         assert "exchange_rate" in result, "Exchange rate should be included in result"
         assert result["exchange_rate"] == 10.5, f"Exchange rate should be 10.5, got {result.get('exchange_rate')}"
-        
+
         # Check converted prices
         assert result["interval_prices"]["2025-04-26T10:00:00+02:00"] == 1.05, \
             f"First interval price should be converted to 1.05 SEK, got {result['interval_prices']['2025-04-26T10:00:00+02:00']}"
         assert result["interval_prices"]["2025-04-26T10:15:00+02:00"] == 2.1, \
             f"Second interval price should be converted to 2.1 SEK, got {result['interval_prices']['2025-04-26T10:15:00+02:00']}"
 
-    @pytest.mark.asyncio  
+    @pytest.mark.asyncio
     async def test_fetch_data_with_timezone_conversion(self, manager, auto_mock_core_dependencies):
         """Test correct timezone conversion - critical for international markets."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_tz_service = auto_mock_core_dependencies["tz_service"].return_value
-        
+
         # Create result with UTC timestamps at 15-minute intervals
         utc_result = {
             "data_source": Source.NORDPOOL,
@@ -760,10 +760,10 @@ class TestUnifiedPriceManager:
             "attempted_sources": [Source.NORDPOOL],
         }
         mock_fallback.return_value = utc_result
-        
+
         # Configure timezone service
         mock_tz_service.get_area_timezone.return_value = "Europe/Stockholm"
-        
+
         # Expected processed result with converted timezone
         converted_tz_result = {
             **MOCK_PROCESSED_RESULT,
@@ -775,12 +775,12 @@ class TestUnifiedPriceManager:
             }
         }
         mock_processor.return_value = converted_tz_result
-        
+
         # Act
         result = await manager.fetch_data()
-        
+
         # Assert
-        assert "source_timezone" in result, "Source timezone should be included in result" 
+        assert "source_timezone" in result, "Source timezone should be included in result"
         assert "target_timezone" in result, "Target timezone should be included in result"
         assert result["source_timezone"] == "UTC", f"Source timezone should be UTC, got {result.get('source_timezone')}"
         assert result["target_timezone"] == "Europe/Stockholm", \

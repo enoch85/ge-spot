@@ -274,7 +274,7 @@ class CacheManager:
             interval_minutes = TimeInterval.get_interval_minutes()
             minute = (now_in_target_tz.minute // interval_minutes) * interval_minutes
             current_interval_key = f"{now_in_target_tz.hour:02d}:{minute:02d}"
-        
+
         target_date = now_in_target_tz.date()
 
         latest_entry = self.get_data(area, target_date=target_date) # Use get_data to find newest valid entry

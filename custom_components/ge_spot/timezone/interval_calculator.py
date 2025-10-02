@@ -25,7 +25,7 @@ class IntervalCalculator:
 
     def _round_to_interval(self, dt: datetime) -> datetime:
         """Round datetime to nearest interval boundary.
-        
+
         Uses configured interval duration from TimeInterval.DEFAULT.
         Works for any interval duration (15-min, hourly, etc.).
         """

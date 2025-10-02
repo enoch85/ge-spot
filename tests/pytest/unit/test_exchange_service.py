@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from custom_components.ge_spot.utils.exchange_service import (
-    ExchangeRateService, 
+    ExchangeRateService,
     get_exchange_service,
     ExchangeService  # This is now an alias for ExchangeRateService
 )
@@ -81,20 +81,20 @@ async def exchange_service():
     mock_session = MagicMock(spec=ClientSession)
     mock_session.closed = False
     mock_session.close = AsyncMock()
-    
+
     # Create service instance with a temporary cache file to avoid using real cached data
     service = ExchangeRateService(session=mock_session, cache_file="/tmp/test_exchange_rates.json")
-    
+
     # Reset internal state
     service.rates = {}
     service.last_update = 0
-    
+
     yield service
-    
+
     # Clean up
     if not mock_session.closed:
         await service.close()
-    
+
     # Clean up test cache file
     if os.path.exists("/tmp/test_exchange_rates.json"):
         os.remove("/tmp/test_exchange_rates.json")
@@ -111,22 +111,22 @@ async def test_convert_currency_success(exchange_service):
         "SEK": 11.1430,
         "NOK": 11.5480
     }
-    
+
     # Directly patch the _fetch_ecb_rates method
     with patch.object(exchange_service, '_fetch_ecb_rates', AsyncMock(return_value=mock_rates)):
         # Act - Force a rates refresh
         await exchange_service.get_rates(force_refresh=True)
-        
+
         # Verify rates were loaded correctly
         assert exchange_service.rates[Currency.EUR] == 1.0
         assert exchange_service.rates["SEK"] == 11.1430
-        
+
         # Now test conversion
         amount = 100.0
         from_currency = Currency.EUR
         to_currency = "SEK"
         result = await exchange_service.convert(amount, from_currency, to_currency)
-        
+
         # Assert
         assert result is not None, "Conversion rate should not be None"
         expected_rate = 11.1430  # SEK rate from mock data
@@ -145,32 +145,32 @@ async def test_convert_currency_caching(exchange_service):
         "SEK": 11.1430,
         "NOK": 11.5480
     }
-    
+
     # Use patching with a spy to track calls
     with patch.object(exchange_service, '_fetch_ecb_rates', AsyncMock(return_value=mock_rates)) as mock_fetch:
         # Act - First call to get rates
         await exchange_service.get_rates(force_refresh=True)
-        
+
         # Assert the fetch was called once
         mock_fetch.assert_called_once()
         mock_fetch.reset_mock()
-        
+
         # Act - Second conversion should use cached rates without fetching
         await exchange_service.convert(
             amount=50.0,
             from_currency=Currency.EUR,
             to_currency="NOK"
         )
-        
+
         # Assert fetch wasn't called again
         mock_fetch.assert_not_called()
-        
+
         # Force refresh with old timestamp
         exchange_service.last_update = 0
-        
+
         # Act - Third conversion should refresh rates
         await exchange_service.get_rates(force_refresh=True)
-        
+
         # Assert fetch was called again
         mock_fetch.assert_called_once()
 
@@ -185,16 +185,16 @@ async def test_convert_currency_api_error(exchange_service):
         Currency.USD: 1.1
     }
     exchange_service.last_update = time.time() - 3600  # 1 hour ago
-    
+
     # Simulate API error by having _fetch_ecb_rates return None
     with patch.object(exchange_service, '_fetch_ecb_rates', AsyncMock(return_value=None)):
         # Act - Should use existing rates when fetch fails
         rates = await exchange_service.get_rates(force_refresh=True)
-        
+
         # Assert fallback to existing rates
         assert rates is not None, "Should use existing rates"
         assert Currency.SEK in rates, "Existing rates should be preserved"
-        
+
         # But with no existing rates, should raise error
         exchange_service.rates = {}
         with pytest.raises(ValueError):
@@ -206,14 +206,14 @@ async def test_convert_currency_same_currency(exchange_service):
     """Test conversion when source and target currencies are the same."""
     # Arrange - No session needed for same currency
     exchange_service.session.get = AsyncMock()
-    
+
     # Act
     result = await exchange_service.convert(
         amount=100.0,
         from_currency=Currency.EUR,
         to_currency=Currency.EUR
     )
-    
+
     # Assert
     assert result == 100.0, f"Converting to same currency should return original amount, got {result}"
     exchange_service.session.get.assert_not_called(), "API should not be called for same currency conversion"
@@ -229,17 +229,17 @@ async def test_convert_currency_network_error(exchange_service):
         Currency.USD: 1.1
     }
     exchange_service.last_update = time.time()
-    
+
     # Simulate network error by raising an exception
     network_error = ClientError("Connection error")
     with patch.object(exchange_service, '_fetch_ecb_rates', AsyncMock(side_effect=network_error)):
         # Act - Should use existing rates on error
         rates = await exchange_service.get_rates(force_refresh=True)
-        
+
         # Assert
         assert rates is not None, "Should use existing rates"
         assert Currency.SEK in rates, "Existing rates should be preserved"
-        
+
         # But with empty rates, should propagate error
         exchange_service.rates = {}
         with pytest.raises(ClientError):
@@ -251,7 +251,7 @@ async def test_parse_ecb_xml(exchange_service):
     """Test parsing of ECB XML data."""
     # Act
     rates = exchange_service._parse_ecb_xml(MOCK_ECB_XML_RESPONSE)
-    
+
     # Assert
     assert rates is not None, "Parsed rates should not be None"
     assert Currency.EUR in rates, "EUR should be in rates"
@@ -269,7 +269,7 @@ async def test_parse_invalid_xml(exchange_service):
     with patch.object(ET, 'fromstring', side_effect=Exception("XML parsing error")):
         # Act
         rates = exchange_service._parse_ecb_xml(MOCK_INVALID_XML_RESPONSE)
-        
+
         # Assert
         assert rates is None, "Invalid XML should return None"
 
@@ -279,19 +279,19 @@ async def test_get_exchange_service_factory():
     """Test the exchange service singleton factory function."""
     # Arrange
     mock_session = MagicMock(spec=ClientSession)
-    
+
     # Mock get_rates to prevent actual API calls during test
     with patch.object(ExchangeRateService, 'get_rates', AsyncMock()):
         # Act - Get the service instance
         service1 = await get_exchange_service(session=mock_session)
-        
+
         # Get another instance
         service2 = await get_exchange_service(session=mock_session)
-        
+
         # Assert
         assert isinstance(service1, ExchangeRateService), "Factory should return ExchangeRateService"
         assert service1 is service2, "Factory should return the same instance on subsequent calls"
-    
+
     # Reset the singleton for other tests
     import custom_components.ge_spot.utils.exchange_service
     custom_components.ge_spot.utils.exchange_service._EXCHANGE_SERVICE = None
@@ -303,7 +303,7 @@ async def test_cache_operations(exchange_service, tmp_path):
     # Setup a temporary cache file
     cache_file = tmp_path / "test_exchange_rates.json"
     exchange_service.cache_file = str(cache_file)
-    
+
     # Set test rates
     exchange_service.rates = {
         Currency.EUR: 1.0,
@@ -311,16 +311,16 @@ async def test_cache_operations(exchange_service, tmp_path):
         Currency.SEK: 10.5
     }
     exchange_service.last_update = time.time()
-    
+
     # Test saving cache
     success = await exchange_service._save_cache()
     assert success, "Cache save should succeed"
     assert cache_file.exists(), "Cache file should be created"
-    
+
     # Clear rates and test loading
     exchange_service.rates = {}
     exchange_service.last_update = 0
-    
+
     success = await exchange_service._load_cache()
     assert success, "Cache load should succeed"
     assert Currency.EUR in exchange_service.rates, "Loaded rates should include EUR"
@@ -338,19 +338,19 @@ async def test_get_exchange_rate_info(exchange_service):
         Currency.SEK: 10.5
     }
     exchange_service.last_update = time.time()
-    
+
     # Act - get info for specific pair
     info = exchange_service.get_exchange_rate_info(Currency.EUR, Currency.SEK)
-    
+
     # Assert
     assert "rate" in info, "Result should include rate"
     assert info["rate"] == 10.5, "Rate should match the test data"
     assert "formatted" in info, "Result should include formatted rate"
     assert "10.5" in info["formatted"], "Formatted string should include the rate value"
-    
+
     # Act - get all rates
     all_info = exchange_service.get_exchange_rate_info(Currency.EUR)
-    
+
     # Assert
     assert "base" in all_info, "All rates result should include base currency"
     assert all_info["base"] == Currency.EUR, "Base currency should match input"
@@ -367,7 +367,7 @@ async def test_convert_currency_missing_rates(exchange_service):
         Currency.EUR: 1.0,
         Currency.USD: 1.1
     }
-    
+
     # Act & Assert - Missing target currency
     with pytest.raises(ValueError) as exc_info:
         await exchange_service.convert(
@@ -375,9 +375,9 @@ async def test_convert_currency_missing_rates(exchange_service):
             from_currency=Currency.EUR,
             to_currency="JPY"  # Not in our test rates
         )
-    
+
     assert "Missing exchange rates" in str(exc_info.value), "Should raise error for missing currency"
-    
+
     # Act & Assert - Missing source currency
     with pytest.raises(ValueError) as exc_info:
         await exchange_service.convert(
@@ -385,5 +385,5 @@ async def test_convert_currency_missing_rates(exchange_service):
             from_currency="AUD",  # Not in our test rates
             to_currency=Currency.EUR
         )
-    
+
     assert "Missing exchange rates" in str(exc_info.value), "Should raise error for missing currency"

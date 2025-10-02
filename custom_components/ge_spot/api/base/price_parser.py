@@ -415,10 +415,10 @@ class BasePriceParser(ABC):
 
     def calculate_peak_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
          """Calculate the peak (maximum) price from interval prices.
-         
+
          Args:
              interval_prices: Dictionary of interval prices
-             
+
          Returns:
              Maximum price value or None
          """
@@ -428,10 +428,10 @@ class BasePriceParser(ABC):
 
     def calculate_off_peak_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
          """Calculate the off-peak (minimum) price from interval prices.
-         
+
          Args:
              interval_prices: Dictionary of interval prices
-             
+
          Returns:
              Minimum price value or None
          """

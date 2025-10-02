@@ -87,7 +87,7 @@ def processor_dependencies(mock_exchange_service, mock_timezone_service):
         Config.VAT: Defaults.VAT_RATE,
         Config.INCLUDE_VAT: Defaults.INCLUDE_VAT,
     }
-    
+
     return {
         "hass": hass,
         "area": "SE4",
@@ -99,14 +99,14 @@ def processor_dependencies(mock_exchange_service, mock_timezone_service):
 
 class TestDataProcessor:
     """Test suite for the DataProcessor class."""
-    
+
     @pytest.mark.asyncio
     async def test_ensure_exchange_service_success(self, processor_dependencies, mock_exchange_service):
         """Test successful initialization of exchange service and currency converter."""
         # Create a specially mocked manager that won't trigger the get_rates attribute check
         mock_manager = MagicMock(spec=[])  # No attributes to avoid hasattr match
         mock_manager._exchange_service = mock_exchange_service
-        
+
         # Create processor with the mock manager
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
@@ -116,26 +116,26 @@ class TestDataProcessor:
             tz_service=processor_dependencies["tz_service"],
             manager=mock_manager
         )
-        
+
         # Patch the _ensure_exchange_service method to test our customized version
         with patch.object(processor, '_ensure_exchange_service') as mock_ensure:
             # Call our patched method
             mock_ensure.return_value = None  # Simulate successful completion
             await processor._ensure_exchange_service()
-            
+
             # Assert
             assert mock_ensure.called, "ensure_exchange_service should be called"
-            
+
         # Now manually set up the processor for the test
         processor._exchange_service = mock_exchange_service
-        
+
         # Patch the CurrencyConverter to avoid actual initialization
         with patch('custom_components.ge_spot.coordinator.data_processor.CurrencyConverter') as mock_converter_cls:
             mock_converter = mock_converter_cls.return_value
-            
+
             # Manually create the currency converter
             processor._currency_converter = mock_converter
-            
+
             # Assert
             assert processor._exchange_service is not None, "Exchange service should be initialized"
             assert processor._currency_converter is not None, "Currency converter should be initialized"
@@ -147,13 +147,13 @@ class TestDataProcessor:
         mock_manager = MagicMock(spec=[])  # No attributes to avoid hasattr match
         mock_manager._exchange_service = None
         mock_manager._ensure_exchange_service = AsyncMock()
-        
+
         # Configure _ensure_exchange_service to set _exchange_service when called
         async def set_exchange_service():
             mock_manager._exchange_service = mock_exchange_service
-        
+
         mock_manager._ensure_exchange_service.side_effect = set_exchange_service
-        
+
         # Create processor with the mock manager
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
@@ -163,27 +163,27 @@ class TestDataProcessor:
             tz_service=processor_dependencies["tz_service"],
             manager=mock_manager
         )
-        
+
         # Patch the processor's _ensure_exchange_service method
         with patch.object(processor, '_ensure_exchange_service') as mock_ensure:
             # Call our patched method
             mock_ensure.return_value = None  # Simulate successful completion
             await processor._ensure_exchange_service()
-            
+
             # Assert
             assert mock_ensure.called, "ensure_exchange_service should be called"
-        
+
         # Directly test the specific part we're interested in by setting up processor
         with patch('custom_components.ge_spot.coordinator.data_processor.CurrencyConverter') as mock_converter_cls:
             # Simulate manager._ensure_exchange_service getting called and setting exchange_service
             await mock_manager._ensure_exchange_service()
-            
+
             # Manually update processor's exchange service
             processor._exchange_service = mock_manager._exchange_service
-            
+
             # Manually create the currency converter
             processor._currency_converter = mock_converter_cls.return_value
-            
+
             # Assert
             assert mock_manager._ensure_exchange_service.called, "Manager's _ensure_exchange_service should be called"
             assert processor._exchange_service is not None, "Exchange service should be initialized"
@@ -203,10 +203,10 @@ class TestDataProcessor:
                 tz_service=processor_dependencies["tz_service"],
                 manager=mock_exchange_service  # Use exchange service directly as manager
             )
-            
+
             # Act
             await processor._ensure_exchange_service()
-            
+
             # Assert
             assert processor._exchange_service is not None, "Exchange service should be initialized"
             assert processor._currency_converter is not None, "Currency converter should be initialized"
@@ -218,7 +218,7 @@ class TestDataProcessor:
         """Test handling of exchange service initialization failure."""
         # Skip if hasattr check by not providing 'get_rates' method
         mock_manager = MagicMock(spec=[])  # Empty spec ensures no attributes exist
-        
+
         # Create processor with the mock manager that can't provide an exchange service
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
@@ -228,11 +228,11 @@ class TestDataProcessor:
             tz_service=processor_dependencies["tz_service"],
             manager=mock_manager
         )
-        
+
         # Act & Assert
         with pytest.raises(RuntimeError, match="Exchange service could not be initialized or retrieved"):
             await processor._ensure_exchange_service()
-        
+
         assert processor._exchange_service is None, "Exchange service should remain None on failure"
         assert processor._currency_converter is None, "Currency converter should remain None on failure"
 
@@ -243,7 +243,7 @@ class TestDataProcessor:
         # to have an exchange service but will fail when creating the currency converter
         mock_manager = MagicMock()
         mock_manager._exchange_service = mock_exchange_service
-        
+
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
             area=processor_dependencies["area"],
@@ -252,26 +252,26 @@ class TestDataProcessor:
             tz_service=processor_dependencies["tz_service"],
             manager=mock_manager
         )
-        
+
         # We need to ensure processor._exchange_service is None initially
         processor._exchange_service = None
-        
+
         # Set up a patched version of the method that will mimic the actual behavior we're testing
         async def mock_ensure_exchange():
             # First, simulate successful exchange service initialization
             processor._exchange_service = mock_exchange_service
-            
+
             # Then, simulate currency converter creation failure
             if processor._currency_converter is None and processor._exchange_service is not None:
                 # Raise RuntimeError as the actual method would
                 raise RuntimeError("Currency converter could not be initialized.")
-            
+
         # Patch the method with our mock implementation
         with patch.object(processor, '_ensure_exchange_service', mock_ensure_exchange):
             # Test that the method raises the expected RuntimeError
             with pytest.raises(RuntimeError, match="Currency converter could not be initialized"):
                 await processor._ensure_exchange_service()
-                
+
             # Verify exchange service was set but currency converter remained None
             assert processor._exchange_service is not None
             assert processor._currency_converter is None
@@ -282,7 +282,7 @@ class TestDataProcessor:
         # Looking at the process method implementation, we need to:
         # 1. Make _ensure_exchange_service succeed but leave _currency_converter as None
         # 2. Let the method detect that currency converter is None and return the empty result
-        
+
         # Create a processor with manually set exchange service
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
@@ -292,7 +292,7 @@ class TestDataProcessor:
             tz_service=processor_dependencies["tz_service"],
             manager=MagicMock(spec=[])
         )
-        
+
         # Define the expected empty result
         expected_empty_result = {
             "source": "nordpool",
@@ -301,13 +301,13 @@ class TestDataProcessor:
             "interval_prices": {},
             # Plus other keys that will be included
         }
-        
+
         # First, patch _ensure_exchange_service to succeed but leave _currency_converter as None
         async def mock_ensure_exchange():
             processor._exchange_service = mock_exchange_service
             # Deliberately NOT setting the currency_converter
-            
-        # Second, patch _generate_empty_processed_result to return our expected result    
+
+        # Second, patch _generate_empty_processed_result to return our expected result
         def mock_generate_empty(data, error=None):
             return {
                 "source": data.get("source", "unknown"),
@@ -316,14 +316,14 @@ class TestDataProcessor:
                 "interval_prices": {},
                 # Additional keys would be here in the real implementation
             }
-            
+
         # Apply the patches and run the test
         with patch.object(processor, '_ensure_exchange_service', side_effect=mock_ensure_exchange), \
              patch.object(processor, '_generate_empty_processed_result', side_effect=mock_generate_empty):
-            
+
             # Call process - since _currency_converter will be None, it should return our empty result
             result = await processor.process(SAMPLE_RAW_DATA)
-            
+
             # Assert we got the expected result
             assert result is not None, "Process should return a result even on currency converter failure"
             assert "error" in result, "Result should contain an error message"

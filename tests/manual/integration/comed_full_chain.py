@@ -10,7 +10,7 @@ This script performs an end-to-end test of the ComEd API integration:
 
 Usage:
     python comed_full_chain.py [--date YYYY-MM-DD] [--debug]
-    
+
     --date: Optional date to fetch data for (format: YYYY-MM-DD)
             Defaults to today if not provided
     --debug: Enable detailed debug logging
@@ -47,7 +47,7 @@ async def main():
                         help='Date to fetch data for (format: YYYY-MM-DD, default: today)')
     parser.add_argument('--debug', action='store_true', help='Enable detailed debug logging')
     args = parser.parse_args()
-    
+
     # Configure logging level
     log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(
@@ -55,9 +55,9 @@ async def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    
+
     reference_date_str = args.date
-    
+
     # Process reference date if provided
     reference_time = None
     target_date = datetime.now(pytz.timezone(LOCAL_TZ_NAME)).date() # Use local time for default date
@@ -77,29 +77,29 @@ async def main():
          reference_time = datetime.now(pytz.timezone(LOCAL_TZ_NAME))
 
     logger.info(f"\n===== ComEd API Full Chain Test for {AREA} =====\n")
-    
+
     # Initialize timezone service based on area
     logger.info("Setting up timezone service...")
     local_tz = pytz.timezone(LOCAL_TZ_NAME)
     tz_config = {"timezone_reference": "area"} # Assuming area dictates timezone
     # Use a fixed area for ComEd as it's specific
-    tz_service = TimezoneService(area=AREA, config=tz_config, fixed_timezone=LOCAL_TZ_NAME) 
+    tz_service = TimezoneService(area=AREA, config=tz_config, fixed_timezone=LOCAL_TZ_NAME)
     tz_converter = TimezoneConverter(tz_service)
     logger.info(f"Timezone service initialized for area: {AREA} using {LOCAL_TZ_NAME}")
 
     # Initialize the API client
     api = ComedAPI(config={}) # ComEd API might not need specific config like API keys
-    
+
     try:
         # Step 1: Fetch raw data
         logger.info(f"Fetching ComEd data for area: {AREA}")
         # Adjust fetch call based on ComedAPI's expected parameters
-        raw_data = await api.fetch_raw_data(area=AREA, reference_time=reference_time) 
-        
+        raw_data = await api.fetch_raw_data(area=AREA, reference_time=reference_time)
+
         if not raw_data:
             logger.error("Error: Failed to fetch data from ComEd API")
             return 1
-            
+
         logger.debug(f"Raw data keys: {list(raw_data.keys())}")
         log_data = {}
         for k, v in raw_data.items():
@@ -108,11 +108,11 @@ async def main():
              else:
                  log_data[k] = v
         logger.debug(f"Raw data content (summary): {json.dumps(log_data, indent=2)}")
-        
+
         # Step 2: Parse raw data
         logger.info("\nParsing raw data...")
-        parsed_data = await api.parse_raw_data(raw_data) 
-        
+        parsed_data = await api.parse_raw_data(raw_data)
+
         logger.debug(f"Parsed data keys: {list(parsed_data.keys())}")
         logger.info(f"Source: {parsed_data.get('source_name', parsed_data.get('source'))}")
         logger.info(f"Area: {AREA}")
@@ -120,7 +120,7 @@ async def main():
         logger.info(f"Currency: {original_currency}")
         source_timezone = parsed_data.get('timezone') # Parser should determine this
         logger.info(f"API Timezone: {source_timezone}")
-        
+
         interval_raw_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
         if not interval_raw_prices:
             logger.error("Error: No interval prices found in the parsed data after parsing step.")
@@ -131,7 +131,7 @@ async def main():
                  logger.debug(json.dumps(raw_data['api_response'], indent=2))
                  logger.debug(f"--- Raw API Response --- END ---")
             return 1
-            
+
         logger.info(f"Found {len(interval_raw_prices)} raw interval price points (before timezone normalization)")
         # Check if data is 5-minute or hourly
         is_five_minute = parsed_data.get('is_five_minute', False)
@@ -153,7 +153,7 @@ async def main():
         # Step 4: Currency conversion (Not needed for ComEd as it's already USD)
         target_currency = Currency.USD
         logger.info(f"\nPrices are already in target currency: {target_currency}")
-        
+
         converted_prices = {}
         for time_key, price_info in normalized_prices.items():
             # Price should already be in $/kWh or similar from the parser
@@ -163,26 +163,26 @@ async def main():
                  normalized_prices[time_key]['converted_kwh'] = price_kwh
             else:
                  # Ensure structure is consistent for display
-                 normalized_prices[time_key] = {'price': price_kwh, 'converted_kwh': price_kwh} 
+                 normalized_prices[time_key] = {'price': price_kwh, 'converted_kwh': price_kwh}
 
         logger.debug(f"Final prices sample ({target_currency}/kWh): {dict(list(converted_prices.items())[:5])}")
 
         # Step 5: Display results
         logger.info("\nPrice Information:")
         logger.info(f"Currency: {target_currency}/kWh") # Assuming parser provides price per kWh
-        
+
         # Split into today/tomorrow based on the *local* target date
         today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(
-            normalized_prices, 
+            normalized_prices,
             target_date=target_date # Pass the target date explicitly
         )
-        
+
         all_display_prices = {**today_prices, **tomorrow_prices}
 
         logger.info(f"\nPrice Points (formatted time in target timezone: {LOCAL_TZ_NAME}):")
         logger.info(f"{'Time':<20} {f'{target_currency}/kWh':<15}")
         logger.info("-" * 40)
-        
+
         for time_key, price_data in sorted(all_display_prices.items()):
             converted_val = price_data['converted_kwh']
             logger.info(f"{time_key:<20} {converted_val:<15.6f}")
@@ -190,12 +190,12 @@ async def main():
         # Step 6: Validate data completeness (Adjust for 5-min or hourly)
         # This part needs careful adjustment based on what ComEd API returns (today only? tomorrow? 5-min?)
         # For simplicity, let's just check if we got *any* data for today.
-        
+
         today_keys = set(today_prices.keys())
-        
+
         logger.info(f"\nData completeness check (Target Timezone: {LOCAL_TZ_NAME}):")
         logger.info(f"Today ({target_date}): Found {len(today_keys)} price points.")
-        
+
         # Basic check: Did we get at least some data for today?
         if len(today_keys) > 0:
             logger.info("\nTest completed successfully (found some price data)!")
@@ -203,7 +203,7 @@ async def main():
         else:
             logger.error(f"\nTest failed: No price data found for today ({target_date}).")
             return 1
-        
+
     except Exception as e:
         logger.error(f"Error during test: {e}", exc_info=args.debug)
         return 1

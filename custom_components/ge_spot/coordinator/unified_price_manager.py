@@ -208,7 +208,7 @@ class UnifiedPriceManager:
                 has_current_hour_price_in_cache = True
             if cached_data_for_decision.get("statistics", {}).get("complete_data", False):
                 has_complete_data_for_today_in_cache = True
-            
+
             _LOGGER.debug(
                 f"[{self.area}] Decision making: cached_data_for_decision found. "
                 f"Current price available in cache: {has_current_hour_price_in_cache}. "

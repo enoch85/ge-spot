@@ -10,7 +10,7 @@ class Config:
     DISPLAY_UNIT = "display_unit"
     CURRENCY = "currency"
     PRECISION = "precision"
-    
+
     # Cache Settings
     CACHE_MAX_ENTRIES = "cache_max_entries"
     CACHE_TTL = "cache_ttl"

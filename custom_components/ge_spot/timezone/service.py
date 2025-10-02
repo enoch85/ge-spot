@@ -158,12 +158,12 @@ class TimezoneService:
 
     def normalize_interval_prices(self, interval_prices: Dict[str, float], source_tz_str: Optional[str] = None, is_five_minute: bool = False) -> Dict[datetime, float]:
         """Normalizes price timestamps to the target timezone, optionally using a source timezone hint and handling 5-minute intervals.
-        
+
         Args:
             interval_prices: Dictionary of prices with timestamp keys
             source_tz_str: Optional source timezone hint
             is_five_minute: Whether data is in 5-minute intervals
-            
+
         Returns:
             Dictionary with normalized datetime keys
         """
