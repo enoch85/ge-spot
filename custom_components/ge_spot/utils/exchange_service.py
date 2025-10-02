@@ -7,12 +7,9 @@ import datetime
 import json
 import os
 import time
-import asyncio
-from typing import Dict, Optional
-
 from homeassistant.helpers.event import async_track_time_change
 
-from ..const.currencies import Currency, CurrencyInfo
+from ..const.currencies import Currency
 from ..const.network import Network
 from ..const.api import ECB
 from ..const.attributes import Attributes
@@ -64,13 +61,13 @@ class ExchangeRateService:
             async with self.session.get(Network.URLs.ECB,
                                       timeout=Network.Defaults.TIMEOUT) as response:
                 if response.status != 200:
-                    _LOGGER.error(f"Failed to fetch exchange rates: HTTP {response.status}")
+                    _LOGGER.error("Failed to fetch exchange rates: HTTP %s", response.status)
                     return None
 
                 xml_data = await response.text()
                 return self._parse_ecb_xml(xml_data)
         except Exception as e:
-            _LOGGER.error(f"Error fetching exchange rates: {e}")
+            _LOGGER.error("Error fetching exchange rates: %s", e)
             return None
 
     def _parse_ecb_xml(self, xml_data):
@@ -91,10 +88,10 @@ class ExchangeRateService:
                 rate = float(cube.attrib.get("rate"))
                 rates[currency] = rate
 
-            _LOGGER.info(f"Fetched {len(rates)-1} exchange rates")
+            _LOGGER.info("Fetched %d exchange rates", len(rates)-1)
             return rates
         except Exception as e:
-            _LOGGER.error(f"Error parsing ECB XML: {e}")
+            _LOGGER.error("Error parsing ECB XML: %s", e)
             return None
 
     async def _load_cache(self):
@@ -121,10 +118,13 @@ class ExchangeRateService:
             self.last_update = data.get("timestamp", modified_time)
 
             age = time.time() - self.last_update
-            _LOGGER.info(f"Loaded exchange rates from cache (age: {age:.1f}s, currencies: {len(self.rates)})")
+            _LOGGER.info(
+                "Loaded exchange rates from cache (age: %.1fs, currencies: %d)",
+                age, len(self.rates)
+            )
             return True
         except Exception as e:
-            _LOGGER.error(f"Error loading exchange rate cache: {e}")
+            _LOGGER.error("Error loading exchange rate cache: %s", e)
             return False
 
     async def _save_cache(self):
@@ -142,10 +142,10 @@ class ExchangeRateService:
             async with aiofiles.open(self.cache_file, "w") as f:
                 await f.write(json.dumps(data))
 
-            _LOGGER.debug(f"Saved exchange rates to {self.cache_file}")
+            _LOGGER.debug("Saved exchange rates to %s", self.cache_file)
             return True
         except Exception as e:
-            _LOGGER.error(f"Error saving exchange rate cache: {e}")
+            _LOGGER.error("Error saving exchange rate cache: %s", e)
             return False
 
     async def get_rates(self, force_refresh=False):
@@ -166,7 +166,7 @@ class ExchangeRateService:
                 fresh_rates = await self._fetch_ecb_rates() # Decorated with retry
             except Exception as e:
                 fetch_exception = e # Store exception
-                _LOGGER.warning(f"Fetching fresh ECB rates failed after retries: {e}")
+                _LOGGER.warning("Fetching fresh ECB rates failed after retries: %s", e)
 
             if fresh_rates:
                 _LOGGER.info("Successfully fetched fresh exchange rates.")
@@ -205,18 +205,27 @@ class ExchangeRateService:
         if from_currency == Currency.CENTS and to_currency == Currency.USD:
             # Convert from cents to USD (divide by 100)
             result = amount / 100.0
-            _LOGGER.debug(f"Currency conversion: {amount} {from_currency} → {result} {to_currency} (cents to USD)")
+            _LOGGER.debug(
+                "Currency conversion: %s %s → %s %s (cents to USD)",
+                amount, from_currency, result, to_currency
+            )
             return result
 
         if from_currency == Currency.USD and to_currency == Currency.CENTS:
             # Convert from USD to cents (multiply by 100)
             result = amount * 100.0
-            _LOGGER.debug(f"Currency conversion: {amount} {from_currency} → {result} {to_currency} (USD to cents)")
+            _LOGGER.debug(
+                "Currency conversion: %s %s → %s %s (USD to cents)",
+                amount, from_currency, result, to_currency
+            )
             return result
 
         # Check if we have the rates
         if from_currency not in rates or to_currency not in rates:
-            _LOGGER.error(f"Missing exchange rates for {from_currency} → {to_currency}")
+            _LOGGER.error(
+                "Missing exchange rates for %s → %s",
+                from_currency, to_currency
+            )
             raise ValueError(f"Missing exchange rates for {from_currency} → {to_currency}")
 
         # EUR-based conversion: amount / from_rate * to_rate
@@ -224,7 +233,10 @@ class ExchangeRateService:
         to_rate = rates[to_currency]
 
         result = amount / from_rate * to_rate
-        _LOGGER.debug(f"Currency conversion: {amount} {from_currency} → {result} {to_currency} (rates: {from_rate}, {to_rate})")
+        _LOGGER.debug(
+            "Currency conversion: %s %s → %s %s (rates: %s, %s)",
+            amount, from_currency, result, to_currency, from_rate, to_rate
+        )
 
         return result
 
@@ -252,7 +264,7 @@ class ExchangeRateService:
             }
 
         if to_currency and to_currency not in self.rates:
-            _LOGGER.warning(f"Currency {to_currency} not found in exchange rates")
+            _LOGGER.warning("Currency %s not found in exchange rates", to_currency)
             return {
                 Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso,
                 "rates": None,

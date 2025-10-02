@@ -1,6 +1,6 @@
 """Data validation for API responses."""
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from ...const.sources import Source
 from .schema import Schema

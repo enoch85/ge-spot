@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, List, Tuple, Callable, Awaitable
 
 from homeassistant.core import HomeAssistant
 
-from ..const.config import Config
+fro            # Check if any task completed successfully\n            for task in done:\n                try:\n                    data = task.result()\n                    source = source_by_task[task]\n\n                    # Check if the API was skipped due to missing credentials\n                    if is_skipped_response(data):\n                        _LOGGER.debug(\"Source %s skipped: %s\", source, data.get('reason'))\n                        continue\n\n                    # Update stats\n                    self._stats[\"successful_fetches\"] += 1\n                    self._stats[\"sources_succeeded\"][source] = self._stats[\"sources_succeeded\"].get(source, 0) + 1\n\n                    return source, data\n                except Exception as e:\n                    _LOGGER.warning(\"Error in task for %s: %s\", source_by_task[task], e)\n                    continueport Config
 from ..const.defaults import Defaults
 from ..api.base.data_fetch import is_skipped_response
 
@@ -151,7 +151,7 @@ class SourcePriorityFetcher:
 
                 # Check if the API was skipped due to missing credentials
                 if is_skipped_response(data):
-                    _LOGGER.debug(f"Source {source} skipped: {data.get('reason')}")
+                    _LOGGER.debug("Source %s skipped: %s", source, data.get('reason'))
                     continue
 
                 # Update stats
@@ -161,11 +161,11 @@ class SourcePriorityFetcher:
                 return source, data
 
             except asyncio.TimeoutError:
-                _LOGGER.warning(f"Timeout fetching from {source}")
+                _LOGGER.warning("Timeout fetching from %s", source)
                 continue
 
             except Exception as e:
-                _LOGGER.warning(f"Error fetching from {source}: {e}")
+                _LOGGER.warning("Error fetching from %s: %s", source, e)
                 continue
 
         # All sources failed
