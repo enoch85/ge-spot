@@ -152,8 +152,8 @@ class TimezoneService:
             _LOGGER.error(error_msg)
             raise ValueError(error_msg)
 
-        # Use the converter initialized with the target_timezone
-        return self.converter.convert(dt, self.target_timezone)
+        # Convert datetime to target timezone
+        return dt.astimezone(self.target_timezone)
 
 
     def normalize_interval_prices(self, interval_prices: Dict[str, float], source_tz_str: Optional[str] = None, is_five_minute: bool = False) -> Dict[datetime, float]:

@@ -138,30 +138,8 @@ class BasePriceAPI(ABC):
                 "error": str(e)
             }
 
-    # --- Methods required by subclasses (as per PARSER_UPDATES.md) ---
-    @abstractmethod
-    def get_timezone_for_area(self, area: str) -> Any:
-        """Get the source timezone for the specified area.
-
-        Args:
-            area: Area code
-
-        Returns:
-            Timezone object or identifier string for the area
-        """
-        pass
-
-    @abstractmethod
-    def get_parser_for_area(self, area: str) -> Any:
-        """Get the appropriate parser instance for the specified area.
-
-        Args:
-            area: Area code
-
-        Returns:
-            Parser instance for the area
-        """
-        pass
+    # --- Methods that can be overridden by subclasses (as per PARSER_UPDATES.md) ---
+    # Concrete implementations provided below
     # --- END Required Methods ---
 
     # --- REMOVED UNUSED HELPER METHODS ---

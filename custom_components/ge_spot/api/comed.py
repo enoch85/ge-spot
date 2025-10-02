@@ -60,7 +60,7 @@ class ComedAPI(BasePriceAPI):
 
             # Parse the response
             parser = self.get_parser_for_area(None)
-            parsed = parser.parse(response, endpoint)
+            parsed = parser.parse(raw_data)
             interval_raw = parsed.get("interval_raw", {})
             metadata = parser.extract_metadata(raw_data)
 

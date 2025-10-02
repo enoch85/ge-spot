@@ -32,6 +32,7 @@ class CacheManager:
         """
         self.hass = hass
         self.config = config
+        self._timezone_service = None  # Can be set later if needed
         # Use default TTL from Defaults if not in config
         default_ttl_minutes = config.get("cache_ttl", Defaults.CACHE_TTL)
         # Pass TTL in seconds to AdvancedCache
