@@ -105,7 +105,7 @@ async def async_setup_entry(
             config_data, # Pass config_data
             "average_price", # Pass only the sensor type
             "Average Price",
-            "average" # Removed additional_attrs
+            "avg" 
         )
     )
 
@@ -159,7 +159,7 @@ async def async_setup_entry(
 
     # Tomorrow Average price sensor
     # Define value extraction function for tomorrow average
-    get_tomorrow_avg_price = lambda data: data.get("tomorrow_statistics", {}).get("average")
+    get_tomorrow_avg_price = lambda data: data.get("tomorrow_statistics", {}).get("avg")
     entities.append(
         TomorrowAveragePriceSensor(
             coordinator,

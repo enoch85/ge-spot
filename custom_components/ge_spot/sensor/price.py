@@ -233,7 +233,7 @@ class PriceDifferenceSensor(PriceValueSensor):
             if value2_key == "average":
                 # Get from statistics
                 stats = data.get("statistics", {})
-                value2 = stats.get("average")
+                value2 = stats.get("avg")  # Fixed: use 'avg' to match PriceStatistics dataclass
                 _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Reading average from statistics: {value2}")
             else:
                 value2 = data.get(value2_key)
@@ -280,7 +280,7 @@ class PricePercentSensor(PriceValueSensor):
             if reference_key == "average":
                 # Get from statistics
                 stats = data.get("statistics", {})
-                reference = stats.get("average")
+                reference = stats.get("avg")  # Fixed: use 'avg' to match PriceStatistics dataclass
                 _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Reading average from statistics: {reference}")
             else:
                 reference = data.get(reference_key)
