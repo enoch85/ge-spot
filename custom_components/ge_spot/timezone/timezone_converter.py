@@ -106,8 +106,15 @@ class TimezoneConverter:
                     target_key = f"{target_dt.hour:02d}:{target_dt.minute:02d}"
 
                 # Handle potential DST fallback duplicates
+                # Only log as DST fallback if the keys don't have dates (when preserve_date=False)
+                # With preserve_date=True, duplicates across days are normal (e.g., "2025-10-02 00:00" and "2025-10-03 00:00")
                 if target_key in normalized_prices:
-                    _LOGGER.debug(f"Duplicate interval found: {target_key} - handling DST fallback")
+                    if preserve_date:
+                        # With dates, this is just a different day - overwrite is expected
+                        _LOGGER.debug(f"Duplicate interval key found: {target_key} - overwriting with newer value (likely next day)")
+                    else:
+                        # Without dates, this could be genuine DST fallback (same hour repeating in one day)
+                        _LOGGER.debug(f"Duplicate interval found: {target_key} - handling DST fallback")
                     # In case of DST fallback, use the second occurrence
                     # This aligns with how most energy markets handle the extra interval
 

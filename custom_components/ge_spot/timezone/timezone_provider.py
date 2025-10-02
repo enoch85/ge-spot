@@ -299,19 +299,23 @@ class TimezoneProvider:
         return start, end
 
     def get_day_hours(self, dt: datetime) -> List[datetime]:
-        """Get all hours in a day.
+        """Get all interval start times for a day.
 
         Args:
             dt: Datetime
 
         Returns:
-            List of hour start datetimes
+            List of interval start datetimes
         """
+        from ..const.time import TimeInterval
+        
         # Get start of day
         day_start = self.get_day_start(dt)
 
-        # Get all hours
-        return [day_start + timedelta(hours=i) for i in range(24)]
+        # Get all intervals for the day
+        interval_minutes = TimeInterval.get_interval_minutes()
+        intervals_per_day = TimeInterval.get_intervals_per_day()
+        return [day_start + timedelta(minutes=i * interval_minutes) for i in range(intervals_per_day)]
 
     def is_dst_transition_day(self, dt: datetime) -> bool:
         """Check if a day is a DST transition day.
