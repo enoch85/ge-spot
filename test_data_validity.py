@@ -29,32 +29,32 @@ validity = DataValidity(
 print(f"   Last valid interval: {validity.last_valid_interval}")
 print(f"   Data valid until: {validity.data_valid_until}")
 print(f"   Interval count: {validity.interval_count}")
-print(f"   Hours remaining: {validity.hours_remaining(now):.2f}")
+intervals = validity.intervals_remaining(now)
+print(f"   Intervals remaining: {intervals}")
 print(f"   Is valid: {validity.is_valid()}")
 
 assert validity.data_valid_until == last_valid
 assert validity.interval_count == 192
 assert validity.is_valid()
-hours = validity.hours_remaining(now)
-assert 34 < hours < 35  # Should be ~34.75 hours
+assert 139 <= intervals <= 140  # Should be ~139 intervals (34.75 hours * 4 intervals/hour)
 print("   ✅ DataValidity creation works correctly")
 
-# Test 2: Hours remaining calculation
-print("\n2. Testing hours_remaining at different times...")
+# Test 2: Intervals remaining calculation
+print("\n2. Testing intervals_remaining at different times...")
 test_times = [
-    (datetime(2025, 10, 2, 13, 0, 0), "13:00 (fetch time)", 34.75),
-    (datetime(2025, 10, 2, 14, 0, 0), "14:00 (1h later)", 33.75),
-    (datetime(2025, 10, 2, 23, 0, 0), "23:00 (evening)", 24.75),
-    (datetime(2025, 10, 3, 0, 0, 0), "00:00 (midnight)", 23.75),
-    (datetime(2025, 10, 3, 12, 0, 0), "12:00 (next day)", 11.75),
-    (datetime(2025, 10, 3, 22, 0, 0), "22:00 (near end)", 1.75),
+    (datetime(2025, 10, 2, 13, 0, 0), "13:00 (fetch time)", 139),  # 34.75h * 4 intervals/h
+    (datetime(2025, 10, 2, 14, 0, 0), "14:00 (1h later)", 135),   # 33.75h * 4
+    (datetime(2025, 10, 2, 23, 0, 0), "23:00 (evening)", 99),     # 24.75h * 4
+    (datetime(2025, 10, 3, 0, 0, 0), "00:00 (midnight)", 95),     # 23.75h * 4
+    (datetime(2025, 10, 3, 12, 0, 0), "12:00 (next day)", 47),    # 11.75h * 4
+    (datetime(2025, 10, 3, 22, 0, 0), "22:00 (near end)", 7),     # 1.75h * 4
 ]
 
-for test_time, desc, expected_hours in test_times:
-    hours = validity.hours_remaining(test_time)
-    print(f"   {desc}: {hours:.2f} hours (expected ~{expected_hours:.2f})")
-    assert abs(hours - expected_hours) < 0.1
-print("   ✅ Hours remaining calculation correct")
+for test_time, desc, expected_intervals in test_times:
+    intervals = validity.intervals_remaining(test_time)
+    print(f"   {desc}: {intervals} intervals (expected ~{expected_intervals})")
+    assert abs(intervals - expected_intervals) <= 1  # Allow 1 interval tolerance for rounding
+print("   ✅ Intervals remaining calculation correct")
 
 # Test 3: is_valid checks
 print("\n3. Testing is_valid...")
@@ -77,7 +77,7 @@ empty_validity = DataValidity(
     last_valid_interval=None,
     interval_count=0
 )
-assert empty_validity.hours_remaining(now) == 0
+assert empty_validity.intervals_remaining(now) == 0
 assert not empty_validity.is_valid()
 print("   ✅ Empty data handled correctly")
 
@@ -87,7 +87,7 @@ expired_validity = DataValidity(
     interval_count=96,
     has_current_interval=True
 )
-remaining = expired_validity.hours_remaining(now)
+remaining = expired_validity.intervals_remaining(now)
 assert remaining == 0  # max(0, ...) prevents negative
 assert expired_validity.is_valid()  # Still "valid" structure, just expired
 print("   ✅ Expired data detected correctly")

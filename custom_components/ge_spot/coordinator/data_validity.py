@@ -50,20 +50,25 @@ class DataValidity:
         if self.last_valid_interval and not self.data_valid_until:
             self.data_valid_until = self.last_valid_interval
     
-    def hours_remaining(self, now: datetime) -> float:
-        """Calculate how many hours of data we have remaining.
+    def intervals_remaining(self, now: datetime) -> int:
+        """Calculate how many intervals of data we have remaining.
         
         Args:
             now: Current datetime
             
         Returns:
-            Hours of data remaining, or 0 if no valid data
+            Number of intervals remaining, or 0 if no valid data
         """
         if not self.data_valid_until:
-            return 0.0
-            
+            return 0
+        
+        from ..const.time import TimeInterval
+        
+        # Simple: remaining seconds / interval seconds
         remaining_seconds = (self.data_valid_until - now).total_seconds()
-        return max(0.0, remaining_seconds / 3600.0)
+        remaining_intervals = int(remaining_seconds / TimeInterval.get_interval_seconds())
+        
+        return max(0, remaining_intervals)
     
     def is_valid(self) -> bool:
         """Check if this validity object represents valid data.

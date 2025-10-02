@@ -22,9 +22,9 @@ class Network:
             (13, 15), # 13:00-15:00 - For tomorrow's data (most EU markets publish around 13:00-14:00 CET)
         ]
         
-        # Data validity settings
-        DATA_SAFETY_BUFFER_HOURS = 2  # Fetch new data when we have less than this many hours remaining
-        DATA_COMPLETENESS_THRESHOLD = 0.80  # Require 80% of intervals to consider data "complete"
+        # Data validity settings (in intervals, assuming 15-min intervals = 96/day)
+        DATA_SAFETY_BUFFER_INTERVALS = 8  # Fetch when we have less than 8 intervals remaining (~2 hours)
+        REQUIRED_TOMORROW_INTERVALS = 76  # Require at least 76 intervals (~80% of 96) to consider tomorrow data "complete"
 
     class URLs:
         """Base URLs for various APIs."""

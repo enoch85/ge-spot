@@ -290,8 +290,8 @@ class DataProcessor:
             "next_interval_price": None,
             "current_interval_key": None,
             "next_interval_key": None,
-            "statistics": PriceStatistics(complete_data=False).to_dict(),
-            "tomorrow_statistics": PriceStatistics(complete_data=False).to_dict(),
+            "statistics": PriceStatistics().to_dict(),
+            "tomorrow_statistics": PriceStatistics().to_dict(),
             "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,
@@ -334,17 +334,16 @@ class DataProcessor:
                 if today_complete_enough:
                     stats = self._calculate_statistics(final_today_prices)
                     # Mark as complete only if all intervals are present
-                    stats.complete_data = today_complete_enough # Align with 80% quota
                     processed_result["statistics"] = stats.to_dict()
                     _LOGGER.debug(f"Calculated today's statistics for {self.area}: {processed_result['statistics']}") # Log today's stats
                 else:
                     missing_keys = sorted(list(today_keys - found_keys))
                     # Update warning message threshold
                     _LOGGER.warning(f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need {int(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
-                    processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
+                    processed_result["statistics"] = PriceStatistics().to_dict()
             else:
                 _LOGGER.warning(f"No final prices for today available after processing for area {self.area}, skipping stats.")
-                processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
+                processed_result["statistics"] = PriceStatistics().to_dict()
 
             # Calculate Tomorrow's Statistics
             if final_tomorrow_prices:
@@ -358,7 +357,6 @@ class DataProcessor:
                 if tomorrow_complete_enough:
                     stats = self._calculate_statistics(final_tomorrow_prices)
                      # Mark as complete only if all intervals are present
-                    stats.complete_data = tomorrow_complete_enough # Align with 80% quota
                     processed_result["tomorrow_statistics"] = stats.to_dict()
                     # Set tomorrow_valid if we have enough data for stats, even if not fully complete
                     processed_result["tomorrow_valid"] = True
@@ -367,10 +365,10 @@ class DataProcessor:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
                     # Update warning message threshold
                     _LOGGER.warning(f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need {int(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
-                    processed_result["tomorrow_statistics"] = PriceStatistics(complete_data=False).to_dict()
+                    processed_result["tomorrow_statistics"] = PriceStatistics().to_dict()
             else:
                 # No tomorrow prices, ensure stats reflect incompleteness
-                processed_result["tomorrow_statistics"] = PriceStatistics(complete_data=False).to_dict()
+                processed_result["tomorrow_statistics"] = PriceStatistics().to_dict()
 
         except Exception as e:
             _LOGGER.error(f"Error during data processing for area {self.area}: {e}", exc_info=True)
@@ -457,26 +455,12 @@ class DataProcessor:
         """Calculate price statistics from a dictionary of interval prices (HH:MM keys)."""
         prices = [p for p in interval_prices.values() if p is not None]
         if not prices:
-            return PriceStatistics(complete_data=False)
-
-        prices.sort()
-        mid = len(prices) // 2
-        # Ensure indices are valid before access
-        median = None
-        if prices:
-            if len(prices) % 2 == 1:
-                median = prices[mid]
-            elif mid > 0:
-                median = (prices[mid - 1] + prices[mid]) / 2
-            else: # Only one element
-                median = prices[0]
+            return PriceStatistics()
 
         return PriceStatistics(
+            avg=sum(prices) / len(prices) if prices else None,
             min=min(prices) if prices else None,
-            max=max(prices) if prices else None,
-            average=sum(prices) / len(prices) if prices else None,
-            median=median,
-            complete_data=True # Assume complete if this function is called
+            max=max(prices) if prices else None
         )
 
     def _generate_empty_processed_result(self, data, error=None):
@@ -496,8 +480,8 @@ class DataProcessor:
             "next_interval_price": None,
             "current_interval_key": None,
             "next_interval_key": None,
-            "statistics": PriceStatistics(complete_data=False).to_dict(),
-            "tomorrow_statistics": PriceStatistics(complete_data=False).to_dict(),
+            "statistics": PriceStatistics().to_dict(),
+            "tomorrow_statistics": PriceStatistics().to_dict(),
             "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,

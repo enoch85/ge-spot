@@ -10,7 +10,6 @@ from typing import Any, Optional, Tuple
 from homeassistant.util import dt as dt_util
 
 from ..const.network import Network
-from ..const.time import TimeInterval
 from .data_validity import DataValidity
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,19 +84,17 @@ class FetchDecisionMaker:
             return True, reason
 
         # Calculate how much data we have left
-        hours_remaining = data_validity.hours_remaining(now)
+        intervals_remaining = data_validity.intervals_remaining(now)
         
         _LOGGER.debug(
-            f"Data validity check: {data_validity}, "
-            f"{hours_remaining:.1f} hours remaining"
+            f"Data validity check: {intervals_remaining} intervals remaining, validity: {data_validity}"
         )
 
         # SAFETY CHECK: Are we running low on data?
-        safety_buffer_hours = Network.Defaults.DATA_SAFETY_BUFFER_HOURS
-        if hours_remaining < safety_buffer_hours:
+        if intervals_remaining < Network.Defaults.DATA_SAFETY_BUFFER_INTERVALS:
             reason = (
-                f"Running low on data: only {hours_remaining:.1f} hours remaining "
-                f"(safety buffer: {safety_buffer_hours}h) - fetching"
+                f"Running low on data: only {intervals_remaining} intervals remaining "
+                f"(safety buffer: {Network.Defaults.DATA_SAFETY_BUFFER_INTERVALS} intervals) - fetching"
             )
             _LOGGER.info(reason)
             
@@ -125,16 +122,12 @@ class FetchDecisionMaker:
             # Check if we already have tomorrow's complete data
             tomorrow_date = now.date() + timedelta(days=1)
             
-            # Calculate the threshold for "complete" data
-            intervals_per_day = TimeInterval.get_intervals_per_day()
-            completeness_threshold = Network.Defaults.DATA_COMPLETENESS_THRESHOLD
-            required_tomorrow_intervals = int(intervals_per_day * completeness_threshold)
-            
-            if data_validity.tomorrow_interval_count < required_tomorrow_intervals:
+            # Check against the required interval threshold (76 intervals = 80% of 96)
+            if data_validity.tomorrow_interval_count < Network.Defaults.REQUIRED_TOMORROW_INTERVALS:
                 reason = (
                     f"Special fetch window ({start_hour}:00-{end_hour}:00) - "
-                    f"missing tomorrow's data (have {data_validity.tomorrow_interval_count}/{intervals_per_day} intervals, "
-                    f"need {required_tomorrow_intervals}) - fetching"
+                    f"missing tomorrow's data (have {data_validity.tomorrow_interval_count} intervals, "
+                    f"need {Network.Defaults.REQUIRED_TOMORROW_INTERVALS}) - fetching"
                 )
                 _LOGGER.info(reason)
                 
@@ -166,7 +159,7 @@ class FetchDecisionMaker:
         # ALL GOOD: We have enough data
         reason = (
             f"Data valid until {data_validity.data_valid_until.strftime('%Y-%m-%d %H:%M') if data_validity.data_valid_until else 'unknown'} "
-            f"({hours_remaining:.1f} hours remaining) - no fetch needed"
+            f"({intervals_remaining} intervals remaining) - no fetch needed"
         )
         _LOGGER.debug(reason)
         return False, reason

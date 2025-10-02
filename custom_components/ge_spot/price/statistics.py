@@ -15,24 +15,10 @@ def calculate_statistics(interval_prices: Dict[str, float]) -> PriceStatistics:
     """
     prices = [p for p in interval_prices.values() if p is not None]
     if not prices:
-        return PriceStatistics(complete_data=False)
-
-    prices.sort()
-    mid = len(prices) // 2
-    # Ensure indices are valid before access
-    median = None
-    if prices:
-        if len(prices) % 2 == 1:
-            median = prices[mid]
-        elif mid > 0:
-            median = (prices[mid - 1] + prices[mid]) / 2
-        else:  # Only one element
-            median = prices[0]
+        return PriceStatistics()
 
     return PriceStatistics(
+        avg=sum(prices) / len(prices) if prices else None,
         min=min(prices) if prices else None,
-        max=max(prices) if prices else None,
-        average=sum(prices) / len(prices) if prices else None,
-        median=median,
-        complete_data=True  # Assume complete if this function is called
+        max=max(prices) if prices else None
     )
