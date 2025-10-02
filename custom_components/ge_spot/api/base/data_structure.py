@@ -27,13 +27,18 @@ class PriceStatistics:
     The complete_data flag indicates whether the statistics are based on a
     complete dataset or not. If complete_data is False, the statistics should
     not be used for critical calculations.
+    
+    DEPRECATED: The complete_data boolean is legacy. Use DataValidity.is_valid() 
+    and DataValidity.hours_remaining() instead for determining data coverage and 
+    validity. This field is kept for backward compatibility with sensor attributes 
+    but is no longer used in fetch decision logic.
     """
 
     min: Optional[float] = None
     max: Optional[float] = None
     average: Optional[float] = None
     median: Optional[float] = None
-    complete_data: bool = False
+    complete_data: bool = False  # DEPRECATED: Use DataValidity instead
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
