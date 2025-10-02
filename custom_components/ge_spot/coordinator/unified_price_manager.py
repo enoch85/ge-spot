@@ -245,10 +245,13 @@ class UnifiedPriceManager:
             _LOGGER.info(f"Skipping API fetch for area {self.area}: {fetch_reason}")
             if cached_data_for_decision:
                 _LOGGER.debug("Returning cached data for %s", self.area)
-                # Ensure the cached data is marked correctly
-                cached_data_for_decision["using_cached_data"] = True
+                # Work on a shallow copy to prevent cache corruption
+                # (We only modify top-level keys, so shallow copy is sufficient and much faster)
+                data_copy = dict(cached_data_for_decision)
+                # Ensure the copied data is marked correctly
+                data_copy["using_cached_data"] = True
                 # Re-process to ensure current/next prices are updated
-                return await self._process_result(cached_data_for_decision, is_cached=True)
+                return await self._process_result(data_copy, is_cached=True)
             else:
                 # This shouldn't happen if data_validity is properly checked
                 _LOGGER.warning(
@@ -283,9 +286,12 @@ class UnifiedPriceManager:
                     )
                     if cached_data_rate_limited:
                         _LOGGER.debug("Returning rate-limited cached data for %s (after decision check)", self.area)
-                        cached_data_rate_limited["using_cached_data"] = True
-                        cached_data_rate_limited["next_fetch_allowed_in_seconds"] = round(next_fetch_allowed_in_seconds, 1)
-                        return await self._process_result(cached_data_rate_limited, is_cached=True)
+                        # Work on a shallow copy to prevent cache corruption
+                        # (We only modify top-level keys, so shallow copy is sufficient and much faster)
+                        data_copy = dict(cached_data_rate_limited)
+                        data_copy["using_cached_data"] = True
+                        data_copy["next_fetch_allowed_in_seconds"] = round(next_fetch_allowed_in_seconds, 1)
+                        return await self._process_result(data_copy, is_cached=True)
                     else:
                         _LOGGER.warning("Rate limited for %s (after decision check), but no cached data available for today (%s).", self.area, today_date)
                         return await self._generate_empty_result(error="Rate limited (after decision), no cache available")
@@ -546,14 +552,16 @@ class UnifiedPriceManager:
         return self._cache_manager.get_cache_stats()
 
     async def clear_cache(self, target_date: Optional[date] = None):
-        """Clear the price cache via the manager, optionally for a specific date, and force a fresh fetch."""
-        # Cache manager's clear_cache returns a bool, don't await it
+        """Clear the price cache and immediately fetch fresh data."""
+        # Clear the cache first (synchronous operation)
         cleared = self._cache_manager.clear_cache(target_date=target_date)
         if cleared:
-            _LOGGER.info("Cache cleared for area %s. Forcing fresh fetch.", self.area)
-            # We need to force a new fetch
-            await self.fetch_data(force=True)
-        return cleared
+            _LOGGER.info("Cache cleared for all areas. Forcing fresh fetch for area %s.", self.area)
+            # Force a new fetch - this will return fresh data
+            fresh_data = await self.fetch_data(force=True)
+            _LOGGER.debug(f"Fresh data fetched after cache clear: has_data={fresh_data.get('has_data')}")
+            return fresh_data
+        return None
 
     async def async_close(self):
         """Close any open sessions and resources."""
@@ -658,13 +666,15 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
 
 
     async def clear_cache(self, target_date: Optional[date] = None):
-        """Clear the price cache via the manager, optionally for a specific date, and force a fresh fetch."""
-        # Call the manager's clear_cache method with await since it's an async method
-        cleared = await self.price_manager.clear_cache(target_date=target_date)
-        if cleared:
-            _LOGGER.info("Cache cleared for area %s. Forcing fresh fetch.", self.area)
-            await self.force_update()  # This will call fetch_data(force=True)
-        return cleared
+        """Clear the price cache and force immediate refresh with fresh data."""
+        # Call the manager's clear_cache which fetches fresh data
+        fresh_data = await self.price_manager.clear_cache(target_date=target_date)
+        if fresh_data:
+            _LOGGER.info("Cache cleared and fresh data fetched for area %s", self.area)
+            # Directly update coordinator data with the fresh result
+            self.async_set_updated_data(fresh_data)
+            return True
+        return False
 
     async def async_close(self):
         """Close any open sessions and resources via the manager."""

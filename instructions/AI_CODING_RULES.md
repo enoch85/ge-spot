@@ -6,6 +6,16 @@
 
 ## 🔐 Critical Implementation Rules
 
+### Rule 0: No Verbose Summaries
+**After making changes:**
+- DO NOT provide lengthy summaries or recaps
+- DO NOT create bulleted lists of what was changed
+- DO NOT write "implementation complete" paragraphs
+- ONLY respond with confirmation if asked
+- Let the user ask questions if they need clarification
+
+**Why:** Summaries waste time and tokens. The user can see the changes in their editor.
+
 ### Rule 1: Always Read Full Files First
 **BEFORE editing ANY file:**
 - Use `read_file` to read the ENTIRE file (all lines)

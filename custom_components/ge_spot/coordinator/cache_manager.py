@@ -185,7 +185,8 @@ class CacheManager:
                                 found_source, area
                             )
 
-                            # Create a copy of the data to modify
+                            # Create a shallow copy to prevent cache corruption
+                            # (We only modify top-level keys, so shallow copy is sufficient and much faster)
                             data_copy = dict(entry_data)
 
                             # Move tomorrow's prices to today's prices
