@@ -17,7 +17,6 @@ Example:
 import asyncio
 import os
 import sys
-from datetime import datetime, timedelta
 import logging
 
 # Add the project root to the path
@@ -25,7 +24,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 from custom_components.ge_spot.api.entsoe import EntsoeAPI
 from custom_components.ge_spot.const.areas import AreaMapping
-from custom_components.ge_spot.const.config import Config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')

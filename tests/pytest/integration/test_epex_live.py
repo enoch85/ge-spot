@@ -1,6 +1,7 @@
 import pytest
 import logging
 from datetime import datetime, timedelta
+import asyncio
 
 from custom_components.ge_spot.api.epex import EpexAPI
 from custom_components.ge_spot.const.sources import Source
@@ -11,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Mark all tests in this file as live API tests
-pytestmark = pytest.mark.liveapi
+pytestmark = [pytest.mark.liveapi, pytest.mark.skip(reason="Live API test - requires network access, skip by default")]
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("area", ["FR", "DE-LU"]) # EPEX covers FR, DE-LU, AT, BE, CH, GB, NL
@@ -23,6 +24,7 @@ async def test_epex_live_fetch_parse(area):
     logger.info(f"Testing EPEX Spot live API for area: {area}...")
     # Arrange
     api = EpexAPI()
+    session_closed = False
 
     try:
         # Act: Fetch Raw Data - don't catch exceptions, let test fail to expose real issues
@@ -112,5 +114,12 @@ async def test_epex_live_fetch_parse(area):
         logger.error(f"EPEX Live Test ({area}): EXCEPTION - {str(e)}")
         raise
     finally:
-        if hasattr(api, 'session') and api.session:
-             await api.session.close()
+        # Proper async cleanup
+        if hasattr(api, 'session') and api.session and not session_closed:
+            try:
+                await api.session.close()
+                session_closed = True
+                # Give a moment for the session to fully close
+                await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.warning(f"Error closing session: {e}")

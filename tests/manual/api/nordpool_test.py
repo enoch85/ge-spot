@@ -17,16 +17,14 @@ Example:
 import asyncio
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 import logging
-import json
 import aiohttp
 
 # Add the project root to the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
 
 from custom_components.ge_spot.api.nordpool import NordpoolAPI
-from custom_components.ge_spot.const.areas import Area
 from custom_components.ge_spot.timezone.service import TimezoneService
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
 

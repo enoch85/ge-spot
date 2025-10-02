@@ -25,7 +25,7 @@ import sys
 import os
 import argparse
 import getpass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 import asyncio
 import pytz
 import logging
@@ -37,9 +37,7 @@ logger = logging.getLogger(__name__)
 # Add the root directory to the path so we can import the component modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 from custom_components.ge_spot.api.amber import AmberAPI
-from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
-from custom_components.ge_spot.utils.exchange_service import ExchangeRateService # Keep for potential future use
 from custom_components.ge_spot.timezone.service import TimezoneService
 from custom_components.ge_spot.timezone.timezone_converter import TimezoneConverter
 

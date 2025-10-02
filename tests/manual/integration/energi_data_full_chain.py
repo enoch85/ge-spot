@@ -18,7 +18,7 @@ Usage:
 import sys
 import os
 import argparse
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 import asyncio
 import pytz
 import logging

@@ -37,7 +37,6 @@ logger = logging.getLogger(__name__)
 # Add the root directory to the path so we can import the component modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 from custom_components.ge_spot.api.entsoe import EntsoeAPI
-from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
 from custom_components.ge_spot.timezone.service import TimezoneService
