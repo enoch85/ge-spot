@@ -378,9 +378,13 @@ class UnifiedPriceManager:
                 # Process the raw result (this is where parsing happens)
                 processed_data = await self._process_result(result)
 
-                # NOW check if processing yielded interval_prices data and has_data flag is true
-                if processed_data and processed_data.get("has_data") and processed_data.get("interval_prices"): # Check for interval_prices *after* processing
-                    _LOGGER.info(f"[{self.area}] Successfully processed data, found 'interval_prices'.")
+                # Check if processing yielded valid data (either today OR tomorrow prices)
+                has_today = processed_data and processed_data.get("interval_prices")
+                has_tomorrow = processed_data and processed_data.get("tomorrow_interval_prices")
+                has_valid_data = has_today or has_tomorrow
+                
+                if processed_data and has_valid_data and "error" not in processed_data:
+                    _LOGGER.info(f"[{self.area}] Successfully processed data. Today: {len(processed_data.get('interval_prices', {}))}, Tomorrow: {len(processed_data.get('tomorrow_interval_prices', {}))}")
                     self._consecutive_failures = 0
                     self._active_source = processed_data.get("data_source", "unknown") # Use source from processed data
                     self._attempted_sources = processed_data.get("attempted_sources", [])
@@ -489,7 +493,10 @@ class UnifiedPriceManager:
         # Use data processor to generate final result
         try:
             processed_data = await self._data_processor.process(result)
-            processed_data["has_data"] = bool(processed_data.get("interval_prices")) # Add a simple flag
+            # Set has_data flag if we have either today OR tomorrow prices
+            has_today = bool(processed_data.get("interval_prices"))
+            has_tomorrow = bool(processed_data.get("tomorrow_interval_prices"))
+            processed_data["has_data"] = has_today or has_tomorrow
             processed_data["last_update"] = dt_util.now().isoformat() # Timestamp the processing time
 
             # Get source info directly from the input result dictionary

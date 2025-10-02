@@ -165,8 +165,12 @@ def calculate_data_validity(
     validity.tomorrow_interval_count = len(tomorrow_interval_prices)
     validity.interval_count = validity.today_interval_count + validity.tomorrow_interval_count
     
-    # Check if we have current interval
-    validity.has_current_interval = current_interval_key in interval_prices
+    # Check if we have current interval in today's prices OR tomorrow's prices
+    # (late evening, tomorrow might already be available)
+    validity.has_current_interval = (
+        current_interval_key in interval_prices 
+        or current_interval_key in tomorrow_interval_prices
+    )
     
     # Find the last valid interval timestamp
     all_intervals = []
