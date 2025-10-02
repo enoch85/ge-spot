@@ -26,7 +26,6 @@ class FetchDecisionMaker:
         last_fetch: Optional[datetime],
         fetch_interval: int,
         has_current_hour_price: bool,
-        # Add the new parameter
         has_complete_data_for_today: bool
     ) -> Tuple[bool, str]:
         """Determine if we need to fetch from API.

@@ -19,7 +19,7 @@ class Network:
         # Special time windows for updates
         SPECIAL_HOUR_WINDOWS = [
             (0, 1),   # 00:00-01:00 - For today's new prices
-            # Note: Tomorrow's data search starts at 13:00 but is handled by TomorrowDataManager
+            (13, 15), # 13:00-15:00 - For tomorrow's data (most EU markets publish around 13:00-14:00 CET)
         ]
 
     class URLs:

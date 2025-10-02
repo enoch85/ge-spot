@@ -15,19 +15,12 @@ class Defaults:
     CURRENCY_SUBUNIT = "cents" # Added default for subunit check
 
     # Cache Settings
-    CACHE_MAX_ENTRIES = 100
-    CACHE_TTL = 3600 * 6 # 6 hours default TTL
+    CACHE_TTL = 60 * 24 * 3  # minutes (3 days = 4320 minutes) - Electricity prices valid for 24-72 hours
+    CACHE_MAX_ENTRIES = 3500  # Max cache entries (3 days × 24h × 4 intervals × ~12 areas = ~3500)
     PERSIST_CACHE = False # Added default for cache persistence
     CACHE_DIR = "cache" # Added default cache directory
 
     # API & Network
-    # Cache defaults
-    CACHE_TTL = 60  # minutes
-    CACHE_MAX_DAYS = 3  # days
-    CACHE_MAX_ENTRIES = 10  # entries per area
-    CACHE_COMPRESSION_THRESHOLD = 10240  # bytes (10KB)
-    CACHE_CLEANUP_THRESHOLD = 100  # stores before auto cleanup
-    CACHE_ADVANCED = True  # use advanced cache by default
 
     # Timezone defaults
     TIMEZONE_REFERENCE = TimezoneReference.DEFAULT

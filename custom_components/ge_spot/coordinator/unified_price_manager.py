@@ -195,8 +195,7 @@ class UnifiedPriceManager:
         # Get current cache status to inform fetch decision
         cached_data_for_decision = self._cache_manager.get_data(
             area=self.area,
-            target_date=today_date,
-            max_age_minutes=Defaults.CACHE_TTL
+            target_date=today_date
         )
 
         has_current_hour_price_in_cache = False
@@ -271,8 +270,7 @@ class UnifiedPriceManager:
                     # and inside the rate limiting lock.
                     cached_data_rate_limited = self._cache_manager.get_data(
                         area=self.area,
-                        target_date=today_date,
-                        max_age_minutes=Defaults.CACHE_TTL
+                        target_date=today_date
                     )
                     if cached_data_rate_limited:
                         _LOGGER.debug("Returning rate-limited cached data for %s (after decision check)", self.area)
@@ -310,8 +308,7 @@ class UnifiedPriceManager:
                 # Try cache before giving up - specify today's date
                 cached_data = self._cache_manager.get_data(
                     area=self.area,
-                    target_date=today_date, # Specify today
-                    max_age_minutes=Defaults.CACHE_TTL
+                    target_date=today_date # Specify today
                 )
                 if cached_data:
                     _LOGGER.warning("No APIs available for %s, using cached data.", self.area)
@@ -389,8 +386,7 @@ class UnifiedPriceManager:
             # Try to use cached data as a last resort - specify today's date
             cached_data = self._cache_manager.get_data(
                 area=self.area,
-                target_date=today_date, # Specify today
-                max_age_minutes=Defaults.CACHE_TTL
+                target_date=today_date # Specify today
             )
             if cached_data:
                 _LOGGER.warning("Using cached data for %s due to fetch/processing failure.", self.area)
@@ -416,8 +412,7 @@ class UnifiedPriceManager:
             # Try cache on unexpected error - specify today's date
             cached_data = self._cache_manager.get_data(
                 area=self.area,
-                target_date=today_date, # Specify today
-                max_age_minutes=Defaults.CACHE_TTL
+                target_date=today_date # Specify today
             )
             if cached_data:
                  _LOGGER.warning("Using cached data for %s due to unexpected error: %s", self.area, e)
