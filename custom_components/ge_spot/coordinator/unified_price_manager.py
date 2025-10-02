@@ -68,6 +68,12 @@ class UnifiedPriceManager:
         self.area = area
         self.currency = currency
         self.config = config
+        
+        # Debug: Log config keys to diagnose API key issue
+        _LOGGER.debug(
+            f"UnifiedPriceManager init for {area}: config keys={list(config.keys())}, "
+            f"api_key={'PRESENT' if config.get(Config.API_KEY) or config.get('api_key') else 'MISSING'}"
+        )
 
         # API sources and tracking
         self._supported_sources = get_sources_for_region(area)
@@ -253,10 +259,13 @@ class UnifiedPriceManager:
                 # Re-process to ensure current/next prices are updated
                 return await self._process_result(data_copy, is_cached=True)
             else:
-                # This shouldn't happen if data_validity is properly checked
-                _LOGGER.warning(
+                # No cache available - this can happen when:
+                # 1. Rate-limited with no current interval data
+                # 2. Parser/source change invalidated cache
+                # 3. First run or cache cleared
+                _LOGGER.error(
                     f"Fetch skipped for {self.area} but no cached data available. "
-                    f"This indicates a logic error."
+                    f"Reason: {fetch_reason}"
                 )
                 return await self._generate_empty_result(error=f"No cache and no fetch: {fetch_reason}")
 
@@ -293,7 +302,10 @@ class UnifiedPriceManager:
                         data_copy["next_fetch_allowed_in_seconds"] = round(next_fetch_allowed_in_seconds, 1)
                         return await self._process_result(data_copy, is_cached=True)
                     else:
-                        _LOGGER.warning("Rate limited for %s (after decision check), but no cached data available for today (%s).", self.area, today_date)
+                        _LOGGER.error(
+                            f"Rate limited for {self.area} (after decision check), no cached data available for today ({today_date}). "
+                            f"Next fetch in {next_fetch_allowed_in_seconds:.1f}s"
+                        )
                         return await self._generate_empty_result(error="Rate limited (after decision), no cache available")
 
             # If not rate limited or forced, proceed to fetch. Update fetch timestamp.

@@ -94,9 +94,20 @@ class EntsoeAPI(BasePriceAPI):
         Returns:
             Raw data dictionary
         """
+        # Debug: Log what's in config
+        _LOGGER.debug(
+            "ENTSO-E config check: config keys=%s, API_KEY constant='%s', api_key value=%s",
+            list(self.config.keys()),
+            Config.API_KEY,
+            self.config.get(Config.API_KEY) or self.config.get("api_key") or "NOT FOUND"
+        )
+        
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
         if not api_key:
-            _LOGGER.debug("No API key provided for ENTSO-E, skipping")
+            _LOGGER.error(
+                "No API key provided for ENTSO-E. Config keys available: %s",
+                list(self.config.keys())
+            )
             raise ValueError("No API key provided for ENTSO-E")
 
         # Use the provided reference time or current UTC time

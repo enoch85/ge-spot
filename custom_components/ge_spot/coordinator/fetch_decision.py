@@ -72,7 +72,9 @@ class FetchDecisionMaker:
                 
                 if should_skip:
                     reason = f"No current interval data, but rate limited ({skip_reason})"
-                    _LOGGER.warning(reason)
+                    # INFO level: This is expected when parser changes or cache invalidation happens
+                    # The system will fall back to any available cached data
+                    _LOGGER.info(reason)
                     return False, reason
             
             return True, reason
