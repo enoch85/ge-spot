@@ -22,12 +22,14 @@ The EV Smart Charging integration expects price data in this format:
     "current_price": 1.234,  # Current price as float
     "raw_today": [
         {
-            "time": "2025-10-01T00:00:00+02:00",  # ISO format timestamp string
-            "price": 1.234                         # Price as float
+            "start": datetime(2025, 10, 1, 0, 0, tzinfo=...),  # datetime object with timezone
+            "end": datetime(2025, 10, 1, 0, 15, tzinfo=...),   # datetime object with timezone
+            "value": 1.234                                      # Price as float
         },
         {
-            "time": "2025-10-01T00:15:00+02:00",
-            "price": 1.456
+            "start": datetime(2025, 10, 1, 0, 15, tzinfo=...),
+            "end": datetime(2025, 10, 1, 0, 30, tzinfo=...),
+            "value": 1.456
         },
         # ... more intervals
     ],
@@ -37,15 +39,27 @@ The EV Smart Charging integration expects price data in this format:
 }
 ```
 
+**Important**: The `start` and `end` keys must contain Python `datetime` objects with timezone information, NOT ISO timestamp strings. The `value` key contains the price as a float.
+
 ## Implementation Details
 
 The implementation converts the internal `interval_prices` and `tomorrow_interval_prices` dictionaries to the array format required by EV Smart Charging:
 
+- **Conditional activation**: Attributes are only added when EV Smart Charging integration is detected in Home Assistant
 - Uses `interval_prices` from coordinator data (supports 15-minute intervals)
 - Uses `tomorrow_interval_prices` for next day's prices
-- Timestamps are kept in ISO format (e.g., `"2025-10-01T00:15:00+02:00"`)
+- Converts ISO timestamp strings to Python `datetime` objects with timezone using `dt_util.as_local()`
+- Calculates `end` time as `start` + 15 minutes for each interval
+- Uses keys `start`, `end`, and `value` (matching Nordpool's format)
 - Prices are rounded to 4 decimal places
 - Only adds these attributes to the `current_price` sensor type
+
+### Performance Optimization
+
+The compatibility layer only activates when the EV Smart Charging integration (`ev_smart_charging`) is detected in Home Assistant's integration data. This means:
+- Zero overhead for users who don't use EV Smart Charging
+- Automatic activation when EV Smart Charging is installed
+- Cleaner sensor attributes for non-EV charging users
 
 ## Usage with EV Smart Charging
 

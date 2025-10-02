@@ -5,34 +5,27 @@
 
 ---
 
-## 📋 Main Document
+## 📋 Primary References
 
-**Read this first:**
-- **`MASTER_MIGRATION_PLAN.md`** - Complete migration plan in ONE file
+1. **`MASTER_MIGRATION_PLAN.md`** – Single source of truth for scope, architecture, and phased work.
+2. **`CURRENT_STATUS.md`** – Realistic progress snapshot aligned with the 15min branch.
+3. **`INTEGRATION_TEST_STATUS_REPORT.md`** – Consolidated history, outstanding work, and validation guidance for integration testing.
+4. **`PHASE_6_7_8_AUDIT.md`** – Deep dive into remaining coordinator/utility TODOs (kept as an audit trail).
+5. **`NO_BACKWARD_COMPATIBILITY.md`** – Policy reminder: rename everything cleanly, no aliases.
 
----
-
-## 📚 Original Documents (Consolidated into Master Plan)
-
-These were the original separate documents that are now consolidated:
-
-1. `IMPLEMENTATION_PLAN_15MIN.md` - Implementation phases
-2. `FACT_FINDING_15MIN.md` - Code analysis and findings
-3. `GENERIC_NAMING_GUIDE.md` - Naming conventions
-4. `MIGRATION_SUMMARY.md` - Executive summary
-5. `PROGRESS_TRACKER.md` - Progress checklist
-
-**You don't need to read these anymore** - everything is in the Master Plan!
+Additional targeted references:
+- `EV_SMART_CHARGING_COMPATIBILITY.md` – Attribute contract for EV Smart Charging integration.
+- `CLEANUP_PLAN.md` – Record of the 2025 documentation consolidation (for maintainers).
 
 ---
 
 ## 🎯 Quick Start
 
-1. Read `MASTER_MIGRATION_PLAN.md` (it has everything)
-2. Get approval from maintainer
-3. Start with Phase 1
-4. Check off TODOs as you complete them
-5. Test after each phase
+1. Read `MASTER_MIGRATION_PLAN.md` end-to-end.
+2. Skim `CURRENT_STATUS.md` to confirm what’s still outstanding.
+3. Review the latest findings in `INTEGRATION_TEST_STATUS_REPORT.md` before touching tests.
+4. Coordinate with the maintainer, then start at Phase 1 of the master plan.
+5. Test after each phase using the guidance in the status report.
 
 ---
 
@@ -61,3 +54,9 @@ The planning docs are only needed during migration.
 - FAQ
 
 **Everything you need, all in one place!**
+
+---
+
+## 🗃️ Retired Artifacts
+
+These historical docs were consolidated into the resources above and removed on October 2, 2025: `IMPLEMENTATION_PLAN_15MIN.md`, `FACT_FINDING_15MIN.md`, `GENERIC_NAMING_GUIDE.md`, `MIGRATION_SUMMARY.md`, `PROGRESS_TRACKER.md`, `INTEGRATION_TEST_FIXES*.md`, `TEST_REFERENCE_AUDIT.md`, and `TEST_VALIDATION_REPORT.md`.

@@ -556,6 +556,26 @@ def expand_to_intervals(hourly_data: Dict[str, float]) -> Dict[str, float]:
 - Keys are in "HH:MM" format
 - Data count is correct (96 for full day)
 
+##### API Data Resolution Snapshot (October 2025)
+
+| Source | Native Resolution | Migration Action | Status |
+|--------|-------------------|------------------|--------|
+| ENTSO-E | PT15M / PT30M / PT60M | Prioritise PT15M in `resolution_preference` and ensure naming updates | ✅ Native support already in place |
+| Nord Pool | Transitioning to 15-minute MTU | Detect actual feed; expand hourly data with `expand_to_intervals()` if necessary | ⚠️ Verify per market on first run |
+| EPEX | 15-minute products | Confirm timestamp handling and naming updates | ✅ Parser already handles 15-min data |
+| OMIE | Hourly only | Use `expand_to_intervals()` at API layer to fan out to configured interval | 🔧 Required |
+| ComEd | 5-minute | Aggregate to 15-minute intervals before returning `interval_raw` | ✅ Fixed in Phase 5 critical patch |
+| Stromligning | Hourly | Use `expand_to_intervals()` in API implementation | 🔧 Required |
+| Energi Data | Hourly (`HourUTC`/`HourDK`) | Use `expand_to_intervals()` in API implementation | 🔧 Required |
+| Amber | 30-minute (NEM) | Accept 30-minute intervals; document limitation | ✅ Accept as-is |
+| AEMO | 5-minute dispatch | Aggregate to 15-minute intervals before exposing `interval_raw` | ✅ Fixed in Phase 5 critical patch |
+
+##### Critical Parser Fixes Already Landed
+
+- **ComEd:** Switched aggregation from 5-min → hourly (data loss) to 5-min → 15-min using the new helper, preserving granularity.
+- **AEMO:** Removed destructive hour-rounding and introduced 5-min → 15-min aggregation so dispatch data remains accurate.
+- These fixes ensure integration tests and downstream APIs receive true 15-minute interval data instead of averaged hourly values.
+
 ---
 
 ### Phase 6: API Implementations (Priority 2)
@@ -1094,6 +1114,8 @@ def test_dst_fall_back():
 4. Verify keys are in "HH:MM" format
 5. Verify prices are reasonable
 6. Verify expansion works for hourly-only APIs
+
+👉 See `INTEGRATION_TEST_STATUS_REPORT.md` for the current timeline of fixes, open issues, and recommended validation commands before running or modifying these suites.
 
 ### Manual Testing
 
