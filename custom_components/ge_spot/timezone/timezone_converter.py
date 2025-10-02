@@ -122,6 +122,7 @@ class TimezoneConverter:
                 normalized_prices[target_key] = price_data if isinstance(price_data, dict) else price_data
 
             _LOGGER.debug("Normalization complete. Result keys: %s", list(normalized_prices.keys())[:5] + ["..."] if len(normalized_prices) > 5 else list(normalized_prices.keys()))
+            _LOGGER.debug(f"Normalization summary: Input had {len(interval_prices)} prices, output has {len(normalized_prices)} normalized prices")
 
         except Exception as e:
             _LOGGER.error(
@@ -160,6 +161,8 @@ class TimezoneConverter:
 
         # Check if keys have date information (like '2025-04-29 10:00')
         has_date_in_keys = any(" " in key for key in normalized_prices.keys())
+        
+        _LOGGER.debug(f"split_into_today_tomorrow: Received {len(normalized_prices)} normalized prices. has_date_in_keys={has_date_in_keys}. Sample keys: {list(normalized_prices.keys())[:5]}")
 
         if has_date_in_keys:
             # Keys already have date info, we can directly separate today and tomorrow
