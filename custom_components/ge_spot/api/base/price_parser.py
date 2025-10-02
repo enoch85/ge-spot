@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 from ...timezone.service import TimezoneService
 from ...const.sources import Source
+from ...const.time import TimeInterval
 from ...timezone.timezone_utils import get_timezone_object # Import helper
 import pytz # Import pytz for robust timezone handling
 
@@ -331,10 +332,13 @@ class BasePriceParser(ABC):
             return None
 
         now_utc = datetime.now(timezone.utc)
-        current_hour_utc = now_utc.replace(minute=0, second=0, microsecond=0)
+        # Round down to nearest interval boundary (e.g., 21:20 → 21:15 for 15-min intervals)
+        interval_minutes = TimeInterval.get_interval_minutes()
+        minute = (now_utc.minute // interval_minutes) * interval_minutes
+        current_interval_utc = now_utc.replace(minute=minute, second=0, microsecond=0)
 
         # Try finding the price using the ISO format key (most reliable)
-        iso_key = current_hour_utc.isoformat()
+        iso_key = current_interval_utc.isoformat()
         if iso_key in interval_raw:
             return interval_raw[iso_key]
 
@@ -343,7 +347,7 @@ class BasePriceParser(ABC):
             try:
                 dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
                 # Ensure comparison is timezone-aware (both should be UTC)
-                if dt == current_hour_utc:
+                if dt == current_interval_utc:
                     return price
             except (ValueError, TypeError):
                 _LOGGER.debug(f"Skipping invalid key format in interval_raw: {key}")
@@ -359,10 +363,14 @@ class BasePriceParser(ABC):
             return None
 
         now_utc = datetime.now(timezone.utc)
-        next_hour_utc = (now_utc.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+        # Round down to nearest interval boundary, then add one interval
+        interval_minutes = TimeInterval.get_interval_minutes()
+        minute = (now_utc.minute // interval_minutes) * interval_minutes
+        current_interval_utc = now_utc.replace(minute=minute, second=0, microsecond=0)
+        next_interval_utc = current_interval_utc + timedelta(minutes=interval_minutes)
 
         # Try finding the price using the ISO format key
-        iso_key = next_hour_utc.isoformat()
+        iso_key = next_interval_utc.isoformat()
         if iso_key in interval_raw:
             return interval_raw[iso_key]
 
@@ -370,7 +378,7 @@ class BasePriceParser(ABC):
         for key, price in interval_raw.items():
             try:
                 dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
-                if dt == next_hour_utc:
+                if dt == next_interval_utc:
                     return price
             except (ValueError, TypeError):
                 _LOGGER.debug(f"Skipping invalid key format in interval_raw: {key}")
