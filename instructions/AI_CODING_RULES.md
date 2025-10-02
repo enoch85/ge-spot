@@ -35,13 +35,13 @@
 ### Rule 4: Use Configuration, Never Hardcode
 ```python
 # ✅ ALWAYS DO THIS:
-from ..const.time import TimeInterval
-interval_minutes = TimeInterval.get_interval_minutes()
-intervals_per_day = TimeInterval.get_intervals_per_day()
+from ..const.config import Config
+item_duration = Config.get_item_duration()
+items_per_cycle = Config.get_items_per_cycle()
 
 # ❌ NEVER DO THIS:
-interval_minutes = 15  # DON'T HARDCODE!
-intervals_per_day = 96  # DON'T HARDCODE!
+item_duration = 15  # DON'T HARDCODE!
+items_per_cycle = 96  # DON'T HARDCODE!
 ```
 
 **Why:** Hardcoded values make the code inflexible and create bugs when requirements change.
@@ -49,11 +49,13 @@ intervals_per_day = 96  # DON'T HARDCODE!
 ### Rule 5: Generic Naming Only
 ```python
 # ✅ ALWAYS USE:
-interval_prices, interval_key, IntervalCalculator
+# Generic, reusable names
+data_items, item_key, DataProcessor, process_records()
 
 # ❌ NEVER USE:
-hourly_prices, hour_key, HourCalculator (old)
-fifteen_min_prices, 15min_key (too specific)
+# Overly specific or implementation-detail names
+hourly_data, record_24, DataProcessor24Hour, process_exactly_24()
+daily_data_15min, fifteen_minute_key (too specific to current implementation)
 ```
 
 **Why:** Generic names make code reusable and future-proof.
@@ -68,13 +70,13 @@ fifteen_min_prices, 15min_key (too specific)
 
 ```python
 # ❌ WRONG - Don't create aliases:
-def normalize_hourly_prices(self, *args, **kwargs):
+def process_old_format(self, *args, **kwargs):
     """Backward compatibility alias."""
-    return self.normalize_interval_prices(*args, **kwargs)
+    return self.process_new_format(*args, **kwargs)
 
 # ✅ CORRECT - Just rename it:
-def normalize_interval_prices(self, interval_prices, ...):
-    """Normalizes timestamps in interval price dictionary."""
+def process_new_format(self, data, ...):
+    """Processes data in the new format."""
     # ... implementation
 ```
 
@@ -129,23 +131,62 @@ When making multiple independent edits:
 
 ## 🧪 Testing Philosophy
 
+### Test Production Code, Not Tests
+
+**Priority:** Test that the actual production code works correctly.
+
+```python
+# ✅ Good: Test production functionality with real calls
+def test_api_fetch_real_data():
+    """Test actual API can fetch and parse real data."""
+    api = ProductionAPI(api_key="test_key")
+    result = api.fetch_data(region="TEST")
+    
+    assert result is not None
+    assert "data" in result
+    assert len(result["data"]) > 0
+
+# ❌ Bad: Testing the test helpers
+def test_mock_returns_correct_structure():
+    """Test that our mock returns what we expect."""
+    mock_data = create_mock_data()
+    assert mock_data["field"] == "expected"
+```
+
+**When to Use Mocks:**
+- External API calls that cost money or have rate limits
+- External services that require authentication
+- Slow operations (database, network) in unit tests
+- Non-deterministic behavior (random, timestamps)
+
+**When to Use Real Calls:**
+- Integration tests verifying end-to-end flow
+- Testing parsers with real API response structures
+- Validating configuration and connection logic
+- Smoke tests before deployment
+
 ### Test Coverage
-- Unit tests for individual functions
-- Integration tests for API interactions
-- Manual tests for end-to-end validation
-- Test both success and failure paths
+
+- **Unit tests** for individual functions (fast, isolated, use mocks)
+- **Integration tests** for API interactions (real calls, verify production works)
+- **Manual tests** for end-to-end validation (real Home Assistant, real data)
+- **Test both success and failure paths** (happy path + error handling)
 
 ### Test Quality
+
 - Tests should be independent (no shared state)
-- Use descriptive test names
-- Mock external dependencies
+- Use descriptive test names (`test_parser_handles_empty_response`)
+- Don't mock what you're testing (mock dependencies only)
+- Verify behavior, not implementation details
 - Test edge cases and error conditions
 
 ### When to Test
+
 - After implementing new features
 - After refactoring existing code
 - Before committing changes
 - When fixing bugs (add regression test)
+- **Run integration tests to verify production APIs work correctly**
 
 ---
 
@@ -155,15 +196,15 @@ When making multiple independent edits:
 After making changes, actively search for issues:
 ```bash
 # Search for old terminology that should be renamed
-grep -r "hourly_prices" custom_components/ge_spot/
-grep -r "HourCalculator" custom_components/ge_spot/
+grep -r "old_function_name" custom_components/
+grep -r "OldClassName" custom_components/
 
-# Search for hardcoded values
-grep -r "range(24)" custom_components/ge_spot/
-grep -r ":00\"" custom_components/ge_spot/
+# Search for hardcoded values that should use configuration
+grep -r "range(24)" custom_components/
+grep -r "fixed_value" custom_components/
 
 # Verify imports work
-python3 -c "from custom_components.ge_spot.const.time import TimeInterval"
+python3 -c "from custom_components.ge_spot.module import NewClass"
 ```
 
 **Why:** Don't assume your changes worked - prove it!
@@ -172,8 +213,8 @@ python3 -c "from custom_components.ge_spot.const.time import TimeInterval"
 When refactoring, track your progress:
 ```python
 # Example: Document what you're changing
-# Found 77 occurrences of "hourly_prices"
-# Found 94 occurrences of "hour_key"
+# Found 77 occurrences of "old_api_call"
+# Found 94 occurrences of "deprecated_method"
 # Total: 171 items to update
 ```
 
@@ -223,7 +264,7 @@ CACHE_MAX_ENTRIES = 100  # Line 18
 CACHE_MAX_ENTRIES = 10   # Line 26 (overwrites first!)
 
 # ✅ After:
-CACHE_MAX_ENTRIES = 3500  # Single definition with proper value
+CACHE_MAX_ENTRIES = 1000  # Single definition with proper value
 ```
 
 **Why:** Duplicates cause confusion about which value is actually used.
@@ -232,11 +273,11 @@ CACHE_MAX_ENTRIES = 3500  # Single definition with proper value
 Don't just pick numbers - show your math:
 ```python
 # ✅ Good: Document the calculation
-# Per area for 3 days of 15-minute intervals:
-#   3 days × 24 hours × 4 intervals/hour = 288 entries
-# For 10 typical areas: 288 × 10 = 2,880 entries  
-# With 20% buffer: 2,880 × 1.2 = 3,456 entries
-# Rounded: 3,500 entries
+# Per area for 3 days of data at current resolution:
+#   3 days × 24 hours × resolution_factor = base_entries
+# For typical_areas configured: base × typical_areas = total
+# With buffer_percent buffer: total × (1 + buffer) = final
+# Example: 3 × 24 × 4 × 10 × 1.2 = 3,456 → round to 3,500
 CACHE_MAX_ENTRIES = 3500
 ```
 
@@ -253,8 +294,8 @@ if time.time() - cached_time < MAX_AGE:
     return cached_data
 
 # ✅ Content-based (robust):
-if cached_data.get("current_price") is not None:
-    if cached_data.get("statistics", {}).get("complete_data", False):
+if cached_data.get("required_field") is not None:
+    if cached_data.get("statistics", {}).get("data_complete", False):
         return cached_data  # Has what we need
 ```
 
@@ -269,7 +310,7 @@ if not rate_limiter.can_fetch():
     return cached_data  # Too soon to fetch again
 
 # 2. Data validity (do we have what we need?)
-if has_current_interval and has_complete_data:
+if has_required_data and data_is_complete:
     return cached_data  # Data is still valid
 ```
 
@@ -309,14 +350,14 @@ if has_current_interval and has_complete_data:
 - Test with real Home Assistant instance when possible
 
 ### Configuration-Driven Architecture
-- Single point of control: `TimeInterval.DEFAULT`
+- Single point of control for major settings
 - Everything derives from configuration
 - Makes future changes trivial
 - This is a core architectural principle
 
 ### Generic, Future-Proof Code
-- Don't tie code to specific intervals (15-min, hourly)
-- Use generic terminology (interval, not hour)
+- Don't tie code to specific implementation details
+- Use generic terminology that scales
 - Design for flexibility
 - Think about maintainability
 
@@ -334,12 +375,12 @@ if has_current_interval and has_complete_data:
 ### ❌ Hardcoding Magic Numbers
 ```python
 # BAD:
-for i in range(24):  # What if intervals change?
+for i in range(24):  # What if requirements change?
     ...
 
 # GOOD:
-intervals = TimeInterval.get_intervals_per_day()
-for i in range(intervals):
+item_count = Config.get_item_count()
+for i in range(item_count):
     ...
 ```
 
@@ -362,8 +403,8 @@ for i in range(intervals):
 i += 1
 
 # GOOD:
-# Round to nearest interval boundary for timestamp alignment
-minute = (dt.minute // interval_minutes) * interval_minutes
+# Round to nearest time boundary for timestamp alignment
+value = (raw_value // resolution) * resolution
 ```
 
 ---
@@ -373,30 +414,30 @@ minute = (dt.minute // interval_minutes) * interval_minutes
 ### Issue 1: Incomplete Phase Claims
 ```python
 # ❌ Commit says "Phase 8 complete" but...
-# sensor/base.py still has BOTH old and new terminology:
-self.hourly_prices = {}      # Old
-self.interval_prices = {}    # New (both exist!)
+# Files still have BOTH old and new terminology:
+self.old_data = {}      # Old
+self.new_data = {}      # New (both exist - incomplete transition!)
 ```
 
-**Lesson:** Don't claim a phase is complete until ALL files in that phase are updated.
+**Lesson:** Don't claim a phase is complete until ALL files in that phase are fully updated.
 
 ### Issue 2: Base Classes Missed
 ```python
-# ❌ Updated all API implementations but forgot:
-# - api/base/base_price_api.py
-# - api/base/price_parser.py
-# - api/base/api_validator.py
+# ❌ Updated all implementations but forgot:
+# - api/base/base_api.py
+# - api/base/parser.py
+# - api/base/validator.py
 ```
 
-**Lesson:** Base classes affect everything - don't skip them!
+**Lesson:** Base classes affect everything - they're often the most important to update first!
 
 ### Issue 3: Validation/Schema Files
 ```python
 # ❌ Updated code but forgot validation:
-# utils/data_validator.py still expects:
+# utils/validator.py still expects:
 SCHEMA = {
-    "hourly_prices": dict,  # Old key!
-    "next_hour_price": float  # Old key!
+    "old_key": dict,  # Old key!
+    "deprecated_field": float  # Old field!
 }
 ```
 
@@ -405,8 +446,8 @@ SCHEMA = {
 ### Issue 4: Mixed State
 ```python
 # ❌ Some files updated, others not:
-# coordinator/data_processor.py: ✅ Uses interval_prices
-# price/__init__.py: ❌ Still uses hourly_prices
+# coordinator/processor.py: ✅ Uses new_data_structure
+# utils/helper.py: ❌ Still uses old_data_structure
 ```
 
 **Lesson:** Mixed terminology creates bugs - complete one layer at a time.
@@ -414,9 +455,9 @@ SCHEMA = {
 ### Issue 5: Comments and Docstrings
 ```python
 # ❌ Code updated but comments weren't:
-def calculate_statistics(interval_prices: Dict[str, float]):
-    """Calculate statistics from hourly prices."""  # Wrong!
-    #                              ^^^^^^^ old terminology
+def calculate_stats(new_data: Dict[str, float]):
+    """Calculate statistics from old data format."""  # Wrong!
+    #                              ^^^ outdated terminology
 ```
 
 **Lesson:** Update ALL documentation, not just code.
@@ -474,17 +515,17 @@ Before claiming a phase is complete, verify:
 
 ### Configuration-Driven
 ```python
-# ✅ Good: Adapts to any interval setting
-interval_minutes = TimeInterval.get_interval_minutes()
-intervals_per_hour = TimeInterval.get_intervals_per_hour()
-intervals_per_day = TimeInterval.get_intervals_per_day()
+# ✅ Good: Adapts to configuration changes
+item_duration = Config.get_item_duration()
+items_per_cycle = Config.get_items_per_cycle()
+items_per_day = Config.get_items_per_day()
 ```
 
 ### Generic Naming
 ```python
-# ✅ Good: Works for any time interval
-interval_prices = parser.parse_response(response)
-current_interval = calculator.get_current_interval_key()
+# ✅ Good: Works for any time period or data structure
+data_items = parser.parse_response(response)
+current_item = calculator.get_current_item_key()
 ```
 
 ### Proper Error Handling
@@ -499,22 +540,22 @@ except APIError as e:
 
 ### Clear Documentation
 ```python
-def expand_to_intervals(hourly_data: Dict[str, float]) -> Dict[str, float]:
+def expand_data(source_data: Dict[str, float]) -> Dict[str, float]:
     """
-    Expand hourly prices to match configured interval.
+    Expand source data to match configured target resolution.
     
-    Generic implementation - automatically adapts to TimeInterval.DEFAULT.
-    For APIs that provide hourly data but system needs finer granularity.
+    Generic implementation - automatically adapts to Config.get_resolution().
+    For sources that provide coarse data but system needs finer granularity.
     
     Args:
-        hourly_data: Dictionary with hour keys (HH:00) and prices
+        source_data: Dictionary with source keys and values
         
     Returns:
-        Dictionary with interval keys (HH:MM) and prices
+        Dictionary with target resolution keys and values
         
     Example:
-        >>> expand_to_intervals({"14:00": 50.0})
-        {"14:00": 50.0, "14:15": 50.0, "14:30": 50.0, "14:45": 50.0}
+        >>> expand_data({"00:00": 50.0})
+        {"00:00": 50.0, "00:15": 50.0, "00:30": 50.0, "00:45": 50.0}
     """
 ```
 
@@ -547,10 +588,6 @@ def expand_to_intervals(hourly_data: Dict[str, float]) -> Dict[str, float]:
 
 ---
 
-**Why:** Quality over speed. A correct, maintainable solution is better than a fast, broken one.
-
----
-
 ## 📐 Phased Implementation Strategy
 
 ### Why Phases Matter
@@ -573,14 +610,6 @@ Base classes  →  Structures   →  Processors    →  Sensors      →  Tests
 Helpers          APIs            Coordinators     Config          Utils
 ```
 
-**Example from this project:**
-1. Phase 1: `TimeInterval` constants & helper methods
-2. Phase 2: `IntervalCalculator` (uses Phase 1)
-3. Phase 3: `IntervalPrice` data class (uses Phase 2)
-4. Phase 4: API expansion utilities (uses Phase 3)
-5. Phase 5: Parsers (uses Phase 4)
-6. ...and so on
-
 ### Commit After Each Phase
 ```bash
 git add <phase_files>
@@ -597,18 +626,10 @@ Progress: N/27 TODOs complete"
 **Why:** Small commits are easier to review, revert, and understand.
 
 ### Testing Between Phases
-After each phase:
-```python
-# Run a quick smoke test
-python3 -c "from custom_components.ge_spot.const.time import TimeInterval; \
-            print(TimeInterval.get_intervals_per_day())"
-
-# Check for import errors
-python3 -c "from custom_components.ge_spot import *"
-
-# Run relevant tests
-pytest tests/pytest/unit/test_time.py
-```
+- Run smoke tests to verify imports work
+- Check for syntax errors
+- Run relevant unit tests
+- Verify integration points
 
 **Why:** Catch integration issues before they compound.
 
