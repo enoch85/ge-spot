@@ -191,35 +191,44 @@ class UnifiedPriceManager:
         # Ensure exchange service is initialized before fetching/processing
         await self._ensure_exchange_service()
 
-        # --- Decision to Fetch (incorporating FetchDecisionMaker) ---
+        # --- Decision to Fetch (using DataValidity) ---
         # Get current cache status to inform fetch decision
         cached_data_for_decision = self._cache_manager.get_data(
             area=self.area,
             target_date=today_date
         )
 
-        has_current_hour_price_in_cache = False
-        has_complete_data_for_today_in_cache = False
-
+        # Extract data validity from cache if available
+        from .data_validity import DataValidity
+        data_validity = DataValidity()  # Default: no valid data
+        
         if cached_data_for_decision:
-            # Directly inspect the already processed cached_data_for_decision
-            # The cache stores fully processed data, so we don't need to re-process it here.
-            if cached_data_for_decision.get("current_price") is not None:
-                has_current_hour_price_in_cache = True
-            if cached_data_for_decision.get("statistics", {}).get("complete_data", False):
-                has_complete_data_for_today_in_cache = True
-
-            _LOGGER.debug(
-                f"[{self.area}] Decision making: cached_data_for_decision found. "
-                f"Current price available in cache: {has_current_hour_price_in_cache}. "
-                f"Complete data in cache (20+ hrs): {has_complete_data_for_today_in_cache}. "
-                f"Cached stats content: {cached_data_for_decision.get('statistics')}"
-            )
+            # Extract DataValidity from cached data
+            if "data_validity" in cached_data_for_decision:
+                try:
+                    data_validity = DataValidity.from_dict(cached_data_for_decision["data_validity"])
+                    _LOGGER.debug(f"[{self.area}] Loaded data validity from cache: {data_validity}")
+                except Exception as e:
+                    _LOGGER.warning(f"[{self.area}] Failed to load data validity from cache: {e}")
+            else:
+                # Fallback: calculate validity from cached price data
+                try:
+                    from .data_validity import calculate_data_validity
+                    current_interval_key = self._tz_service.get_current_interval_key()
+                    data_validity = calculate_data_validity(
+                        interval_prices=cached_data_for_decision.get("interval_prices", {}),
+                        tomorrow_interval_prices=cached_data_for_decision.get("tomorrow_interval_prices", {}),
+                        now=now,
+                        current_interval_key=current_interval_key
+                    )
+                    _LOGGER.debug(f"[{self.area}] Calculated data validity from cache: {data_validity}")
+                except Exception as e:
+                    _LOGGER.warning(f"[{self.area}] Failed to calculate data validity from cache: {e}")
         else:
-            _LOGGER.debug(f"[{self.area}] Decision making: no cached_data_for_decision found.")
+            _LOGGER.debug(f"[{self.area}] No cached data found for decision making.")
 
         # Instantiate FetchDecisionMaker
-        from .fetch_decision import FetchDecisionMaker # Local import
+        from .fetch_decision import FetchDecisionMaker
         decision_maker = FetchDecisionMaker(tz_service=self._tz_service)
 
         # Get last fetch time from the shared dictionary for this area
@@ -228,26 +237,26 @@ class UnifiedPriceManager:
         should_fetch_from_api, fetch_reason = decision_maker.should_fetch(
             now=now,
             last_fetch=last_fetch_for_decision,
-            fetch_interval=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES, # Use the same interval as rate limiter
-            has_current_hour_price=has_current_hour_price_in_cache,
-            has_complete_data_for_today=has_complete_data_for_today_in_cache
+            data_validity=data_validity,
+            fetch_interval_minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
         )
 
         if not force and not should_fetch_from_api:
-            _LOGGER.info(f"Skipping API fetch for area {self.area} based on FetchDecisionMaker: {fetch_reason}")
+            _LOGGER.info(f"Skipping API fetch for area {self.area}: {fetch_reason}")
             if cached_data_for_decision:
-                _LOGGER.debug("Returning data based on initial cache check for decision making for %s", self.area)
-                # Ensure the cached data is marked correctly if it's used
+                _LOGGER.debug("Returning cached data for %s", self.area)
+                # Ensure the cached data is marked correctly
                 cached_data_for_decision["using_cached_data"] = True
-                # Re-process if it wasn't fully processed or to update timestamps
+                # Re-process to ensure current/next prices are updated
                 return await self._process_result(cached_data_for_decision, is_cached=True)
             else:
+                # This shouldn't happen if data_validity is properly checked
                 _LOGGER.warning(
-                    f"FetchDecisionMaker advised against fetching for {self.area}, but no cached data was available for decision. "
-                    f"This might indicate an issue or an edge case (e.g. initial startup with no cache yet)."
+                    f"Fetch skipped for {self.area} but no cached data available. "
+                    f"This indicates a logic error."
                 )
-                # Attempt to generate an empty result, or consider if a fetch should be forced here
-                return await self._generate_empty_result(error=f"Fetch skipped by decision maker, no cache: {fetch_reason}")
+                return await self._generate_empty_result(error=f"No cache and no fetch: {fetch_reason}")
+
 
         # --- Rate Limiting Lock (moved after initial fetch decision) ---
         # If we decided to fetch (or force is true), then acquire the lock.

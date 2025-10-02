@@ -389,6 +389,31 @@ class DataProcessor:
              _LOGGER.error(f"Source timezone ('source_timezone') is missing in the processed result for area {self.area} after processing. This indicates an issue.")
              processed_result["error"] = processed_result.get("error", "") + " Missing source timezone after processing."
 
+        # --- Step 6: Calculate Data Validity ---
+        # This tracks how far into the future we have valid price data
+        try:
+            from .data_validity import calculate_data_validity
+            from homeassistant.util import dt as dt_util
+            
+            now = dt_util.now()
+            current_interval_key = processed_result.get("current_interval_key") or self._tz_service.get_current_interval_key()
+            
+            validity = calculate_data_validity(
+                interval_prices=processed_result["interval_prices"],
+                tomorrow_interval_prices=processed_result["tomorrow_interval_prices"],
+                now=now,
+                current_interval_key=current_interval_key
+            )
+            
+            processed_result["data_validity"] = validity.to_dict()
+            _LOGGER.info(f"Data validity for {self.area}: {validity}")
+            
+        except Exception as e:
+            _LOGGER.error(f"Error calculating data validity for {self.area}: {e}", exc_info=True)
+            # Add empty validity on error
+            from .data_validity import DataValidity
+            processed_result["data_validity"] = DataValidity().to_dict()
+
         _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}")
         return processed_result
 

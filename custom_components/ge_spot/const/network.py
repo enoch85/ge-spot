@@ -21,6 +21,10 @@ class Network:
             (0, 1),   # 00:00-01:00 - For today's new prices
             (13, 15), # 13:00-15:00 - For tomorrow's data (most EU markets publish around 13:00-14:00 CET)
         ]
+        
+        # Data validity settings
+        DATA_SAFETY_BUFFER_HOURS = 2  # Fetch new data when we have less than this many hours remaining
+        DATA_COMPLETENESS_THRESHOLD = 0.80  # Require 80% of intervals to consider data "complete"
 
     class URLs:
         """Base URLs for various APIs."""
