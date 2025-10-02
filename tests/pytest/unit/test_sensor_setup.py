@@ -18,7 +18,7 @@ MOCK_COORDINATOR_DATA = {
     "area": "SE4",
     "currency": "SEK",
     "current_price": 123.45,
-    "next_hour_price": 130.00,
+    "next_interval_price": 130.00,
     "today_stats": {
         "average": 110.5,
         "min": 90.0,
@@ -105,7 +105,7 @@ async def test_sensor_platform_setup(hass, monkeypatch):
     #    (Adjust names/count based on actual sensors created)
     expected_sensors = [
         "sensor.gespot_se4_current_price_se4",
-        "sensor.gespot_se4_next_hour_price_se4",
+        "sensor.gespot_se4_next_interval_price_se4",
         "sensor.gespot_average_price_se4",
         "sensor.gespot_se4_peak_price_se4",
         "sensor.gespot_se4_off_peak_price_se4",

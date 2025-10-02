@@ -20,7 +20,7 @@ SAMPLE_ENTSOE_RESPONSES = {
         "area": "DE-LU",
         "currency": Currency.EUR,
         "api_timezone": "Europe/Brussels",
-        "hourly_prices": {
+        "interval_prices": {
             "2025-04-26T22:00:00Z": 45.61,
             "2025-04-26T23:00:00Z": 42.82,
             "2025-04-27T00:00:00Z": 41.15,
@@ -52,7 +52,7 @@ SAMPLE_ENTSOE_RESPONSES = {
         "area": "FR",
         "currency": Currency.EUR,
         "api_timezone": "Europe/Brussels",
-        "hourly_prices": {
+        "interval_prices": {
             "2025-04-26T22:00:00Z": 42.61,
             "2025-04-26T23:00:00Z": 40.82,
             "2025-04-27T00:00:00Z": 39.15,
@@ -84,7 +84,7 @@ SAMPLE_ENTSOE_RESPONSES = {
         "area": "ES",
         "currency": Currency.EUR,
         "api_timezone": "Europe/Brussels",
-        "hourly_prices": {
+        "interval_prices": {
             "2025-04-26T22:00:00Z": 35.61,
             "2025-04-26T23:00:00Z": 33.82,
             "2025-04-27T00:00:00Z": 32.15,
@@ -116,7 +116,7 @@ SAMPLE_ENTSOE_RESPONSES = {
         "area": "FI",
         "currency": Currency.EUR,
         "api_timezone": "Europe/Brussels",
-        "hourly_prices": {
+        "interval_prices": {
             "2025-04-26T22:00:00Z": 30.61,
             "2025-04-26T23:00:00Z": 28.82,
             "2025-04-27T00:00:00Z": 27.15,
@@ -176,24 +176,24 @@ async def test_entsoe_live_fetch_parse(entsoe_api, area):
         assert parsed_data.get("area") == area, f"Area should be {area}, got {parsed_data.get('area')}"
         
         # Stricter validation of required fields
-        required_fields = ["currency", "api_timezone", "hourly_prices"]
+        required_fields = ["currency", "api_timezone", "interval_prices"]
         for field in required_fields:
             assert field in parsed_data, f"Required field '{field}' missing from parsed data for {area}"
         
-        assert isinstance(parsed_data["hourly_prices"], dict), f"hourly_prices should be a dictionary, got {type(parsed_data['hourly_prices'])}"
+        assert isinstance(parsed_data["interval_prices"], dict), f"interval_prices should be a dictionary, got {type(parsed_data['interval_prices'])}"
 
-        # Validate hourly prices content
-        hourly_prices = parsed_data["hourly_prices"]
+        # Validate interval prices content
+        interval_prices = parsed_data["interval_prices"]
         
         # Check for expected data presence
-        assert hourly_prices, f"No hourly prices found for {area} - this is a real issue that should be investigated"
+        assert interval_prices, f"No interval prices found for {area} - this is a real issue that should be investigated"
         
-        # Validate number of hours - should typically have 24 hours of data at a minimum
-        min_expected_hours = 24
-        assert len(hourly_prices) >= min_expected_hours, f"Expected at least {min_expected_hours} hours of data, got {len(hourly_prices)} for {area}"
+        # Validate number of intervals - should typically have at least 24 intervals (could be more with 15-min data)
+        min_expected_intervals = 24
+        assert len(interval_prices) >= min_expected_intervals, f"Expected at least {min_expected_intervals} intervals of data, got {len(interval_prices)} for {area}"
         
         # Verify all timestamps follow ISO format
-        for timestamp, price in hourly_prices.items():
+        for timestamp, price in interval_prices.items():
             try:
                 dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                 # Validate the timestamp is within reasonable range (not too far in past or future)
@@ -208,20 +208,21 @@ async def test_entsoe_live_fetch_parse(entsoe_api, area):
             assert isinstance(price, float), f"Price should be a float, got {type(price)} for timestamp {timestamp}"
             assert -1000 <= price <= 5000, f"Price {price} for {timestamp} is outside reasonable range for {area}"
         
-        # Verify timestamps are contiguous and hourly
-        timestamps = sorted(hourly_prices.keys())
+        # Verify timestamps are contiguous (hourly or 15-minute intervals)
+        timestamps = sorted(interval_prices.keys())
         for i in range(1, len(timestamps)):
             prev_dt = datetime.fromisoformat(timestamps[i-1].replace("Z", "+00:00"))
             curr_dt = datetime.fromisoformat(timestamps[i].replace("Z", "+00:00"))
-            hour_diff = (curr_dt - prev_dt).total_seconds() / 3600
-            assert abs(hour_diff - 1.0) < 0.1, f"Non-hourly gap between {timestamps[i-1]} and {timestamps[i]} for {area}"
+            time_diff_minutes = (curr_dt - prev_dt).total_seconds() / 60
+            # Allow 15-min, 30-min, or 60-min intervals
+            assert time_diff_minutes in [15, 30, 60], f"Unexpected time gap of {time_diff_minutes} minutes between {timestamps[i-1]} and {timestamps[i]} for {area}"
         
         # Validate currency is appropriate for the area
         currency = parsed_data["currency"]
         # Real-world validation: ENTSO-E should return EUR for European countries
         assert currency in ["EUR"], f"Expected currency EUR for {area}, got {currency}"
         
-        logger.info(f"ENTSO-E Test ({area}): PASS - Found {len(hourly_prices)} prices. Range: {min(hourly_prices.values()):.2f} to {max(hourly_prices.values()):.2f} {currency}")
+        logger.info(f"ENTSO-E Test ({area}): PASS - Found {len(interval_prices)} prices. Range: {min(interval_prices.values()):.2f} to {max(interval_prices.values()):.2f} {currency}")
 
     except AssertionError as ae:
         # Let assertion errors propagate - these are test failures that should be fixed in the code, not the test

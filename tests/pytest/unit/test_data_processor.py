@@ -44,7 +44,7 @@ SAMPLE_RAW_DATA = {
     "currency": "SEK",
     # FIX: Use source_timezone key
     "source_timezone": "Europe/Stockholm",
-    "hourly_prices": {
+    "interval_prices": {
         "2025-04-26T10:00:00+02:00": 1.5,
         "2025-04-26T11:00:00+02:00": 2.0
     },
@@ -298,7 +298,7 @@ class TestDataProcessor:
             "source": "nordpool",
             "area": "SE4",
             "error": "Currency converter failed to initialize",
-            "hourly_prices": {},
+            "interval_prices": {},
             # Plus other keys that will be included
         }
         
@@ -313,7 +313,7 @@ class TestDataProcessor:
                 "source": data.get("source", "unknown"),
                 "area": processor.area,
                 "error": error or "No data available",
-                "hourly_prices": {},
+                "interval_prices": {},
                 # Additional keys would be here in the real implementation
             }
             
@@ -373,7 +373,7 @@ class TestDataProcessor:
 
                 # Setup currency converter mock
                 mock_currency_converter = AsyncMock()
-                mock_currency_converter.convert_hourly_prices = AsyncMock(return_value=(
+                mock_currency_converter.convert_interval_prices = AsyncMock(return_value=(
                     {"10:00": 1.5, "11:00": 2.0},  # Converted prices
                     10.5,  # Exchange rate
                     datetime.now(timezone.utc).isoformat()  # Rate timestamp
@@ -389,9 +389,9 @@ class TestDataProcessor:
                     # Assert
                     assert result is not None, "Process should return a result"
                     assert "error" not in result, f"Result should not contain an error, got: {result.get('error')}"
-                    assert result.get("hourly_prices") == {"10:00": 1.5, "11:00": 2.0}, f"Result should have correctly processed hourly_prices, got: {result.get('hourly_prices')}"
+                    assert result.get("interval_prices") == {"10:00": 1.5, "11:00": 2.0}, f"Result should have correctly processed interval_prices, got: {result.get('interval_prices')}"
                     assert result.get("current_price") == 1.5, f"Current price should be correctly set, got: {result.get('current_price')}"
-                    assert result.get("next_hour_price") == 2.0, f"Next hour price should be correctly set, got: {result.get('next_hour_price')}"
+                    assert result.get("next_interval_price") == 2.0, f"Next interval price should be correctly set, got: {result.get('next_interval_price')}"
                     assert result.get("source_currency") == "SEK", f"Source currency should be set, got: {result.get('source_currency')}"
                     assert result.get("target_currency") == "SEK", f"Target currency should be set, got: {result.get('target_currency')}"
                     assert "statistics" in result, "Result should include statistics"

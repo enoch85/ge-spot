@@ -73,19 +73,19 @@ async def test_energi_data_live_fetch_parse(area):
         assert "Europe" in api_timezone or "CET" in api_timezone or "UTC" in api_timezone, f"Expected European timezone, got {api_timezone}"
         
         # Hourly prices validation
-        assert "hourly_prices" in parsed_data, "hourly_prices missing from parsed data"
-        hourly_prices = parsed_data["hourly_prices"]
-        assert isinstance(hourly_prices, dict), f"hourly_prices should be a dictionary, got {type(hourly_prices)}"
+        assert "interval_prices" in parsed_data, "interval_prices missing from parsed data"
+        interval_prices = parsed_data["interval_prices"]
+        assert isinstance(interval_prices, dict), f"interval_prices should be a dictionary, got {type(interval_prices)}"
         
         # Real-world validation: Energi Data Service should return price data
-        assert hourly_prices, f"No hourly prices found for {area} - this indicates a real issue with the API or parser"
+        assert interval_prices, f"No interval prices found for {area} - this indicates a real issue with the API or parser"
         
-        # Real-world validation: Energi Data Service typically provides at least 24 hours of data
-        min_expected_hours = 12  # At minimum, should have half a day of data
-        assert len(hourly_prices) >= min_expected_hours, f"Expected at least {min_expected_hours} hourly prices, got {len(hourly_prices)}"
+        # Real-world validation: Energi Data Service typically provides at least 24 intervals of data
+        min_expected_intervals = 12  # At minimum, should have half a day of data
+        assert len(interval_prices) >= min_expected_intervals, f"Expected at least {min_expected_intervals} interval prices, got {len(interval_prices)}"
         
         # Validate timestamp format and price values
-        for timestamp, price in hourly_prices.items():
+        for timestamp, price in interval_prices.items():
             # Validate timestamp format
             try:
                 dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -106,18 +106,18 @@ async def test_energi_data_live_fetch_parse(area):
             # The price range in DKK/MWh is typically between -500 and 3000
             assert -500 <= price <= 5000, f"Price {price} DKK/MWh for {timestamp} is outside reasonable range for {area}"
         
-        # Check for sequential hourly timestamps
-        timestamps = sorted(hourly_prices.keys())
+        # Check for sequential timestamps (hourly or sub-hourly)
+        timestamps = sorted(interval_prices.keys())
         for i in range(1, len(timestamps)):
             prev_dt = datetime.fromisoformat(timestamps[i-1].replace("Z", "+00:00"))
             curr_dt = datetime.fromisoformat(timestamps[i].replace("Z", "+00:00"))
-            hour_diff = (curr_dt - prev_dt).total_seconds() / 3600
+            time_diff_minutes = (curr_dt - prev_dt).total_seconds() / 60
             
-            # Danish market data should be hourly
-            assert abs(hour_diff - 1.0) < 0.1, f"Non-hourly gap between {timestamps[i-1]} and {timestamps[i]} for {area}: {hour_diff} hours"
+            # Allow 15-min, 30-min, or 60-min intervals
+            assert time_diff_minutes in [15, 30, 60], f"Unexpected time gap of {time_diff_minutes} minutes between {timestamps[i-1]} and {timestamps[i]} for {area}"
         
-        logger.info(f"Energi Data Service Live Test ({area}): PASS - Found {len(hourly_prices)} prices. "
-                  f"Range: {min(hourly_prices.values()):.2f} to {max(hourly_prices.values()):.2f} {parsed_data.get('currency')}/MWh")
+        logger.info(f"Energi Data Service Live Test ({area}): PASS - Found {len(interval_prices)} prices. "
+                  f"Range: {min(interval_prices.values()):.2f} to {max(interval_prices.values()):.2f} {parsed_data.get('currency')}/MWh")
 
     except AssertionError as ae:
         # Let assertion errors propagate - these are test failures that should be fixed in the code, not the test

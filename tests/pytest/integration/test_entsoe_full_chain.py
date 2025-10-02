@@ -101,7 +101,7 @@ SAMPLE_ENTSOE_PARSED_DATA = {
         "area": "SE4",
         "api_timezone": "Europe/Brussels",
         "currency": Currency.EUR,
-        "hourly_prices": {
+        "interval_prices": {
             "2025-04-26T22:00:00Z": 38.56,
             "2025-04-26T23:00:00Z": 35.24,
             "2025-04-27T00:00:00Z": 33.88,
@@ -205,28 +205,28 @@ async def test_entsoe_full_chain(monkeypatch):
     assert isinstance(parsed_data, dict), f"Parsed data should be a dictionary, got {type(parsed_data)}"
     
     # Required fields validation
-    assert "hourly_prices" in parsed_data, "Parsed data should contain 'hourly_prices' key"
+    assert "interval_prices" in parsed_data, "Parsed data should contain 'interval_prices' key"
     assert "source" in parsed_data, "Parsed data should contain 'source' key"
     assert parsed_data["source"] == Source.ENTSOE, f"Source should be {Source.ENTSOE}, got {parsed_data.get('source')}"
     assert parsed_data["area"] == area, f"Area should be {area}, got {parsed_data.get('area')}"
     assert "currency" in parsed_data, "Parsed data should contain a 'currency' key"
     assert parsed_data["currency"] == Currency.EUR, f"ENTSOE currency should be EUR, got {parsed_data.get('currency')}"
     
-    # Validate hourly prices
-    hourly_prices = parsed_data.get("hourly_prices", {})
-    assert isinstance(hourly_prices, dict), f"hourly_prices should be a dictionary, got {type(hourly_prices)}"
+    # Validate interval prices
+    interval_prices = parsed_data.get("interval_prices", {})
+    assert isinstance(interval_prices, dict), f"interval_prices should be a dictionary, got {type(interval_prices)}"
     
     # Validation: ENTSOE should return data
-    assert hourly_prices, "No hourly prices found - this indicates a real issue with the API or parser"
+    assert interval_prices, "No interval prices found - this indicates a real issue with the API or parser"
     
-    # Check for reasonable number of hours (at least 24 for day-ahead prices)
-    min_expected_hours = 24
-    assert len(hourly_prices) >= min_expected_hours, f"Expected at least {min_expected_hours} hourly prices, got {len(hourly_prices)}"
+    # Check for reasonable number of intervals (at least 24 for day-ahead prices, could be more with 15-min intervals)
+    min_expected_intervals = 24
+    assert len(interval_prices) >= min_expected_intervals, f"Expected at least {min_expected_intervals} interval prices, got {len(interval_prices)}"
     
-    logger.info(f"Parsed data contains {len(hourly_prices)} hourly prices")
+    logger.info(f"Parsed data contains {len(interval_prices)} interval prices")
     
     # Validate timestamp format and price values
-    for timestamp, price in hourly_prices.items():
+    for timestamp, price in interval_prices.items():
         try:
             # Validate ISO timestamp format
             dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
@@ -256,7 +256,7 @@ async def test_entsoe_full_chain(monkeypatch):
     assert source_currency is not None, "Source currency should not be None"
     
     converted_prices = {}
-    for ts, price in hourly_prices.items():
+    for ts, price in interval_prices.items():
         # Test specific conversion logic - if this fails, it's a real issue
         price_converted = await exchange_service.convert(price, source_currency, target_currency)
         

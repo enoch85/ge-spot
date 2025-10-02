@@ -92,7 +92,7 @@ class BasePriceParser(ABC):
             # Check if the *start* of the next hour in the target timezone is still on the same *calendar day* as *now* in the target timezone.
             # This determines if we *expect* the next hour's price to be part of the current day's data fetch.
             if next_hour_start_target.date() == now_target.date():
-                next_price = self._get_next_hour_price(data["interval_raw"])
+                next_price = self._get_next_interval_price(data["interval_raw"])
                 if next_price is None:
                     _LOGGER.warning(f"{self.source}: Next interval price expected within the same day ({now_target.date()}) but not found in interval_raw")
                     # Allow validation to pass if next interval is missing, might be end of day data
@@ -352,7 +352,7 @@ class BasePriceParser(ABC):
         _LOGGER.warning(f"{self.source}: Could not find current interval price for {iso_key}")
         return None
 
-    def _get_next_hour_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
+    def _get_next_interval_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
         """Get the next interval's price from the interval_raw data."""
         if not interval_raw:
             _LOGGER.warning(f"{self.source}: No interval_raw prices found to determine next interval price.")

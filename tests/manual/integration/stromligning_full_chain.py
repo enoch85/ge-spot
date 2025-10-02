@@ -137,7 +137,7 @@ async def main():
         dk_tz = pytz.timezone('Europe/Copenhagen')
         prices_by_date = {}
         
-        for ts, price in hourly_prices.items():
+        for ts, price in interval_prices.items():
             try:
                 # Parse the timestamp and convert to local timezone
                 dt = datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone(dk_tz)
@@ -218,7 +218,7 @@ async def main():
                 logger.info(f"- {component_name}: {value}")
         
         # Final validation - check if we have enough data overall to consider the test successful
-        total_prices = len(hourly_prices)
+        total_prices = len(interval_prices)
         if total_prices >= 22:  # At minimum, we should have most of today's hours
             logger.info("\nTest completed successfully!")
             return 0

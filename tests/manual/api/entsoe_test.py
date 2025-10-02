@@ -64,8 +64,8 @@ async def main():
         logger.info("Parsing raw data...")
         parsed_data = await api.parse_raw_data(raw_data)
         
-        if not parsed_data or not parsed_data.get("hourly_prices"):
-            logger.error("Failed to parse data or no hourly prices returned")
+        if not parsed_data or not parsed_data.get("interval_prices"):
+            logger.error("Failed to parse data or no interval prices returned")
             return 1
         
         # Display results
@@ -76,12 +76,12 @@ async def main():
         logger.info(f"API Timezone: {parsed_data.get('api_timezone')}")
         logger.info(f"Fetched at: {parsed_data.get('fetched_at')}")
         
-        # Format hourly prices into a table
-        logger.info("\nHourly Prices:")
+        # Format interval prices into a table
+        logger.info("\nInterval Prices:")
         logger.info(f"{'Timestamp':<25} | {'Price':<10}")
         logger.info("-" * 38)
         
-        for timestamp, price in sorted(parsed_data.get("hourly_prices", {}).items()):
+        for timestamp, price in sorted(parsed_data.get("interval_prices", {}).items()):
             logger.info(f"{timestamp:<25} | {price:<10.5f}")
         
         logger.info("\nTest completed successfully")

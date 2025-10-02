@@ -18,9 +18,9 @@ _SCHEMAS = {
         "properties": {
             "data": {"type": "object", "optional": True},
             "currency": {"type": "string", "optional": True},
-            "hourly_prices": {"type": "object", "optional": True},
+            "interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
-            "next_hour_price": {"type": "number", "optional": True},
+            "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
         }
     }),
@@ -28,9 +28,9 @@ _SCHEMAS = {
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "hourly_prices": {"type": "object", "optional": True},
+            "interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
-            "next_hour_price": {"type": "number", "optional": True},
+            "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
         }
     }),
@@ -39,9 +39,9 @@ _SCHEMAS = {
         "properties": {
             "records": {"type": "array", "optional": True},
             "currency": {"type": "string", "optional": True},
-            "hourly_prices": {"type": "object", "optional": True},
+            "interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
-            "next_hour_price": {"type": "number", "optional": True},
+            "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
         }
     }),
@@ -49,9 +49,9 @@ _SCHEMAS = {
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "hourly_prices": {"type": "object", "optional": True},
+            "interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
-            "next_hour_price": {"type": "number", "optional": True},
+            "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
         }
     }),
@@ -59,9 +59,9 @@ _SCHEMAS = {
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "hourly_prices": {"type": "object", "optional": True},
+            "interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
-            "next_hour_price": {"type": "number", "optional": True},
+            "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
         }
     }),
@@ -69,9 +69,9 @@ _SCHEMAS = {
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "hourly_prices": {"type": "object", "optional": True},
+            "interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
-            "next_hour_price": {"type": "number", "optional": True},
+            "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
         }
     }),
@@ -80,9 +80,9 @@ _SCHEMAS = {
         "properties": {
             "prices": {"type": "array", "optional": True},
             "currency": {"type": "string", "optional": True},
-            "hourly_prices": {"type": "object", "optional": True},
+            "interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
-            "next_hour_price": {"type": "number", "optional": True},
+            "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
         }
     })
@@ -93,9 +93,9 @@ _DEFAULT_SCHEMA = Schema({
     "type": "object",
     "properties": {
         "currency": {"type": "string", "optional": True},
-        "hourly_prices": {"type": "object", "optional": True},
+        "interval_prices": {"type": "object", "optional": True},
         "current_price": {"type": "number", "optional": True},
-        "next_hour_price": {"type": "number", "optional": True},
+        "next_interval_price": {"type": "number", "optional": True},
         "raw_data": {"type": "string", "optional": True}
     }
 })
@@ -170,25 +170,25 @@ class DataValidator:
         # Validate using schema
         validated_data = validate_data(data, source_name)
 
-        # Check for hourly prices
-        hourly_prices = data.get("hourly_prices", {})
-        if not hourly_prices:
-            result["errors"].append("No hourly prices")
+        # Check for interval prices
+        interval_prices = data.get("interval_prices", {})
+        if not interval_prices:
+            result["errors"].append("No interval prices")
             return result
 
-        # Check for anomalies in hourly prices
+        # Check for anomalies in interval prices
         try:
-            prices = list(hourly_prices.values())
+            prices = list(interval_prices.values())
             if len(prices) >= 3:  # Need at least 3 values for meaningful statistics
                 mean = statistics.mean(prices)
                 stdev = statistics.stdev(prices)
 
                 if stdev > 0:  # Avoid division by zero
-                    for hour, price in hourly_prices.items():
+                    for interval, price in interval_prices.items():
                         z_score = abs((price - mean) / stdev)
                         if z_score > self._anomaly_threshold:
                             result["anomalies"].append({
-                                "hour": hour,
+                                "interval": interval,
                                 "price": price,
                                 "z_score": z_score
                             })

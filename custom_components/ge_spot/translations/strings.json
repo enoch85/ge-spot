@@ -75,7 +75,7 @@
           "vat": "Enter your local VAT percentage (e.g., 25 for 25%)",
           "update_interval": "How often to check for new price data",
           "display_unit": "Choose how prices should be displayed",
-          "timezone_reference": "Choose which timezone to use for displaying hourly prices",
+          "timezone_reference": "Choose which timezone to use for displaying prices",
           "entsoe_api_key": "Required for using ENTSO-E as a data source",
           "clear_cache": "Clear the price cache to force a fresh data fetch",
           "stromligning_supplier": "Complete list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"

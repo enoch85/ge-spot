@@ -4,16 +4,16 @@ from typing import Dict, List, Optional
 from ..api.base.data_structure import PriceStatistics
 
 
-def calculate_statistics(hourly_prices: Dict[str, float]) -> PriceStatistics:
-    """Calculate price statistics from a dictionary of hourly prices.
+def calculate_statistics(interval_prices: Dict[str, float]) -> PriceStatistics:
+    """Calculate price statistics from a dictionary of interval prices.
 
     Args:
-        hourly_prices: Dictionary with hour keys (HH:00) and price values
+        interval_prices: Dictionary with interval keys (HH:MM) and price values
 
     Returns:
         PriceStatistics object with min, max, average, median values
     """
-    prices = [p for p in hourly_prices.values() if p is not None]
+    prices = [p for p in interval_prices.values() if p is not None]
     if not prices:
         return PriceStatistics(complete_data=False)
 

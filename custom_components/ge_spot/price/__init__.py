@@ -31,9 +31,9 @@ class ElectricityPriceAdapter:
         """Process the data to extract prices and statistics."""
         # Initialize default empty values
         self.current_price = None
-        self.next_hour_price = None
-        self.hourly_prices = {}
-        self.tomorrow_hourly_prices = {}
+        self.next_interval_price = None
+        self.interval_prices = {}
+        self.tomorrow_interval_prices = {}
         self.prices_tomorrow_updated = False
         self.min_price = None
         self.max_price = None
@@ -45,20 +45,20 @@ class ElectricityPriceAdapter:
                 continue
 
             # Extract prices
-            if "hourly_prices" in data and data["hourly_prices"]:
-                self.hourly_prices.update(data["hourly_prices"])
+            if "interval_prices" in data and data["interval_prices"]:
+                self.interval_prices.update(data["interval_prices"])
 
             # Extract tomorrow's prices if available
-            if "tomorrow_hourly_prices" in data and data["tomorrow_hourly_prices"]:
-                self.tomorrow_hourly_prices.update(data["tomorrow_hourly_prices"])
+            if "tomorrow_interval_prices" in data and data["tomorrow_interval_prices"]:
+                self.tomorrow_interval_prices.update(data["tomorrow_interval_prices"])
                 self.prices_tomorrow_updated = data.get("has_tomorrow_prices", False)
 
-            # Current and next hour prices
+            # Current and next interval prices
             if "current_price" in data and data["current_price"] is not None:
                 self.current_price = data["current_price"]
 
-            if "next_hour_price" in data and data["next_hour_price"] is not None:
-                self.next_hour_price = data["next_hour_price"]
+            if "next_interval_price" in data and data["next_interval_price"] is not None:
+                self.next_interval_price = data["next_interval_price"]
 
             # Statistics
             if "statistics" in data and data["statistics"]:
@@ -74,17 +74,17 @@ class ElectricityPriceAdapter:
         """Get all prices.
 
         Returns:
-            Dictionary with hourly prices
+            Dictionary with interval prices
         """
-        return self.hourly_prices
+        return self.interval_prices
 
     def get_tomorrow_prices(self):
         """Get tomorrow's prices if available.
 
         Returns:
-            Dictionary with tomorrow's hourly prices
+            Dictionary with tomorrow's interval prices
         """
-        return self.tomorrow_hourly_prices
+        return self.tomorrow_interval_prices
 
     def get_current_price(self):
         """Get the current price.
@@ -95,12 +95,12 @@ class ElectricityPriceAdapter:
         return self.current_price
 
     def get_next_price(self):
-        """Get the next hour price.
+        """Get the next interval price.
 
         Returns:
-            Next hour price or None if not available
+            Next interval price or None if not available
         """
-        return self.next_hour_price
+        return self.next_interval_price
 
     def get_min_price(self):
         """Get the minimum price.
@@ -132,7 +132,7 @@ class ElectricityPriceAdapter:
         Returns:
             True if tomorrow's prices are available, False otherwise
         """
-        return self.prices_tomorrow_updated and bool(self.tomorrow_hourly_prices)
+        return self.prices_tomorrow_updated and bool(self.tomorrow_interval_prices)
 
 # Export the compatibility class
 __all__ = ["ElectricityPriceAdapter"]
