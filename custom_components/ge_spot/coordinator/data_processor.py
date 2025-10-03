@@ -429,20 +429,15 @@ class DataProcessor:
         # ...
 
         parser_map = {
-            # Use API Class names as keys, matching what FallbackManager provides
-            "EntsoeAPI": EntsoeParser,
-            "NordpoolAPI": NordpoolPriceParser,
-            # Add mapping for Stromligning
-            "StromligningAPI": StromligningParser,
-            # Add mapping for EnergiDataService
-            "EnergiDataAPI": EnergiDataParser,
-            # Add mapping for OmieAPI
-            "OmieAPI": OmieParser,
-            # Add mapping for AemoAPI
-            "AemoAPI": AemoParser,
-            # Add mapping for EpexAPI
-            "EpexAPI": EpexParser,
-            # ... add mappings for other sources using their API class name ...
+            # Use lowercase source names from Source constants
+            Source.NORDPOOL: NordpoolPriceParser,
+            Source.ENTSOE: EntsoeParser,
+            Source.STROMLIGNING: StromligningParser,
+            Source.ENERGI_DATA_SERVICE: EnergiDataParser,
+            Source.OMIE: OmieParser,
+            Source.AEMO: AemoParser,
+            Source.EPEX: EpexParser,
+            # ... add mappings for other sources using Source.* constants ...
         }
 
         parser_class = parser_map.get(source_name)

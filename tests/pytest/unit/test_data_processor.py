@@ -39,12 +39,12 @@ from tests.lib.mocks.hass import MockHass
 
 # Sample test data for processing
 SAMPLE_RAW_DATA = {
-    "source": "NordpoolAPI",  # Use API class name to match parser map
+    "source": "nordpool",  # Use lowercase source name from Source constants
     "area": "SE4",
     "currency": "SEK",
     "timezone": "Europe/Stockholm",  # Use timezone key (not source_timezone)
     "unit": EnergyUnit.MWH,
-    "attempted_sources": ["NordpoolAPI"],  # Also update this
+    "attempted_sources": ["nordpool"],  # Use lowercase source name
     "error": None,
     # The NordpoolParser expects the actual API response under 'raw_data' key
     "raw_data": {

@@ -17,6 +17,13 @@ eggs/
 lib/
 lib64/
 parts/
+
+# Ignore most test library files but keep specific mocks
+tests/lib/*
+!tests/lib/mocks/
+tests/lib/mocks/*
+!tests/lib/mocks/__init__.py
+!tests/lib/mocks/hass.py
 sdist/
 var/
 wheels/
