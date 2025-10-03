@@ -4,7 +4,6 @@ import json
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List, Tuple
-from collections import defaultdict
 
 from ...const.sources import Source
 from ...timezone.timezone_utils import normalize_hour_value
@@ -12,6 +11,7 @@ from ...const.currencies import Currency
 from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
 from ...const.api import ComEd, SourceTimezone
+from ..interval_expander import convert_to_target_intervals
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -156,12 +156,9 @@ class ComedParser(BasePriceParser):
         if not isinstance(data, list) or not data:
             return
 
-        interval_prices = {}
-
-        # For 5-minute feed, we need to aggregate to 15-minute intervals
+        # For 5-minute feed, parse all prices then aggregate to target intervals
         if endpoint == ComEd.FIVE_MINUTE_FEED:
-            # Use defaultdict to automatically create empty lists for new 15-minute interval keys
-            interval_15min_prices = defaultdict(list)
+            five_min_prices = {}
 
             for item in data:
                 if "price" in item and "millisUTC" in item:
@@ -170,26 +167,22 @@ class ComedParser(BasePriceParser):
                         millis = int(item["millisUTC"])
                         timestamp = datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
                         price = float(item["price"])
-                        # Create ISO timestamp for 15-minute interval aggregation from 5-min data
-                        # Round down to nearest 15-minute interval: 00, 15, 30, 45
-                        minute_rounded = (timestamp.minute // 15) * 15
-                        interval_dt = timestamp.replace(minute=minute_rounded, second=0, microsecond=0)
-                        interval_key = interval_dt.isoformat()
-                        price_date = interval_dt.date().isoformat()
-                        # Add to 15-minute interval prices
-                        interval_15min_prices[interval_key].append(price)
+                        
+                        # Store with ISO timestamp (5-minute granularity)
+                        interval_key = timestamp.isoformat()
+                        five_min_prices[interval_key] = price
+                        
                         # Extract current price from first item if it's the most recent
                         if item == data[0]:
                             result["current_price"] = price
                     except (ValueError, TypeError) as e:
                         _LOGGER.debug(f"Skipping invalid data point: {e}")
                         continue
-            # Calculate average price for each 15-minute interval (averages 3x 5-min prices)
-            for interval_key, prices in interval_15min_prices.items():
-                if prices:
-                    # Simple average of all 5-minute prices within the 15-minute interval
-                    avg_price = sum(prices) / len(prices)
-                    result["interval_raw"][interval_key] = avg_price  # Changed from interval_prices
+            
+            # Use centralized conversion to convert 5-min data to target intervals
+            if five_min_prices:
+                converted_prices = convert_to_target_intervals(five_min_prices, source_interval_minutes=5)
+                result["interval_raw"].update(converted_prices)
 
         # For current hour average, just use the current price
         else:
@@ -207,9 +200,6 @@ class ComedParser(BasePriceParser):
                     result["interval_raw"][interval_key] = current_price  # Changed from interval_prices
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning(f"Failed to parse current hour price: {e}")
-
-        # Update result with interval prices
-        result["interval_raw"].update(interval_prices)  # Changed from interval_prices
 
     def _get_current_price(self, interval_raw: Dict[str, float]) -> Optional[float]:  # Changed from interval_prices
         """Get current interval price.

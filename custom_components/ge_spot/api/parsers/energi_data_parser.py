@@ -9,7 +9,7 @@ from ...const.currencies import Currency
 from ...utils.validation import validate_data
 from ...timezone.timezone_utils import normalize_hour_value
 from ..base.price_parser import BasePriceParser
-from ...const.energy import EnergyUnit # Add this import
+from ...const.energy import EnergyUnit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,20 +77,31 @@ class EnergiDataParser(BasePriceParser):
             return result
 
         # --- Parse interval prices from records ---
+        # DayAheadPrices dataset provides native 15-minute intervals (since Sept 30, 2025)
+        # No expansion needed - data is already in correct interval format
+        interval_prices_iso = {}
+        
         for record in records:
             try:
-                # Extract timestamp and price
-                if "HourDK" in record and "SpotPriceDKK" in record:
-                    # Parse timestamp
-                    timestamp_str = record["HourDK"]
+                # DayAheadPrices format: TimeDK and DayAheadPriceDKK
+                if "TimeDK" in record and "DayAheadPriceDKK" in record:
+                    timestamp_str = record["TimeDK"]
                     dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                     interval_key = dt.isoformat()
-                    price = float(record["SpotPriceDKK"])
-                    # Add to interval_raw
-                    result["interval_raw"][interval_key] = price
-                    _LOGGER.debug(f"Storing raw price for {interval_key}: {price} DKK/MWh")
+                    price = float(record["DayAheadPriceDKK"])
+                    interval_prices_iso[interval_key] = price
+                    _LOGGER.debug(f"Parsed interval price for {interval_key}: {price} DKK/MWh")
+                else:
+                    _LOGGER.warning(f"Record missing TimeDK or DayAheadPriceDKK: {record}")
             except (ValueError, TypeError) as e:
                 _LOGGER.debug(f"Failed to parse Energi Data Service record: {e}")
+
+        # Use interval prices directly - already in correct 15-minute format
+        if interval_prices_iso:
+            result["interval_raw"] = interval_prices_iso
+            _LOGGER.debug(f"Final interval_raw has {len(result['interval_raw'])} interval prices")
+        else:
+            _LOGGER.warning("No interval prices parsed from records")
 
         return result
 

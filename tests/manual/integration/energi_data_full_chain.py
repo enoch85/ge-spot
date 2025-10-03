@@ -23,6 +23,11 @@ import asyncio
 import pytz
 import logging
 import json
+import warnings
+
+# Suppress aiohttp ResourceWarning for unclosed sessions in tests
+# These warnings appear during event loop cleanup and don't indicate real problems
+warnings.filterwarnings("ignore", message="unclosed", category=ResourceWarning)
 
 # Add the root directory to the path so we can import the component modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
@@ -35,9 +40,16 @@ from custom_components.ge_spot.api.parsers.energi_data_parser import EnergiDataP
 # Danish price areas
 DANISH_AREAS = ['DK1', 'DK2']
 
-# Setup basic logging
-logging.basicConfig(level=logging.DEBUG)
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 _LOGGER = logging.getLogger(__name__)
+
+# Suppress asyncio warnings about unclosed sessions during cleanup
+# These are harmless in test context where the event loop is shutting down
+logging.getLogger('asyncio').setLevel(logging.CRITICAL)
 
 async def main():
     # Parse command line arguments
@@ -57,65 +69,68 @@ async def main():
         # Step 1: Fetch raw data
         _LOGGER.info(f"Fetching Energi Data Service data for area: {area}")
         raw_data_wrapper = await api.fetch_raw_data(area=area)
-        _LOGGER.debug(f"[EnergiDataService RAW DATA - {area}] Full raw_data object: {json.dumps(raw_data_wrapper, indent=2)}")
+        _LOGGER.debug(f"[EnergiDataService RAW DATA - {area}] Full raw_data object: {json.dumps(raw_data_wrapper, default=str, indent=2)}")
 
-        if not raw_data_wrapper or not raw_data_wrapper.get("raw_data"):
-            _LOGGER.error("Error: Failed to fetch raw data or raw_data key is missing/empty.")
+        if not raw_data_wrapper:
+            _LOGGER.error("Error: Failed to fetch data from Energi Data Service API")
             print("Error: Failed to fetch data from Energi Data Service API")
             return 1
 
-        # Extract the actual API responses for today and tomorrow
-        api_response_today = raw_data_wrapper.get("raw_data", {}).get("today")
-        api_response_tomorrow = raw_data_wrapper.get("raw_data", {}).get("tomorrow")
+        # Step 2: Parse the raw data
+        _LOGGER.info(f"Parsing Energi Data Service data...")
+        parser = api.get_parser_for_area(area)
+        parsed_data = parser.parse(raw_data_wrapper)
+        
+        if not parsed_data:
+            _LOGGER.error("Error: Failed to parse data")
+            print("Error: Failed to parse data")
+            return 1
+        
+        # Check if we have interval_raw (the processed prices)
+        if "interval_raw" not in parsed_data:
+            _LOGGER.error("Error: interval_raw key is missing from parsed data.")
+            print("Error: No interval prices in parsed data")
+            return 1
+        
+        interval_raw_prices = parsed_data.get("interval_raw", {})
+        
+        # Extract the actual API responses for today and tomorrow if available in nested structure
+        nested_raw = raw_data_wrapper.get("raw_data", {})
+        api_response_today = nested_raw.get("today") if isinstance(nested_raw, dict) else None
+        api_response_tomorrow = nested_raw.get("tomorrow") if isinstance(nested_raw, dict) else None
 
-        if not api_response_today:
-            _LOGGER.warning("Warning: No raw data found for today.")
-
-        # Print a sample of the raw data
-        print(f"Raw data wrapper type: {type(raw_data_wrapper)}")
         if api_response_today:
             print(f"Today's raw data sample (truncated): {str(api_response_today)[:300]}...")
             if isinstance(api_response_today, dict) and 'records' in api_response_today:
-                print(f"Number of records today: {len(api_response_today['records'])}")
+                print(f"Number of hourly records today: {len(api_response_today['records'])}")
                 if api_response_today['records']:
                     print(f"First record sample today: {api_response_today['records'][0]}")
         if api_response_tomorrow:
             print(f"Tomorrow's raw data sample (truncated): {str(api_response_tomorrow)[:300]}...")
             if isinstance(api_response_tomorrow, dict) and 'records' in api_response_tomorrow:
-                print(f"Number of records tomorrow: {len(api_response_tomorrow['records'])}")
+                print(f"Number of hourly records tomorrow: {len(api_response_tomorrow['records'])}")
 
-        # Step 2: Parse raw data using the specific parser
-        print("\nParsing raw data...")
-        parser = EnergiDataParser()
+        # Print info about the expanded interval data
+        print(f"\nExpanded interval prices: {len(interval_raw_prices)} intervals")
+        print(f"Currency: {raw_data_wrapper.get('currency', Currency.DKK)}")
+        print(f"Timezone: {raw_data_wrapper.get('timezone', 'Europe/Copenhagen')}")
 
-        # Combine records from today and tomorrow if available
-        all_records = []
-        if api_response_today and isinstance(api_response_today.get("records"), list):
-            all_records.extend(api_response_today["records"])
-        if api_response_tomorrow and isinstance(api_response_tomorrow.get("records"), list):
-            all_records.extend(api_response_tomorrow["records"])
-
-        if not all_records:
-            _LOGGER.error("Error: No records found in today's or tomorrow's data to parse.")
-            return 1
-
-        data_to_parse = {"records": all_records}
-        parsed_data = parser.parse(data_to_parse)
-
-        # Add metadata back from the wrapper if needed
-        parsed_data["area"] = raw_data_wrapper.get("area", area)
-        parsed_data["source"] = raw_data_wrapper.get("source", Source.ENERGI_DATA_SERVICE)
-        parsed_data["currency"] = raw_data_wrapper.get("currency", Currency.DKK)
-        parsed_data["timezone"] = raw_data_wrapper.get("timezone", "Europe/Copenhagen")
-
-        print(f"Parsed data keys: {list(parsed_data.keys())}")
-        interval_raw_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
         if not interval_raw_prices:
-            print("Warning: No interval prices (interval_raw) found in the parsed data")
-            print(f"Available keys: {list(parsed_data.keys())}")
+            _LOGGER.error("Error: No interval prices found in the response.")
             return 1
 
-        print(f"Found {len(interval_raw_prices)} interval prices (raw)")
+        # Step 2: The data is already parsed and expanded - use it directly
+        print("\nUsing already-parsed interval data...")
+        
+        parsed_data = {
+            "interval_raw": interval_raw_prices,
+            "area": raw_data_wrapper.get("area", area),
+            "source": raw_data_wrapper.get("source", Source.ENERGI_DATA_SERVICE),
+            "currency": raw_data_wrapper.get("currency", Currency.DKK),
+            "timezone": raw_data_wrapper.get("timezone", "Europe/Copenhagen")
+        }
+
+        print(f"Found {len(interval_raw_prices)} interval prices (already expanded from hourly)")
 
         # Step 3: Currency conversion (DKK -> EUR)
         print("\nConverting prices from DKK to EUR...")
@@ -166,16 +181,23 @@ async def main():
             today_prices = prices_by_date[today]
             print(f"\nFound {len(today_prices)} price points for today ({today})")
 
-            if len(today_prices) == 24:
-                print("✓ Complete set of 24 hourly prices for today")
+            # Native 15-minute intervals: expect 96 per day (4 per hour × 24 hours)
+            expected_intervals = 96
+            if len(today_prices) == expected_intervals:
+                print(f"✓ Complete set of {expected_intervals} 15-minute intervals for today")
+            elif len(today_prices) >= expected_intervals * 0.9:
+                print(f"✓ Nearly complete data: Found {len(today_prices)} 15-minute intervals (expected {expected_intervals})")
             else:
-                print(f"⚠ Incomplete data: Found {len(today_prices)} hourly prices for today (expected 24)")
+                print(f"⚠ Incomplete data: Found {len(today_prices)} 15-minute intervals for today (expected {expected_intervals})")
 
-                all_hours = set(f"{h:02d}:00" for h in range(24))
-                found_hours = set(today_prices.keys())
-                missing_hours = all_hours - found_hours
-                if missing_hours:
-                    print(f"Missing hours: {', '.join(sorted(missing_hours))}")
+                # Show first few missing intervals if any
+                all_intervals = set(f"{h:02d}:{m:02d}" for h in range(24) for m in [0, 15, 30, 45])
+                found_intervals = set(today_prices.keys())
+                missing_intervals = all_intervals - found_intervals
+                if missing_intervals:
+                    missing_list = sorted(missing_intervals)[:10]  # Show first 10
+                    more = f" (and {len(missing_intervals) - 10} more)" if len(missing_intervals) > 10 else ""
+                    print(f"Missing intervals: {', '.join(missing_list)}{more}")
         else:
             print(f"\nWarning: No prices found for today ({today})")
 
@@ -197,6 +219,10 @@ async def main():
         import traceback
         traceback.print_exc()
         return 1
+    finally:
+        # Add a delay to allow any pending async operations to complete
+        # This helps avoid "Unclosed client session" warnings from aiohttp
+        await asyncio.sleep(0.5)
 
     return 0
 
