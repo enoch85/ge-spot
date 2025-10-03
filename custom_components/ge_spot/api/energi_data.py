@@ -20,7 +20,9 @@ from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
-BASE_URL = "https://api.energidataservice.dk/dataset/Elspotprices"
+# Since September 30, 2025: DayAheadPrices provides native 15-minute intervals
+# Before: Elspotprices provided hourly data
+BASE_URL = "https://api.energidataservice.dk/dataset/DayAheadPrices"
 
 class EnergiDataAPI(BasePriceAPI):
     """API client for Energi Data Service."""
@@ -183,7 +185,7 @@ class EnergiDataAPI(BasePriceAPI):
                 "start": f"{start_str}T00:00",
                 "end": f"{end_str}T00:00",
                 "filter": json.dumps({"PriceArea": area_code}),
-                "sort": "HourDK",
+                "sort": "TimeDK",
                 "timezone": "dk",
             }
 
