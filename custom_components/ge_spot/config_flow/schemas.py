@@ -157,10 +157,10 @@ def get_options_schema(defaults, supported_sources, area):
     # Add API key fields for sources that require it
     if Source.ENTSOE in supported_sources:
         current_api_key = defaults.get(Config.API_KEY, "")
-        api_key_status = "API key configured" if current_api_key else "No API key configured"
         schema[vol.Optional(
             f"{Source.ENTSOE}_api_key",
-            description=f"Current status: {api_key_status}"
+            default=current_api_key,
+            description=f"{'API key configured' if current_api_key else 'Enter API key for ENTSO-E'}"
         )] = FormHelper.create_api_key_selector()
 
     # Add Stromligning Supplier Field Conditionally, after ENTSO-E API key

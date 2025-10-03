@@ -12,7 +12,7 @@ as a command-line argument.
 Examples:
     # Test ENTSOE API for the SE3 area
     python -m tests.python3.api.entsoe_test SE3
-    
+
     # Test Nordpool API for the FI area
     python -m tests.python3.api.nordpool_test FI
 

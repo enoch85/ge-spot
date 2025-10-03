@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 from ...timezone.service import TimezoneService
 from ...const.sources import Source
+from ...const.time import TimeInterval
 from ...timezone.timezone_utils import get_timezone_object # Import helper
 import pytz # Import pytz for robust timezone handling
 
@@ -47,10 +48,10 @@ class BasePriceParser(ABC):
         """
         metadata = {
             "source": self.source,
-            "price_count": len(data.get("hourly_prices", {})),
+            "price_count": len(data.get("interval_raw", {})),
             "currency": data.get("currency", "EUR"),
             "has_current_price": "current_price" in data and data["current_price"] is not None,
-            "has_next_hour_price": "next_hour_price" in data and data["next_hour_price"] is not None,
+            "has_next_interval_price": "next_interval_price" in data and data["next_interval_price"] is not None,
             "parser_version": "2.0",  # Add version for tracking changes
             "parsed_at": datetime.now(timezone.utc).isoformat()
         }
@@ -66,24 +67,24 @@ class BasePriceParser(ABC):
         Returns:
             True if data is valid, False otherwise
         """
-        # Check if hourly_raw exists and is a dict
-        if "hourly_raw" not in data or not isinstance(data["hourly_raw"], dict):
-            _LOGGER.warning(f"{self.source}: Missing or invalid hourly_raw")
+        # Check if interval_raw exists and is a dict
+        if "interval_raw" not in data or not isinstance(data["interval_raw"], dict):
+            _LOGGER.warning(f"{self.source}: Missing or invalid interval_raw")
             return False
 
         # Check if there are any prices
-        if not data["hourly_raw"]:
-            _LOGGER.warning(f"{self.source}: No hourly prices found in hourly_raw")
+        if not data["interval_raw"]:
+            _LOGGER.warning(f"{self.source}: No interval prices found in interval_raw")
             return False
 
-        # Check if current hour price is available when expected
-        current_price = self._get_current_price(data["hourly_raw"])
+        # Check if current interval price is available when expected
+        current_price = self._get_current_price(data["interval_raw"])
         if current_price is None:
-            _LOGGER.warning(f"{self.source}: Current hour price not found in hourly_raw")
-            # Allow validation to pass even if current hour is missing (e.g., data for future only)
+            _LOGGER.warning(f"{self.source}: Current interval price not found in interval_raw")
+            # Allow validation to pass even if current interval is missing (e.g., data for future only)
             # return False # Temporarily commented out to allow future data validation
 
-        # Check if next hour price is available when it should be (within the same target timezone day)
+        # Check if next interval price is available when it should be (within the same target timezone day)
         target_tz = self.timezone_service.target_timezone # FIX: Access attribute directly
         if target_tz:
             now_target = datetime.now(target_tz)
@@ -92,10 +93,10 @@ class BasePriceParser(ABC):
             # Check if the *start* of the next hour in the target timezone is still on the same *calendar day* as *now* in the target timezone.
             # This determines if we *expect* the next hour's price to be part of the current day's data fetch.
             if next_hour_start_target.date() == now_target.date():
-                next_price = self._get_next_hour_price(data["hourly_raw"])
+                next_price = self._get_next_interval_price(data["interval_raw"])
                 if next_price is None:
-                    _LOGGER.warning(f"{self.source}: Next hour price expected within the same day ({now_target.date()}) but not found in hourly_raw")
-                    # Allow validation to pass if next hour is missing, might be end of day data
+                    _LOGGER.warning(f"{self.source}: Next interval price expected within the same day ({now_target.date()}) but not found in interval_raw")
+                    # Allow validation to pass if next interval is missing, might be end of day data
                     # return False # Temporarily commented out
         else:
             _LOGGER.warning(f"{self.source}: Target timezone not available in TimezoneService, skipping next hour price validation.")
@@ -308,13 +309,13 @@ class BasePriceParser(ABC):
 
                 # Convert UTC time to target timezone
                 dt_target = dt_utc.astimezone(target_timezone)
-                hour_key = dt_target.strftime("%H:%M")
+                interval_key = dt_target.strftime("%H:%M")
 
                 # Check for duplicates before assigning
-                if hour_key in normalized_prices[day_type]:
-                     _LOGGER.warning(f"Duplicate hour key '{hour_key}' encountered for '{day_type}'. Overwriting with value for {timestamp_key}.")
+                if interval_key in normalized_prices[day_type]:
+                     _LOGGER.warning(f"Duplicate interval key '{interval_key}' encountered for '{day_type}'. Overwriting with value for {timestamp_key}.")
 
-                normalized_prices[day_type][hour_key] = price
+                normalized_prices[day_type][interval_key] = price
 
             except ValueError as e:
                 _LOGGER.warning(f"Skipping invalid timestamp key '{timestamp_key}': {e}")
@@ -324,65 +325,72 @@ class BasePriceParser(ABC):
         _LOGGER.debug(f"Normalized {len(prices)} timestamps into: today({len(normalized_prices['today'])}), tomorrow({len(normalized_prices['tomorrow'])}), other({len(normalized_prices['other'])})")
         return normalized_prices
 
-    def _get_current_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:
-        """Get the current hour's price from the hourly_raw data."""
-        if not hourly_raw:
-            _LOGGER.warning(f"{self.source}: No hourly_raw prices found to determine current price.")
+    def _get_current_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
+        """Get the current interval's price from the interval_raw data."""
+        if not interval_raw:
+            _LOGGER.warning(f"{self.source}: No interval_raw prices found to determine current price.")
             return None
 
         now_utc = datetime.now(timezone.utc)
-        current_hour_utc = now_utc.replace(minute=0, second=0, microsecond=0)
+        # Round down to nearest interval boundary (e.g., 21:20 → 21:15 for 15-min intervals)
+        interval_minutes = TimeInterval.get_interval_minutes()
+        minute = (now_utc.minute // interval_minutes) * interval_minutes
+        current_interval_utc = now_utc.replace(minute=minute, second=0, microsecond=0)
 
         # Try finding the price using the ISO format key (most reliable)
-        iso_key = current_hour_utc.isoformat()
-        if iso_key in hourly_raw:
-            return hourly_raw[iso_key]
+        iso_key = current_interval_utc.isoformat()
+        if iso_key in interval_raw:
+            return interval_raw[iso_key]
 
         # Fallback: Iterate through keys and compare datetime objects (less efficient)
-        for key, price in hourly_raw.items():
+        for key, price in interval_raw.items():
             try:
                 dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
                 # Ensure comparison is timezone-aware (both should be UTC)
-                if dt == current_hour_utc:
+                if dt == current_interval_utc:
                     return price
             except (ValueError, TypeError):
-                _LOGGER.debug(f"Skipping invalid key format in hourly_raw: {key}")
+                _LOGGER.debug(f"Skipping invalid key format in interval_raw: {key}")
                 continue
 
-        _LOGGER.warning(f"{self.source}: Could not find current hour price for {iso_key}")
+        _LOGGER.warning(f"{self.source}: Could not find current interval price for {iso_key}")
         return None
 
-    def _get_next_hour_price(self, hourly_raw: Dict[str, float]) -> Optional[float]:
-        """Get the next hour's price from the hourly_raw data."""
-        if not hourly_raw:
-            _LOGGER.warning(f"{self.source}: No hourly_raw prices found to determine next hour price.")
+    def _get_next_interval_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
+        """Get the next interval's price from the interval_raw data."""
+        if not interval_raw:
+            _LOGGER.warning(f"{self.source}: No interval_raw prices found to determine next interval price.")
             return None
 
         now_utc = datetime.now(timezone.utc)
-        next_hour_utc = (now_utc.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+        # Round down to nearest interval boundary, then add one interval
+        interval_minutes = TimeInterval.get_interval_minutes()
+        minute = (now_utc.minute // interval_minutes) * interval_minutes
+        current_interval_utc = now_utc.replace(minute=minute, second=0, microsecond=0)
+        next_interval_utc = current_interval_utc + timedelta(minutes=interval_minutes)
 
         # Try finding the price using the ISO format key
-        iso_key = next_hour_utc.isoformat()
-        if iso_key in hourly_raw:
-            return hourly_raw[iso_key]
+        iso_key = next_interval_utc.isoformat()
+        if iso_key in interval_raw:
+            return interval_raw[iso_key]
 
         # Fallback: Iterate through keys
-        for key, price in hourly_raw.items():
+        for key, price in interval_raw.items():
             try:
                 dt = datetime.fromisoformat(key.replace('Z', '+00:00'))
-                if dt == next_hour_utc:
+                if dt == next_interval_utc:
                     return price
             except (ValueError, TypeError):
-                _LOGGER.debug(f"Skipping invalid key format in hourly_raw: {key}")
+                _LOGGER.debug(f"Skipping invalid key format in interval_raw: {key}")
                 continue
 
-        _LOGGER.warning(f"{self.source}: Could not find next hour price for {iso_key}")
+        _LOGGER.warning(f"{self.source}: Could not find next interval price for {iso_key}")
         return None
 
-    def _calculate_day_average(self, hourly_raw: Dict[str, float], day: str = "today") -> Optional[float]:
-        """Calculate day average price from hourly_raw data."""
-        if not hourly_raw:
-            _LOGGER.warning(f"{self.source}: No hourly_raw prices found to calculate average.")
+    def _calculate_day_average(self, interval_raw: Dict[str, float], day: str = "today") -> Optional[float]:
+        """Calculate day average price from interval_raw data."""
+        if not interval_raw:
+            _LOGGER.warning(f"{self.source}: No interval_raw prices found to calculate average.")
             return None
 
         target_date = datetime.now(timezone.utc).date()
@@ -392,33 +400,49 @@ class BasePriceParser(ABC):
              _LOGGER.warning(f"Invalid day specified for average calculation: {day}. Defaulting to today.")
 
         day_prices = []
-        for hour_key, price in hourly_raw.items():
+        for interval_key, price in interval_raw.items():
             try:
                 # Ensure keys are parsed as UTC
-                hour_dt = datetime.fromisoformat(hour_key.replace('Z', '+00:00')).astimezone(timezone.utc)
-                if hour_dt.date() == target_date:
+                interval_dt = datetime.fromisoformat(interval_key.replace('Z', '+00:00')).astimezone(timezone.utc)
+                if interval_dt.date() == target_date:
                     day_prices.append(price)
             except (ValueError, TypeError):
-                _LOGGER.debug(f"Skipping invalid key format in hourly_raw: {hour_key}")
+                _LOGGER.debug(f"Skipping invalid key format in interval_raw: {interval_key}")
                 continue
 
         if not day_prices:
              _LOGGER.warning(f"{self.source}: No prices found for {day} ({target_date}) to calculate average.")
              return None
 
-        # Consider if a minimum number of hours is required for a meaningful average
-        # if len(day_prices) < 12: # Example threshold
+        # Consider if a minimum number of intervals is required for a meaningful average
+        # if len(day_prices) < 48: # Example threshold for 15-min intervals
         #     _LOGGER.warning(f"{self.source}: Not enough data points ({len(day_prices)}) for {day} average.")
         #     return None
 
         return sum(day_prices) / len(day_prices)
 
-    def calculate_peak_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-         if not hourly_prices:
-             return None
-         return max(hourly_prices.values()) if hourly_prices else None
+    def calculate_peak_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+         """Calculate the peak (maximum) price from interval prices.
 
-    def calculate_off_peak_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-         if not hourly_prices:
+         Args:
+             interval_prices: Dictionary of interval prices
+
+         Returns:
+             Maximum price value or None
+         """
+         if not interval_prices:
              return None
-         return min(hourly_prices.values()) if hourly_prices else None
+         return max(interval_prices.values()) if interval_prices else None
+
+    def calculate_off_peak_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+         """Calculate the off-peak (minimum) price from interval prices.
+
+         Args:
+             interval_prices: Dictionary of interval prices
+
+         Returns:
+             Minimum price value or None
+         """
+         if not interval_prices:
+             return None
+         return min(interval_prices.values()) if interval_prices else None

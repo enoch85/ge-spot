@@ -28,10 +28,10 @@ class StromligningParser(BasePriceParser):
             raw_data: Raw API response data
 
         Returns:
-            Parsed data with hourly prices
+            Parsed data with interval prices
         """
         result = {
-            "hourly_raw": {},
+            "interval_raw": {},
             "currency": Currency.DKK,
             "timezone": "Europe/Copenhagen",
             "source_unit": EnergyUnit.KWH # Stromligning provides prices in kWh
@@ -158,7 +158,7 @@ class StromligningParser(BasePriceParser):
                         # ISO format
                         dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
                         # Create ISO formatted timestamp key
-                        hour_key = dt.isoformat()
+                        interval_key = dt.isoformat()
                         price_date = dt.date().isoformat()
 
                         # --- Price Extraction Logic Change ---
@@ -167,9 +167,9 @@ class StromligningParser(BasePriceParser):
                         if "value" in price_data["price"]:
                             try:
                                 price_value = float(price_data["price"]["value"])
-                                _LOGGER.debug(f"Using primary price.value for {hour_key}: {price_value}")
+                                _LOGGER.debug(f"Using primary price.value for {interval_key}: {price_value}")
                             except (ValueError, TypeError):
-                                _LOGGER.warning(f"Could not parse primary price value: {price_data['price'].get('value')} for {hour_key}")
+                                _LOGGER.warning(f"Could not parse primary price value: {price_data['price'].get('value')} for {interval_key}")
 
                         # Fallback to details.electricity.value if primary fails (less likely now)
                         if price_value is None and "details" in price_data and isinstance(price_data["details"], dict):
@@ -178,28 +178,28 @@ class StromligningParser(BasePriceParser):
                                 if "value" in electricity:
                                     try:
                                         price_value = float(electricity["value"])
-                                        _LOGGER.debug(f"Using fallback electricity.value as price for {hour_key}: {price_value}")
+                                        _LOGGER.debug(f"Using fallback electricity.value as price for {interval_key}: {price_value}")
                                     except (ValueError, TypeError):
-                                        _LOGGER.warning(f"Could not parse fallback electricity value: {electricity.get('value')} for {hour_key}")
+                                        _LOGGER.warning(f"Could not parse fallback electricity value: {electricity.get('value')} for {interval_key}")
                         # --- End Price Extraction Logic Change ---
 
                         if price_value is not None:
                             # Store original price value in DKK/kWh
-                            result["hourly_raw"][hour_key] = price_value  # Store raw price in DKK/kWh
-                            _LOGGER.debug(f"Storing raw price for {hour_key}: {price_value} DKK/kWh")
+                            result["interval_raw"][interval_key] = price_value  # Store raw price in DKK/kWh
+                            _LOGGER.debug(f"Storing raw price for {interval_key}: {price_value} DKK/kWh")
                         else:
-                            _LOGGER.warning(f"No valid price found in Stromligning data for hour {hour_key}")
+                            _LOGGER.warning(f"No valid price found in Stromligning data for hour {interval_key}")
 
                         # Extract price components from details for internal storage/debugging
                         if "details" in price_data and isinstance(price_data["details"], dict):
-                            self._price_components[hour_key] = {}
+                            self._price_components[interval_key] = {}
                             for component_name, component_data in price_data["details"].items():
                                 if isinstance(component_data, dict) and "value" in component_data:
                                     try:
                                         component_value = float(component_data["value"])
-                                        self._price_components[hour_key][component_name] = component_value
+                                        self._price_components[interval_key][component_name] = component_value
                                     except (ValueError, TypeError):
-                                        _LOGGER.debug(f"Could not parse component '{component_name}' value: {component_data.get('value')} for {hour_key}")
+                                        _LOGGER.debug(f"Could not parse component '{component_name}' value: {component_data.get('value')} for {interval_key}")
 
                                 # Handle nested components like transmission
                                 elif isinstance(component_data, dict):
@@ -207,9 +207,9 @@ class StromligningParser(BasePriceParser):
                                         if isinstance(sub_data, dict) and "value" in sub_data:
                                             try:
                                                 sub_value = float(sub_data["value"])
-                                                self._price_components[hour_key][f"{component_name}.{sub_name}"] = sub_value
+                                                self._price_components[interval_key][f"{component_name}.{sub_name}"] = sub_value
                                             except (ValueError, TypeError):
-                                                _LOGGER.debug(f"Could not parse nested component '{component_name}.{sub_name}' value: {sub_data.get('value')} for {hour_key}")
+                                                _LOGGER.debug(f"Could not parse nested component '{component_name}.{sub_name}' value: {sub_data.get('value')} for {interval_key}")
                     except (ValueError, TypeError) as e:
                         _LOGGER.debug(f"Failed to parse Stromligning timestamp: {timestamp_str} - {e}")
                 except Exception as e: # Catch broader errors during item processing
@@ -255,38 +255,38 @@ class StromligningParser(BasePriceParser):
             _LOGGER.warning(f"Failed to parse timestamp: {timestamp_str}")
             return None
 
-    def _get_current_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get current hour price.
+    def _get_current_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+        """Get current interval price.
 
         Args:
-            hourly_prices: Dictionary of hourly prices
+            interval_prices: Dictionary of interval prices
 
         Returns:
-            Current hour price or None if not available
+            Current interval price or None if not available
         """
-        if not hourly_prices:
+        if not interval_prices:
             return None
 
         now = datetime.now(timezone.utc)
         current_hour = now.replace(minute=0, second=0, microsecond=0)
-        current_hour_key = current_hour.isoformat()
+        current_interval_key = current_hour.isoformat()
 
-        return hourly_prices.get(current_hour_key)
+        return interval_prices.get(current_interval_key)
 
-    def _get_next_hour_price(self, hourly_prices: Dict[str, float]) -> Optional[float]:
-        """Get next hour price.
+    def _get_next_interval_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+        """Get next interval price.
 
         Args:
-            hourly_prices: Dictionary of hourly prices
+            interval_prices: Dictionary of interval prices
 
         Returns:
-            Next hour price or None if not available
+            Next interval price or None if not available
         """
-        if not hourly_prices:
+        if not interval_prices:
             return None
 
         now = datetime.now(timezone.utc)
         next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        next_hour_key = next_hour.isoformat()
+        next_interval_key = next_hour.isoformat()
 
-        return hourly_prices.get(next_hour_key)
+        return interval_prices.get(next_interval_key)

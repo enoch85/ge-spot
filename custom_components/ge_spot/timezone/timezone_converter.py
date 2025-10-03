@@ -39,7 +39,7 @@ class TimezoneConverter:
                 source_tz = get_timezone_object(source_timezone_str)
                 if source_tz:
                     try:
-                        dt = source_tz.localize(dt)
+                        dt = source_tz.localize(dt)  # type: ignore[attr-defined]  # pytz has localize, zoneinfo doesn't
                     except AttributeError:
                         # If timezone object doesn't have localize method (e.g., zoneinfo)
                         dt = dt.replace(tzinfo=source_tz)
@@ -57,36 +57,36 @@ class TimezoneConverter:
             _LOGGER.error(f"Error parsing datetime '{iso_datetime_str}': {e}")
             return None
 
-    def normalize_hourly_prices(
+    def normalize_interval_prices(
         self,
-        hourly_prices: Dict[str, Any],
+        interval_prices: Dict[str, Any],
         source_timezone_str: Optional[str] = None,
         preserve_date: bool = True
     ) -> Dict[str, Any]:
-        """Normalizes timestamps in the hourly price dictionary to the target timezone.
+        """Normalizes timestamps in the interval price dictionary to the target timezone.
 
         Args:
-            hourly_prices: Dictionary of raw hourly prices with timestamps as keys.
+            interval_prices: Dictionary of raw interval prices with timestamps as keys.
             source_timezone_str: Optional timezone string if known from the source API.
             preserve_date: Whether to include date in the key format (for differentiating today/tomorrow)
 
         Returns:
-            A dictionary with timestamps normalized to the format 'HH:00' or 'YYYY-MM-DD HH:00' in the target timezone.
+            A dictionary with timestamps normalized to the format 'HH:MM' or 'YYYY-MM-DD HH:MM' in the target timezone.
         """
-        if not hourly_prices:
+        if not interval_prices:
             return {}
 
         _LOGGER.debug(
-            "Normalizing %d hourly price timestamps using target timezone: %s (preserve_date=%s)",
-            len(hourly_prices),
+            "Normalizing %d interval price timestamps using target timezone: %s (preserve_date=%s)",
+            len(interval_prices),
             self._tz_service.target_timezone,
             preserve_date
         )
 
         normalized_prices = {}
         try:
-            # Process each ISO timestamp to target timezone hour format
-            for iso_key, price_data in hourly_prices.items():
+            # Process each ISO timestamp to target timezone interval format
+            for iso_key, price_data in interval_prices.items():
                 # Parse the ISO timestamp to datetime with timezone
                 dt = self.parse_datetime_with_tz(iso_key, source_timezone_str)
                 if dt is None:
@@ -96,31 +96,39 @@ class TimezoneConverter:
                 # Convert to target timezone
                 target_dt = dt.astimezone(self._tz_service.target_timezone)
 
-                # Format as 'HH:00' or 'YYYY-MM-DD HH:00' in target timezone
+                # Format as 'HH:MM' or 'YYYY-MM-DD HH:MM' in target timezone
                 if preserve_date:
-                    target_key = f"{target_dt.date().isoformat()} {target_dt.hour:02d}:00"
+                    target_key = f"{target_dt.date().isoformat()} {target_dt.hour:02d}:{target_dt.minute:02d}"
                     # Store date in price data for sorting/filtering if it's a dict
                     if isinstance(price_data, dict):
                         price_data["date"] = target_dt.date().isoformat()
                 else:
-                    target_key = f"{target_dt.hour:02d}:00"
+                    target_key = f"{target_dt.hour:02d}:{target_dt.minute:02d}"
 
                 # Handle potential DST fallback duplicates
+                # Only log as DST fallback if the keys don't have dates (when preserve_date=False)
+                # With preserve_date=True, duplicates across days are normal (e.g., "2025-10-02 00:00" and "2025-10-03 00:00")
                 if target_key in normalized_prices:
-                    _LOGGER.debug(f"Duplicate hour found: {target_key} - handling DST fallback")
+                    if preserve_date:
+                        # With dates, this is just a different day - overwrite is expected
+                        _LOGGER.debug(f"Duplicate interval key found: {target_key} - overwriting with newer value (likely next day)")
+                    else:
+                        # Without dates, this could be genuine DST fallback (same hour repeating in one day)
+                        _LOGGER.debug(f"Duplicate interval found: {target_key} - handling DST fallback")
                     # In case of DST fallback, use the second occurrence
-                    # This aligns with how most energy markets handle the extra hour
+                    # This aligns with how most energy markets handle the extra interval
 
                 # Store the price
                 normalized_prices[target_key] = price_data if isinstance(price_data, dict) else price_data
 
             _LOGGER.debug("Normalization complete. Result keys: %s", list(normalized_prices.keys())[:5] + ["..."] if len(normalized_prices) > 5 else list(normalized_prices.keys()))
+            _LOGGER.debug(f"Normalization summary: Input had {len(interval_prices)} prices, output has {len(normalized_prices)} normalized prices")
 
         except Exception as e:
             _LOGGER.error(
                 "Error during timezone normalization: %s. Input keys: %s",
                 e,
-                list(hourly_prices.keys()),
+                list(interval_prices.keys()),
                 exc_info=True
             )
             return {}
@@ -131,7 +139,7 @@ class TimezoneConverter:
         self,
         normalized_prices: Dict[str, Any]
     ) -> tuple[Dict[str, Any], Dict[str, Any]]:
-        """Split normalized hourly prices into today and tomorrow buckets.
+        """Split normalized interval prices into today and tomorrow buckets.
 
         Args:
             normalized_prices: Dictionary of prices already normalized to target timezone
@@ -153,39 +161,41 @@ class TimezoneConverter:
 
         # Check if keys have date information (like '2025-04-29 10:00')
         has_date_in_keys = any(" " in key for key in normalized_prices.keys())
+        
+        _LOGGER.debug(f"split_into_today_tomorrow: Received {len(normalized_prices)} normalized prices. has_date_in_keys={has_date_in_keys}. Sample keys: {list(normalized_prices.keys())[:5]}")
 
         if has_date_in_keys:
             # Keys already have date info, we can directly separate today and tomorrow
             for key, price in normalized_prices.items():
                 date_part = key.split(" ")[0]
-                hour_part = key.split(" ")[1]
+                interval_part = key.split(" ")[1]
 
                 if date_part == today_date_str:
-                    today_prices[hour_part] = price
+                    today_prices[interval_part] = price
                 elif date_part == tomorrow_date_str:
-                    tomorrow_prices[hour_part] = price
+                    tomorrow_prices[interval_part] = price
         else:
-            # Use the original logic with hour ranges
-            today_hours = self._tz_service.get_today_range()
-            tomorrow_hours = self._tz_service.get_tomorrow_range()
+            # Use the original logic with interval ranges
+            today_intervals = self._tz_service.get_today_range()
+            tomorrow_intervals = self._tz_service.get_tomorrow_range()
 
             # Since we can't differentiate by date, use the API price date if available
-            for hour_key, price in normalized_prices.items():
+            for interval_key, price in normalized_prices.items():
                 if isinstance(price, dict) and "date" in price:
                     price_date = price["date"]
                     price_without_date = price.copy()
                     price_without_date.pop("date", None)
 
                     if price_date == today_date_str:
-                        today_prices[hour_key] = price_without_date
+                        today_prices[interval_key] = price_without_date
                     elif price_date == tomorrow_date_str:
-                        tomorrow_prices[hour_key] = price_without_date
-                elif hour_key in today_hours:
-                    today_prices[hour_key] = price
-                elif hour_key in tomorrow_hours:
-                    tomorrow_prices[hour_key] = price
+                        tomorrow_prices[interval_key] = price_without_date
+                elif interval_key in today_intervals:
+                    today_prices[interval_key] = price
+                elif interval_key in tomorrow_intervals:
+                    tomorrow_prices[interval_key] = price
 
-        _LOGGER.debug(f"Split prices into today ({len(today_prices)} hours) and tomorrow ({len(tomorrow_prices)} hours)")
+        _LOGGER.debug(f"Split prices into today ({len(today_prices)} intervals) and tomorrow ({len(tomorrow_prices)} intervals)")
         return today_prices, tomorrow_prices
 
     def normalize_today_and_tomorrow_prices(
@@ -201,18 +211,18 @@ class TimezoneConverter:
 
         if today_prices_raw:
             _LOGGER.debug("Normalizing today's prices...")
-            final_today_prices = self.normalize_hourly_prices(today_prices_raw, source_timezone_str)
+            final_today_prices = self.normalize_interval_prices(today_prices_raw, source_timezone_str)
 
         if tomorrow_prices_raw:
             _LOGGER.debug("Normalizing tomorrow's prices...")
-            final_tomorrow_prices = self.normalize_hourly_prices(tomorrow_prices_raw, source_timezone_str)
+            final_tomorrow_prices = self.normalize_interval_prices(tomorrow_prices_raw, source_timezone_str)
 
         return final_today_prices, final_tomorrow_prices
 
 # Example usage (would be in DataProcessor):
 # tz_converter = TimezoneConverter(self._tz_service)
 # final_today, final_tomorrow = tz_converter.normalize_today_and_tomorrow_prices(
-#     raw_data.get("hourly_prices"), # Assuming raw data structure
-#     raw_data.get("tomorrow_hourly_prices_raw"), # Assuming raw data structure
+#     raw_data.get("interval_prices"), # Assuming raw data structure
+#     raw_data.get("tomorrow_interval_prices_raw"), # Assuming raw data structure
 #     raw_data.get("api_timezone")
 # )

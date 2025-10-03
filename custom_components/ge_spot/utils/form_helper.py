@@ -1,10 +1,10 @@
 """Form helper utilities for GE-Spot integration."""
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from homeassistant.helpers import selector
 
-from ..const.display import DisplayUnit, UpdateInterval
+from ..const.display import DisplayUnit
 
 _LOGGER = logging.getLogger(__name__)
 

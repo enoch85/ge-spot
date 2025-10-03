@@ -11,7 +11,7 @@ This script performs an end-to-end test of the Amber API integration:
 
 Usage:
     python amber_full_chain.py [area] [api_key] [--date YYYY-MM-DD] [--debug]
-    
+
     area: Optional area code (e.g., NSW, VIC, QLD, SA, TAS)
           Defaults to NSW if not provided
     api_key: Optional Amber API key
@@ -25,7 +25,7 @@ import sys
 import os
 import argparse
 import getpass
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 import asyncio
 import pytz
 import logging
@@ -37,9 +37,7 @@ logger = logging.getLogger(__name__)
 # Add the root directory to the path so we can import the component modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 from custom_components.ge_spot.api.amber import AmberAPI
-from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
-from custom_components.ge_spot.utils.exchange_service import ExchangeRateService # Keep for potential future use
 from custom_components.ge_spot.timezone.service import TimezoneService
 from custom_components.ge_spot.timezone.timezone_converter import TimezoneConverter
 
@@ -55,7 +53,7 @@ AMBER_AREA_TIMEZONES = {
 async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Test Amber API integration')
-    parser.add_argument('area', nargs='?', default='NSW', 
+    parser.add_argument('area', nargs='?', default='NSW',
                         choices=AMBER_AREA_TIMEZONES.keys(),
                         help='Area code (e.g., NSW, VIC)')
     parser.add_argument('api_key', nargs='?', default=None,
@@ -64,7 +62,7 @@ async def main():
                         help='Date to fetch data for (format: YYYY-MM-DD, default: today)')
     parser.add_argument('--debug', action='store_true', help='Enable detailed debug logging')
     args = parser.parse_args()
-    
+
     # Configure logging level
     log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(
@@ -72,7 +70,7 @@ async def main():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
-    
+
     area = args.area
     reference_date_str = args.date
     local_tz_name = AMBER_AREA_TIMEZONES.get(area, 'Australia/Sydney')
@@ -82,7 +80,7 @@ async def main():
     api_key = args.api_key or os.environ.get("AMBER_API_KEY")
     if not api_key:
         api_key = getpass.getpass("Enter your Amber API key: ")
-        
+
     # Process reference date if provided
     reference_time = None
     target_date = datetime.now(local_tz).date() # Use local time for default date
@@ -101,7 +99,7 @@ async def main():
          reference_time = datetime.now(local_tz)
 
     logger.info(f"\n===== Amber API Full Chain Test for {area} =====\n")
-    
+
     # Initialize timezone service based on area
     logger.info("Setting up timezone service...")
     tz_config = {"timezone_reference": "area"} # Assuming area dictates timezone
@@ -111,17 +109,17 @@ async def main():
 
     # Initialize the API client with the API key
     api = AmberAPI(config={"api_key": api_key})
-    
+
     try:
         # Step 1: Fetch raw data
         logger.info(f"Fetching Amber data for area: {area}")
         # Adjust fetch call based on AmberAPI's expected parameters
         raw_data = await api.fetch_raw_data(area=area, reference_time=reference_time)
-        
+
         if not raw_data:
             logger.error("Error: Failed to fetch data from Amber API")
             return 1
-            
+
         # Log raw data summary
         if isinstance(raw_data, list):
             logger.debug(f"Received {len(raw_data)} data points in list")
@@ -142,7 +140,7 @@ async def main():
         # Step 2: Parse raw data
         logger.info("\nParsing raw data...")
         parsed_data = await api.parse_raw_data(raw_data)
-        
+
         logger.debug(f"Parsed data keys: {list(parsed_data.keys())}")
         logger.info(f"Source: {parsed_data.get('source_name', parsed_data.get('source'))}")
         logger.info(f"Area: {area}")
@@ -150,16 +148,16 @@ async def main():
         logger.info(f"Currency: {original_currency}")
         source_timezone = parsed_data.get('timezone') # Parser should determine this
         logger.info(f"API Timezone: {source_timezone}")
-        
+
         # Amber provides prices per kWh, often in 30-min or 5-min intervals
         raw_prices = parsed_data.get("raw_prices", {}) # Assuming parser returns raw prices here
         if not raw_prices:
             logger.error("Error: No raw prices found in the parsed data after parsing step.")
             return 1
-            
+
         logger.info(f"Found {len(raw_prices)} raw price points (before timezone normalization)")
         # Amber interval can vary, check if parser provides info
-        is_five_minute = parsed_data.get('is_five_minute', False) 
+        is_five_minute = parsed_data.get('is_five_minute', False)
         is_thirty_minute = parsed_data.get('is_thirty_minute', False)
         interval_desc = "5-minute" if is_five_minute else ("30-minute" if is_thirty_minute else "Hourly")
         logger.info(f"Data interval: {interval_desc}")
@@ -167,19 +165,20 @@ async def main():
 
         # Step 3: Normalize Timezones
         logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
-        # Use the timezone converter
-        normalized_prices = tz_converter.normalize_hourly_prices(
-            hourly_prices=raw_prices, # Pass the raw prices
+        # Use normalize_interval_prices to preserve 15-minute intervals
+        normalized_prices = tz_converter.normalize_interval_prices(
+            interval_prices=raw_prices, # Pass the raw prices
             source_timezone_str=source_timezone,
             preserve_date=True # Keep original date context
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
+        logger.info(f"Expected: Depends on Amber API interval (possibly 30-min or hourly)")
         logger.debug(f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}")
 
         # Step 4: Unit/Currency conversion (Amber is usually AUD/kWh, so only structure adjustment needed)
         target_currency = Currency.AUD
         logger.info(f"\nPrices are already in target currency/unit: {target_currency}/kWh")
-        
+
         converted_prices = {}
         for time_key, price_info in normalized_prices.items():
             price_kwh = price_info["price"] if isinstance(price_info, dict) else price_info
@@ -195,19 +194,19 @@ async def main():
         # Step 5: Display results
         logger.info("\nPrice Information:")
         logger.info(f"Currency/Unit: {target_currency}/kWh")
-        
+
         # Split into today/tomorrow based on the *local* target date
         today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(
-            normalized_prices, 
+            normalized_prices,
             target_date=target_date # Pass the target date explicitly
         )
-        
+
         all_display_prices = {**today_prices, **tomorrow_prices}
 
         logger.info(f"\nPrice Points (formatted time in target timezone: {local_tz_name}):")
         logger.info(f"{'Time':<20} {f'{target_currency}/kWh':<15}")
         logger.info("-" * 40)
-        
+
         for time_key, price_data in sorted(all_display_prices.items()):
             converted_val = price_data['converted_kwh']
             logger.info(f"{time_key:<20} {converted_val:<15.6f}")
@@ -215,7 +214,7 @@ async def main():
         # Step 6: Validate data completeness (Adjust for interval)
         today_keys = set(today_prices.keys())
         tomorrow_keys = set(tomorrow_prices.keys())
-        
+
         # Expected intervals per day
         if is_five_minute:
             expected_intervals_per_day = 288
@@ -223,30 +222,30 @@ async def main():
             expected_intervals_per_day = 48
         else: # Assume hourly if not specified
             expected_intervals_per_day = 24
-            
+
         logger.info(f"\nData completeness check (Target Timezone: {local_tz_name}):")
         logger.info(f"Today ({target_date}): Found {len(today_keys)}/{expected_intervals_per_day} price points.")
         logger.info(f"Tomorrow ({target_date + timedelta(days=1)}): Found {len(tomorrow_keys)}/{expected_intervals_per_day} price points.")
-        
+
         # Basic check: Did we get a reasonable amount of data for today?
         # Amber might provide forecast data, but let's focus on getting *some* data for today.
         min_expected_today = expected_intervals_per_day // 4 # Expect at least a quarter of the day
-        
+
         today_sufficient = len(today_keys) >= min_expected_today
-        
+
         if today_sufficient:
             logger.info(f"\nTest completed successfully (found at least {min_expected_today} price points for today)!")
             return 0
         else:
             logger.error(f"\nTest failed: Insufficient price data found for today ({target_date}). Found {len(today_keys)}, expected at least {min_expected_today}.")
             return 1
-        
+
     except Exception as e:
         logger.error(f"Error during test: {e}", exc_info=args.debug)
         return 1
     finally:
         # Clean up resources if needed (e.g., close aiohttp session if used directly)
-        pass 
+        pass
 
 if __name__ == "__main__":
     print("Starting Amber API full chain test...")

@@ -34,7 +34,7 @@ class OmieParser(BasePriceParser):
                   'fetched_at': ISO timestamp of fetch.
 
         Returns:
-            Parsed data dictionary: {'hourly_raw': {...}, 'currency': 'EUR', 'timezone': 'Europe/Madrid', 'source': 'omie'}
+            Parsed data dictionary: {'interval_raw': {...}, 'currency': 'EUR', 'timezone': 'Europe/Madrid', 'source': 'omie'}
         """
         # Extract info from the input dictionary
         raw_data_payload = data.get("raw_data")
@@ -43,7 +43,7 @@ class OmieParser(BasePriceParser):
         _LOGGER.debug(f"[OmieParser] Received data for Area: {area}, Timezone: {source_timezone}")
 
         result = {
-            "hourly_raw": {},
+            "interval_raw": {},
             "currency": data.get("currency", Currency.EUR), # Use provided currency or default
             "source": data.get("source", Source.OMIE),
             "timezone": source_timezone,
@@ -79,15 +79,15 @@ class OmieParser(BasePriceParser):
             elif raw_text is not None:
                  _LOGGER.warning(f"[OmieParser] Expected string data for '{day_key}', but got {type(raw_text)}. Skipping.")
 
-        _LOGGER.debug(f"[OmieParser] Found {len(result['hourly_raw'])} total hourly prices after parsing available days.")
-        if not result["hourly_raw"]:
-            _LOGGER.warning("[OmieParser] Parsing completed, but no hourly prices were extracted from any provided data.")
+        _LOGGER.debug(f"[OmieParser] Found {len(result['interval_raw'])} total interval prices after parsing available days.")
+        if not result["interval_raw"]:
+            _LOGGER.warning("[OmieParser] Parsing completed, but no interval prices were extracted from any provided data.")
 
         return result
 
     def _parse_json(self, json_data: str, result: Dict[str, Any], timezone_name: str) -> None:
         """Parse JSON data (less common for OMIE files, might be ESIOS format)."""
-        hourly_prices = {}
+        interval_prices = {}
         try:
             local_tz = ZoneInfo(timezone_name)
         except ZoneInfoNotFoundError:
@@ -124,15 +124,15 @@ class OmieParser(BasePriceParser):
                         dt_local = dt_naive.replace(tzinfo=local_tz)
                         dt_utc = dt_local.astimezone(timezone.utc)
                         timestamp = dt_utc.isoformat()
-                        hourly_prices[timestamp] = price
+                        interval_prices[timestamp] = price
                     except (ValueError, KeyError, IndexError, TypeError) as e:
                         _LOGGER.warning(f"[OmieParser/_parse_json] Error parsing PVPC entry: {entry}. Error: {e}")
                         continue # Correct indentation for continue
             else:
                 _LOGGER.warning("[OmieParser/_parse_json] JSON data found, but not in expected PVPC format.")
 
-            result["hourly_raw"].update(hourly_prices)
-            _LOGGER.debug(f"[OmieParser/_parse_json] Parsed {len(hourly_prices)} prices from JSON.")
+            result["interval_raw"].update(interval_prices)
+            _LOGGER.debug(f"[OmieParser/_parse_json] Parsed {len(interval_prices)} prices from JSON.")
 
         except json.JSONDecodeError as e:
             _LOGGER.error(f"[OmieParser/_parse_json] Invalid JSON: {e}")
@@ -141,7 +141,7 @@ class OmieParser(BasePriceParser):
 
     def _parse_csv(self, csv_data: str, result: Dict[str, Any], timezone_name: str) -> None:
         """Parse CSV-like text data from OMIE files (Updated Logic)."""
-        hourly_prices = {}
+        interval_prices = {}
         area = result.get("metadata", {}).get("area", "ES")
         target_date_str = None
         price_line = None
@@ -237,15 +237,15 @@ class OmieParser(BasePriceParser):
                     dt_utc = dt_local.astimezone(timezone.utc)
                     timestamp = dt_utc.isoformat()
 
-                    hourly_prices[timestamp] = price
+                    interval_prices[timestamp] = price
                     _LOGGER.debug(f"[OmieParser/_parse_csv] Hour {hour_1_24}: Price={price}, Timestamp={timestamp}")
 
                 except (ValueError, IndexError) as e:
                     _LOGGER.warning(f"[OmieParser/_parse_csv] Error processing hour {hour_1_24} with price '{price_str}'. Error: {e}")
                     continue
 
-            result["hourly_raw"].update(hourly_prices)
-            _LOGGER.debug(f"[OmieParser/_parse_csv] Successfully parsed {len(hourly_prices)} prices from OMIE file.")
+            result["interval_raw"].update(interval_prices)
+            _LOGGER.debug(f"[OmieParser/_parse_csv] Successfully parsed {len(interval_prices)} prices from OMIE file.")
 
         except Exception as e:
             _LOGGER.error(f"[OmieParser/_parse_csv] Error during CSV processing: {e}", exc_info=True)

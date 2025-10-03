@@ -4,12 +4,12 @@ from dataclasses import dataclass, asdict, field
 from datetime import datetime
 
 @dataclass
-class HourlyPrice:
-    """Hourly price data."""
+class IntervalPrice:
+    """Price data for a single time interval."""
 
     datetime: str  # ISO format datetime string
     price: float
-    hour_key: str  # Format: HH:00
+    interval_key: str  # Format: HH:MM
     currency: str
     timezone: str
     source: str
@@ -23,17 +23,12 @@ class HourlyPrice:
 class PriceStatistics:
     """Price statistics.
 
-    Note: Statistics should only be calculated when complete data is available.
-    The complete_data flag indicates whether the statistics are based on a
-    complete dataset or not. If complete_data is False, the statistics should
-    not be used for critical calculations.
+    Note: Statistics should only be calculated when sufficient data is available.
+    Use DataValidity to check data coverage instead of checking these statistics.
     """
-
+    avg: Optional[float] = None
     min: Optional[float] = None
     max: Optional[float] = None
-    average: Optional[float] = None
-    median: Optional[float] = None
-    complete_data: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -58,13 +53,13 @@ class StandardizedPriceData:
     currency: str
     fetched_at: str  # ISO format datetime string
     reference_time: Optional[str] = None  # ISO format datetime string
-    hourly_prices: Dict[str, float] = field(default_factory=dict)  # Key: HH:00, Value: price
-    raw_prices: List[HourlyPrice] = field(default_factory=list)
+    interval_prices: Dict[str, float] = field(default_factory=dict)  # Key: HH:MM, Value: price
+    raw_prices: List[IntervalPrice] = field(default_factory=list)
     current_price: Optional[float] = None
-    next_hour_price: Optional[float] = None
+    next_interval_price: Optional[float] = None
     api_timezone: Optional[str] = None
-    current_hour_key: Optional[str] = None
-    next_hour_key: Optional[str] = None
+    current_interval_key: Optional[str] = None
+    next_interval_key: Optional[str] = None
     statistics: Optional[PriceStatistics] = None
     peak_hours: Optional[PeakHourStatistics] = None
     off_peak_hours: Optional[PeakHourStatistics] = None
@@ -85,9 +80,9 @@ class StandardizedPriceData:
             "area": self.area,
             "currency": self.currency,
             "fetched_at": self.fetched_at,
-            "hourly_prices": self.hourly_prices,
+            "interval_prices": self.interval_prices,
             "current_price": self.current_price,
-            "next_hour_price": self.next_hour_price,
+            "next_interval_price": self.next_interval_price,
             "vat_included": self.vat_included,
             "has_tomorrow_prices": self.has_tomorrow_prices,
             "tomorrow_prices_expected": self.tomorrow_prices_expected
@@ -100,11 +95,11 @@ class StandardizedPriceData:
         if self.api_timezone:
             result["api_timezone"] = self.api_timezone
 
-        if self.current_hour_key:
-            result["current_hour_key"] = self.current_hour_key
+        if self.current_interval_key:
+            result["current_interval_key"] = self.current_interval_key
 
-        if self.next_hour_key:
-            result["next_hour_key"] = self.next_hour_key
+        if self.next_interval_key:
+            result["next_interval_key"] = self.next_interval_key
 
         if self.vat_rate is not None:
             result["vat_rate"] = self.vat_rate
@@ -148,7 +143,7 @@ def create_standardized_price_data(
     source: str,
     area: str,
     currency: str,
-    hourly_prices: Dict[str, float],
+    interval_prices: Dict[str, float],
     reference_time: Optional[datetime] = None,
     api_timezone: Optional[str] = None,
     vat_rate: Optional[float] = None,
@@ -164,7 +159,7 @@ def create_standardized_price_data(
         source: Source identifier
         area: Area code
         currency: Currency code
-        hourly_prices: Hourly prices dictionary (RAW, from parser, likely ISO keys)
+        interval_prices: Interval prices dictionary (RAW, from parser, likely ISO keys)
         reference_time: Optional reference time
         api_timezone: Optional API timezone
         vat_rate: Optional VAT rate
@@ -182,25 +177,25 @@ def create_standardized_price_data(
 
     # REMOVED: Validation logic - should happen in DataProcessor after normalization
     # REMOVED: Statistics calculation
-    # REMOVED: Current/Next hour price calculation
+    # REMOVED: Current/Next interval price calculation
 
-    # Create raw_prices list from the input hourly_prices (assuming ISO keys from parser)
+    # Create raw_prices list from the input interval_prices (assuming ISO keys from parser)
     raw_prices_list = []
-    for hour_key, price in hourly_prices.items():
+    for interval_key, price in interval_prices.items():
         try:
             # Attempt to parse ISO string key
-            dt_obj = datetime.fromisoformat(hour_key.replace('Z', '+00:00'))
-            # Create simple HH:00 key for compatibility if needed, but prefer ISO
-            simple_hour_key = dt_obj.strftime("%H:00")
+            dt_obj = datetime.fromisoformat(interval_key.replace('Z', '+00:00'))
+            # Create simple HH:MM key for compatibility if needed, but prefer ISO
+            simple_interval_key = dt_obj.strftime("%H:%M")
         except (ValueError, TypeError):
-            # Fallback if key is not ISO (e.g., HH:00) - less ideal
-            iso_dt = f"{today.isoformat()}T{hour_key}:00" # Placeholder
-            simple_hour_key = hour_key
+            # Fallback if key is not ISO (e.g., HH:MM) - less ideal
+            iso_dt = f"{today.isoformat()}T{interval_key}:00" # Placeholder
+            simple_interval_key = interval_key
 
-        raw_prices_list.append(HourlyPrice(
-            datetime=hour_key, # Store original key as datetime string
+        raw_prices_list.append(IntervalPrice(
+            datetime=interval_key, # Store original key as datetime string
             price=price,
-            hour_key=simple_hour_key, # Store HH:00 for potential compatibility
+            interval_key=simple_interval_key, # Store HH:MM for potential compatibility
             currency=currency,
             timezone=api_timezone or "UTC",
             source=source,
@@ -214,7 +209,7 @@ def create_standardized_price_data(
         currency=currency,
         fetched_at=now.isoformat(),
         reference_time=reference_time.isoformat() if reference_time else None,
-        hourly_prices=hourly_prices, # Store the RAW hourly prices dict from parser
+        interval_prices=interval_prices, # Store the RAW interval prices dict from parser
         raw_prices=raw_prices_list,
         api_timezone=api_timezone,
         vat_rate=vat_rate,
@@ -224,9 +219,9 @@ def create_standardized_price_data(
         tomorrow_prices_expected=tomorrow_prices_expected,
         # Fields below will be populated by DataProcessor
         current_price=None,
-        next_hour_price=None,
-        current_hour_key=None,
-        next_hour_key=None,
+        next_interval_price=None,
+        current_interval_key=None,
+        next_interval_key=None,
         statistics=None,
         peak_hours=None,
         off_peak_hours=None

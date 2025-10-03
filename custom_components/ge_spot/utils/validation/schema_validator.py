@@ -1,7 +1,7 @@
 """Schema validator for data validation."""
 import logging
 import re
-from typing import Dict, Any, List, Union, Optional, Set
+from typing import Any
 
 from .schema import Schema
 from .validation_error import ValidationError

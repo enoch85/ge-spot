@@ -106,11 +106,17 @@ function validate_version_tag {
 # Check if we're on the main branch
 function check_branch {
     local current_branch=$(git rev-parse --abbrev-ref HEAD)
+    
     if [[ "$current_branch" != "main" ]]; then
-        error_log "You are not on the main branch!"
-        echo "Current branch: $current_branch"
-        echo "Please switch to the main branch before creating a release."
-        exit 1
+        if [[ "$IS_BETA" == "true" ]]; then
+            info_log "Beta release detected - allowing release from branch: $current_branch"
+        else
+            error_log "You are not on the main branch!"
+            echo "Current branch: $current_branch"
+            echo "Please switch to the main branch before creating a release."
+            echo "Or use a beta version (e.g., v1.2.0-beta1) to release from this branch."
+            exit 1
+        fi
     fi
 }
 
@@ -597,13 +603,21 @@ function run_release_process {
             fi
             success_log "Changes committed"
     
-            # Push to main
-            info_log "Pushing to main branch..."
-            if ! git push origin main; then
-                error_log "Failed to push changes to main"
+            # Push to current branch (main for regular releases, current branch for beta releases)
+            local target_branch
+            if [[ "$IS_BETA" == "true" ]]; then
+                target_branch=$(git rev-parse --abbrev-ref HEAD)
+                info_log "Pushing to current branch: ${target_branch}..."
+            else
+                target_branch="main"
+                info_log "Pushing to main branch..."
+            fi
+    
+            if ! git push origin "${target_branch}"; then
+                error_log "Failed to push changes to ${target_branch}"
                 exit 1
             fi
-            success_log "Changes pushed to main"
+            success_log "Changes pushed to ${target_branch}"
     
             # Create and push tag
             if ! create_and_push_tag "$version_tag"; then

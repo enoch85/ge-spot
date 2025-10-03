@@ -19,8 +19,12 @@ class Network:
         # Special time windows for updates
         SPECIAL_HOUR_WINDOWS = [
             (0, 1),   # 00:00-01:00 - For today's new prices
-            # Note: Tomorrow's data search starts at 13:00 but is handled by TomorrowDataManager
+            (13, 15), # 13:00-15:00 - For tomorrow's data (most EU markets publish around 13:00-14:00 CET)
         ]
+        
+        # Data validity settings (in intervals, assuming 15-min intervals = 96/day)
+        DATA_SAFETY_BUFFER_INTERVALS = 8  # Fetch when we have less than 8 intervals remaining (~2 hours)
+        REQUIRED_TOMORROW_INTERVALS = 76  # Require at least 76 intervals (~80% of 96) to consider tomorrow data "complete"
 
     class URLs:
         """Base URLs for various APIs."""

@@ -46,73 +46,73 @@ class GSpotOptionsFlow(OptionsFlow):
                 # Find existing API key from this or other entries
                 existing_api_key = await self._find_existing_api_key(Source.ENTSOE)
 
-                # Handle API key updates if present
-                if f"{Source.ENTSOE}_api_key" in user_input and user_input[f"{Source.ENTSOE}_api_key"]:
-                    # If empty field but we have an existing key, use that
+                # Handle API key updates if present in user input
+                if f"{Source.ENTSOE}_api_key" in user_input:
                     api_key = user_input[f"{Source.ENTSOE}_api_key"]
+                    
+                    # If field is empty but we have an existing key, preserve it
                     if not api_key and existing_api_key:
                         api_key = existing_api_key
+                    
+                    # Save/update the API key if we have one
+                    if api_key:
+                        # Only validate and save if key has changed
+                        if api_key != self._data.get(Config.API_KEY, ""):
+                            # Validate key directly using entsoe module
+                            valid_key = await entsoe.validate_api_key(api_key, self._area)
 
-                    # Only validate if key has changed
-                    if api_key != self._data.get(Config.API_KEY, ""):
-                        _LOGGER.debug(f"Validating updated ENTSO-E API key")
-
-                        # Validate key directly using entsoe module
-                        valid_key = await entsoe.validate_api_key(api_key, self._area)
-
-                        if valid_key:
-                            # Update the stored data with the new API key
-                            updated_data = dict(self._data)
-                            updated_data[Config.API_KEY] = api_key
-                            # Update the config entry data
-                            self.hass.config_entries.async_update_entry(
-                                self.hass.config_entries.async_get_entry(self.entry_id),
-                                data=updated_data
-                            )
+                            if valid_key:
+                                # Update self._data so subsequent updates see it
+                                self._data[Config.API_KEY] = api_key
+                            else:
+                                self._errors[f"{Source.ENTSOE}_api_key"] = "invalid_api_key_in_options"
+                                return await self._show_form()
                         else:
-                            self._errors[f"{Source.ENTSOE}_api_key"] = "invalid_api_key_in_options"
-                            return await self._show_form()
-
+                            # Key unchanged, but ensure it's in entry.data
+                            if Config.API_KEY not in self._data and api_key:
+                                updated_data = dict(self._data)
+                                updated_data[Config.API_KEY] = api_key
+                                self.hass.config_entries.async_update_entry(
+                                    self.hass.config_entries.async_get_entry(self.entry_id),
+                                    data=updated_data
+                                )
+                    
                     # Remove the API key field from options to avoid duplication
-                    if f"{Source.ENTSOE}_api_key" in user_input:
-                        user_input.pop(f"{Source.ENTSOE}_api_key")
+                    user_input.pop(f"{Source.ENTSOE}_api_key")
 
                 # Convert VAT from percentage to decimal if present
                 if Config.VAT in user_input:
                     user_input[Config.VAT] = user_input[Config.VAT] / 100
 
                 # Handle source priority, timezone reference, and Stromligning supplier updates if present
-                updated_data = None
-                if (
-                    Config.SOURCE_PRIORITY in user_input or
-                    Config.TIMEZONE_REFERENCE in user_input or
-                    Config.CONF_STROMLIGNING_SUPPLIER in user_input
-                ):
-                    updated_data = dict(self._data)
+                # ALWAYS update entry.data to ensure API key and other data fields are persisted
+                updated_data = dict(self._data)
+                data_changed = False
 
-                    if Config.SOURCE_PRIORITY in user_input:
-                        updated_data[Config.SOURCE_PRIORITY] = user_input[Config.SOURCE_PRIORITY]
-                        user_input.pop(Config.SOURCE_PRIORITY)
+                if Config.SOURCE_PRIORITY in user_input:
+                    updated_data[Config.SOURCE_PRIORITY] = user_input[Config.SOURCE_PRIORITY]
+                    user_input.pop(Config.SOURCE_PRIORITY)
+                    data_changed = True
 
-                    if Config.TIMEZONE_REFERENCE in user_input:
-                        _LOGGER.debug(f"Saving timezone reference setting: {user_input[Config.TIMEZONE_REFERENCE]}")
-                        updated_data[Config.TIMEZONE_REFERENCE] = user_input[Config.TIMEZONE_REFERENCE]
-                        # Keep in options as well
+                if Config.TIMEZONE_REFERENCE in user_input:
+                    _LOGGER.debug(f"Saving timezone reference setting: {user_input[Config.TIMEZONE_REFERENCE]}")
+                    updated_data[Config.TIMEZONE_REFERENCE] = user_input[Config.TIMEZONE_REFERENCE]
+                    # Keep in options as well
+                    data_changed = True
 
-                    # Handle Stromligning supplier update
-                    if Config.CONF_STROMLIGNING_SUPPLIER in user_input:
-                        supplier_value = user_input[Config.CONF_STROMLIGNING_SUPPLIER]
-                        _LOGGER.debug(f"Saving Stromligning supplier: {supplier_value}")
-                        updated_data[Config.CONF_STROMLIGNING_SUPPLIER] = supplier_value
-                        # Remove from options dict before saving options
-                        user_input.pop(Config.CONF_STROMLIGNING_SUPPLIER)
+                # Handle Stromligning supplier update
+                if Config.CONF_STROMLIGNING_SUPPLIER in user_input:
+                    supplier_value = user_input[Config.CONF_STROMLIGNING_SUPPLIER]
+                    _LOGGER.debug(f"Saving Stromligning supplier: {supplier_value}")
+                    updated_data[Config.CONF_STROMLIGNING_SUPPLIER] = supplier_value
+                    # Remove from options dict before saving options
+                    user_input.pop(Config.CONF_STROMLIGNING_SUPPLIER)
+                    data_changed = True
 
-                # Update the config entry data if needed
-                if updated_data:
-                    self.hass.config_entries.async_update_entry(
-                        self.hass.config_entries.async_get_entry(self.entry_id),
-                        data=updated_data
-                    )
+                # Update the config entry data (this includes the API key from self._data)
+                entry = self.hass.config_entries.async_get_entry(self.entry_id)
+                self.hass.config_entries.async_update_entry(entry, data=updated_data)
+                _LOGGER.debug(f"Updated entry.data with keys: {list(updated_data.keys())}, api_key present: {Config.API_KEY in updated_data}")
 
                 # Handle clear cache action if present
                 if "clear_cache" in user_input and user_input["clear_cache"]:

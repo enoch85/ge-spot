@@ -4,7 +4,7 @@ from .service import TimezoneService
 from .parser import TimestampParser
 from .timezone_converter import TimezoneConverter
 from .dst_handler import DSTHandler
-from .hour_calculator import HourCalculator
+from .interval_calculator import IntervalCalculator
 
 # Re-export only necessary functions from source_tz
 from .source_tz import get_source_timezone, get_timezone_object
@@ -32,7 +32,7 @@ __all__ = [
     "TimestampParser",
     "TimezoneConverter",
     "DSTHandler",
-    "HourCalculator",
+    "IntervalCalculator",
 
     # Supporting functions
     "get_source_timezone",

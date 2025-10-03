@@ -32,6 +32,7 @@ class CacheManager:
         """
         self.hass = hass
         self.config = config
+        self._timezone_service = None  # Can be set later if needed
         # Use default TTL from Defaults if not in config
         default_ttl_minutes = config.get("cache_ttl", Defaults.CACHE_TTL)
         # Pass TTL in seconds to AdvancedCache
@@ -176,7 +177,7 @@ class CacheManager:
                         entry_data = self._price_cache.get(key)
 
                         # Check if this entry has tomorrow's prices that we can use for today
-                        if entry_data and "tomorrow_hourly_prices" in entry_data and entry_data["tomorrow_hourly_prices"]:
+                        if entry_data and "tomorrow_interval_prices" in entry_data and entry_data["tomorrow_interval_prices"]:
                             found_source = metadata.get("source", "unknown")
                             _LOGGER.info(
                                 "Found yesterday's cached data from %s with tomorrow's prices for area %s. "
@@ -184,12 +185,13 @@ class CacheManager:
                                 found_source, area
                             )
 
-                            # Create a copy of the data to modify
+                            # Create a shallow copy to prevent cache corruption
+                            # (We only modify top-level keys, so shallow copy is sufficient and much faster)
                             data_copy = dict(entry_data)
 
                             # Move tomorrow's prices to today's prices
-                            data_copy["hourly_prices"] = data_copy["tomorrow_hourly_prices"]
-                            data_copy["tomorrow_hourly_prices"] = {}
+                            data_copy["interval_prices"] = data_copy["tomorrow_interval_prices"]
+                            data_copy["tomorrow_interval_prices"] = {}
 
                             # Mark as migrated for debugging purposes
                             data_copy["migrated_from_tomorrow"] = True
@@ -246,63 +248,6 @@ class CacheManager:
         except Exception as e:
             _LOGGER.warning(f"Error checking max_age for timestamp {created_at_str}: {e}")
             return False
-
-
-    def get_current_hour_price(self, area: str, target_timezone: Optional[Union[str, tzinfo]] = None) -> Optional[Dict[str, Any]]:
-        """Get the current hour's price details from the latest valid cache entry for the area.""" # Corrected docstring quotes
-        if target_timezone is None:
-            _LOGGER.error(f"Target timezone must be provided to get_current_hour_price for area {area}.")
-            return None # Cannot determine current hour without target timezone
-
-        if isinstance(target_timezone, str):
-            target_tz_obj = get_timezone_object(target_timezone)
-            if target_tz_obj is None:
-                _LOGGER.error(f"Invalid target timezone string provided: {target_timezone}")
-                return None
-        else:
-            target_tz_obj = target_timezone
-
-        now_in_target_tz = dt_util.now(target_tz_obj)
-        current_hour_key = f"{now_in_target_tz.hour:02d}:00" # Corrected f-string quotes
-        target_date = now_in_target_tz.date()
-
-        latest_entry = self.get_data(area, target_date=target_date) # Use get_data to find newest valid entry
-
-        if not latest_entry:
-            _LOGGER.debug(f"No valid cache entry found for area {area} and date {target_date} to get current hour price.")
-            return None
-
-        cached_data = latest_entry.get("data", {})
-        hourly_prices = cached_data.get("hourly_prices", {})
-        current_price = hourly_prices.get(current_hour_key)
-
-        if current_price is None:
-            _LOGGER.debug(f"Current hour key '{current_hour_key}' not found in cached hourly prices for {area}.")
-            return None
-
-        # Determine the timezone of the *cached data* itself if needed for context
-        # This relies on the data processor correctly storing timezone info
-        area_tz_str = cached_data.get("target_timezone") or cached_data.get("source_timezone") # Prefer target, fallback to source TZ stored in data
-
-        if not area_tz_str:
-            _LOGGER.warning(f"Could not determine the original timezone of the cached data for area {area}. Proceeding without it.")
-            # Do not fall back to HA default or any hardcoded value.
-            # area_tz_obj = None # Or handle as needed if area_tz_obj is critical later
-
-        # Fallback for source name if 'data_source' is missing
-        data_source = cached_data.get("data_source") or cached_data.get("source", "unknown")
-
-        return {
-            "price": current_price,
-            "hour_key": current_hour_key,
-            "timestamp": latest_entry.get("timestamp"),
-            "source": data_source, # Use determined source name
-            "area_timezone": area_tz_str # Include the determined timezone string if found
-        }
-
-    def has_current_hour_price(self, area: str) -> bool:
-        """Check if cache has current hour price for today."""
-        return self.get_current_hour_price(area) is not None
 
     def clear(self, area: str, target_date: Optional[date] = None) -> bool:
         """Clear cache for a specific area, optionally for a specific date."""

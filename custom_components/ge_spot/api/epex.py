@@ -89,14 +89,14 @@ class EpexAPI(BasePriceAPI):
             # --- Parsing and Structuring ---
             # (Moved parsing logic down to ensure checks happen first)
             parser = self.get_parser_for_area(area)
-            hourly_raw = {}
+            interval_raw = {}
             metadata = {}
 
             # Parse today's data (already validated by is_data_available)
             try:
                 parsed_today = parser.parse(raw_today)
-                if parsed_today and "hourly_prices" in parsed_today:
-                    hourly_raw.update(parsed_today["hourly_prices"])
+                if parsed_today and "interval_raw" in parsed_today:
+                    interval_raw.update(parsed_today["interval_raw"])
                 # Extract metadata primarily from today's data
                 metadata = parser.extract_metadata(raw_today)
             except Exception as e:
@@ -108,8 +108,8 @@ class EpexAPI(BasePriceAPI):
             if is_data_available(raw_tomorrow):
                 try:
                     parsed_tomorrow = parser.parse(raw_tomorrow)
-                    if parsed_tomorrow and "hourly_prices" in parsed_tomorrow:
-                        hourly_raw.update(parsed_tomorrow["hourly_prices"])
+                    if parsed_tomorrow and "interval_raw" in parsed_tomorrow:
+                        interval_raw.update(parsed_tomorrow["interval_raw"])
                     # Optionally update metadata if today's failed, though less likely
                     if not metadata:
                          metadata = parser.extract_metadata(raw_tomorrow)
@@ -117,8 +117,8 @@ class EpexAPI(BasePriceAPI):
                     _LOGGER.warning(f"Failed to parse tomorrow's EPEX data, proceeding without it: {e}")
 
             # Ensure we have at least some prices before returning success
-            if not hourly_raw:
-                _LOGGER.error(f"EPEX parsing failed for area {area}: No hourly prices extracted from valid raw data.")
+            if not interval_raw:
+                _LOGGER.error(f"EPEX parsing failed for area {area}: No interval prices extracted from valid raw data.")
                 return None
 
             # Construct the final dictionary for the DataProcessor
@@ -131,7 +131,7 @@ class EpexAPI(BasePriceAPI):
             }
 
             return {
-                "hourly_raw": hourly_raw,
+                "interval_raw": interval_raw,
                 "timezone": metadata.get("timezone", "Europe/Berlin"),
                 "currency": metadata.get("currency", "EUR"),
                 "source_name": Source.EPEX, # Use constant
@@ -188,22 +188,29 @@ class EpexAPI(BasePriceAPI):
             return None
 
     async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse raw EPEX data for reprocessing from cache.
+
+        Args:
+            raw_data: Raw data dictionary
+
+        Returns:
+            Parsed data with interval_raw
+        """
         parser = self.get_parser_for_area(raw_data.get("raw_data", {}).get("area") or raw_data.get("area") or "FR")
-        hourly_prices = {}
+        interval_raw = {}
         timezone = raw_data.get("timezone", "Europe/Paris")
         currency = raw_data.get("currency", "EUR")
         for key in ("today", "tomorrow"):
             html = raw_data.get("raw_data", {}).get(key)
             if html:
                 parsed = parser.parse(html)
-                if parsed and "hourly_prices" in parsed:
-                    hourly_prices.update(parsed["hourly_prices"])
+                if parsed and "interval_raw" in parsed:
+                    interval_raw.update(parsed["interval_raw"])
         return {
-            "hourly_prices": hourly_prices,
+            "interval_raw": interval_raw,
             "currency": currency,
             "api_timezone": timezone,
             "source": "epex",
             "area": raw_data.get("raw_data", {}).get("area") or raw_data.get("area") or "FR",
             "fetched_at": raw_data.get("raw_data", {}).get("timestamp"),
         }
-

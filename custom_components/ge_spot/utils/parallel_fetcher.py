@@ -151,7 +151,7 @@ class SourcePriorityFetcher:
 
                 # Check if the API was skipped due to missing credentials
                 if is_skipped_response(data):
-                    _LOGGER.debug(f"Source {source} skipped: {data.get('reason')}")
+                    _LOGGER.debug("Source %s skipped: %s", source, data.get('reason'))
                     continue
 
                 # Update stats
@@ -161,11 +161,11 @@ class SourcePriorityFetcher:
                 return source, data
 
             except asyncio.TimeoutError:
-                _LOGGER.warning(f"Timeout fetching from {source}")
+                _LOGGER.warning("Timeout fetching from %s", source)
                 continue
 
             except Exception as e:
-                _LOGGER.warning(f"Error fetching from {source}: {e}")
+                _LOGGER.warning("Error fetching from %s: %s", source, e)
                 continue
 
         # All sources failed

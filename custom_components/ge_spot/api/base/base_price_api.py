@@ -103,8 +103,8 @@ class BasePriceAPI(ABC):
             # Ensure basic structure exists even if parser returns None/empty
             if not parsed_data:
                 parsed_data = {}
-            if "hourly_prices" not in parsed_data:
-                parsed_data["hourly_prices"] = {}
+            if "interval_prices" not in parsed_data:
+                parsed_data["interval_prices"] = {}
             if "currency" not in parsed_data or not parsed_data["currency"]:
                 # Use const.currencies mapping for area
                 from ...const.currencies import CurrencyInfo
@@ -134,34 +134,12 @@ class BasePriceAPI(ABC):
                 "source": self.source_type,
                 "area": area,
                 "currency": currency,
-                "hourly_prices": {},
+                "interval_prices": {},
                 "error": str(e)
             }
 
-    # --- Methods required by subclasses (as per PARSER_UPDATES.md) ---
-    @abstractmethod
-    def get_timezone_for_area(self, area: str) -> Any:
-        """Get the source timezone for the specified area.
-
-        Args:
-            area: Area code
-
-        Returns:
-            Timezone object or identifier string for the area
-        """
-        pass
-
-    @abstractmethod
-    def get_parser_for_area(self, area: str) -> Any:
-        """Get the appropriate parser instance for the specified area.
-
-        Args:
-            area: Area code
-
-        Returns:
-            Parser instance for the area
-        """
-        pass
+    # --- Methods that can be overridden by subclasses (as per PARSER_UPDATES.md) ---
+    # Concrete implementations provided below
     # --- END Required Methods ---
 
     # --- REMOVED UNUSED HELPER METHODS ---

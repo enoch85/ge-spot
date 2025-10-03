@@ -94,9 +94,20 @@ class EntsoeAPI(BasePriceAPI):
         Returns:
             Raw data dictionary
         """
+        # Debug: Log what's in config
+        _LOGGER.debug(
+            "ENTSO-E config check: config keys=%s, API_KEY constant='%s', api_key value=%s",
+            list(self.config.keys()),
+            Config.API_KEY,
+            self.config.get(Config.API_KEY) or self.config.get("api_key") or "NOT FOUND"
+        )
+        
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
         if not api_key:
-            _LOGGER.debug("No API key provided for ENTSO-E, skipping")
+            _LOGGER.error(
+                "No API key provided for ENTSO-E. Config keys available: %s",
+                list(self.config.keys())
+            )
             raise ValueError("No API key provided for ENTSO-E")
 
         # Use the provided reference time or current UTC time
@@ -322,8 +333,8 @@ class EntsoeAPI(BasePriceAPI):
             # Pass the entire raw_data dictionary directly to the parser instance
             parsed_data = self.parser.parse(raw_data)
 
-            if not parsed_data or not parsed_data.get("hourly_raw"):
-                 _LOGGER.warning("ENTSOE API: Parser returned no hourly_raw data.")
+            if not parsed_data or not parsed_data.get("interval_raw"):
+                 _LOGGER.warning("ENTSOE API: Parser returned no interval_raw data.")
                  return {}
 
             _LOGGER.debug(f"ENTSOE API: Parser returned keys: {list(parsed_data.keys())}")
@@ -335,9 +346,11 @@ class EntsoeAPI(BasePriceAPI):
             # Include the original raw data for potential debugging/caching
             parsed_data["raw_data"] = raw_data
 
-            # Remove the deprecated key if it exists
-            if "hourly_prices" in parsed_data:
-                del parsed_data["hourly_prices"]
+            # Remove any legacy keys if they exist (backward compatibility cleanup)
+            legacy_keys = ["hourly_prices", "hourly_raw"]
+            for key in legacy_keys:
+                if key in parsed_data:
+                    del parsed_data[key]
 
             return parsed_data
 

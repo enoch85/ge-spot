@@ -33,31 +33,31 @@ class CurrencyConverter:
         self.use_subunit = display_unit == DisplayUnit.CENTS
         _LOGGER.debug("CurrencyConverter initialized with display_unit=%s, use_subunit=%s", display_unit, self.use_subunit)
 
-    async def convert_hourly_prices(
+    async def convert_interval_prices(
         self,
-        hourly_prices: Dict[str, float], # Prices in source currency/unit
+        interval_prices: Dict[str, float], # Prices in source currency/unit
         source_currency: str,
         source_unit: str = EnergyUnit.MWH # Assume MWh default if not specified
     ) -> Tuple[Dict[str, float], Optional[float], Optional[str]]:
-        """Converts a dictionary of hourly prices to the target currency and display unit.
+        """Converts a dictionary of interval prices to the target currency and display unit.
 
         Args:
-            hourly_prices: Dict of {'HH:00': price} in source currency/unit.
+            interval_prices: Dict of {'HH:MM': price} in source currency/unit.
             source_currency: The currency code of the source prices (e.g., 'EUR').
             source_unit: The energy unit of the source prices (e.g., 'MWh').
 
         Returns:
             A tuple containing:
-            - Dictionary of converted hourly prices {'HH:00': converted_price}.
+            - Dictionary of converted interval prices {'HH:MM': converted_price}.
             - The exchange rate used (or None if no conversion needed).
             - The timestamp of the exchange rate used.
         """
-        if not hourly_prices:
+        if not interval_prices:
             return {}, None, None
 
         _LOGGER.debug(
             "Converting %d prices from %s/%s to %s/%s (VAT included: %s, Rate: %.2f%%, Use Subunit/Cents: %s)",
-            len(hourly_prices),
+            len(interval_prices),
             source_currency,
             source_unit,
             self.target_currency,
@@ -106,9 +106,9 @@ class CurrencyConverter:
         # Determine display unit multiplier (e.g., cents/øre if requested)
         display_unit_multiplier = get_display_unit_multiplier(self.display_unit) if self.use_subunit else 1
 
-        for hour_key, price in hourly_prices.items():
+        for interval_key, price in interval_prices.items():
             if price is None:
-                converted_prices[hour_key] = None
+                converted_prices[interval_key] = None
                 continue
 
             try:
@@ -129,13 +129,13 @@ class CurrencyConverter:
                     vat_rate=self.vat_rate if self.include_vat else 0.0,
                     display_unit_multiplier=display_unit_multiplier
                 )
-                converted_prices[hour_key] = converted_price
+                converted_prices[interval_key] = converted_price
 
             except Exception as e:
-                _LOGGER.error("Error converting price for hour %s (Value: %s): %s", hour_key, price, e, exc_info=True)
-                converted_prices[hour_key] = None # Mark as None on conversion error
+                _LOGGER.error("Error converting price for interval %s (Value: %s): %s", interval_key, price, e, exc_info=True)
+                converted_prices[interval_key] = None # Mark as None on conversion error
 
-        _LOGGER.debug("Conversion complete. Example converted price for first hour: %s",
+        _LOGGER.debug("Conversion complete. Example converted price for first interval: %s",
                       next(iter(converted_prices.items())) if converted_prices else "N/A")
 
         return converted_prices, exchange_rate, rate_timestamp

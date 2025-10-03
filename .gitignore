@@ -17,6 +17,13 @@ eggs/
 lib/
 lib64/
 parts/
+
+# Ignore most test library files but keep specific mocks
+tests/lib/*
+!tests/lib/mocks/
+tests/lib/mocks/*
+!tests/lib/mocks/__init__.py
+!tests/lib/mocks/hass.py
 sdist/
 var/
 wheels/
@@ -172,3 +179,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Analysis and summary files - keep untracked, don't merge to main
+*ANALYSIS*.md
+*SUMMARY*.md
+TODO/SOURCE_VALIDATION_MASTER_PLAN.md

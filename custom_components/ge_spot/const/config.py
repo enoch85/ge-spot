@@ -10,7 +10,7 @@ class Config:
     DISPLAY_UNIT = "display_unit"
     CURRENCY = "currency"
     PRECISION = "precision"
-    CACHE_MAX_DAYS = "cache_max_days"  # Maximum number of days to keep in cache
+
     # Cache Settings
     CACHE_MAX_ENTRIES = "cache_max_entries"
     CACHE_TTL = "cache_ttl"
@@ -24,11 +24,6 @@ class Config:
 
     # Stromligning specific
     CONF_STROMLIGNING_SUPPLIER = "stromligning_supplier"
-
-    # Cache configuration
-    CACHE_COMPRESSION_THRESHOLD = "cache_compression_threshold"  # Size threshold for compression
-    CACHE_CLEANUP_THRESHOLD = "cache_cleanup_threshold"  # Number of stores before auto cleanup
-    CACHE_ADVANCED = "cache_advanced"  # Whether to use advanced cache
 
     # API configuration
     SOURCE_PRIORITY = "source_priority"  # Priority order for data sources

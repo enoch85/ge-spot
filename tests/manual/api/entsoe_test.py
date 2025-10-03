@@ -17,7 +17,6 @@ Example:
 import asyncio
 import os
 import sys
-from datetime import datetime, timedelta
 import logging
 
 # Add the project root to the path
@@ -25,7 +24,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 from custom_components.ge_spot.api.entsoe import EntsoeAPI
 from custom_components.ge_spot.const.areas import AreaMapping
-from custom_components.ge_spot.const.config import Config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -49,7 +47,7 @@ async def main():
 
     # Initialize API
     api = EntsoeAPI(api_key)
-    
+
     # Test connection
     logger.info("Testing API connection...")
     try:
@@ -63,11 +61,11 @@ async def main():
         # Parse data
         logger.info("Parsing raw data...")
         parsed_data = await api.parse_raw_data(raw_data)
-        
-        if not parsed_data or not parsed_data.get("hourly_prices"):
-            logger.error("Failed to parse data or no hourly prices returned")
+
+        if not parsed_data or not parsed_data.get("interval_prices"):
+            logger.error("Failed to parse data or no interval prices returned")
             return 1
-        
+
         # Display results
         logger.info("\nParsed Data:")
         logger.info(f"Source: {parsed_data.get('source')}")
@@ -75,18 +73,18 @@ async def main():
         logger.info(f"Currency: {parsed_data.get('currency')}")
         logger.info(f"API Timezone: {parsed_data.get('api_timezone')}")
         logger.info(f"Fetched at: {parsed_data.get('fetched_at')}")
-        
-        # Format hourly prices into a table
-        logger.info("\nHourly Prices:")
+
+        # Format interval prices into a table
+        logger.info("\nInterval Prices:")
         logger.info(f"{'Timestamp':<25} | {'Price':<10}")
         logger.info("-" * 38)
-        
-        for timestamp, price in sorted(parsed_data.get("hourly_prices", {}).items()):
+
+        for timestamp, price in sorted(parsed_data.get("interval_prices", {}).items()):
             logger.info(f"{timestamp:<25} | {price:<10.5f}")
-        
+
         logger.info("\nTest completed successfully")
         return 0
-        
+
     except Exception as e:
         logger.error(f"Error: {str(e)}")
         return 1

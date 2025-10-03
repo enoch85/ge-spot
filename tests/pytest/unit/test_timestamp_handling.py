@@ -176,12 +176,12 @@ class TestTimestampHandling:
         late_today_utc = datetime.combine(test_dates["today"], datetime.min.time().replace(hour=22), tzinfo=timezone.utc)
 
         # Should be "today" in UTC
-        day_type = parser.classify_timestamp_day(late_today_utc, timezones["utc"])
+        day_type = parser.classify_timestamp_day(late_today_utc, timezones["utc"], test_dates["today"])
         assert day_type == "today", f"Expected 'today', got '{day_type}' for {late_today_utc} in UTC"
 
-        # Should be "today" in Tokyo (relative to Tokyo's current date)
-        day_type = parser.classify_timestamp_day(late_today_utc, timezones["japanese"])
-        assert day_type == "today", f"Expected 'today', got '{day_type}' for {late_today_utc} in Tokyo" # CORRECTED Assertion
+        # Should be "tomorrow" in Tokyo (UTC 22:00 Oct 3 = Tokyo 07:00 Oct 4, which is tomorrow from Oct 3)
+        day_type = parser.classify_timestamp_day(late_today_utc, timezones["japanese"], test_dates["today"])
+        assert day_type == "tomorrow", f"Expected 'tomorrow', got '{day_type}' for {late_today_utc} in Tokyo"
 
         # Test early tomorrow UTC (01:00) which might be today in US timezones (e.g., US Eastern UTC-5/-4 -> 21:00/20:00 previous day)
         early_tomorrow_utc = datetime.combine(test_dates["tomorrow"], datetime.min.time().replace(hour=1), tzinfo=timezone.utc)

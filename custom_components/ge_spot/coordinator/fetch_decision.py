@@ -1,16 +1,26 @@
-"""Decision maker for when to fetch new data."""
+"""Decision maker for when to fetch new data.
+
+This module uses data validity tracking to determine when fetches are needed.
+Instead of asking "do we have complete data?", we ask "how long is our data valid for?"
+"""
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, Optional, List, Tuple
+from datetime import datetime, time, timedelta
+from typing import Any, Optional, Tuple
 
 from homeassistant.util import dt as dt_util
 
 from ..const.network import Network
+from .data_validity import DataValidity
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class FetchDecisionMaker:
-    """Decision maker for when to fetch new data."""
+    """Decision maker for when to fetch new data.
+    
+    Uses DataValidity to make clear, timestamp-based decisions about when to fetch.
+    Goal: Only fetch 1-2 times per day (typically at 13:00 for tomorrow's data).
+    """
 
     def __init__(self, tz_service: Any):
         """Initialize the fetch decision maker.
@@ -24,104 +34,134 @@ class FetchDecisionMaker:
         self,
         now: datetime,
         last_fetch: Optional[datetime],
-        fetch_interval: int,
-        has_current_hour_price: bool,
-        # Add the new parameter
-        has_complete_data_for_today: bool
+        data_validity: DataValidity,
+        fetch_interval_minutes: int = 15
     ) -> Tuple[bool, str]:
-        """Determine if we need to fetch from API.
+        """Determine if we need to fetch from API based on data validity.
+
+        Decision logic:
+        1. CRITICAL: No data for current interval → FETCH IMMEDIATELY
+        2. Running out: Less than safety buffer intervals remaining → FETCH
+        3. Special window: 13:00-14:00 and missing tomorrow's data → FETCH
+        4. Initial fetch: Never fetched before → FETCH
+        5. Otherwise: SKIP (we have enough future data)
 
         Args:
             now: Current datetime
-            last_fetch: Last API fetch time
-            fetch_interval: API fetch interval in minutes
-            has_current_hour_price: Whether cache has current hour price
-            has_complete_data_for_today: Whether cache has complete data for today (20+ hours)
+            last_fetch: Last API fetch time (used for rate limiting)
+            data_validity: DataValidity object describing our current data coverage
+            fetch_interval_minutes: Minimum minutes between fetches (rate limit)
 
         Returns:
             Tuple of (need_api_fetch, reason)
         """
-        need_api_fetch = False
-        reason = ""
-
-        # Check special time windows first
-        hour = now.hour
-        for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
-            if start_hour <= hour < end_hour:
-                # During special windows, only fetch if we don't have data for the current hour
-                if not has_current_hour_price:
-                    reason = f"Special time window ({start_hour}-{end_hour}), no data for current hour, fetching from API"
+        # CRITICAL CHECK: Do we have data for the current interval?
+        if not data_validity.has_current_interval:
+            current_interval_key = self._tz_service.get_current_interval_key()
+            reason = f"No data for current interval ({current_interval_key}) - fetching data immediately"
+            _LOGGER.info(reason)  # INFO level: expected on reload, not an error
+            
+            # Respect rate limiting to avoid hammering the API
+            if last_fetch:
+                from ..utils.rate_limiter import RateLimiter
+                should_skip, skip_reason = RateLimiter.should_skip_fetch(
+                    last_fetched=last_fetch,
+                    current_time=now,
+                    min_interval=fetch_interval_minutes
+                )
+                
+                if should_skip:
+                    reason = f"No current interval data, but rate limited ({skip_reason})"
+                    # INFO level: This is expected when parser changes or cache invalidation happens
+                    # The system will fall back to any available cached data
                     _LOGGER.info(reason)
-                    need_api_fetch = True
-                    break
-                else:
-                    # We have current hour data, no need to fetch during special window
-                    reason = f"Special time window ({start_hour}-{end_hour}), but we already have current hour data, skipping"
-                    _LOGGER.debug(reason)
                     return False, reason
+            
+            return True, reason
 
-        # Use the rate limiter to make the decision
-        from ..utils.rate_limiter import RateLimiter
-        should_skip, skip_reason = RateLimiter.should_skip_fetch(
-            last_fetched=last_fetch,
-            current_time=now,
-            min_interval=fetch_interval
+        # Initial fetch check (never fetched before)
+        if not last_fetch:
+            reason = "Initial startup - fetching data"
+            _LOGGER.info(reason)
+            return True, reason
+
+        # Calculate how much data we have left
+        intervals_remaining = data_validity.intervals_remaining(now)
+        
+        _LOGGER.debug(
+            f"Data validity check: {intervals_remaining} intervals remaining, validity: {data_validity}"
         )
 
-        # If rate limiter says skip, and we have current hour data, definitely skip.
-        if should_skip and has_current_hour_price:
-            reason = f"Rate limiter suggests skipping fetch: {skip_reason}"
-            _LOGGER.debug(reason)
-            return False, reason
-
-        # If we have complete data for today, don't fetch unless forced by other critical reasons.
-        if has_complete_data_for_today:
-            reason = "Valid processed data for the complete_data period (20+ hours) exists. Fetch not needed based on this rule."
-            _LOGGER.debug(reason)
-            # This condition should take precedence unless other critical flags are set.
-            # We will re-evaluate need_api_fetch at the end based on critical needs like no current_hour_price.
-        else:
-            # If we don't have complete data, this is a reason to fetch.
-            reason = "Complete_data quota (20+ hours) not met for today. Fetching new data."
+        # SAFETY CHECK: Are we running low on data?
+        if intervals_remaining < Network.Defaults.DATA_SAFETY_BUFFER_INTERVALS:
+            reason = (
+                f"Running low on data: only {intervals_remaining} intervals remaining "
+                f"(safety buffer: {Network.Defaults.DATA_SAFETY_BUFFER_INTERVALS} intervals) - fetching"
+            )
             _LOGGER.info(reason)
-            need_api_fetch = True
+            
+            # Check rate limiting
+            from ..utils.rate_limiter import RateLimiter
+            should_skip, skip_reason = RateLimiter.should_skip_fetch(
+                last_fetched=last_fetch,
+                current_time=now,
+                min_interval=fetch_interval_minutes
+            )
+            
+            if should_skip:
+                reason = f"Low on data but rate limited: {skip_reason}"
+                _LOGGER.warning(reason)
+                return False, reason
+                
+            return True, reason
 
-        # Check if API fetch interval has passed
-        if not need_api_fetch and last_fetch:
-            time_since_fetch = (now - last_fetch).total_seconds() / 60
-            if time_since_fetch >= fetch_interval:
-                if not has_current_hour_price:
+        # SPECIAL WINDOW CHECK: During tomorrow data fetch window (13:00-15:00) - time to fetch tomorrow's data
+        hour = now.hour
+        # Use the second window from SPECIAL_HOUR_WINDOWS which is for tomorrow's data
+        start_hour, end_hour = Network.Defaults.SPECIAL_HOUR_WINDOWS[1]
+        
+        if start_hour <= hour < end_hour:
+            # Check if we already have tomorrow's complete data
+            tomorrow_date = now.date() + timedelta(days=1)
+            
+            # Check against the required interval threshold (76 intervals = 80% of 96)
+            if data_validity.tomorrow_interval_count < Network.Defaults.REQUIRED_TOMORROW_INTERVALS:
+                reason = (
+                    f"Special fetch window ({start_hour}:00-{end_hour}:00) - "
+                    f"missing tomorrow's data (have {data_validity.tomorrow_interval_count} intervals, "
+                    f"need {Network.Defaults.REQUIRED_TOMORROW_INTERVALS}) - fetching"
+                )
+                _LOGGER.info(reason)
+                
+                # Check rate limiting
+                from ..utils.rate_limiter import RateLimiter
+                should_skip, skip_reason = RateLimiter.should_skip_fetch(
+                    last_fetched=last_fetch,
+                    current_time=now,
+                    min_interval=fetch_interval_minutes
+                )
+                
+                if should_skip:
                     reason = (
-                        f"API fetch interval ({fetch_interval} minutes) passed "
-                        f"and no current_hour_price, fetching new data"
+                        f"Special window but rate limited: {skip_reason}. "
+                        f"Will retry in next update cycle."
                     )
                     _LOGGER.info(reason)
-                    need_api_fetch = True
-                elif has_current_hour_price: # Log when interval passed but we have current hour data
-                    reason = (
-                        f"API fetch interval ({fetch_interval} minutes) passed, "
-                        f"but current_hour_price is available. "
-                        f"Fetch not triggered by this specific interval rule."
-                    )
-                    _LOGGER.debug(reason)
+                    return False, reason
+                    
+                return True, reason
+            else:
+                reason = (
+                    f"Special window ({start_hour}:00-{end_hour}:00) but already have tomorrow's data "
+                    f"({data_validity.tomorrow_interval_count} intervals) - skipping"
+                )
+                _LOGGER.debug(reason)
+                return False, reason
 
-        # If we've never fetched, we need to fetch
-        if not need_api_fetch and not last_fetch:
-            reason = "Initial startup or forced refresh, fetching from API"
-            _LOGGER.info(reason)
-            need_api_fetch = True
-
-        # If we have no cached data for the current hour, this is a critical reason to fetch.
-        if not has_current_hour_price:
-            current_hour_key = self._tz_service.get_current_hour_key()
-            reason = f"No cached data for current hour {current_hour_key}, fetching from API (overrides complete_data check if necessary)"
-            _LOGGER.info(reason)
-            need_api_fetch = True
-        # If we decided to fetch because complete_data quota was not met, but we DO have current hour price,
-        # and the rate limiter didn't say to skip, then proceed with the fetch.
-        elif need_api_fetch and has_current_hour_price:
-            _LOGGER.debug(
-                "Proceeding with fetch because complete_data quota not met, even though current hour price is available."
-            )
-
-        return need_api_fetch, reason
+        # ALL GOOD: We have enough data
+        reason = (
+            f"Data valid until {data_validity.data_valid_until.strftime('%Y-%m-%d %H:%M') if data_validity.data_valid_until else 'unknown'} "
+            f"({intervals_remaining} intervals remaining) - no fetch needed"
+        )
+        _LOGGER.debug(reason)
+        return False, reason

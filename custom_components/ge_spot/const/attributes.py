@@ -8,9 +8,9 @@ class Attributes:
     RAW_VALUES = "raw_values"  # Raw values before conversion
     FALLBACK_INFO = "fallback_info"  # Detailed fallback information
     USING_CACHED_DATA = "using_cached_data"  # Whether using cached data
-    ATTEMPTED_SOURCES = "attempted_sources"  # All attempted API sources
-    PRIMARY_SOURCE = "primary_source"  # Original primary source
+    ATTEMPTED_SOURCES = "attempted_sources"  # All attempted API sources (backend only)
     ACTIVE_SOURCE = "active_source"  # Source that succeeded
+    VALIDATED_SOURCES = "validated_sources"    # Sources proven to work
     RAW_VALUE = "raw_value"  # Raw value for a specific metric
     CONVERSION_INFO = "conversion_info"  # Information about value conversions
     CURRENCY = "currency"
@@ -29,8 +29,6 @@ class Attributes:
     OFF_PEAK_2 = "off_peak_2"
     PEAK = "peak"
     LAST_UPDATED = "last_updated"
-    AVAILABLE_FALLBACKS = "available_fallbacks"  # List of available fallback sources
-    IS_USING_FALLBACK = "is_using_fallback"  # Whether currently using a fallback
     API_KEY_STATUS = "api_key_status"  # Status of API key (valid/invalid)
 
     # Exchange rate attributes

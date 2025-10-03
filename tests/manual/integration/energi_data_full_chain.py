@@ -10,7 +10,7 @@ This script performs an end-to-end test of the Energi Data Service API integrati
 
 Usage:
     python energi_data_full_chain.py [area]
-    
+
     area: Optional area code (DK1, DK2)
           Defaults to DK1 if not provided
 """
@@ -18,7 +18,7 @@ Usage:
 import sys
 import os
 import argparse
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 import asyncio
 import pytz
 import logging
@@ -42,17 +42,17 @@ _LOGGER = logging.getLogger(__name__)
 async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Test Energi Data Service API integration')
-    parser.add_argument('area', nargs='?', default='DK1', 
+    parser.add_argument('area', nargs='?', default='DK1',
                         choices=DANISH_AREAS,
                         help='Area code (DK1, DK2)')
     args = parser.parse_args()
     area = args.area
-    
+
     print(f"\n===== Energi Data Service API Full Chain Test for {area} =====\n")
-    
+
     # Initialize the API client
     api = EnergiDataAPI()
-    
+
     try:
         # Step 1: Fetch raw data
         _LOGGER.info(f"Fetching Energi Data Service data for area: {area}")
@@ -109,12 +109,13 @@ async def main():
         parsed_data["timezone"] = raw_data_wrapper.get("timezone", "Europe/Copenhagen")
 
         print(f"Parsed data keys: {list(parsed_data.keys())}")
-        hourly_raw_prices = parsed_data.get("hourly_raw", {})
-        if not hourly_raw_prices:
-            print("Warning: No hourly prices (hourly_raw) found in the parsed data")
+        interval_raw_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
+        if not interval_raw_prices:
+            print("Warning: No interval prices (interval_raw) found in the parsed data")
+            print(f"Available keys: {list(parsed_data.keys())}")
             return 1
 
-        print(f"Found {len(hourly_raw_prices)} hourly prices (raw)")
+        print(f"Found {len(interval_raw_prices)} interval prices (raw)")
 
         # Step 3: Currency conversion (DKK -> EUR)
         print("\nConverting prices from DKK to EUR...")
@@ -122,7 +123,7 @@ async def main():
         await exchange_service.get_rates(force_refresh=True)
 
         converted_prices = {}
-        for ts, price in hourly_raw_prices.items():
+        for ts, price in interval_raw_prices.items():  # Changed from hourly_raw_prices
             price_eur = await exchange_service.convert(
                 price,
                 parsed_data.get("currency", Currency.DKK),
@@ -139,7 +140,7 @@ async def main():
         dk_tz = pytz.timezone(parsed_data.get('timezone', 'Europe/Copenhagen'))
         prices_by_date = {}
 
-        for ts, price in hourly_raw_prices.items():
+        for ts, price in interval_raw_prices.items():  # Changed from hourly_raw_prices
             dt = datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone(dk_tz)
             date_str = dt.strftime('%Y-%m-%d')
             hour_str = dt.strftime('%H:%M')
@@ -189,14 +190,14 @@ async def main():
                     print("⚠ No price variation detected - suspicious for real market data")
 
         print("\nTest completed successfully!")
-        
+
     except Exception as e:
         _LOGGER.error(f"Error during test: {e}", exc_info=True)
         print(f"Error during test: {e}")
         import traceback
         traceback.print_exc()
         return 1
-    
+
     return 0
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # GE-Spot: Global Electricity Spot Prices Integration for Home Assistant
 
-![Version](https://img.shields.io/badge/version-1.1.2-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg)
+![Version](https://img.shields.io/badge/version-1.2.0-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg)
 
 > *"Hit the right spot with your energy prices"*
 
@@ -92,23 +92,24 @@ For a complete list of supported areas and their currency mappings, see the [Con
 
 - Simple configuration through the Home Assistant UI
 - Region-specific setup options
+- **15-minute price intervals** for accurate, granular pricing (96 intervals per day)
 - Source-agnostic sensors that provide consistent entity IDs regardless of data source
 - Tomorrow's prices available after 13:00 CET (when published)
 - Automatic fallback between data sources for the same region for increased reliability
-- Seamless timezone handling to ensure correct hourly price display regardless of API source
+- Seamless timezone handling to ensure correct interval price display regardless of API source
 - Currency conversion with dynamic exchange rates from the European Central Bank
 - Timestamps in ISO format for compatibility with other systems
 - Provides the following sensors for each configured region:
-  - **Current Price:** The electricity spot price for the current hour in your chosen display unit (e.g., cents/kWh).
-  - **Next Hour Price:** The electricity spot price for the upcoming hour.
-  - **Average Price:** The average electricity spot price calculated across all hours of the current day (today).
-  - **Peak Price:** The highest hourly electricity spot price encountered during the current day (today).
-  - **Off-Peak Price:** The lowest hourly electricity spot price encountered during the current day (today).
+  - **Current Price:** The electricity spot price for the current 15-minute interval in your chosen display unit (e.g., cents/kWh).
+  - **Next Interval Price:** The electricity spot price for the upcoming 15-minute interval.
+  - **Average Price:** The average electricity spot price calculated across all intervals of the current day (today).
+  - **Peak Price:** The highest interval electricity spot price encountered during the current day (today).
+  - **Off-Peak Price:** The lowest interval electricity spot price encountered during the current day (today).
   - **Price Difference:** The absolute difference between the *Current Price* and the *Average Price* for today. A negative value indicates the current price is below the daily average.
   - **Price Percentage:** The relative difference between the *Current Price* and the *Average Price* for today, expressed as a percentage of the average price. A negative percentage indicates the current price is below the daily average.
-  - **Tomorrow Average Price:** The average electricity spot price calculated across all hours of the *next* day (tomorrow). This sensor becomes available once tomorrow's prices are published by the source (typically around 13:00-14:00 CET).
-  - **Tomorrow Peak Price:** The highest hourly electricity spot price forecast for the *next* day (tomorrow). Becomes available when tomorrow's prices are published.
-  - **Tomorrow Off-Peak Price:** The lowest hourly electricity spot price forecast for the *next* day (tomorrow). Becomes available when tomorrow's prices are published.
+  - **Tomorrow Average Price:** The average electricity spot price calculated across all intervals of the *next* day (tomorrow). This sensor becomes available once tomorrow's prices are published by the source (typically around 13:00-14:00 CET).
+  - **Tomorrow Peak Price:** The highest interval electricity spot price forecast for the *next* day (tomorrow). Becomes available when tomorrow's prices are published.
+  - **Tomorrow Off-Peak Price:** The lowest interval electricity spot price forecast for the *next* day (tomorrow). Becomes available when tomorrow's prices are published.
 
 ## Configuration
 
@@ -203,7 +204,7 @@ flowchart TD
 
 ### Timezone Handling
 
-The integration normalizes timestamps from different APIs to ensure correct hourly prices:
+The integration normalizes timestamps from different APIs to ensure correct interval prices:
 
 ```mermaid
 flowchart TD
@@ -218,10 +219,10 @@ flowchart TD
         SourceTZ & AreaTZ & HA_TZ & DST --> Converter
     end
 
-    Converter --> HourMatch["Hour-matching logic"]
-    HourMatch -->|current| Cur["Current-price sensor"]
-    HourMatch -->|next| Next["Next-hour sensor"]
-    HourMatch -->|all| All["Hourly prices"]
+    Converter --> IntervalMatch["Interval-matching logic"]
+    IntervalMatch -->|current| Cur["Current-price sensor"]
+    IntervalMatch -->|next| Next["Next-interval sensor"]
+    IntervalMatch -->|all| All["Interval prices (96 per day)"]
 
     All -->|today| TStats["Today's stats"]
     All -->|tomorrow| MStats["Tomorrow stats"]
@@ -232,6 +233,7 @@ flowchart TD
 - **Timezone Awareness**: Handles UTC, local time, and timezone-naive timestamps correctly
 - **Region-specific Handling**: Applies appropriate timezone for each price area
 - **Home Assistant Integration**: Uses your Home Assistant timezone setting for consistent display
+- **15-Minute Intervals**: All timestamps are normalized to 15-minute boundaries (HH:00, HH:15, HH:30, HH:45)
 
 ### Price Conversion Logic
 
@@ -346,16 +348,39 @@ Different data sources will return different prices for the same hour due to wha
 
 For Danish areas (DK1, DK2), the integration extracts only the electricity component from Stromligning to match other price sources. The full price breakdown with all components is available in the sensor attributes.
 
-### Ensuring Consistent Hour Alignment
+### Ensuring Consistent Interval Alignment
 
-To ensure all sources report prices for the same hours despite different source timezones:
+To ensure all sources report prices for the same time intervals despite different source timezones:
 
 1. Each API response is processed with explicit timezone awareness
 2. Timestamps are parsed in their original timezone context
-3. Hours are normalized to the Home Assistant timezone
-4. DST transitions are handled automatically
+3. Intervals are normalized to the Home Assistant timezone
+4. DST transitions are handled automatically (92 intervals on spring-forward days, 100 on fall-back days)
+5. All prices are aligned to 15-minute boundaries: HH:00, HH:15, HH:30, HH:45
 
-This ensures that, for example, the price for 14:00 is the same regardless of which API provided it.
+This ensures that, for example, the price for 14:15 is the same regardless of which API provided it.
+
+### API Data Resolution & Expansion
+
+Different APIs provide data at different intervals. GE-Spot intelligently handles this:
+
+| Source | Native Resolution | How GE-Spot Handles It |
+|--------|-------------------|------------------------|
+| **ENTSO-E** | 15-min (PT15M), 30-min (PT30M), or hourly (PT60M) | Uses native 15-min data when available |
+| **Nord Pool** | Transitioning to 15-min | Detects actual resolution; expands if hourly |
+| **EPEX** | 15-min products | Uses native 15-min data |
+| **OMIE** | Hourly only | Expands hourly data to 15-min intervals (duplicates price) |
+| **ComEd** | 5-min dispatch | Aggregates 5-min data to 15-min intervals (averages 3 values) |
+| **Stromligning** | Hourly | Expands hourly data to 15-min intervals |
+| **Energi Data** | Hourly | Expands hourly data to 15-min intervals |
+| **Amber** | 30-min (NEM) | Accepts 30-min intervals; may expand to 15-min |
+| **AEMO** | 5-min dispatch | Aggregates 5-min data to 15-min intervals |
+
+**Expansion Strategy**: For hourly-only APIs, each hour's price is duplicated across all 4 intervals within that hour. For example:
+- Input: `{"14:00": 50.0 EUR/MWh, "15:00": 55.0 EUR/MWh}`
+- Output: `{"14:00": 50.0, "14:15": 50.0, "14:30": 50.0, "14:45": 50.0, "15:00": 55.0, "15:15": 55.0, "15:30": 55.0, "15:45": 55.0}`
+
+This approach maintains compatibility with all API sources while providing consistent 15-minute granularity for automations.
 
 ### Tomorrow's Data Fetching
 
@@ -393,9 +418,9 @@ flowchart TD
 type: entities
 entities:
   - entity: sensor.gespot_current_price_se4
-    name: Current Electricity Price
-  - entity: sensor.gespot_next_hour_price_se4
-    name: Next Hour Price
+    name: Current Electricity Price (15-min interval)
+  - entity: sensor.gespot_next_interval_price_se4
+    name: Next Interval Price
   - entity: sensor.gespot_day_average_price_se4
     name: Today's Average
   - entity: sensor.gespot_tomorrow_average_price_se4
@@ -408,19 +433,19 @@ entities:
 type: custom:apexcharts-card
 header:
   show: true
-  title: Electricity Prices
+  title: Electricity Prices (15-min intervals)
   show_states: true
 series:
   - entity: sensor.gespot_current_price_se4
     attribute: today_with_timestamps
     type: column
-    name: Today
+    name: Today (96 intervals)
     group_by:
       func: raw
   - entity: sensor.gespot_current_price_se4
     attribute: tomorrow_with_timestamps
     type: column
-    name: Tomorrow
+    name: Tomorrow (96 intervals)
     group_by:
       func: raw
 ```
@@ -463,8 +488,9 @@ If you experience issues:
 
 - **No Data/Empty Sensors**: Check if your area is correctly supported by your selected source
 - **API Key Errors**: For ENTSO-E, verify your API key is entered correctly
-- **Timezone Issues**: Check if the hourly prices align with your expected hours
+- **Timezone Issues**: Check if the interval prices align with your expected times
 - **Missing Tomorrow Prices**: Tomorrow's prices are typically only available after 13:00 CET
+- **Sensor Shows 96 Data Points**: This is correct! GE-Spot now provides 15-minute intervals (96 per day instead of 24 hourly)
 
 ### Diagnostic Steps
 
@@ -567,19 +593,20 @@ To add a new price source:
 
 ### Standardized Return Format
 
-API parsers aim to return a standardized dictionary format containing raw hourly prices, timezone, and currency information. This raw structure is then processed by the `DataProcessor` into the final format used by sensors, which typically includes:
+API parsers aim to return a standardized dictionary format containing raw interval prices, timezone, and currency information. This raw structure is then processed by the `DataProcessor` into the final format used by sensors, which typically includes:
 
 ```python
 {
-    "current_price": float,           # Current hour price (converted)
-    "next_hour_price": float,         # Next hour price (converted)
+    "current_price": float,           # Current interval price (converted)
+    "next_interval_price": float,     # Next interval price (converted)
     "day_average_price": float,       # Day average (converted)
     "peak_price": float,              # Day maximum (converted)
     "off_peak_price": float,          # Day minimum (converted)
-    "hourly_prices": dict,            # Hourly prices "YYYY-MM-DDTHH:00:00+ZZ:ZZ" -> float (converted)
-    "tomorrow_hourly_prices": dict,   # Tomorrow's hourly prices (if available, converted)
-    "raw_today": dict,                # Raw hourly prices for today (before conversion)
-    "raw_tomorrow": dict,             # Raw hourly prices for tomorrow (before conversion)
+    "interval_prices": dict,          # Interval prices "YYYY-MM-DDTHH:MM:00+ZZ:ZZ" -> float (converted)
+                                      # 96 entries for a full day (15-min intervals)
+    "tomorrow_interval_prices": dict, # Tomorrow's interval prices (if available, converted)
+    "raw_today": dict,                # Raw interval prices for today (before conversion)
+    "raw_tomorrow": dict,             # Raw interval prices for tomorrow (before conversion)
     "source_data": {                  # Metadata about the fetch
         "source": str,                # Source name that provided the data
         "currency": str,              # Original currency from source

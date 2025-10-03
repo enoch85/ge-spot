@@ -24,11 +24,11 @@ class EpexParser(BasePriceParser):
             raw_data: Raw API response data
 
         Returns:
-            Parsed data with hourly prices
+            Parsed data with interval prices
         """
         _LOGGER.debug(f"EpexParser received raw_data of type: {type(raw_data)}")
         result = {
-            "hourly_prices": {},
+            "interval_raw": {},  # Changed from interval_prices
             "currency": Currency.EUR
         }
 
@@ -47,12 +47,12 @@ class EpexParser(BasePriceParser):
                 _LOGGER.warning(f"Failed to parse EPEX HTML: {e}")
         # Handle pre-processed data
         elif isinstance(raw_data, dict):
-            if "hourly_prices" in raw_data and isinstance(raw_data["hourly_prices"], dict):
-                result["hourly_prices"] = raw_data["hourly_prices"]
+            if "interval_raw" in raw_data and isinstance(raw_data["interval_raw"], dict):  # Changed from interval_prices
+                result["interval_raw"] = raw_data["interval_raw"]  # Changed from interval_prices
 
-        # Calculate current and next hour prices
-        result["current_price"] = self._get_current_price(result["hourly_prices"])
-        result["next_hour_price"] = self._get_next_hour_price(result["hourly_prices"])
+        # Calculate current and next interval prices
+        result["current_price"] = self._get_current_price(result["interval_raw"])  # Changed from interval_prices
+        result["next_interval_price"] = self._get_next_interval_price(result["interval_raw"])  # Changed from interval_prices
 
         _LOGGER.debug(f"EpexParser returning result: {result}")
         return result
@@ -144,10 +144,10 @@ class EpexParser(BasePriceParser):
                                         date_obj.year, date_obj.month, date_obj.day,
                                         hour_idx, 0, 0, tzinfo=timezone.utc
                                     )
-                                    hour_key = hour_dt.isoformat()
+                                    interval_key = hour_dt.isoformat()
 
-                                    # Add to hourly prices
-                                    result["hourly_prices"][hour_key] = {"price": price_value, "api_price_date": date_obj.isoformat()}
+                                    # Add to interval prices (EPEX provides hourly data only)
+                                    result["interval_raw"][interval_key] = {"price": price_value, "api_price_date": date_obj.isoformat()}  # Changed from interval_prices
                                 except (ValueError, TypeError) as e:
                                     _LOGGER.debug(f"Failed to parse EPEX price: {price_text} - {e}")
             except Exception as e:
@@ -197,43 +197,43 @@ class EpexParser(BasePriceParser):
 
         return None
 
-    def _get_current_price(self, hourly_prices: Dict[str, Dict[str, Any]]) -> Optional[float]:
-        """Get current hour price.
+    def _get_current_price(self, interval_prices: Dict[str, Dict[str, Any]]) -> Optional[float]:
+        """Get current interval price.
 
         Args:
-            hourly_prices: Dictionary of hourly prices {iso_timestamp: {"price": float, ...}}
+            interval_prices: Dictionary of interval prices {iso_timestamp: {"price": float, ...}}
 
         Returns:
-            Current hour price or None if not available
+            Current interval price or None if not available
         """
-        if not hourly_prices:
+        if not interval_prices:
             return None
 
         # Use UTC time for comparison
         now_utc = datetime.now(timezone.utc)
         current_hour_utc = now_utc.replace(minute=0, second=0, microsecond=0)
-        current_hour_key = current_hour_utc.isoformat()
+        current_interval_key = current_hour_utc.isoformat()
 
-        price_data = hourly_prices.get(current_hour_key)
+        price_data = interval_prices.get(current_interval_key)
         return price_data.get("price") if price_data else None
 
-    def _get_next_hour_price(self, hourly_prices: Dict[str, Dict[str, Any]]) -> Optional[float]:
-        """Get next hour price.
+    def _get_next_interval_price(self, interval_prices: Dict[str, Dict[str, Any]]) -> Optional[float]:
+        """Get next interval price.
 
         Args:
-            hourly_prices: Dictionary of hourly prices {iso_timestamp: {"price": float, ...}}
+            interval_prices: Dictionary of interval prices {iso_timestamp: {"price": float, ...}}
 
         Returns:
-            Next hour price or None if not available
+            Next interval price or None if not available
         """
-        if not hourly_prices:
+        if not interval_prices:
             return None
 
         # Use UTC time for comparison
         now_utc = datetime.now(timezone.utc)
         next_hour_utc = (now_utc.replace(minute=0, second=0, microsecond=0) +
                          timedelta(hours=1))
-        next_hour_key = next_hour_utc.isoformat()
+        next_interval_key = next_hour_utc.isoformat()
 
-        price_data = hourly_prices.get(next_hour_key)
+        price_data = interval_prices.get(next_interval_key)
         return price_data.get("price") if price_data else None

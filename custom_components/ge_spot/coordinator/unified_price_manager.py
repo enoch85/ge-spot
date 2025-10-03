@@ -68,6 +68,18 @@ class UnifiedPriceManager:
         self.area = area
         self.currency = currency
         self.config = config
+        
+        # Debug: Log config keys to diagnose API key issue
+        _LOGGER.debug(
+            f"UnifiedPriceManager init for {area}: config keys={list(config.keys())}, "
+            f"api_key={'PRESENT' if config.get(Config.API_KEY) or config.get('api_key') else 'MISSING'}"
+        )
+        
+        self.timezone_service = TimezoneService(
+            hass=hass,
+            area=area,
+            config=config
+        )
 
         # API sources and tracking
         self._supported_sources = get_sources_for_region(area)
@@ -76,6 +88,7 @@ class UnifiedPriceManager:
         self._attempted_sources = []
         self._fallback_sources = [] # Keep track of sources used as fallback
         self._using_cached_data = False
+        self._validated_sources = set()  # Sources that have successfully returned usable data
 
         # Services and utilities
         self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
@@ -160,7 +173,93 @@ class UnifiedPriceManager:
             else:
                 _LOGGER.warning("Source '%s' configured but no matching API class found.", source)
 
-        _LOGGER.info(f"Configured sources for area {self.area}: {[cls.__name__ for cls in self._api_classes]}")
+        # Log configured sources using source_type instead of class names
+        configured_source_names = [
+            cls(config={}).source_type for cls in self._api_classes
+        ]
+        _LOGGER.info(f"Configured sources for area {self.area}: {configured_source_names}")
+
+    def get_validated_sources(self) -> List[str]:
+        """Get list of validated source names."""
+        return sorted(list(self._validated_sources))
+
+    async def validate_configured_sources_once(self) -> Dict[str, bool]:
+        """Validate all configured sources during initial setup (one-time only).
+        
+        Fetches actual data with minimal date range (today only) to verify:
+        - API is accessible
+        - API keys are valid
+        - Data can be fetched and parsed
+        
+        Called ONLY during initial configuration, not on every restart.
+        Failures are logged but don't block setup.
+        Runs all validations in parallel for speed.
+        
+        Returns:
+            Dict mapping source names to validation results
+        """
+        session = async_get_clientsession(self.hass)
+        now = dt_util.now()
+        
+        _LOGGER.info(f"[{self.area}] Validating {len(self._api_classes)} configured source(s)")
+        
+        async def validate_single_source(api_class):
+            """Validate a single API source."""
+            temp_instance = api_class(config={})
+            source_name = temp_instance.source_type
+            
+            try:
+                api_instance = api_class(
+                    config=self.config,
+                    session=session,
+                    timezone_service=self._tz_service
+                )
+                
+                # Fetch minimal data (today only)
+                data = await api_instance.fetch_raw_data(
+                    area=self.area,
+                    session=session,
+                    reference_time=now
+                )
+                
+                # Generic validation: Check raw_data exists and is not empty
+                # This confirms the API works without source-specific logic
+                raw_data = data.get('raw_data') if data and isinstance(data, dict) else None
+                is_valid = raw_data is not None and raw_data  # Not None and not empty
+                
+                if is_valid:
+                    self._validated_sources.add(source_name)
+                    _LOGGER.info(f"[{self.area}] ✓ '{source_name}' validated")
+                else:
+                    _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation failed - no raw_data")
+                
+                return (source_name, is_valid)
+                    
+            except Exception as e:
+                _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation error: {e}")
+                return (source_name, False)
+        
+        # Run all validations in parallel
+        results = await asyncio.gather(
+            *[validate_single_source(api_class) for api_class in self._api_classes],
+            return_exceptions=True
+        )
+        
+        # Convert results to dict
+        validation_results = {}
+        for result in results:
+            if isinstance(result, Exception):
+                _LOGGER.error(f"[{self.area}] Validation task failed: {result}")
+                continue
+            if not isinstance(result, tuple) or len(result) != 2:
+                _LOGGER.error(f"[{self.area}] Invalid validation result format: {result}")
+                continue
+            source_name, is_valid = result
+            validation_results[source_name] = is_valid
+        
+        validated_count = sum(1 for v in validation_results.values() if v)
+        _LOGGER.info(f"[{self.area}] Validation: {validated_count}/{len(validation_results)} sources validated")
+        return validation_results
 
     async def _ensure_exchange_service(self):
         """Ensure the exchange service is initialized."""
@@ -191,36 +290,44 @@ class UnifiedPriceManager:
         # Ensure exchange service is initialized before fetching/processing
         await self._ensure_exchange_service()
 
-        # --- Decision to Fetch (incorporating FetchDecisionMaker) ---
+        # --- Decision to Fetch (using DataValidity) ---
         # Get current cache status to inform fetch decision
         cached_data_for_decision = self._cache_manager.get_data(
             area=self.area,
-            target_date=today_date,
-            max_age_minutes=Defaults.CACHE_TTL
+            target_date=today_date
         )
 
-        has_current_hour_price_in_cache = False
-        has_complete_data_for_today_in_cache = False
-
+        # Extract data validity from cache if available
+        from .data_validity import DataValidity
+        data_validity = DataValidity()  # Default: no valid data
+        
         if cached_data_for_decision:
-            # Directly inspect the already processed cached_data_for_decision
-            # The cache stores fully processed data, so we don't need to re-process it here.
-            if cached_data_for_decision.get("current_price") is not None:
-                has_current_hour_price_in_cache = True
-            if cached_data_for_decision.get("statistics", {}).get("complete_data", False):
-                has_complete_data_for_today_in_cache = True
-            
-            _LOGGER.debug(
-                f"[{self.area}] Decision making: cached_data_for_decision found. "
-                f"Current price available in cache: {has_current_hour_price_in_cache}. "
-                f"Complete data in cache (20+ hrs): {has_complete_data_for_today_in_cache}. "
-                f"Cached stats content: {cached_data_for_decision.get('statistics')}"
-            )
+            # Extract DataValidity from cached data
+            if "data_validity" in cached_data_for_decision:
+                try:
+                    data_validity = DataValidity.from_dict(cached_data_for_decision["data_validity"])
+                    _LOGGER.debug(f"[{self.area}] Loaded data validity from cache: {data_validity}")
+                except Exception as e:
+                    _LOGGER.warning(f"[{self.area}] Failed to load data validity from cache: {e}")
+            else:
+                # Fallback: calculate validity from cached price data
+                try:
+                    from .data_validity import calculate_data_validity
+                    current_interval_key = self._tz_service.get_current_interval_key()
+                    data_validity = calculate_data_validity(
+                        interval_prices=cached_data_for_decision.get("interval_prices", {}),
+                        tomorrow_interval_prices=cached_data_for_decision.get("tomorrow_interval_prices", {}),
+                        now=now,
+                        current_interval_key=current_interval_key
+                    )
+                    _LOGGER.debug(f"[{self.area}] Calculated data validity from cache: {data_validity}")
+                except Exception as e:
+                    _LOGGER.warning(f"[{self.area}] Failed to calculate data validity from cache: {e}")
         else:
-            _LOGGER.debug(f"[{self.area}] Decision making: no cached_data_for_decision found.")
+            _LOGGER.debug(f"[{self.area}] No cached data found for decision making.")
 
         # Instantiate FetchDecisionMaker
-        from .fetch_decision import FetchDecisionMaker # Local import
+        from .fetch_decision import FetchDecisionMaker
         decision_maker = FetchDecisionMaker(tz_service=self._tz_service)
 
         # Get last fetch time from the shared dictionary for this area
@@ -229,26 +336,32 @@ class UnifiedPriceManager:
         should_fetch_from_api, fetch_reason = decision_maker.should_fetch(
             now=now,
             last_fetch=last_fetch_for_decision,
-            fetch_interval=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES, # Use the same interval as rate limiter
-            has_current_hour_price=has_current_hour_price_in_cache,
-            has_complete_data_for_today=has_complete_data_for_today_in_cache
+            data_validity=data_validity,
+            fetch_interval_minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
         )
 
         if not force and not should_fetch_from_api:
-            _LOGGER.info(f"Skipping API fetch for area {self.area} based on FetchDecisionMaker: {fetch_reason}")
+            _LOGGER.info(f"Skipping API fetch for area {self.area}: {fetch_reason}")
             if cached_data_for_decision:
-                _LOGGER.debug("Returning data based on initial cache check for decision making for %s", self.area)
-                # Ensure the cached data is marked correctly if it's used
-                cached_data_for_decision["using_cached_data"] = True
-                # Re-process if it wasn't fully processed or to update timestamps
-                return await self._process_result(cached_data_for_decision, is_cached=True)
+                _LOGGER.debug("Returning cached data for %s", self.area)
+                # Work on a shallow copy to prevent cache corruption
+                # (We only modify top-level keys, so shallow copy is sufficient and much faster)
+                data_copy = dict(cached_data_for_decision)
+                # Ensure the copied data is marked correctly
+                data_copy["using_cached_data"] = True
+                # Re-process to ensure current/next prices are updated
+                return await self._process_result(data_copy, is_cached=True)
             else:
-                _LOGGER.warning(
-                    f"FetchDecisionMaker advised against fetching for {self.area}, but no cached data was available for decision. "
-                    f"This might indicate an issue or an edge case (e.g. initial startup with no cache yet)."
+                # No cache available - this can happen when:
+                # 1. Rate-limited with no current interval data
+                # 2. Parser/source change invalidated cache
+                # 3. First run or cache cleared
+                _LOGGER.error(
+                    f"Fetch skipped for {self.area} but no cached data available. "
+                    f"Reason: {fetch_reason}"
                 )
-                # Attempt to generate an empty result, or consider if a fetch should be forced here
-                return await self._generate_empty_result(error=f"Fetch skipped by decision maker, no cache: {fetch_reason}")
+                return await self._generate_empty_result(error=f"No cache and no fetch: {fetch_reason}")
+
 
         # --- Rate Limiting Lock (moved after initial fetch decision) ---
         # If we decided to fetch (or force is true), then acquire the lock.
@@ -271,16 +384,21 @@ class UnifiedPriceManager:
                     # and inside the rate limiting lock.
                     cached_data_rate_limited = self._cache_manager.get_data(
                         area=self.area,
-                        target_date=today_date,
-                        max_age_minutes=Defaults.CACHE_TTL
+                        target_date=today_date
                     )
                     if cached_data_rate_limited:
                         _LOGGER.debug("Returning rate-limited cached data for %s (after decision check)", self.area)
-                        cached_data_rate_limited["using_cached_data"] = True
-                        cached_data_rate_limited["next_fetch_allowed_in_seconds"] = round(next_fetch_allowed_in_seconds, 1)
-                        return await self._process_result(cached_data_rate_limited, is_cached=True)
+                        # Work on a shallow copy to prevent cache corruption
+                        # (We only modify top-level keys, so shallow copy is sufficient and much faster)
+                        data_copy = dict(cached_data_rate_limited)
+                        data_copy["using_cached_data"] = True
+                        data_copy["next_fetch_allowed_in_seconds"] = round(next_fetch_allowed_in_seconds, 1)
+                        return await self._process_result(data_copy, is_cached=True)
                     else:
-                        _LOGGER.warning("Rate limited for %s (after decision check), but no cached data available for today (%s).", self.area, today_date)
+                        _LOGGER.error(
+                            f"Rate limited for {self.area} (after decision check), no cached data available for today ({today_date}). "
+                            f"Next fetch in {next_fetch_allowed_in_seconds:.1f}s"
+                        )
                         return await self._generate_empty_result(error="Rate limited (after decision), no cache available")
 
             # If not rate limited or forced, proceed to fetch. Update fetch timestamp.
@@ -310,8 +428,7 @@ class UnifiedPriceManager:
                 # Try cache before giving up - specify today's date
                 cached_data = self._cache_manager.get_data(
                     area=self.area,
-                    target_date=today_date, # Specify today
-                    max_age_minutes=Defaults.CACHE_TTL
+                    target_date=today_date # Specify today
                 )
                 if cached_data:
                     _LOGGER.warning("No APIs available for %s, using cached data.", self.area)
@@ -348,15 +465,26 @@ class UnifiedPriceManager:
                 # Process the raw result (this is where parsing happens)
                 processed_data = await self._process_result(result)
 
-                # NOW check if processing yielded hourly_prices data and has_data flag is true
-                if processed_data and processed_data.get("has_data") and processed_data.get("hourly_prices"): # Check for hourly_prices *after* processing
-                    _LOGGER.info(f"[{self.area}] Successfully processed data, found 'hourly_prices'.")
+                # Check if processing yielded valid data (either today OR tomorrow prices)
+                has_today = processed_data and processed_data.get("interval_prices")
+                has_tomorrow = processed_data and processed_data.get("tomorrow_interval_prices")
+                has_valid_data = has_today or has_tomorrow
+                
+                if processed_data and has_valid_data and "error" not in processed_data:
+                    _LOGGER.info(f"[{self.area}] Successfully processed data. Today: {len(processed_data.get('interval_prices', {}))}, Tomorrow: {len(processed_data.get('tomorrow_interval_prices', {}))}")
                     self._consecutive_failures = 0
                     self._active_source = processed_data.get("data_source", "unknown") # Use source from processed data
                     self._attempted_sources = processed_data.get("attempted_sources", [])
                     self._fallback_sources = [s for s in self._attempted_sources if s != self._active_source]
                     self._using_cached_data = False
                     processed_data["using_cached_data"] = False
+
+                    # Track source validation
+                    validated_source = self._active_source
+                    if validated_source and validated_source not in ("unknown", "None", None):
+                        if validated_source not in self._validated_sources:
+                            self._validated_sources.add(validated_source)
+                            _LOGGER.info(f"[{self.area}] Source '{validated_source}' validated")
 
                     # Cache the successfully processed data
                     self._cache_manager.store(
@@ -367,7 +495,7 @@ class UnifiedPriceManager:
                     )
                     return processed_data
                 else:
-                    # Processing failed to produce hourly_raw or marked as no data
+                    # Processing failed to produce interval_raw or marked as no data
                     error_info = processed_data.get("error", "Processing failed to produce valid data") if processed_data else "Processing returned None or empty"
                     _LOGGER.error(f"[{self.area}] Failed to process fetched data. Error: {error_info}")
                     # Fall through to failure handling (try cache)
@@ -389,8 +517,7 @@ class UnifiedPriceManager:
             # Try to use cached data as a last resort - specify today's date
             cached_data = self._cache_manager.get_data(
                 area=self.area,
-                target_date=today_date, # Specify today
-                max_age_minutes=Defaults.CACHE_TTL
+                target_date=today_date # Specify today
             )
             if cached_data:
                 _LOGGER.warning("Using cached data for %s due to fetch/processing failure.", self.area)
@@ -416,8 +543,7 @@ class UnifiedPriceManager:
             # Try cache on unexpected error - specify today's date
             cached_data = self._cache_manager.get_data(
                 area=self.area,
-                target_date=today_date, # Specify today
-                max_age_minutes=Defaults.CACHE_TTL
+                target_date=today_date # Specify today
             )
             if cached_data:
                  _LOGGER.warning("Using cached data for %s due to unexpected error: %s", self.area, e)
@@ -461,7 +587,10 @@ class UnifiedPriceManager:
         # Use data processor to generate final result
         try:
             processed_data = await self._data_processor.process(result)
-            processed_data["has_data"] = bool(processed_data.get("hourly_prices")) # Add a simple flag
+            # Set has_data flag if we have either today OR tomorrow prices
+            has_today = bool(processed_data.get("interval_prices"))
+            has_tomorrow = bool(processed_data.get("tomorrow_interval_prices"))
+            processed_data["has_data"] = has_today or has_tomorrow
             processed_data["last_update"] = dt_util.now().isoformat() # Timestamp the processing time
 
             # Get source info directly from the input result dictionary
@@ -476,6 +605,9 @@ class UnifiedPriceManager:
 
             # Ensure the final flag reflects the input is_cached status
             processed_data["using_cached_data"] = is_cached
+
+            # Add validated sources (what's been tested and working)
+            processed_data["validated_sources"] = self.get_validated_sources()
 
             return processed_data
         except Exception as proc_err:
@@ -503,7 +635,7 @@ class UnifiedPriceManager:
             "area": self.area,
             "currency": self.currency,
             "target_currency": self.currency,
-            "hourly_prices": {},
+            "interval_prices": {},
             "raw_data": None,
             "source_timezone": None,
             "attempted_sources": self._attempted_sources,
@@ -526,7 +658,8 @@ class UnifiedPriceManager:
             "off_peak_2": None,
             "weighted_average_price": None,
             "data_source": "None",
-            "price_in_cents": False
+            "price_in_cents": False,
+            "validated_sources": self.get_validated_sources(),
         }
 
         # Directly return the structured empty data without processing
@@ -542,14 +675,16 @@ class UnifiedPriceManager:
         return self._cache_manager.get_cache_stats()
 
     async def clear_cache(self, target_date: Optional[date] = None):
-        """Clear the price cache via the manager, optionally for a specific date, and force a fresh fetch."""
-        # Cache manager's clear_cache returns a bool, don't await it
+        """Clear the price cache and immediately fetch fresh data."""
+        # Clear the cache first (synchronous operation)
         cleared = self._cache_manager.clear_cache(target_date=target_date)
         if cleared:
-            _LOGGER.info("Cache cleared for area %s. Forcing fresh fetch.", self.area)
-            # We need to force a new fetch
-            await self.fetch_data(force=True)
-        return cleared
+            _LOGGER.info("Cache cleared for all areas. Forcing fresh fetch for area %s.", self.area)
+            # Force a new fetch - this will return fresh data
+            fresh_data = await self.fetch_data(force=True)
+            _LOGGER.debug(f"Fresh data fetched after cache clear: has_data={fresh_data.get('has_data')}")
+            return fresh_data
+        return None
 
     async def async_close(self):
         """Close any open sessions and resources."""
@@ -654,13 +789,15 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
 
 
     async def clear_cache(self, target_date: Optional[date] = None):
-        """Clear the price cache via the manager, optionally for a specific date, and force a fresh fetch."""
-        # Call the manager's clear_cache method with await since it's an async method
-        cleared = await self.price_manager.clear_cache(target_date=target_date)
-        if cleared:
-            _LOGGER.info("Cache cleared for area %s. Forcing fresh fetch.", self.area)
-            await self.force_update()  # This will call fetch_data(force=True)
-        return cleared
+        """Clear the price cache and force immediate refresh with fresh data."""
+        # Call the manager's clear_cache which fetches fresh data
+        fresh_data = await self.price_manager.clear_cache(target_date=target_date)
+        if fresh_data:
+            _LOGGER.info("Cache cleared and fresh data fetched for area %s", self.area)
+            # Directly update coordinator data with the fresh result
+            self.async_set_updated_data(fresh_data)
+            return True
+        return False
 
     async def async_close(self):
         """Close any open sessions and resources via the manager."""

@@ -74,14 +74,14 @@ class PriceValueSensor(BaseElectricityPriceSensor):
 
         # Add formatted timestamps with prices for current price sensor
         if self._sensor_type == "current_price" and self.coordinator.data:
-            # Use processed hourly prices from coordinator data
-            today_prices = self.coordinator.data.get("hourly_prices")
+            # Use processed interval prices from coordinator data
+            today_prices = self.coordinator.data.get("interval_prices")
             if today_prices:
                 attrs["today_with_timestamps"] = self._format_timestamp_display(today_prices)
 
             # Add tomorrow prices if valid and available
             if self.coordinator.data.get("tomorrow_valid", False):
-                tomorrow_prices = self.coordinator.data.get("tomorrow_hourly_prices")
+                tomorrow_prices = self.coordinator.data.get("tomorrow_interval_prices")
                 if tomorrow_prices:
                     attrs["tomorrow_with_timestamps"] = self._format_timestamp_display(tomorrow_prices)
 
@@ -233,7 +233,7 @@ class PriceDifferenceSensor(PriceValueSensor):
             if value2_key == "average":
                 # Get from statistics
                 stats = data.get("statistics", {})
-                value2 = stats.get("average")
+                value2 = stats.get("avg")  # Fixed: use 'avg' to match PriceStatistics dataclass
                 _LOGGER.debug(f"PriceDifferenceSensor {self.entity_id}: Reading average from statistics: {value2}")
             else:
                 value2 = data.get(value2_key)
@@ -280,7 +280,7 @@ class PricePercentSensor(PriceValueSensor):
             if reference_key == "average":
                 # Get from statistics
                 stats = data.get("statistics", {})
-                reference = stats.get("average")
+                reference = stats.get("avg")  # Fixed: use 'avg' to match PriceStatistics dataclass
                 _LOGGER.debug(f"PricePercentSensor {self.entity_id}: Reading average from statistics: {reference}")
             else:
                 reference = data.get(reference_key)

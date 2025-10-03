@@ -46,7 +46,41 @@ class TimeInterval:
     QUARTER_HOURLY = "PT15M"
     DAILY = "P1D"
 
-    DEFAULT = HOURLY
+    DEFAULT = QUARTER_HOURLY
+
+    @staticmethod
+    def get_interval_minutes() -> int:
+        """Get interval duration in minutes."""
+        if TimeInterval.DEFAULT == TimeInterval.QUARTER_HOURLY:
+            return 15
+        elif TimeInterval.DEFAULT == TimeInterval.HOURLY:
+            return 60
+        return 15
+    
+    @staticmethod
+    def get_interval_seconds() -> int:
+        """Get interval duration in seconds."""
+        return TimeInterval.get_interval_minutes() * 60
+
+    @staticmethod
+    def get_intervals_per_hour() -> int:
+        """Get number of intervals per hour."""
+        return 60 // TimeInterval.get_interval_minutes()
+
+    @staticmethod
+    def get_intervals_per_day() -> int:
+        """Get number of intervals per day."""
+        return 24 * TimeInterval.get_intervals_per_hour()
+
+    @staticmethod
+    def get_intervals_per_day_dst_spring() -> int:
+        """Get intervals for DST spring forward day (lose 1 hour)."""
+        return TimeInterval.get_intervals_per_day() - TimeInterval.get_intervals_per_hour()
+
+    @staticmethod
+    def get_intervals_per_day_dst_fall() -> int:
+        """Get intervals for DST fall back day (gain 1 hour)."""
+        return TimeInterval.get_intervals_per_day() + TimeInterval.get_intervals_per_hour()
 
 class TimeFormat:
     """Time format constants."""
@@ -62,7 +96,7 @@ class PeriodType:
     TOMORROW = "tomorrow"
     OTHER = "other"
 
-    MIN_VALID_HOURS = 20  # Minimum hours required for valid data
+    MIN_VALID_INTERVALS = 80  # Minimum intervals required for valid data (80 of 96 = 83%)
 
 class DSTTransitionType:
     """DST transition type constants."""

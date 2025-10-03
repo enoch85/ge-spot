@@ -98,46 +98,24 @@ class BaseElectricityPriceSensor(SensorEntity):
         if "last_fetch_attempt" in self.coordinator.data:
             attrs["last_api_fetch"] = self.coordinator.data["last_fetch_attempt"]
 
-        # Add source info dictionary (logic previously updated)
+        # Add simplified source info
         source_info = {}
+
+        # Show validated sources (what's been tested and working)
+        validated_sources = self.coordinator.data.get("validated_sources")
+        if validated_sources:
+            source_info["validated_sources"] = validated_sources
+
+        # Show active source (what's currently used)
         active_source = self.coordinator.data.get("data_source")
-        attempted_sources = self.coordinator.data.get("attempted_sources")
-        primary_source = None
-
-        # Infer primary source from attempted_sources if available
-        if attempted_sources and isinstance(attempted_sources, list) and len(attempted_sources) > 0:
-            primary_source = attempted_sources[0]
-            source_info["primary_source"] = primary_source # Add inferred primary source
-
-        if active_source:
-            source_info["active_source"] = active_source # Use data_source as active_source
-
-        if attempted_sources:
-            source_info["attempted_sources"] = attempted_sources
-
-        # Calculate fallback status using inferred primary and active source
-        if primary_source and active_source:
-            source_info["is_using_fallback"] = (active_source != primary_source) and (active_source != "None")
-        elif active_source == "None" and primary_source:
-            source_info["is_using_fallback"] = True
-        else:
-            source_info["is_using_fallback"] = False
-
-        # Add fallback sources list if available
-        if "fallback_sources" in self.coordinator.data:
-            fallback_sources_list = self.coordinator.data["fallback_sources"]
-            source_info["fallback_sources"] = fallback_sources_list
-            source_info["available_fallbacks"] = len(fallback_sources_list)
-        else:
-             source_info["fallback_sources"] = []
-             source_info["available_fallbacks"] = 0
+        if active_source and active_source not in ("unknown", "None"):
+            source_info["active_source"] = active_source
 
         # Add API key status if available
         if "api_key_status" in self.coordinator.data:
             source_info["api_key_status"] = self.coordinator.data["api_key_status"]
 
-        # Add rate limit info
-        source_info["rate_limit_interval_seconds"] = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES * 60
+        # Add rate limit info (dynamic only)
         if "next_fetch_allowed_in_seconds" in self.coordinator.data:
             source_info["next_fetch_allowed_in_seconds"] = self.coordinator.data["next_fetch_allowed_in_seconds"]
 
@@ -154,27 +132,61 @@ class BaseElectricityPriceSensor(SensorEntity):
         if "source_timezone" in self.coordinator.data:
             attrs["api_timezone"] = self.coordinator.data["source_timezone"]
 
-        # Add hourly prices if available, rounding float values
-        if "hourly_prices" in self.coordinator.data:
-            hourly_prices = self.coordinator.data["hourly_prices"]
-            if isinstance(hourly_prices, dict):
-                attrs["hourly_prices"] = {
-                    k: round(v, 4) if isinstance(v, float) else v
-                    for k, v in hourly_prices.items()
-                }
-            else:
-                attrs["hourly_prices"] = hourly_prices # Keep original if not a dict
+        # Add data validity information
+        if "data_validity" in self.coordinator.data:
+            validity_dict = self.coordinator.data["data_validity"]
+            if isinstance(validity_dict, dict):
+                # Add data validity info for monitoring
+                data_validity_info = {}
+                
+                if validity_dict.get("data_valid_until"):
+                    data_validity_info["data_valid_until"] = validity_dict["data_valid_until"]
+                
+                if validity_dict.get("last_valid_interval"):
+                    data_validity_info["last_valid_interval"] = validity_dict["last_valid_interval"]
+                
+                data_validity_info["interval_count"] = validity_dict.get("interval_count", 0)
+                data_validity_info["today_intervals"] = validity_dict.get("today_interval_count", 0)
+                data_validity_info["tomorrow_intervals"] = validity_dict.get("tomorrow_interval_count", 0)
+                data_validity_info["has_current_interval"] = validity_dict.get("has_current_interval", False)
+                
+                # Calculate intervals remaining (if we have validity data)
+                if validity_dict.get("data_valid_until"):
+                    from homeassistant.util import dt as dt_util
+                    from ..coordinator.data_validity import DataValidity
+                    
+                    try:
+                        # Reconstruct DataValidity to calculate intervals_remaining
+                        validity = DataValidity.from_dict(validity_dict)
+                        now = dt_util.now()
+                        intervals_remaining = validity.intervals_remaining(now)
+                        data_validity_info["intervals_remaining"] = intervals_remaining
+                    except Exception as e:
+                        _LOGGER.warning(f"Failed to calculate intervals_remaining: {e}")
+                
+                attrs["data_validity"] = data_validity_info
 
-        # Add tomorrow hourly prices if available, rounding float values
-        if "tomorrow_hourly_prices" in self.coordinator.data:
-            tomorrow_hourly_prices = self.coordinator.data["tomorrow_hourly_prices"]
-            if isinstance(tomorrow_hourly_prices, dict):
-                attrs["tomorrow_hourly_prices"] = {
+        # Add interval prices if available, rounding float values
+        if "interval_prices" in self.coordinator.data:
+            interval_prices = self.coordinator.data["interval_prices"]
+            if isinstance(interval_prices, dict):
+                attrs["interval_prices"] = {
                     k: round(v, 4) if isinstance(v, float) else v
-                    for k, v in tomorrow_hourly_prices.items()
+                    for k, v in interval_prices.items()
                 }
             else:
-                attrs["tomorrow_hourly_prices"] = tomorrow_hourly_prices # Keep original if not a dict
+                attrs["interval_prices"] = interval_prices # Keep original if not a dict
+
+        # Add tomorrow interval prices if available, rounding float values
+        if "tomorrow_interval_prices" in self.coordinator.data:
+            tomorrow_interval_prices = self.coordinator.data["tomorrow_interval_prices"]
+            if isinstance(tomorrow_interval_prices, dict):
+                attrs["tomorrow_interval_prices"] = {
+                    k: round(v, 4) if isinstance(v, float) else v
+                    for k, v in tomorrow_interval_prices.items()
+                }
+            else:
+                attrs["tomorrow_interval_prices"] = tomorrow_interval_prices # Keep original if not a dict
 
         # Add error message if available
         if "error" in self.coordinator.data and self.coordinator.data["error"]:

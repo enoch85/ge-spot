@@ -50,11 +50,17 @@ def convert_energy_price(
             target_factor = EnergyUnit.CONVERSION.get(target_unit)
 
             if source_factor is None or target_factor is None:
-                _LOGGER.error(f"Invalid energy unit specified: source='{source_unit}', target='{target_unit}'")
+                _LOGGER.error(
+                    "Invalid energy unit specified: source='%s', target='%s'",
+                    source_unit, target_unit
+                )
                 return None
 
             if source_factor == 0:
-                _LOGGER.error(f"Source unit '{source_unit}' has a zero conversion factor.")
+                _LOGGER.error(
+                    "Source unit '%s' has a zero conversion factor.",
+                    source_unit
+                )
                 return None
 
             # Energy price conversion:
@@ -78,5 +84,8 @@ def convert_energy_price(
         return price
 
     except (TypeError, ValueError) as e:
-        _LOGGER.error(f"Error during energy price conversion: {e}. Price: {price}, SourceUnit: {source_unit}, TargetUnit: {target_unit}")
+        _LOGGER.error(
+            "Error during energy price conversion: %s. Price: %s, SourceUnit: %s, TargetUnit: %s",
+            e, price, source_unit, target_unit
+        )
         return None

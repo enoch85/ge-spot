@@ -12,10 +12,10 @@ from homeassistant.util import dt as dt_util
 # Import Timezone class instead of AREA_TIMEZONES directly
 from ..const.areas import Area, Timezone
 from ..const.config import Config
-from ..const.time import TimezoneConstants, TimezoneReference
+from ..const.time import TimezoneConstants, TimezoneReference, TimeInterval
 from .timezone_converter import TimezoneConverter
 from .dst_handler import DSTHandler
-from .hour_calculator import HourCalculator
+from .interval_calculator import IntervalCalculator
 from .parser import TimestampParser
 from .timezone_utils import get_source_timezone, get_timezone_object
 
@@ -66,9 +66,9 @@ class TimezoneService:
         self.converter = TimezoneConverter(self)
         self.dst_handler = DSTHandler(self.target_timezone) # Use target_timezone for DST handler
 
-        # Determine which timezone to use for hour calculation based on the timezone reference
-        # HourCalculator needs the reference mode to decide internally
-        self.hour_calculator = HourCalculator(
+        # Determine which timezone to use for interval calculation based on the timezone reference
+        # IntervalCalculator needs the reference mode to decide internally
+        self.interval_calculator = IntervalCalculator(
             timezone=self.target_timezone, # Pass the determined target timezone
             system_timezone=self.system_timezone,
             area_timezone=self.area_timezone,
@@ -152,22 +152,31 @@ class TimezoneService:
             _LOGGER.error(error_msg)
             raise ValueError(error_msg)
 
-        # Use the converter initialized with the target_timezone
-        return self.converter.convert(dt, self.target_timezone)
+        # Convert datetime to target timezone
+        return dt.astimezone(self.target_timezone)
 
 
-    def normalize_hourly_prices(self, hourly_prices: Dict[str, float], source_tz_str: Optional[str] = None, is_five_minute: bool = False) -> Dict[datetime, float]:
-        """Normalizes price timestamps to the target timezone, optionally using a source timezone hint and handling 5-minute intervals."""
+    def normalize_interval_prices(self, interval_prices: Dict[str, float], source_tz_str: Optional[str] = None, is_five_minute: bool = False) -> Dict[datetime, float]:
+        """Normalizes price timestamps to the target timezone, optionally using a source timezone hint and handling 5-minute intervals.
+
+        Args:
+            interval_prices: Dictionary of prices with timestamp keys
+            source_tz_str: Optional source timezone hint
+            is_five_minute: Whether data is in 5-minute intervals
+
+        Returns:
+            Dictionary with normalized datetime keys
+        """
         _LOGGER.debug(
             "Normalizing %d price timestamps using target timezone: %s%s%s",
-            len(hourly_prices),
+            len(interval_prices),
             self.target_timezone,
             f" (with source hint: {source_tz_str})" if source_tz_str else "",
-            " (5-minute intervals)" if is_five_minute else " (hourly intervals)"
+            " (5-minute intervals)" if is_five_minute else " (standard intervals)"
         )
         normalized_prices = {}
 
-        for timestamp_str, price in hourly_prices.items():
+        for timestamp_str, price in interval_prices.items():
             try:
                 aware_dt = self._parse_timestamp(timestamp_str, source_hint=source_tz_str)
 
@@ -226,8 +235,8 @@ class TimezoneService:
             _LOGGER.error("Unexpected error parsing timestamp '%s': %s", timestamp_str, e)
             return None
 
-    def get_current_hour_key(self):
-        """Get the current hour key in the appropriate timezone based on the timezone reference setting."""
+    def get_current_interval_key(self):
+        """Get the current interval key in the appropriate timezone based on the timezone reference setting."""
         # Get current time in different timezones for debugging
         # Use pytz.utc instead of undefined timezone.utc
         now_utc = datetime.now(pytz.utc)
@@ -238,43 +247,57 @@ class TimezoneService:
         _LOGGER.debug(f"Current time - UTC: {now_utc.strftime('%H:%M:%S')}, HA: {now_ha.strftime('%H:%M:%S')}" +
                      (f", Area ({self.area}): {now_area.strftime('%H:%M:%S')}" if now_area else ""))
 
-        hour_key = self.hour_calculator.get_current_hour_key()
+        interval_key = self.interval_calculator.get_current_interval_key()
 
         # Log which timezone is being used based on the timezone reference setting
         if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
             used_tz = self.area_timezone
-            _LOGGER.debug(f"Using area timezone {used_tz} for hour key (Local Area Time mode)")
+            _LOGGER.debug(f"Using area timezone {used_tz} for interval key (Local Area Time mode)")
         else:
             used_tz = self.ha_timezone
-            _LOGGER.debug(f"Using HA timezone {used_tz} for hour key (Home Assistant Time mode)")
+            _LOGGER.debug(f"Using HA timezone {used_tz} for interval key (Home Assistant Time mode)")
 
-        _LOGGER.debug(f"Current hour key from calculator: {hour_key} (timezone: {used_tz}, area: {self.area})")
-        return hour_key
+        _LOGGER.debug(f"Current interval key from calculator: {interval_key} (timezone: {used_tz}, area: {self.area})")
+        return interval_key
 
     def is_dst_transition_day(self, dt=None):
         """Check if today is a DST transition day."""
         return self.dst_handler.is_dst_transition_day(dt)
 
-    def get_next_hour_key(self) -> str:
-        """Get key for the next hour in target timezone.
+    def get_next_interval_key(self) -> str:
+        """Get key for the next interval in target timezone.
 
         Returns:
-            String key in format HH:00
+            String key in format HH:MM
         """
-        # Delegate to hour calculator for consistent handling
+        # Delegate to interval calculator for consistent handling
         now = dt_util.now()
-        next_hour = now + timedelta(hours=1)
+        interval_minutes = TimeInterval.get_interval_minutes()
+        next_interval = now + timedelta(minutes=interval_minutes)
 
-        # Use the hour calculator for consistent timezone handling based on timezone_reference
-        return self.hour_calculator.get_hour_key_for_datetime(next_hour)
+        # Use the interval calculator for consistent timezone handling based on timezone_reference
+        return self.interval_calculator.get_interval_key_for_datetime(next_interval)
 
     def get_today_range(self) -> List[str]:
-        """Get list of hour keys for today (represents hours 00-23)."""
-        # The keys themselves are universal (00:00 to 23:00).
-        # The timezone context comes from self.target_timezone when interpreting these keys.
-        return [f"{hour:02d}:00" for hour in range(24)]
+        """Get list of interval keys for today."""
+        # Generate all intervals for the day based on configured interval duration
+        interval_minutes = TimeInterval.get_interval_minutes()
+        intervals_per_hour = TimeInterval.get_intervals_per_hour()
+        result = []
+        for hour in range(24):
+            for i in range(intervals_per_hour):
+                minute = i * interval_minutes
+                result.append(f"{hour:02d}:{minute:02d}")
+        return result
 
     def get_tomorrow_range(self) -> List[str]:
-        """Get list of hour keys for tomorrow (represents hours 00-23)."""
-        # Same as today but represents tomorrow's hours
-        return [f"{hour:02d}:00" for hour in range(24)]
+        """Get list of interval keys for tomorrow."""
+        # Same as today but represents tomorrow's intervals
+        interval_minutes = TimeInterval.get_interval_minutes()
+        intervals_per_hour = TimeInterval.get_intervals_per_hour()
+        result = []
+        for hour in range(24):
+            for i in range(intervals_per_hour):
+                minute = i * interval_minutes
+                result.append(f"{hour:02d}:{minute:02d}")
+        return result

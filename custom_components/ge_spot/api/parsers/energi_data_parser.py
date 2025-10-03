@@ -27,10 +27,10 @@ class EnergiDataParser(BasePriceParser):
             raw_data: Raw API response data (potentially nested)
 
         Returns:
-            Parsed data with hourly prices
+            Parsed data with interval prices
         """
         result = {
-            "hourly_raw": {},
+            "interval_raw": {},
             "currency": Currency.DKK,
             "timezone": "Europe/Copenhagen", # Default for EDS
             "source_unit": EnergyUnit.MWH # Default for EDS
@@ -76,7 +76,7 @@ class EnergiDataParser(BasePriceParser):
             _LOGGER.debug(f"Data received by parser: {raw_data}") # Log the structure received
             return result
 
-        # --- Parse hourly prices from records ---
+        # --- Parse interval prices from records ---
         for record in records:
             try:
                 # Extract timestamp and price
@@ -84,11 +84,11 @@ class EnergiDataParser(BasePriceParser):
                     # Parse timestamp
                     timestamp_str = record["HourDK"]
                     dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                    hour_key = dt.isoformat()
+                    interval_key = dt.isoformat()
                     price = float(record["SpotPriceDKK"])
-                    # Add to hourly_raw
-                    result["hourly_raw"][hour_key] = price
-                    _LOGGER.debug(f"Storing raw price for {hour_key}: {price} DKK/MWh")
+                    # Add to interval_raw
+                    result["interval_raw"][interval_key] = price
+                    _LOGGER.debug(f"Storing raw price for {interval_key}: {price} DKK/MWh")
             except (ValueError, TypeError) as e:
                 _LOGGER.debug(f"Failed to parse Energi Data Service record: {e}")
 

@@ -4,7 +4,6 @@ Shared test fixtures and configurations for all tests.
 This file contains fixtures that can be used across all test files,
 making it easier to maintain consistent test environments.
 """
-import os
 import sys
 import pytest
 from unittest.mock import MagicMock

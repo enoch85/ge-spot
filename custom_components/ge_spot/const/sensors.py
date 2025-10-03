@@ -4,7 +4,7 @@
 class SensorType:
     """Sensor types."""
     CURRENT = "current_price"
-    NEXT = "next_hour_price"
+    NEXT = "next_interval_price"
     DAY_AVG = "day_average_price"
     PEAK = "peak_price"
     OFF_PEAK = "off_peak_price"

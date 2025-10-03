@@ -36,7 +36,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # NOTE: All API modules should return raw, unprocessed data in this standardized format:
 # {
-#     "hourly_prices": {"HH:00" or ISO: price, ...},
+#     "interval_prices": {"HH:MM" or ISO: price, ...},
 #     "currency": str,
 #     "timezone": str,
 #     "area": str,
@@ -130,13 +130,13 @@ class DataProcessor:
 
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         # Accepts raw data from API adapter (e.g., entsoe.py)
-        # Expects keys: 'hourly_raw', 'timezone', 'currency', 'source_name', ...
+        # Expects keys: 'interval_raw', 'timezone', 'currency', 'source_name', ...
         await self._ensure_exchange_service()
 
         source_name = data.get("data_source") or data.get("source")
         is_cached_data = data.get("using_cached_data", False)
-        
-        input_hourly_raw: Optional[Dict[str, Any]] = None
+
+        input_interval_raw: Optional[Dict[str, Any]] = None
         input_source_timezone: Optional[str] = None
         input_source_currency: Optional[str] = None
         raw_api_data_for_result = data.get("raw_data") or data.get("xml_responses") or data.get("dict_response")
@@ -147,27 +147,27 @@ class DataProcessor:
 
         if is_cached_data:
             _LOGGER.debug(f"[{self.area}] Processing cached data from source '{source_name}'.")
-            # For cached data, we expect 'raw_hourly_prices_original', 'source_timezone', and 'source_currency'
+            # For cached data, we expect 'raw_interval_prices_original', 'source_timezone', and 'source_currency'
             # These represent the state *before* previous normalization and conversion.
             if (
-                "raw_hourly_prices_original" in data
+                "raw_interval_prices_original" in data
                 and "source_timezone" in data
                 and "source_currency" in data
             ):
-                input_hourly_raw = data.get("raw_hourly_prices_original")
+                input_interval_raw = data.get("raw_interval_prices_original")
                 input_source_timezone = data.get("source_timezone")
                 input_source_currency = data.get("source_currency")
-                _LOGGER.debug(f"[{self.area}] Using 'raw_hourly_prices_original' from cache for reprocessing.")
-                
+                _LOGGER.debug(f"[{self.area}] Using 'raw_interval_prices_original' from cache for reprocessing.")
+
                 # Ensure raw_api_data_for_result is also populated from cache if it exists there
-                # The initial raw_api_data_for_result might be from the top-level cache dict, 
+                # The initial raw_api_data_for_result might be from the top-level cache dict,
                 # but the more specific one might be nested if the cache stores the full processed dict.
                 if data.get("raw_data"):
                     raw_api_data_for_result = data.get("raw_data")
 
             else:
-                _LOGGER.warning(f"[{self.area}] Cached data for '{source_name}' is missing expected fields: 'raw_hourly_prices_original', 'source_timezone', or 'source_currency'. Attempting to re-parse, but this may lead to errors if data is already processed.")
-                # Fallback to trying to parse the main 'hourly_prices' if the original raw is missing (old cache format)
+                _LOGGER.warning(f"[{self.area}] Cached data for '{source_name}' is missing expected fields: 'raw_interval_prices_original', 'source_timezone', or 'source_currency'. Attempting to re-parse, but this may lead to errors if data is already processed.")
+                # Fallback to trying to parse the main 'interval_prices' if the original raw is missing (old cache format)
                 # This is risky and might be what was causing issues.
                 # The EntsoeParser change should make it safer as it will look for XML.
                 parser = self._get_parser(source_name)
@@ -175,16 +175,16 @@ class DataProcessor:
                     _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area} during cached data processing.")
                     return self._generate_empty_processed_result(data, error=f"No parser for source {source_name} (cache path)")
                 try:
-                    # Pass the entire cached dictionary to the parser. 
+                    # Pass the entire cached dictionary to the parser.
                     # The modified EntsoeParser will look for XML within this dict.
-                    parsed_data = parser.parse(data) 
-                    input_hourly_raw = parsed_data.get("hourly_raw")
+                    parsed_data = parser.parse(data)
+                    input_interval_raw = parsed_data.get("interval_raw")
                     input_source_timezone = parsed_data.get("timezone")
                     input_source_currency = parsed_data.get("currency")
                     # If parser extracted metadata (like raw_data from within), use it
                     if parsed_data.get("raw_data"):
                          raw_api_data_for_result = parsed_data.get("raw_data")
-                    _LOGGER.debug(f"[{self.area}] Reparsed cached data with {parser.__class__.__name__}. Got {len(input_hourly_raw if input_hourly_raw else {})} raw prices.")
+                    _LOGGER.debug(f"[{self.area}] Reparsed cached data with {parser.__class__.__name__}. Got {len(input_interval_raw if input_interval_raw else {})} raw prices.")
                 except Exception as parse_err:
                     _LOGGER.error(f"[{self.area}] Error re-parsing cached data from source '{source_name}': {parse_err}", exc_info=True)
                     return self._generate_empty_processed_result(data, error=f"Cache re-parsing error: {parse_err}")
@@ -200,7 +200,7 @@ class DataProcessor:
                 # Pass the entire raw dictionary from FallbackManager/API Adapter to the parser
                 parsed_data = parser.parse(data)
                 _LOGGER.debug(f"[{self.area}] Parser {parser.__class__.__name__} output keys: {list(parsed_data.keys())}")
-                input_hourly_raw = parsed_data.get("hourly_raw")
+                input_interval_raw = parsed_data.get("interval_raw")
                 input_source_timezone = parsed_data.get("timezone")
                 input_source_currency = parsed_data.get("currency")
                 # If parser extracted metadata (like raw_data from within), use it
@@ -212,9 +212,9 @@ class DataProcessor:
                 return self._generate_empty_processed_result(data, error=f"Parsing error: {parse_err}")
 
         # --- Validate inputs for normalization ---
-        if not input_hourly_raw or not isinstance(input_hourly_raw, dict):
-            _LOGGER.warning(f"[{self.area}] No valid 'hourly_raw' data available for source '{source_name}' after parsing/cache handling. Cached: {is_cached_data}")
-            return self._generate_empty_processed_result(data, error=f"No hourly_raw data from {source_name}")
+        if not input_interval_raw or not isinstance(input_interval_raw, dict):
+            _LOGGER.warning(f"[{self.area}] No valid 'interval_raw' data available for source '{source_name}' after parsing/cache handling. Cached: {is_cached_data}")
+            return self._generate_empty_processed_result(data, error=f"No interval_raw data from {source_name}")
 
         if not input_source_timezone:
             _LOGGER.error(f"Missing 'timezone' for source {source_name} after parsing/cache handling. Cannot process. Cached: {is_cached_data}")
@@ -225,9 +225,9 @@ class DataProcessor:
 
         # --- Step 2: Normalize Timezones ---
         try:
-            # This will convert ISO timestamp keys to 'YYYY-MM-DD HH:00' format in target timezone
-            normalized_prices = self._tz_converter.normalize_hourly_prices(
-                input_hourly_raw, # Use the determined input_hourly_raw
+            # This will convert ISO timestamp keys to 'YYYY-MM-DD HH:MM' format in target timezone
+            normalized_prices = self._tz_converter.normalize_interval_prices(
+                input_interval_raw, # Use the determined input_interval_raw
                 input_source_timezone, # Use the determined input_source_timezone
                 preserve_date=True  # Keep date part for today/tomorrow split
             )
@@ -236,10 +236,10 @@ class DataProcessor:
             normalized_today, normalized_tomorrow = self._tz_converter.split_into_today_tomorrow(normalized_prices)
 
             # Log the results of normalization and splitting
-            _LOGGER.debug(f"Normalized {len(input_hourly_raw)} timestamps from {input_source_timezone} into target TZ. Today: {len(normalized_today)}, Tomorrow: {len(normalized_tomorrow)} prices.")
+            _LOGGER.debug(f"Normalized {len(input_interval_raw)} timestamps from {input_source_timezone} into target TZ. Today: {len(normalized_today)}, Tomorrow: {len(normalized_tomorrow)} prices.")
         except Exception as e:
             _LOGGER.error(f"Error during timestamp normalization for {self.area} (source_tz: {input_source_timezone}): {e}", exc_info=True)
-            _LOGGER.debug(f"Data passed to normalize_hourly_prices that failed: {input_hourly_raw}") # Log problematic data
+            _LOGGER.debug(f"Data passed to normalize_interval_prices that failed: {input_interval_raw}") # Log problematic data
             return self._generate_empty_processed_result(data, error=f"Timestamp normalization error: {e}")
 
         # --- Step 3: Currency/Unit Conversion ---
@@ -248,12 +248,12 @@ class DataProcessor:
         final_today_prices = {}
         # Get source unit from the input data, default to MWh if not present
         # For cached data, this might be inside the 'data' dict, or from the original fetch context
-        source_unit = data.get("source_unit", EnergyUnit.MWH) 
+        source_unit = data.get("source_unit", EnergyUnit.MWH)
         _LOGGER.debug(f"[{self.area}] Using source unit '{source_unit}' for currency conversion.")
 
         if normalized_today:
-            converted_today, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
-                hourly_prices=normalized_today,
+            converted_today, rate, rate_ts = await self._currency_converter.convert_interval_prices(
+                interval_prices=normalized_today,
                 source_currency=input_source_currency, # Use determined input_source_currency
                 # Pass the determined source_unit
                 source_unit=source_unit
@@ -264,8 +264,8 @@ class DataProcessor:
                 ecb_updated = rate_ts
         final_tomorrow_prices = {}
         if normalized_tomorrow:
-            converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_hourly_prices(
-                hourly_prices=normalized_tomorrow,
+            converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_interval_prices(
+                interval_prices=normalized_tomorrow,
                 source_currency=input_source_currency, # Use determined input_source_currency
                 # Pass the determined source_unit
                 source_unit=source_unit
@@ -283,15 +283,15 @@ class DataProcessor:
             "target_currency": self.target_currency,
             "source_timezone": input_source_timezone, # Store the actual source timezone used
             "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None,
-            "hourly_prices": final_today_prices,
-            "tomorrow_hourly_prices": final_tomorrow_prices,
-            "raw_hourly_prices_original": input_hourly_raw, # Store the raw prices that went INTO normalization
+            "interval_prices": final_today_prices,
+            "tomorrow_interval_prices": final_tomorrow_prices,
+            "raw_interval_prices_original": input_interval_raw, # Store the raw prices that went INTO normalization
             "current_price": None,
-            "next_hour_price": None,
-            "current_hour_key": None,
-            "next_hour_key": None,
-            "statistics": PriceStatistics(complete_data=False).to_dict(),
-            "tomorrow_statistics": PriceStatistics(complete_data=False).to_dict(),
+            "next_interval_price": None,
+            "current_interval_key": None,
+            "next_interval_key": None,
+            "statistics": PriceStatistics().to_dict(),
+            "tomorrow_statistics": PriceStatistics().to_dict(),
             "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,
@@ -317,44 +317,46 @@ class DataProcessor:
         try:
             # Calculate Today's Statistics and Current/Next Prices
             if final_today_prices:
-                current_hour_key = self._tz_service.get_current_hour_key()
-                next_hour_key = self._tz_service.get_next_hour_key()
-                processed_result["current_hour_key"] = current_hour_key
-                processed_result["next_hour_key"] = next_hour_key
-                processed_result["current_price"] = final_today_prices.get(current_hour_key)
-                processed_result["next_hour_price"] = final_today_prices.get(next_hour_key)
+                current_interval_key = self._tz_service.get_current_interval_key()
+                next_interval_key = self._tz_service.get_next_interval_key()
+                processed_result["current_interval_key"] = current_interval_key
+                processed_result["next_interval_key"] = next_interval_key
+                processed_result["current_price"] = final_today_prices.get(current_interval_key)
+                processed_result["next_interval_price"] = final_today_prices.get(next_interval_key)
 
                 today_keys = set(self._tz_service.get_today_range())
                 found_keys = set(final_today_prices.keys())
-                # Allow statistics if at least 20 hours are present
-                today_complete_enough = len(found_keys) >= 20
+                # Allow statistics if at least 80% of intervals are present
+                from ..const.time import TimeInterval
+                expected_intervals = TimeInterval.get_intervals_per_day()
+                today_complete_enough = len(found_keys) >= int(expected_intervals * 0.8)
 
                 if today_complete_enough:
                     stats = self._calculate_statistics(final_today_prices)
-                    # Mark as complete only if all 24 hours are present
-                    stats.complete_data = today_complete_enough # Align with 20-hour quota
+                    # Mark as complete only if all intervals are present
                     processed_result["statistics"] = stats.to_dict()
                     _LOGGER.debug(f"Calculated today's statistics for {self.area}: {processed_result['statistics']}") # Log today's stats
                 else:
                     missing_keys = sorted(list(today_keys - found_keys))
                     # Update warning message threshold
-                    _LOGGER.warning(f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need 20), skipping statistics calculation for {self.area}. Missing: {missing_keys}")
-                    processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
+                    _LOGGER.warning(f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need {int(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
+                    processed_result["statistics"] = PriceStatistics().to_dict()
             else:
                 _LOGGER.warning(f"No final prices for today available after processing for area {self.area}, skipping stats.")
-                processed_result["statistics"] = PriceStatistics(complete_data=False).to_dict()
+                processed_result["statistics"] = PriceStatistics().to_dict()
 
             # Calculate Tomorrow's Statistics
             if final_tomorrow_prices:
                 tomorrow_keys = set(self._tz_service.get_tomorrow_range())
                 found_keys = set(final_tomorrow_prices.keys())
-                # Allow statistics if at least 20 hours are present
-                tomorrow_complete_enough = len(found_keys) >= 20
+                # Allow statistics if at least 80% of intervals are present
+                from ..const.time import TimeInterval
+                expected_intervals = TimeInterval.get_intervals_per_day()
+                tomorrow_complete_enough = len(found_keys) >= int(expected_intervals * 0.8)
 
                 if tomorrow_complete_enough:
                     stats = self._calculate_statistics(final_tomorrow_prices)
-                     # Mark as complete only if all 24 hours are present
-                    stats.complete_data = tomorrow_complete_enough # Align with 20-hour quota
+                     # Mark as complete only if all intervals are present
                     processed_result["tomorrow_statistics"] = stats.to_dict()
                     # Set tomorrow_valid if we have enough data for stats, even if not fully complete
                     processed_result["tomorrow_valid"] = True
@@ -362,11 +364,11 @@ class DataProcessor:
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
                     # Update warning message threshold
-                    _LOGGER.warning(f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need 20), skipping statistics calculation for {self.area}. Missing: {missing_keys}")
-                    processed_result["tomorrow_statistics"] = PriceStatistics(complete_data=False).to_dict()
+                    _LOGGER.warning(f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need {int(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
+                    processed_result["tomorrow_statistics"] = PriceStatistics().to_dict()
             else:
                 # No tomorrow prices, ensure stats reflect incompleteness
-                processed_result["tomorrow_statistics"] = PriceStatistics(complete_data=False).to_dict()
+                processed_result["tomorrow_statistics"] = PriceStatistics().to_dict()
 
         except Exception as e:
             _LOGGER.error(f"Error during data processing for area {self.area}: {e}", exc_info=True)
@@ -377,7 +379,7 @@ class DataProcessor:
                  _LOGGER.error(f"Failed to ensure exchange service during error handling: {init_err}")
             # Return structure with error, preserving original raw data if possible
             error_result = self._generate_empty_processed_result(data, error=str(e))
-            error_result["raw_hourly_prices_original"] = input_hourly_raw # Keep original raw input
+            error_result["raw_interval_prices_original"] = input_interval_raw # Keep original raw input
             return error_result
 
         # Ensure source_timezone is always set in processed_result
@@ -385,7 +387,32 @@ class DataProcessor:
              _LOGGER.error(f"Source timezone ('source_timezone') is missing in the processed result for area {self.area} after processing. This indicates an issue.")
              processed_result["error"] = processed_result.get("error", "") + " Missing source timezone after processing."
 
-        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['hourly_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_hourly_prices'])}, Cached: {processed_result['using_cached_data']}")
+        # --- Step 6: Calculate Data Validity ---
+        # This tracks how far into the future we have valid price data
+        try:
+            from .data_validity import calculate_data_validity
+            from homeassistant.util import dt as dt_util
+            
+            now = dt_util.now()
+            current_interval_key = processed_result.get("current_interval_key") or self._tz_service.get_current_interval_key()
+            
+            validity = calculate_data_validity(
+                interval_prices=processed_result["interval_prices"],
+                tomorrow_interval_prices=processed_result["tomorrow_interval_prices"],
+                now=now,
+                current_interval_key=current_interval_key
+            )
+            
+            processed_result["data_validity"] = validity.to_dict()
+            _LOGGER.info(f"Data validity for {self.area}: {validity}")
+            
+        except Exception as e:
+            _LOGGER.error(f"Error calculating data validity for {self.area}: {e}", exc_info=True)
+            # Add empty validity on error
+            from .data_validity import DataValidity
+            processed_result["data_validity"] = DataValidity().to_dict()
+
+        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}")
         return processed_result
 
     def _get_parser(self, source_name: str) -> Optional[BasePriceParser]:
@@ -402,20 +429,15 @@ class DataProcessor:
         # ...
 
         parser_map = {
-            # Use API Class names as keys, matching what FallbackManager provides
-            "EntsoeAPI": EntsoeParser,
-            "NordpoolAPI": NordpoolPriceParser,
-            # Add mapping for Stromligning
-            "StromligningAPI": StromligningParser,
-            # Add mapping for EnergiDataService
-            "EnergiDataAPI": EnergiDataParser,
-            # Add mapping for OmieAPI
-            "OmieAPI": OmieParser,
-            # Add mapping for AemoAPI
-            "AemoAPI": AemoParser,
-            # Add mapping for EpexAPI
-            "EpexAPI": EpexParser,
-            # ... add mappings for other sources using their API class name ...
+            # Use lowercase source names from Source constants
+            Source.NORDPOOL: NordpoolPriceParser,
+            Source.ENTSOE: EntsoeParser,
+            Source.STROMLIGNING: StromligningParser,
+            Source.ENERGI_DATA_SERVICE: EnergiDataParser,
+            Source.OMIE: OmieParser,
+            Source.AEMO: AemoParser,
+            Source.EPEX: EpexParser,
+            # ... add mappings for other sources using Source.* constants ...
         }
 
         parser_class = parser_map.get(source_name)
@@ -424,30 +446,16 @@ class DataProcessor:
             return parser_class(timezone_service=self._tz_service)
         return None
 
-    def _calculate_statistics(self, hourly_prices: Dict[str, float]) -> PriceStatistics:
-        """Calculate price statistics from a dictionary of hourly prices (HH:00 keys)."""
-        prices = [p for p in hourly_prices.values() if p is not None]
+    def _calculate_statistics(self, interval_prices: Dict[str, float]) -> PriceStatistics:
+        """Calculate price statistics from a dictionary of interval prices (HH:MM keys)."""
+        prices = [p for p in interval_prices.values() if p is not None]
         if not prices:
-            return PriceStatistics(complete_data=False)
-
-        prices.sort()
-        mid = len(prices) // 2
-        # Ensure indices are valid before access
-        median = None
-        if prices:
-            if len(prices) % 2 == 1:
-                median = prices[mid]
-            elif mid > 0:
-                median = (prices[mid - 1] + prices[mid]) / 2
-            else: # Only one element
-                median = prices[0]
+            return PriceStatistics()
 
         return PriceStatistics(
+            avg=sum(prices) / len(prices) if prices else None,
             min=min(prices) if prices else None,
-            max=max(prices) if prices else None,
-            average=sum(prices) / len(prices) if prices else None,
-            median=median,
-            complete_data=True # Assume complete if this function is called
+            max=max(prices) if prices else None
         )
 
     def _generate_empty_processed_result(self, data, error=None):
@@ -460,15 +468,15 @@ class DataProcessor:
             "target_currency": self.target_currency,
             "source_timezone": data.get("source_timezone"),
             "target_timezone": str(self._tz_service.area_timezone) if self._tz_service else None, # Use area_timezone as suggested by error
-            "hourly_prices": {},
-            "tomorrow_hourly_prices": {},
-            "raw_hourly_prices_original": data.get("hourly_prices"), # Store original if available
+            "interval_prices": {},
+            "tomorrow_interval_prices": {},
+            "raw_interval_prices_original": data.get("interval_prices"), # Store original if available
             "current_price": None,
-            "next_hour_price": None,
-            "current_hour_key": None,
-            "next_hour_key": None,
-            "statistics": PriceStatistics(complete_data=False).to_dict(),
-            "tomorrow_statistics": PriceStatistics(complete_data=False).to_dict(),
+            "next_interval_price": None,
+            "current_interval_key": None,
+            "next_interval_key": None,
+            "statistics": PriceStatistics().to_dict(),
+            "tomorrow_statistics": PriceStatistics().to_dict(),
             "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,
