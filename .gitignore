@@ -176,3 +176,4 @@ cython_debug/
 # Analysis and summary files - keep untracked, don't merge to main
 *ANALYSIS*.md
 *SUMMARY*.md
+TODO/SOURCE_VALIDATION_MASTER_PLAN.md

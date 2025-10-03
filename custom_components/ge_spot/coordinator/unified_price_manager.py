@@ -88,6 +88,7 @@ class UnifiedPriceManager:
         self._attempted_sources = []
         self._fallback_sources = [] # Keep track of sources used as fallback
         self._using_cached_data = False
+        self._validated_sources = set()  # Sources that have successfully returned usable data
 
         # Services and utilities
         self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
@@ -173,6 +174,74 @@ class UnifiedPriceManager:
                 _LOGGER.warning("Source '%s' configured but no matching API class found.", source)
 
         _LOGGER.info(f"Configured sources for area {self.area}: {[cls.__name__ for cls in self._api_classes]}")
+
+    def get_configured_sources(self) -> List[str]:
+        """Get list of configured source names in priority order."""
+        sources = []
+        for cls in self._api_classes:
+            # Create a temporary instance to get the source type
+            temp_instance = cls(config={})
+            sources.append(temp_instance.source_type)
+        return sources
+
+    def get_validated_sources(self) -> List[str]:
+        """Get list of validated source names."""
+        return sorted(list(self._validated_sources))
+
+    async def validate_configured_sources_once(self) -> Dict[str, bool]:
+        """Validate all configured sources during initial setup (one-time only).
+        
+        Fetches actual data with minimal date range (today only) to verify:
+        - API is accessible
+        - API keys are valid
+        - Data can be fetched and parsed
+        
+        Called ONLY during initial configuration, not on every restart.
+        Failures are logged but don't block setup.
+        
+        Returns:
+            Dict mapping source names to validation results
+        """
+        validation_results = {}
+        session = async_get_clientsession(self.hass)
+        now = dt_util.now()
+        
+        _LOGGER.info(f"[{self.area}] Validating {len(self._api_classes)} configured source(s)")
+        
+        for api_class in self._api_classes:
+            temp_instance = api_class(config={})
+            source_name = temp_instance.source_type
+            
+            try:
+                api_instance = api_class(
+                    config=self.config,
+                    session=session,
+                    timezone_service=self._tz_service
+                )
+                
+                # Fetch minimal data (today only)
+                data = await api_instance.fetch_raw_data(
+                    area=self.area,
+                    session=session,
+                    reference_time=now
+                )
+                
+                # Check if we got usable data
+                is_valid = data and isinstance(data, dict) and data.get('raw_data')
+                validation_results[source_name] = is_valid
+                
+                if is_valid:
+                    self._validated_sources.add(source_name)
+                    _LOGGER.info(f"[{self.area}] ✓ '{source_name}' validated")
+                else:
+                    _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation failed - will retry during use")
+                    
+            except Exception as e:
+                validation_results[source_name] = False
+                _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation error: {e}")
+        
+        _LOGGER.info(f"[{self.area}] Validation: {sum(validation_results.values())}/{len(validation_results)} sources validated")
+        return validation_results
 
     async def _ensure_exchange_service(self):
         """Ensure the exchange service is initialized."""
@@ -392,6 +461,13 @@ class UnifiedPriceManager:
                     self._using_cached_data = False
                     processed_data["using_cached_data"] = False
 
+                    # Track source validation
+                    validated_source = self._active_source
+                    if validated_source and validated_source not in ("unknown", "None", None):
+                        if validated_source not in self._validated_sources:
+                            self._validated_sources.add(validated_source)
+                            _LOGGER.info(f"[{self.area}] Source '{validated_source}' validated")
+
                     # Cache the successfully processed data
                     self._cache_manager.store(
                         data=processed_data,
@@ -512,6 +588,10 @@ class UnifiedPriceManager:
             # Ensure the final flag reflects the input is_cached status
             processed_data["using_cached_data"] = is_cached
 
+            # Add configured and validated sources
+            processed_data["configured_sources"] = self.get_configured_sources()
+            processed_data["validated_sources"] = self.get_validated_sources()
+
             return processed_data
         except Exception as proc_err:
             _LOGGER.error(f"Error processing data for area {self.area}: {proc_err}", exc_info=True)
@@ -561,7 +641,9 @@ class UnifiedPriceManager:
             "off_peak_2": None,
             "weighted_average_price": None,
             "data_source": "None",
-            "price_in_cents": False
+            "price_in_cents": False,
+            "configured_sources": self.get_configured_sources(),
+            "validated_sources": self.get_validated_sources(),
         }
 
         # Directly return the structured empty data without processing

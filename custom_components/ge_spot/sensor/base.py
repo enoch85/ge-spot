@@ -98,46 +98,29 @@ class BaseElectricityPriceSensor(SensorEntity):
         if "last_fetch_attempt" in self.coordinator.data:
             attrs["last_api_fetch"] = self.coordinator.data["last_fetch_attempt"]
 
-        # Add source info dictionary (logic previously updated)
+        # Add simplified source info
         source_info = {}
+
+        # Show configured sources (what's available)
+        configured_sources = self.coordinator.data.get("configured_sources")
+        if configured_sources:
+            source_info["configured_sources"] = configured_sources
+
+        # Show validated sources (what's been proven)
+        validated_sources = self.coordinator.data.get("validated_sources")
+        if validated_sources:
+            source_info["validated_sources"] = validated_sources
+
+        # Show active source (what's currently used)
         active_source = self.coordinator.data.get("data_source")
-        attempted_sources = self.coordinator.data.get("attempted_sources")
-        primary_source = None
-
-        # Infer primary source from attempted_sources if available
-        if attempted_sources and isinstance(attempted_sources, list) and len(attempted_sources) > 0:
-            primary_source = attempted_sources[0]
-            source_info["primary_source"] = primary_source # Add inferred primary source
-
-        if active_source:
-            source_info["active_source"] = active_source # Use data_source as active_source
-
-        if attempted_sources:
-            source_info["attempted_sources"] = attempted_sources
-
-        # Calculate fallback status using inferred primary and active source
-        if primary_source and active_source:
-            source_info["is_using_fallback"] = (active_source != primary_source) and (active_source != "None")
-        elif active_source == "None" and primary_source:
-            source_info["is_using_fallback"] = True
-        else:
-            source_info["is_using_fallback"] = False
-
-        # Add fallback sources list if available
-        if "fallback_sources" in self.coordinator.data:
-            fallback_sources_list = self.coordinator.data["fallback_sources"]
-            source_info["fallback_sources"] = fallback_sources_list
-            source_info["available_fallbacks"] = len(fallback_sources_list)
-        else:
-             source_info["fallback_sources"] = []
-             source_info["available_fallbacks"] = 0
+        if active_source and active_source not in ("unknown", "None"):
+            source_info["active_source"] = active_source
 
         # Add API key status if available
         if "api_key_status" in self.coordinator.data:
             source_info["api_key_status"] = self.coordinator.data["api_key_status"]
 
-        # Add rate limit info
-        source_info["rate_limit_interval_seconds"] = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES * 60
+        # Add rate limit info (dynamic only)
         if "next_fetch_allowed_in_seconds" in self.coordinator.data:
             source_info["next_fetch_allowed_in_seconds"] = self.coordinator.data["next_fetch_allowed_in_seconds"]
 
