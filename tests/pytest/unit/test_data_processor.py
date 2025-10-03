@@ -341,9 +341,7 @@ class TestDataProcessor:
         mock_statistics = PriceStatistics(
             min=1.5,
             max=2.0,
-            average=1.75,
-            median=1.75,
-            complete_data=True  # Mark as complete
+            avg=1.75  # Use 'avg' not 'average'
         )
 
         # Define the target timezone for the test

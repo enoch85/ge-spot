@@ -101,12 +101,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Add simplified source info
         source_info = {}
 
-        # Show configured sources (what's available)
-        configured_sources = self.coordinator.data.get("configured_sources")
-        if configured_sources:
-            source_info["configured_sources"] = configured_sources
-
-        # Show validated sources (what's been proven)
+        # Show validated sources (what's been tested and working)
         validated_sources = self.coordinator.data.get("validated_sources")
         if validated_sources:
             source_info["validated_sources"] = validated_sources

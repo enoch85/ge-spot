@@ -44,7 +44,7 @@ class FallbackManager:
             return None
 
         for api_instance in apis:
-            source_name = getattr(api_instance, 'source_name', type(api_instance).__name__)
+            source_name = getattr(api_instance, 'source_type', type(api_instance).__name__)
             attempted_sources.append(source_name)
             _LOGGER.debug(
                 "Attempting to fetch data from source: %s for area %s",

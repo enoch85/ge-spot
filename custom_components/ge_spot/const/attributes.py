@@ -10,7 +10,6 @@ class Attributes:
     USING_CACHED_DATA = "using_cached_data"  # Whether using cached data
     ATTEMPTED_SOURCES = "attempted_sources"  # All attempted API sources (backend only)
     ACTIVE_SOURCE = "active_source"  # Source that succeeded
-    CONFIGURED_SOURCES = "configured_sources"  # All configured API sources
     VALIDATED_SOURCES = "validated_sources"    # Sources proven to work
     RAW_VALUE = "raw_value"  # Raw value for a specific metric
     CONVERSION_INFO = "conversion_info"  # Information about value conversions

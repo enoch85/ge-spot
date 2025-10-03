@@ -173,16 +173,11 @@ class UnifiedPriceManager:
             else:
                 _LOGGER.warning("Source '%s' configured but no matching API class found.", source)
 
-        _LOGGER.info(f"Configured sources for area {self.area}: {[cls.__name__ for cls in self._api_classes]}")
-
-    def get_configured_sources(self) -> List[str]:
-        """Get list of configured source names in priority order."""
-        sources = []
-        for cls in self._api_classes:
-            # Create a temporary instance to get the source type
-            temp_instance = cls(config={})
-            sources.append(temp_instance.source_type)
-        return sources
+        # Log configured sources using source_type instead of class names
+        configured_source_names = [
+            cls(config={}).source_type for cls in self._api_classes
+        ]
+        _LOGGER.info(f"Configured sources for area {self.area}: {configured_source_names}")
 
     def get_validated_sources(self) -> List[str]:
         """Get list of validated source names."""
@@ -198,17 +193,18 @@ class UnifiedPriceManager:
         
         Called ONLY during initial configuration, not on every restart.
         Failures are logged but don't block setup.
+        Runs all validations in parallel for speed.
         
         Returns:
             Dict mapping source names to validation results
         """
-        validation_results = {}
         session = async_get_clientsession(self.hass)
         now = dt_util.now()
         
         _LOGGER.info(f"[{self.area}] Validating {len(self._api_classes)} configured source(s)")
         
-        for api_class in self._api_classes:
+        async def validate_single_source(api_class):
+            """Validate a single API source."""
             temp_instance = api_class(config={})
             source_name = temp_instance.source_type
             
@@ -226,21 +222,43 @@ class UnifiedPriceManager:
                     reference_time=now
                 )
                 
-                # Check if we got usable data
-                is_valid = data and isinstance(data, dict) and data.get('raw_data')
-                validation_results[source_name] = is_valid
+                # Generic validation: Check raw_data exists and is not empty
+                # This confirms the API works without source-specific logic
+                raw_data = data.get('raw_data') if data and isinstance(data, dict) else None
+                is_valid = raw_data is not None and raw_data  # Not None and not empty
                 
                 if is_valid:
                     self._validated_sources.add(source_name)
                     _LOGGER.info(f"[{self.area}] ✓ '{source_name}' validated")
                 else:
-                    _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation failed - will retry during use")
+                    _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation failed - no raw_data")
+                
+                return (source_name, is_valid)
                     
             except Exception as e:
-                validation_results[source_name] = False
                 _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation error: {e}")
+                return (source_name, False)
         
-        _LOGGER.info(f"[{self.area}] Validation: {sum(validation_results.values())}/{len(validation_results)} sources validated")
+        # Run all validations in parallel
+        results = await asyncio.gather(
+            *[validate_single_source(api_class) for api_class in self._api_classes],
+            return_exceptions=True
+        )
+        
+        # Convert results to dict
+        validation_results = {}
+        for result in results:
+            if isinstance(result, Exception):
+                _LOGGER.error(f"[{self.area}] Validation task failed: {result}")
+                continue
+            if not isinstance(result, tuple) or len(result) != 2:
+                _LOGGER.error(f"[{self.area}] Invalid validation result format: {result}")
+                continue
+            source_name, is_valid = result
+            validation_results[source_name] = is_valid
+        
+        validated_count = sum(1 for v in validation_results.values() if v)
+        _LOGGER.info(f"[{self.area}] Validation: {validated_count}/{len(validation_results)} sources validated")
         return validation_results
 
     async def _ensure_exchange_service(self):
@@ -588,8 +606,7 @@ class UnifiedPriceManager:
             # Ensure the final flag reflects the input is_cached status
             processed_data["using_cached_data"] = is_cached
 
-            # Add configured and validated sources
-            processed_data["configured_sources"] = self.get_configured_sources()
+            # Add validated sources (what's been tested and working)
             processed_data["validated_sources"] = self.get_validated_sources()
 
             return processed_data
@@ -642,7 +659,6 @@ class UnifiedPriceManager:
             "weighted_average_price": None,
             "data_source": "None",
             "price_in_cents": False,
-            "configured_sources": self.get_configured_sources(),
             "validated_sources": self.get_validated_sources(),
         }
 
