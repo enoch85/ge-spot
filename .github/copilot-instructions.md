@@ -12,6 +12,7 @@ Home Assistant custom integration providing 15-minute electricity spot prices ac
 6. **No verbose summaries** - User sees changes in editor, only respond if asked
 7. **Keep it simple** - Clean code over complexity, cleanup as you go
 8. **Ask before acting** - When uncertain, clarify first
+9. **No analysis/summary files in git** - All `*ANALYSIS*.md`, `*SUMMARY*.md` files stay untracked
 
 ## Architecture
 
@@ -259,8 +260,6 @@ if cached_data.get("statistics", {}).get("data_complete"):
 **Branch:** `15min` - Migration from hourly to 15-minute intervals
 
 **Known Issues:** See `TODO/`
-- Attribute reset bug (cache mutation)
-- EV Smart Charging compatibility requirements
 
 **Integration:** Home Assistant `DataUpdateCoordinator` pattern, config flow in `config_flow/`, HACS compatible
 

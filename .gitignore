@@ -172,3 +172,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Analysis and summary files - keep untracked, don't merge to main
+*ANALYSIS*.md
+*SUMMARY*.md
