@@ -429,6 +429,8 @@ entities:
 
 ### Price Graph Card
 
+<img width="403" height="286" alt="image" src="https://github.com/user-attachments/assets/4b8e23ee-6efd-4502-9091-bfa1f36cd6f9" />
+
 ```yaml
 type: custom:apexcharts-card
 now:
