@@ -431,23 +431,89 @@ entities:
 
 ```yaml
 type: custom:apexcharts-card
-header:
+now:
   show: true
-  title: Electricity Prices (15-min intervals)
-  show_states: true
+  label: ""
+graph_span: 2d
+span:
+  start: day
+apex_config:
+  chart:
+    height: 300px
+  legend:
+    show: false
+  xaxis:
+    labels:
+      format: HH:mm
+  grid:
+    borderColor: "#e0e0e0"
+    strokeDashArray: 3
+  tooltip:
+    x:
+      format: HH:mm
+  annotations:
+    yaxis:
+      - "y": 0
+        yAxisIndex: 0
+        strokeDashArray: 0
+        borderColor: rgba(128, 128, 128, 0.8)
+        borderWidth: 2
+        opacity: 1
+yaxis:
+  - id: watts
+    decimals: 0
+  - id: price
+    decimals: 0
+    opposite: true
+experimental:
+  color_threshold: true
 series:
   - entity: sensor.gespot_current_price_se4
-    attribute: today_with_timestamps
-    type: column
-    name: Today (96 intervals)
+    name: Price (öre)
+    type: area
+    curve: stepline
+    yaxis_id: price
+    extend_to: now
+    stroke_width: 0
+    opacity: 0.7
+    data_generator: |
+      const timeToTimestamp = (time, offset = 0) => {
+        const [h, m] = time.split(':');
+        const d = new Date();
+        d.setHours(h, m, 0, 0);
+        offset && d.setDate(d.getDate() + offset);
+        return d;
+      };
+      return [
+        ...Object.entries(entity.attributes.today_with_timestamps || {}).map(([t, v]) => [timeToTimestamp(t), v]),
+        ...Object.entries(entity.attributes.tomorrow_with_timestamps || {}).map(([t, v]) => [timeToTimestamp(t, 1), v])
+      ].sort((a, b) => a[0] - b[0]);
+    color_threshold:
+      - value: -50
+        color: cyan
+      - value: 0
+        color: green
+      - value: 40
+        color: orange
+      - value: 100
+        color: red
+      - value: 200
+        color: magenta
+      - value: 500
+        color: black
+  - entity: sensor.YOUR_ENERGY_METER
+    name: Watts
+    type: line
+    curve: smooth
+    yaxis_id: watts
+    color: "#FF0000"
+    stroke_width: 2
+    opacity: 0.5
+    extend_to: false
     group_by:
-      func: raw
-  - entity: sensor.gespot_current_price_se4
-    attribute: tomorrow_with_timestamps
-    type: column
-    name: Tomorrow (96 intervals)
-    group_by:
-      func: raw
+      func: avg
+      duration: 5min
+update_interval: 300s
 ```
 
 ### Price-Based Automation
