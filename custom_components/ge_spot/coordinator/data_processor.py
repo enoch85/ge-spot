@@ -447,15 +447,57 @@ class DataProcessor:
         return None
 
     def _calculate_statistics(self, interval_prices: Dict[str, float]) -> PriceStatistics:
-        """Calculate price statistics from a dictionary of interval prices (HH:MM keys)."""
+        """Calculate price statistics from a dictionary of interval prices (HH:MM keys).
+        
+        Also calculates timestamps for min/max values by finding the interval key with those values.
+        The timestamps are derived from the current day in the HA timezone.
+        """
         prices = [p for p in interval_prices.values() if p is not None]
         if not prices:
             return PriceStatistics()
 
+        min_price = min(prices)
+        max_price = max(prices)
+        avg_price = sum(prices) / len(prices)
+
+        # Find timestamps for min and max prices
+        # Get the first occurrence of min/max values
+        min_timestamp = None
+        max_timestamp = None
+        
+        for interval_key, price in interval_prices.items():
+            if price == min_price and min_timestamp is None:
+                # Convert HH:MM key to full timestamp using today's date
+                try:
+                    from homeassistant.util import dt as dt_util
+                    now = dt_util.now()
+                    hour, minute = map(int, interval_key.split(':'))
+                    timestamp_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    min_timestamp = timestamp_dt.isoformat()
+                except (ValueError, AttributeError) as e:
+                    _LOGGER.warning(f"Failed to convert interval key '{interval_key}' to timestamp: {e}")
+                    
+            if price == max_price and max_timestamp is None:
+                # Convert HH:MM key to full timestamp using today's date
+                try:
+                    from homeassistant.util import dt as dt_util
+                    now = dt_util.now()
+                    hour, minute = map(int, interval_key.split(':'))
+                    timestamp_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    max_timestamp = timestamp_dt.isoformat()
+                except (ValueError, AttributeError) as e:
+                    _LOGGER.warning(f"Failed to convert interval key '{interval_key}' to timestamp: {e}")
+                    
+            # Stop if we found both
+            if min_timestamp and max_timestamp:
+                break
+
         return PriceStatistics(
-            avg=sum(prices) / len(prices) if prices else None,
-            min=min(prices) if prices else None,
-            max=max(prices) if prices else None
+            avg=avg_price,
+            min=min_price,
+            max=max_price,
+            min_timestamp=min_timestamp,
+            max_timestamp=max_timestamp
         )
 
     def _generate_empty_processed_result(self, data, error=None):

@@ -29,6 +29,8 @@ class PriceStatistics:
     avg: Optional[float] = None
     min: Optional[float] = None
     max: Optional[float] = None
+    min_timestamp: Optional[str] = None  # ISO format datetime string for min price
+    max_timestamp: Optional[str] = None  # ISO format datetime string for max price
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
