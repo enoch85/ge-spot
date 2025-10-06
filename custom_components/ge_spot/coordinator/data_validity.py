@@ -5,7 +5,7 @@ replacing the old 'complete_data' boolean with clear timestamp-based validity.
 """
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 import logging
 
 _LOGGER = logging.getLogger(__name__)
@@ -135,10 +135,11 @@ class DataValidity:
 
 
 def calculate_data_validity(
-    interval_prices: dict,
-    tomorrow_interval_prices: dict,
+    interval_prices: Dict[str, float],
+    tomorrow_interval_prices: Dict[str, float],
     now: datetime,
-    current_interval_key: str
+    current_interval_key: str,
+    target_timezone: Optional[str] = None
 ) -> DataValidity:
     """Calculate data validity from interval price dictionaries.
     
@@ -152,11 +153,14 @@ def calculate_data_validity(
         tomorrow_interval_prices: Tomorrow's interval prices {interval_key: price}
         now: Current datetime
         current_interval_key: Current interval key (e.g., "18:15")
+        target_timezone: Target timezone for interval keys (e.g., "Australia/Sydney"). 
+                        The interval keys are already in this timezone. If not provided, uses HA timezone.
         
     Returns:
         DataValidity object with calculated values
     """
     from homeassistant.util import dt as dt_util
+    import pytz
     
     validity = DataValidity()
     
@@ -176,13 +180,28 @@ def calculate_data_validity(
     all_intervals = []
     today_date = now.date()
     
+    # Determine which timezone to use for localizing interval keys
+    # The interval keys (e.g., "04:15") are ALREADY in the target timezone
+    if target_timezone:
+        try:
+            tz = pytz.timezone(target_timezone)
+            _LOGGER.debug(f"Using target timezone for validity calculation: {target_timezone}")
+        except Exception as e:
+            _LOGGER.warning(f"Invalid target timezone '{target_timezone}': {e}. Falling back to HA timezone.")
+            tz = None
+    else:
+        tz = None
+    
     # Parse today's intervals
     for interval_key in interval_prices.keys():
         try:
             hour, minute = map(int, interval_key.split(':'))
             interval_dt = datetime.combine(today_date, datetime.min.time().replace(hour=hour, minute=minute))
-            # Make timezone aware using the current timezone
-            interval_dt = dt_util.as_local(interval_dt)
+            # Make timezone aware using source timezone or HA timezone
+            if tz:
+                interval_dt = tz.localize(interval_dt)
+            else:
+                interval_dt = dt_util.as_local(interval_dt)
             all_intervals.append(interval_dt)
         except (ValueError, AttributeError) as e:
             _LOGGER.warning(f"Failed to parse interval key '{interval_key}': {e}")
@@ -195,8 +214,11 @@ def calculate_data_validity(
         try:
             hour, minute = map(int, interval_key.split(':'))
             interval_dt = datetime.combine(tomorrow_date, datetime.min.time().replace(hour=hour, minute=minute))
-            # Make timezone aware using the current timezone
-            interval_dt = dt_util.as_local(interval_dt)
+            # Make timezone aware using source timezone or HA timezone
+            if tz:
+                interval_dt = tz.localize(interval_dt)
+            else:
+                interval_dt = dt_util.as_local(interval_dt)
             all_intervals.append(interval_dt)
         except (ValueError, AttributeError) as e:
             _LOGGER.warning(f"Failed to parse interval key '{interval_key}': {e}")
@@ -214,7 +236,10 @@ def calculate_data_validity(
         # Check if we have minimum data (at least rest of today)
         # This means we have intervals from now until at least end of today
         end_of_today = datetime.combine(today_date, datetime.max.time())
-        end_of_today = dt_util.as_local(end_of_today)
+        if tz:
+            end_of_today = tz.localize(end_of_today)
+        else:
+            end_of_today = dt_util.as_local(end_of_today)
         
         validity.has_minimum_data = (
             validity.has_current_interval 

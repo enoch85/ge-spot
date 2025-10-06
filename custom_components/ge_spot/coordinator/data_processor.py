@@ -427,12 +427,15 @@ class DataProcessor:
             
             now = dt_util.now()
             current_interval_key = processed_result.get("current_interval_key") or self._tz_service.get_current_interval_key()
+            # The interval_prices keys are already in target_timezone, so use that for validity timestamps
+            target_timezone = str(self._tz_service.target_timezone)
             
             validity = calculate_data_validity(
                 interval_prices=processed_result["interval_prices"],
                 tomorrow_interval_prices=processed_result["tomorrow_interval_prices"],
                 now=now,
-                current_interval_key=current_interval_key
+                current_interval_key=current_interval_key,
+                target_timezone=target_timezone  # Keys are in this timezone
             )
             
             processed_result["data_validity"] = validity.to_dict()
