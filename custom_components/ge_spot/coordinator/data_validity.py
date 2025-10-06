@@ -160,7 +160,7 @@ def calculate_data_validity(
         DataValidity object with calculated values
     """
     from homeassistant.util import dt as dt_util
-    import pytz
+    from zoneinfo import ZoneInfo
     
     validity = DataValidity()
     
@@ -184,7 +184,7 @@ def calculate_data_validity(
     # The interval keys (e.g., "04:15") are ALREADY in the target timezone
     if target_timezone:
         try:
-            tz = pytz.timezone(target_timezone)
+            tz = ZoneInfo(target_timezone)
             _LOGGER.debug(f"Using target timezone for validity calculation: {target_timezone}")
         except Exception as e:
             _LOGGER.warning(f"Invalid target timezone '{target_timezone}': {e}. Falling back to HA timezone.")
@@ -197,9 +197,9 @@ def calculate_data_validity(
         try:
             hour, minute = map(int, interval_key.split(':'))
             interval_dt = datetime.combine(today_date, datetime.min.time().replace(hour=hour, minute=minute))
-            # Make timezone aware using source timezone or HA timezone
+            # Make timezone aware using target timezone or HA timezone
             if tz:
-                interval_dt = tz.localize(interval_dt)
+                interval_dt = interval_dt.replace(tzinfo=tz)
             else:
                 interval_dt = dt_util.as_local(interval_dt)
             all_intervals.append(interval_dt)
@@ -214,9 +214,9 @@ def calculate_data_validity(
         try:
             hour, minute = map(int, interval_key.split(':'))
             interval_dt = datetime.combine(tomorrow_date, datetime.min.time().replace(hour=hour, minute=minute))
-            # Make timezone aware using source timezone or HA timezone
+            # Make timezone aware using target timezone or HA timezone
             if tz:
-                interval_dt = tz.localize(interval_dt)
+                interval_dt = interval_dt.replace(tzinfo=tz)
             else:
                 interval_dt = dt_util.as_local(interval_dt)
             all_intervals.append(interval_dt)
@@ -237,7 +237,7 @@ def calculate_data_validity(
         # This means we have intervals from now until at least end of today
         end_of_today = datetime.combine(today_date, datetime.max.time())
         if tz:
-            end_of_today = tz.localize(end_of_today)
+            end_of_today = end_of_today.replace(tzinfo=tz)
         else:
             end_of_today = dt_util.as_local(end_of_today)
         

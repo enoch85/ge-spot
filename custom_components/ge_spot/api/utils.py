@@ -4,17 +4,17 @@ import logging
 import datetime
 from typing import Dict, Any, List
 from functools import lru_cache
+from zoneinfo import ZoneInfo
 
 from ..timezone import TimezoneService
-import pytz
 
 _LOGGER = logging.getLogger(__name__)
 
-# Cache timezone objects to avoid repeated file I/O
+# Cache timezone objects to avoid repeated initialization
 @lru_cache(maxsize=32)
 def get_timezone(tz_name):
-    """Get timezone object with caching to avoid repeated file I/O."""
-    return pytz.timezone(tz_name)
+    """Get timezone object with caching to avoid repeated initialization."""
+    return ZoneInfo(tz_name)
 
 async def fetch_with_retry(fetch_func, is_data_available, retry_interval=1800, end_time=None, local_tz_name=None, *args, **kwargs):
     """

@@ -4,6 +4,7 @@ import csv
 import logging
 from datetime import datetime
 from io import StringIO
+from zoneinfo import ZoneInfo
 from typing import Dict, Any, Optional, List
 
 from ..base.price_parser import BasePriceParser
@@ -82,9 +83,8 @@ class AemoParser(BasePriceParser):
                 
                 # Ensure timezone-aware datetime
                 if timestamp.tzinfo is None:
-                    import pytz
-                    tz = pytz.timezone(source_timezone)
-                    timestamp = tz.localize(timestamp)
+                    tz = ZoneInfo(source_timezone)
+                    timestamp = timestamp.replace(tzinfo=tz)
                 
                 # Use ISO format as key
                 interval_key = timestamp.isoformat()
