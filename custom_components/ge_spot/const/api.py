@@ -41,8 +41,14 @@ class Aemo:
     # AEMO regions
     REGIONS = ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
 
-    # AEMO API endpoints - Now consolidated into a single endpoint
+    # AEMO Visualization API (real-time current price only)
     SUMMARY_URL = "https://visualisations.aemo.com.au/aemo/apps/api/report/ELEC_NEM_SUMMARY"
+
+    # NEMWEB Pre-dispatch Reports (forecast data with 40+ hour horizon)
+    NEMWEB_PREDISPATCH_URL = "http://www.nemweb.com.au/Reports/Current/PredispatchIS_Reports/"
+    
+    # NEMWEB file patterns
+    PREDISPATCH_FILE_PATTERN = r"PUBLIC_PREDISPATCHIS_(\d{12})_\d{14}\.zip"
 
     # AEMO data fields
     PRICE_FIELD = "PRICE"

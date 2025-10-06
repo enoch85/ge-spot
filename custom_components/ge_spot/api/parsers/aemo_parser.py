@@ -1,369 +1,238 @@
-"""Parser for AEMO API responses."""
-import logging
-import json
-import csv
-from io import StringIO
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Optional, List, Tuple
+"""Parser for AEMO NEMWEB Pre-dispatch API responses."""
 
+import csv
+import logging
+from datetime import datetime
+from io import StringIO
+from typing import Dict, Any, Optional, List
+
+from ..base.price_parser import BasePriceParser
 from ...const.sources import Source
 from ...const.currencies import Currency
-from ...timezone.timezone_utils import normalize_hour_value
-from ...utils.validation import validate_data
-from ..base.price_parser import BasePriceParser
+from ...const.energy import EnergyUnit
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class AemoParser(BasePriceParser):
-    """Parser for AEMO API responses."""
+    """Parser for AEMO NEMWEB Pre-dispatch CSV data.
+    
+    AEMO operates on 30-minute trading intervals. The Pre-dispatch reports contain
+    forecasts for ~55 trading intervals (40+ hour horizon), which are provided as
+    30-minute interval data.
+    
+    The raw CSV data is parsed and converted to ISO timestamp format for processing
+    by the interval_expander, which will duplicate each 30-min price into two 15-min
+    intervals.
+    """
 
     def __init__(self, timezone_service=None):
         """Initialize the parser."""
         super().__init__(Source.AEMO, timezone_service)
 
-    def parse(self, raw_data: Any, area: Optional[str] = None) -> Dict[str, Any]:
-        """Parse AEMO price data.
+    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse AEMO NEMWEB Pre-dispatch data.
 
-        Returns:
-            Parsed data with interval prices, currency, area, and timezone
-        """
-
-        # Determine timezone based on the area, similar to AemoAPI.get_timezone_for_area
-        # Default to "Australia/Sydney" if area is None or not in the specific map
-        determined_timezone = "Australia/Sydney"
-        if area:
-            timezone_map = {
-                "NSW1": "Australia/Sydney",
-                "QLD1": "Australia/Brisbane",
-                "SA1": "Australia/Adelaide",
-                "TAS1": "Australia/Hobart",
-                "VIC1": "Australia/Melbourne"
-            }
-            determined_timezone = timezone_map.get(area, "Australia/Sydney")
-
-        result = {
-            "interval_raw": {},  # Changed from interval_prices
-            "currency": Currency.AUD,
-            "area": area,  # Store the area if provided
-            "timezone": determined_timezone # Add timezone to the parser's result
+        Expected input structure (from AemoAPI.fetch_raw_data):
+        {
+            'csv_content': str,  # CSV file content
+            'area': str,         # Region code (NSW1, QLD1, etc.)
+            'timezone': str,     # Australia/Sydney
+            'currency': str,     # AUD
+            'raw_data': dict     # Metadata
         }
 
-        # Check for valid data
-        if not raw_data:
-            _LOGGER.warning("Empty AEMO data received")
+        Returns:
+            Dict with interval_raw (ISO timestamps), currency, timezone, source, etc.
+        """
+        _LOGGER.debug(f"[AemoParser] Starting parse. Input data keys: {list(data.keys())}")
+
+        # Extract the CSV content from raw_data
+        csv_content = data.get("csv_content")
+        if not csv_content:
+            _LOGGER.warning("[AemoParser] 'csv_content' missing in input data")
+            return self._create_empty_result(data)
+
+        # Extract metadata
+        area = data.get("area")
+        if not area:
+            _LOGGER.warning("[AemoParser] 'area' not specified")
+            return self._create_empty_result(data)
+
+        source_timezone = data.get("timezone", "Australia/Sydney")
+        source_currency = data.get("currency", Currency.AUD)
+
+        _LOGGER.debug(f"[AemoParser] Parsing NEMWEB CSV for area: {area}, timezone: {source_timezone}")
+
+        # Parse the CSV content
+        try:
+            prices_30min = self._parse_predispatch_csv(csv_content, area)
+            
+            if not prices_30min:
+                _LOGGER.warning(f"[AemoParser] No price data found for {area}")
+                return self._create_empty_result(data, source_timezone, source_currency)
+
+            _LOGGER.debug(f"[AemoParser] Parsed {len(prices_30min)} 30-minute trading intervals")
+
+            # Convert to interval_raw format (ISO timestamps)
+            interval_raw = {}
+            for record in prices_30min:
+                timestamp = record["timestamp"]
+                
+                # Ensure timezone-aware datetime
+                if timestamp.tzinfo is None:
+                    import pytz
+                    tz = pytz.timezone(source_timezone)
+                    timestamp = tz.localize(timestamp)
+                
+                # Use ISO format as key
+                interval_key = timestamp.isoformat()
+                interval_raw[interval_key] = record["price"]
+
+            _LOGGER.debug(f"[AemoParser] Created {len(interval_raw)} interval_raw entries")
+
+            # Construct result
+            result = {
+                "interval_raw": interval_raw,
+                "currency": source_currency,
+                "area": area,
+                "timezone": source_timezone,
+                "source": Source.AEMO,
+                "source_unit": EnergyUnit.MWH,
+                "source_interval_minutes": 30  # AEMO uses 30-min trading intervals
+            }
+
+            # Validate before returning
+            if not self.validate_parsed_data(result):
+                _LOGGER.warning(f"[AemoParser] Validation failed for parsed data")
+                return self._create_empty_result(data, source_timezone, source_currency)
+
             return result
 
-        # If raw_data is a string (CSV or JSON), parse it
-        if isinstance(raw_data, str):
-            try:
-                # Try JSON format first
-                json_data = json.loads(raw_data)
-                self._parse_json(json_data, result, area)  # Pass area
-            except json.JSONDecodeError:
-                # Try CSV format
-                try:
-                    self._parse_csv(raw_data, result, area)  # Pass area
-                except Exception as e:
-                    _LOGGER.warning(f"Failed to parse AEMO data as CSV: {e}")
-        # If raw_data is a dictionary, extract data directly
-        elif isinstance(raw_data, dict):
-            # If interval prices were already processed
-            if "interval_raw" in raw_data and isinstance(raw_data["interval_raw"], dict):  # Changed from interval_prices
-                result["interval_raw"] = raw_data["interval_raw"]  # Changed from interval_prices
-            elif "raw_data" in raw_data:
-                # Try to parse raw_data entry
-                self._parse_json(raw_data, result, area)  # Pass area
-            else:
-                # Try parsing the dict directly as if it's the JSON response
-                self._parse_json(raw_data, result, area)  # Pass area
-
-        # Calculate current and next interval prices if not provided
-        if not result.get("current_price"):
-            result["current_price"] = self._get_current_price(result["interval_raw"])  # Changed from interval_prices
-
-        if not result.get("next_interval_price"):
-            result["next_interval_price"] = self._get_next_interval_price(result["interval_raw"])  # Changed from interval_prices
-
-        return result
-
-    def extract_metadata(self, data: Any) -> Dict[str, Any]:
-        """Extract metadata from AEMO API response.
-
-        Args:
-            data: Raw API response data
-
-        Returns:
-            Metadata dictionary
-        """
-        metadata = super().extract_metadata(data)
-        metadata.update({
-            "currency": Currency.AUD,  # Default currency for AEMO
-            "timezone": "Australia/Sydney",
-            "area": "NSW1",  # Default area
-        })
-
-        # Extract additional metadata
-        if isinstance(data, dict):
-            # Check for area information
-            if "area" in data:
-                metadata["area"] = data["area"]
-
-            # Check for additional fields
-            from ...const.api import Aemo
-            if Aemo.SUMMARY_ARRAY in data:
-                metadata["data_source"] = "ELEC_NEM_SUMMARY"
-
-                # Look for region information in the first entry
-                if data[Aemo.SUMMARY_ARRAY] and isinstance(data[Aemo.SUMMARY_ARRAY], list):
-                    first_entry = data[Aemo.SUMMARY_ARRAY][0]
-                    if Aemo.REGION_FIELD in first_entry:
-                        metadata["area"] = first_entry[Aemo.REGION_FIELD]
-
-        metadata.update({
-            "source": self.source,
-            "price_count": len(data.get("interval_raw", {})),  # Changed from interval_prices
-            "currency": data.get("currency", "AUD"),  # Changed default
-            "area": data.get("area", "NSW1"),  # Use area from parsed data
-            "has_current_price": "current_price" in data and data["current_price"] is not None,
-            "has_next_interval_price": "next_interval_price" in data and data["next_interval_price"] is not None,
-            "parser_version": "2.1",  # Updated version
-            "parsed_at": datetime.now(timezone.utc).isoformat()
-        })
-
-        return metadata
-
-    def _parse_json(self, json_data: Dict[str, Any], result: Dict[str, Any], area: Optional[str] = None) -> None:
-        """Parse JSON formatted data from AEMO.
-
-        Args:
-            json_data: JSON data
-            result: Result dictionary to update
-            area: Optional area code to filter results for
-        """
-        # Check if we're using the consolidated endpoint
-        from ...const.api import Aemo
-        interval_prices_5min = {}
-
-        if Aemo.SUMMARY_ARRAY in json_data:
-            # Process data from the main summary array
-            for entry in json_data[Aemo.SUMMARY_ARRAY]:
-                # Filter by area if provided
-                if area and Aemo.REGION_FIELD in entry and entry[Aemo.REGION_FIELD] != area:
-                    continue
-
-                if Aemo.PRICE_FIELD in entry and Aemo.SETTLEMENT_DATE_FIELD in entry:
-                    try:
-                        # Parse timestamp
-                        timestamp_str = entry[Aemo.SETTLEMENT_DATE_FIELD]
-                        try:
-                            # AEMO timestamps are typically in ISO format with 5-minute intervals
-                            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                            # Store 5-minute prices as-is for now
-                            interval_key = dt.isoformat()
-                            # Parse price
-                            price = float(entry[Aemo.PRICE_FIELD])
-                            interval_prices_5min[interval_key] = price
-                        except (ValueError, TypeError):
-                            _LOGGER.debug(f"Failed to parse AEMO timestamp: {timestamp_str}")
-                    except (KeyError, TypeError):
-                        continue
-
-        # Aggregate 5-minute prices to 15-minute intervals
-        interval_prices_15min = self._aggregate_to_15min(interval_prices_5min)
-
-        # Update result with aggregated 15-minute interval prices
-        result["interval_raw"].update(interval_prices_15min)  # Changed from interval_prices
-
-    def _parse_csv(self, csv_data: str, result: Dict[str, Any], area: Optional[str] = None) -> None:
-        """Parse CSV formatted data from AEMO.
-
-        Args:
-            csv_data: CSV data
-            result: Result dictionary to update
-            area: Optional area code to filter results for
-        """
-        interval_prices_5min = {}
-
-        try:
-            # Read CSV data
-            csv_file = StringIO(csv_data)
-            csv_reader = csv.DictReader(csv_file)
-
-            # Parse rows
-            for row in csv_reader:
-                # Check for required fields
-                if "SETTLEMENTDATE" in row and "RRP" in row and "REGIONID" in row:
-                    # Filter by area if provided
-                    if area and row["REGIONID"] != area:
-                        continue
-                    try:
-                        # Parse timestamp
-                        timestamp_str = row["SETTLEMENTDATE"]
-                        try:
-                            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                            # Store 5-minute prices as-is for now
-                            interval_key = dt.isoformat()
-                            price = float(row["RRP"])
-                            interval_prices_5min[interval_key] = price
-                        except (ValueError, TypeError):
-                            _LOGGER.debug(f"Failed to parse AEMO CSV timestamp: {timestamp_str}")
-                    except (KeyError, TypeError):
-                        continue
         except Exception as e:
-            _LOGGER.warning(f"Error parsing AEMO CSV data: {e}")
+            _LOGGER.error(f"[AemoParser] Error parsing NEMWEB CSV: {e}", exc_info=True)
+            return self._create_empty_result(data, source_timezone, source_currency)
 
-        # Aggregate 5-minute prices to 15-minute intervals
-        interval_prices_15min = self._aggregate_to_15min(interval_prices_5min)
+    def _parse_predispatch_csv(self, csv_content: str, target_region: str) -> List[Dict[str, Any]]:
+        """Parse AEMO NEMWEB Pre-dispatch CSV format.
 
-        # Update result with aggregated 15-minute interval prices
-        result["interval_raw"].update(interval_prices_15min)  # Changed from interval_prices
+        AEMO CSV format uses line type indicators:
+        - C: Comment lines
+        - I: Header lines (column definitions)
+        - D: Data lines
 
-    def _aggregate_to_15min(self, prices_5min: Dict[str, float]) -> Dict[str, float]:
-        """Aggregate 5-minute prices to 15-minute intervals.
-
-        AEMO provides 5-minute dispatch prices, but we aggregate them to 15-minute intervals
-        to match our target resolution. Each 15-minute interval is the average of 3x 5-minute prices.
+        We're looking for:
+        - Header: I,PREDISPATCH,REGION_PRICES,...
+        - Data: D,PREDISPATCH,REGION_PRICES,1,{REGIONID},...
 
         Args:
-            prices_5min: Dictionary of 5-minute interval prices with ISO timestamp keys
+            csv_content: CSV file content as string
+            target_region: Region code (NSW1, QLD1, SA1, TAS1, VIC1)
 
         Returns:
-            Dictionary of 15-minute interval prices (averaged from 5-min data)
+            List of dicts with 'timestamp' and 'price' keys
         """
-        from collections import defaultdict
+        # Extract header to get field names
+        header = self._extract_header(csv_content)
+        if not header:
+            raise ValueError("Could not find PREDISPATCH,REGION_PRICES header in CSV")
 
-        interval_15min_prices = defaultdict(list)
-
-        for interval_key, price in prices_5min.items():
-            try:
-                # Parse the timestamp
-                dt = datetime.fromisoformat(interval_key)
-                # Round down to nearest 15-minute interval: 00, 15, 30, 45
-                minute_rounded = (dt.minute // 15) * 15
-                interval_dt = dt.replace(minute=minute_rounded, second=0, microsecond=0)
-                interval_key_15min = interval_dt.isoformat()
-                # Add to the 15-minute interval bucket
-                interval_15min_prices[interval_key_15min].append(price)
-            except (ValueError, TypeError) as e:
-                _LOGGER.debug(f"Failed to parse timestamp for aggregation: {interval_key}, error: {e}")
+        # Parse data rows for target region
+        prices = []
+        reader = csv.reader(StringIO(csv_content))
+        
+        for row in reader:
+            if len(row) < 2:
                 continue
-
-        # Calculate average for each 15-minute interval
-        result = {}
-        for interval_key_15min, prices in interval_15min_prices.items():
-            if prices:
-                # Average of all 5-minute prices within the 15-minute interval (typically 3 values)
-                avg_price = sum(prices) / len(prices)
-                result[interval_key_15min] = avg_price
-                _LOGGER.debug(f"Aggregated {len(prices)} 5-min prices to 15-min interval {interval_key_15min}: {avg_price:.2f}")
-
-        return result
-
-    def _parse_timestamp(self, timestamp_str: str) -> Optional[datetime]:
-        """Parse timestamp from AEMO format.
-
-        Args:
-            timestamp_str: Timestamp string
-
-        Returns:
-            Parsed datetime or None if parsing fails
-        """
-        try:
-            # Try ISO format
-            return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-        except (ValueError, AttributeError):
-            # Try common AEMO formats
-            formats = [
-                "%Y/%m/%d %H:%M:%S",
-                "%Y-%m-%d %H:%M:%S",
-                "%d/%m/%Y %H:%M:%S",
-                "%d-%m-%Y %H:%M:%S",
-                "%Y%m%d%H%M%S"
-            ]
-
-            for fmt in formats:
+            
+            # Look for data rows: D,PREDISPATCH,REGION_PRICES,1,{REGIONID},...
+            if (row[0] == 'D' and 
+                len(row) >= 3 and 
+                row[1] == 'PREDISPATCH' and 
+                row[2] == 'REGION_PRICES'):
+                
                 try:
-                    return datetime.strptime(timestamp_str, fmt)
-                except (ValueError, TypeError):
+                    # Create dict from header and row
+                    row_dict = dict(zip(header, row))
+                    
+                    # Check if this row is for our target region
+                    if row_dict.get('REGIONID') != target_region:
+                        continue
+                    
+                    # Extract timestamp and price
+                    datetime_str = row_dict.get('DATETIME')
+                    rrp_str = row_dict.get('RRP')  # Regional Reference Price
+                    
+                    if not datetime_str or not rrp_str:
+                        continue
+                    
+                    # Parse datetime (format: "YYYY/MM/DD HH:MM:SS")
+                    timestamp = self._parse_datetime(datetime_str)
+                    
+                    # Parse price
+                    price = float(rrp_str)
+                    
+                    prices.append({
+                        "timestamp": timestamp,
+                        "price": price
+                    })
+                    
+                except (ValueError, KeyError) as e:
+                    _LOGGER.debug(f"Skipping row due to parse error: {e}")
                     continue
 
-            _LOGGER.warning(f"Failed to parse timestamp: {timestamp_str}")
-            return None
+        return prices
 
-    def _get_current_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
-        """Get current interval price.
+    def _extract_header(self, csv_content: str) -> Optional[List[str]]:
+        """Extract column names from CSV header.
 
-        Args:
-            interval_prices: Dictionary of interval prices
-
-        Returns:
-            Current interval price or None if not available
-        """
-        if not interval_prices:
-            return None
-
-        now = datetime.now()
-
-        # Round down to nearest 15-minute interval
-        minute_rounded = (now.minute // 15) * 15
-        current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
-        current_interval_key = current_interval.isoformat()
-
-        _LOGGER.debug(f"Looking for current interval price with key: {current_interval_key}")
-
-        return interval_prices.get(current_interval_key)
-
-    def _get_next_interval_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
-        """Get next interval price.
+        Looks for line: I,PREDISPATCH,REGION_PRICES,{version},{field1},{field2},...
 
         Args:
-            interval_prices: Dictionary of interval prices
+            csv_content: CSV file content
 
         Returns:
-            Next interval price or None if not available
+            List of field names, or None if not found
         """
-        if not interval_prices:
-            return None
-
-        now = datetime.now()
-
-        # Round down to current 15-minute interval, then add 15 minutes
-        minute_rounded = (now.minute // 15) * 15
-        current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
-        next_interval = current_interval + timedelta(minutes=15)
-        next_interval_key = next_interval.isoformat()
-
-        _LOGGER.debug(f"Looking for next interval price with key: {next_interval_key}")
-
-        return interval_prices.get(next_interval_key)
-
-    def _calculate_day_average(self, interval_prices: Dict[str, float]) -> Optional[float]:
-        """Calculate day average price.
-
-        Args:
-            interval_prices: Dictionary of interval prices
-
-        Returns:
-            Day average price or None if not enough data
-        """
-        if not interval_prices:
-            return None
-
-        # Get today's date
-        today = datetime.now().date()
-
-        # Filter prices for today
-        today_prices = []
-        for interval_key, price in interval_prices.items():
-            try:
-                hour_dt = datetime.fromisoformat(interval_key)
-                if hour_dt.date() == today:
-                    today_prices.append(price)
-            except (ValueError, TypeError):
-                continue
-
-        # Calculate average if we have enough prices
-        if len(today_prices) >= 12:
-            return sum(today_prices) / len(today_prices)
-
+        reader = csv.reader(StringIO(csv_content))
+        
+        for row in reader:
+            if len(row) >= 3 and row[0] == 'I' and row[1] == 'PREDISPATCH' and row[2] == 'REGION_PRICES':
+                # Return all columns from position 0 onwards (includes line type)
+                return row
+        
         return None
+
+    def _parse_datetime(self, datetime_str: str) -> datetime:
+        """Parse AEMO datetime format.
+
+        Format: "YYYY/MM/DD HH:MM:SS"
+        Example: "2025/10/07 01:30:00"
+
+        Args:
+            datetime_str: Datetime string from CSV
+
+        Returns:
+            Naive datetime object (timezone added by caller)
+        """
+        try:
+            return datetime.strptime(datetime_str, "%Y/%m/%d %H:%M:%S")
+        except ValueError as e:
+            raise ValueError(f"Invalid AEMO datetime format: {datetime_str}") from e
+
+    def _create_empty_result(
+        self, 
+        original_data: Dict[str, Any], 
+        timezone: str = "Australia/Sydney", 
+        currency: str = Currency.AUD
+    ) -> Dict[str, Any]:
+        """Helper to create a standard empty result structure."""
+        return {
+            "interval_raw": {},
+            "currency": original_data.get("currency", currency),
+            "timezone": original_data.get("timezone", timezone),
+            "area": original_data.get("area"),
+            "source": Source.AEMO,
+            "source_unit": EnergyUnit.MWH,
+            "source_interval_minutes": 30
+        }

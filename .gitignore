@@ -181,6 +181,9 @@ cython_debug/
 .pypirc
 
 # Analysis and summary files - keep untracked, don't merge to main
+# Analysis and documentation files (per copilot-instructions.md rule #9)
+DEBUG_*.md
+IMPLEMENTATION_*.md
 *ANALYSIS*.md
 *SUMMARY*.md
 TODO/SOURCE_VALIDATION_MASTER_PLAN.md
