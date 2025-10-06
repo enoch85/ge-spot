@@ -63,20 +63,20 @@ class TestAemoParser:
         assert result["area"] == "NSW1"
         assert result["source_interval_minutes"] == 30
         
-        # Check interval data (should have 3 intervals)
+        # Check interval data (3 30-min intervals expanded to 6 15-min intervals)
         interval_raw = result["interval_raw"]
-        assert len(interval_raw) == 3
+        assert len(interval_raw) == 6  # 3 × 2 (30min → 15min expansion)
         
         # Verify ISO timestamps are used as keys
         keys = list(interval_raw.keys())
         assert all("2025-10-07" in key for key in keys)
         assert all("T" in key for key in keys)  # ISO format check
         
-        # Verify prices
+        # Verify prices (each 30-min price duplicated twice for 15-min intervals)
         prices = list(interval_raw.values())
-        assert 176.03 in prices
-        assert 155.26 in prices
-        assert 132.77 in prices
+        assert prices.count(176.03) == 2  # Duplicated for 01:00 and 01:15
+        assert prices.count(155.26) == 2  # Duplicated for 01:30 and 01:45
+        assert prices.count(132.77) == 2  # Duplicated for 02:00 and 02:15
 
     def test_parse_qld_data(self, parser, sample_csv_qld):
         """Test parsing QLD1 region data."""
@@ -92,11 +92,13 @@ class TestAemoParser:
         
         assert result["area"] == "QLD1"
         assert result["timezone"] == "Australia/Brisbane"
-        assert len(result["interval_raw"]) == 2
+        # 2 30-min intervals expanded to 4 15-min intervals
+        assert len(result["interval_raw"]) == 4
         
+        # Verify each 30-min price is duplicated twice for 15-min intervals
         prices = list(result["interval_raw"].values())
-        assert 95.50 in prices
-        assert 88.25 in prices
+        assert prices.count(95.50) == 2
+        assert prices.count(88.25) == 2
 
     def test_parse_invalid_region(self, parser, sample_csv_nsw):
         """Test parsing with region not in CSV data."""

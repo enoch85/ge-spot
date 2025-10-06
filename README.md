@@ -173,11 +173,11 @@ GE-Spot intelligently handles different native resolutions from APIs:
 |--------|-------------|-------------------|
 | ENTSO-E | 15/30/60 min | Uses native 15-min when available, expands others |
 | Nordpool | 15/60 min | Uses native 15-min, expands hourly to 15-min |
-| OMIE/Stromligning | 60 min | Duplicates hourly price across 4×15-min intervals |
-| AEMO | 30 min trading | Duplicates 30-min price across 2×15-min intervals |
-| ComEd | 5 min dispatch | Aggregates 3×5-min values into 15-min averages |
+| OMIE/Stromligning | 60 min | Expands hourly to 15-min (duplicates across 4 intervals) |
+| AEMO | 30 min trading | Expands to 15-min (duplicates across 2 intervals) |
+| ComEd | 5 min dispatch | Aggregates to 15-min (averages 3 values per interval) |
 | EPEX | 15 min | Uses native 15-min data |
-| Amber | 30 min | Duplicates 30-min price across 2×15-min intervals |
+| Amber | 30 min | Expands to 15-min (duplicates across 2 intervals) |
 
 **Strategy**: All sources output 96 intervals per day (15-minute granularity) for consistent automation timing.
 

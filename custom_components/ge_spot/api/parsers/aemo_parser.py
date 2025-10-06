@@ -7,6 +7,7 @@ from io import StringIO
 from typing import Dict, Any, Optional, List
 
 from ..base.price_parser import BasePriceParser
+from ..interval_expander import convert_to_target_intervals
 from ...const.sources import Source
 from ...const.currencies import Currency
 from ...const.energy import EnergyUnit
@@ -21,9 +22,9 @@ class AemoParser(BasePriceParser):
     forecasts for ~55 trading intervals (40+ hour horizon), which are provided as
     30-minute interval data.
     
-    The raw CSV data is parsed and converted to ISO timestamp format for processing
-    by the interval_expander, which will duplicate each 30-min price into two 15-min
-    intervals.
+    The parser automatically expands 30-minute trading intervals to 15-minute 
+    intervals using the interval_expander, which duplicates each 30-min price 
+    into two 15-min intervals.
     """
 
     def __init__(self, timezone_service=None):
@@ -89,7 +90,15 @@ class AemoParser(BasePriceParser):
                 interval_key = timestamp.isoformat()
                 interval_raw[interval_key] = record["price"]
 
-            _LOGGER.debug(f"[AemoParser] Created {len(interval_raw)} interval_raw entries")
+            _LOGGER.debug(f"[AemoParser] Created {len(interval_raw)} 30-minute interval_raw entries")
+
+            # Expand 30-minute trading intervals to 15-minute intervals
+            _LOGGER.debug(f"[AemoParser] Expanding {len(interval_raw)} 30-min prices to 15-min intervals")
+            interval_raw = convert_to_target_intervals(
+                source_prices=interval_raw,
+                source_interval_minutes=30  # AEMO uses 30-min trading intervals
+            )
+            _LOGGER.debug(f"[AemoParser] After expansion: {len(interval_raw)} 15-minute intervals")
 
             # Construct result
             result = {
