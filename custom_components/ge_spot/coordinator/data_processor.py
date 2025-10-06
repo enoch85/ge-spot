@@ -26,8 +26,8 @@ from ..price.currency_converter import CurrencyConverter # Import CurrencyConver
 from ..price.statistics import calculate_statistics
 # Use relative import for timezone_utils
 from ..timezone.timezone_utils import get_timezone_object
-# Use absolute component path for sources
-from custom_components.ge_spot.const.sources import Source
+# Use relative import for sources
+from ..const.sources import Source
 from ..const.attributes import Attributes
 # Import BasePriceParser for type hinting
 from ..api.base.price_parser import BasePriceParser
@@ -139,6 +139,8 @@ class DataProcessor:
         input_interval_raw: Optional[Dict[str, Any]] = None
         input_source_timezone: Optional[str] = None
         input_source_currency: Optional[str] = None
+        parser_current_price: Optional[float] = None
+        parser_next_price: Optional[float] = None
         raw_api_data_for_result = data.get("raw_data") or data.get("xml_responses") or data.get("dict_response")
 
         if not source_name:
@@ -203,6 +205,9 @@ class DataProcessor:
                 input_interval_raw = parsed_data.get("interval_raw")
                 input_source_timezone = parsed_data.get("timezone")
                 input_source_currency = parsed_data.get("currency")
+                # Preserve parser-provided current/next prices (for real-time APIs like ComEd)
+                parser_current_price = parsed_data.get("current_price")
+                parser_next_price = parsed_data.get("next_interval_price")
                 # If parser extracted metadata (like raw_data from within), use it
                 if parsed_data.get("raw_data"):
                     raw_api_data_for_result = parsed_data.get("raw_data")
@@ -321,8 +326,35 @@ class DataProcessor:
                 next_interval_key = self._tz_service.get_next_interval_key()
                 processed_result["current_interval_key"] = current_interval_key
                 processed_result["next_interval_key"] = next_interval_key
-                processed_result["current_price"] = final_today_prices.get(current_interval_key)
-                processed_result["next_interval_price"] = final_today_prices.get(next_interval_key)
+                
+                # Use parser-provided current price if available (for real-time APIs like ComEd)
+                # Otherwise, look up the price for the current interval key
+                if not is_cached_data and 'parser_current_price' in locals() and parser_current_price is not None:
+                    processed_result["current_price"] = parser_current_price
+                    _LOGGER.debug(
+                        f"[{self.area}] Using parser-provided current price: {parser_current_price} "
+                        f"(source: {source_name})"
+                    )
+                else:
+                    processed_result["current_price"] = final_today_prices.get(current_interval_key)
+                
+                # Use parser-provided next price if available
+                if not is_cached_data and 'parser_next_price' in locals() and parser_next_price is not None:
+                    processed_result["next_interval_price"] = parser_next_price
+                else:
+                    processed_result["next_interval_price"] = final_today_prices.get(next_interval_key)
+                
+                # Fallback for interval-based pricing when current interval doesn't exist yet
+                # This handles cases where we have interval data but the current interval is incomplete
+                if processed_result["current_price"] is None and source_name == Source.COMED:
+                    if final_today_prices:
+                        # Get the most recent available price (latest time key)
+                        most_recent_key = max(final_today_prices.keys())
+                        processed_result["current_price"] = final_today_prices[most_recent_key]
+                        _LOGGER.debug(
+                            f"[{self.area}] ComEd: Current interval '{current_interval_key}' not available. "
+                            f"Using most recent price from interval '{most_recent_key}': {processed_result['current_price']}"
+                        )
 
                 today_keys = set(self._tz_service.get_today_range())
                 found_keys = set(final_today_prices.keys())
@@ -395,12 +427,15 @@ class DataProcessor:
             
             now = dt_util.now()
             current_interval_key = processed_result.get("current_interval_key") or self._tz_service.get_current_interval_key()
+            # The interval_prices keys are already in target_timezone, so use that for validity timestamps
+            target_timezone = str(self._tz_service.target_timezone)
             
             validity = calculate_data_validity(
                 interval_prices=processed_result["interval_prices"],
                 tomorrow_interval_prices=processed_result["tomorrow_interval_prices"],
                 now=now,
-                current_interval_key=current_interval_key
+                current_interval_key=current_interval_key,
+                target_timezone=target_timezone  # Keys are in this timezone
             )
             
             processed_result["data_validity"] = validity.to_dict()
@@ -425,6 +460,8 @@ class DataProcessor:
         from ..api.parsers.omie_parser import OmieParser
         from ..api.parsers.aemo_parser import AemoParser
         from ..api.parsers.epex_parser import EpexParser
+        from ..api.parsers.comed_parser import ComedParser
+        from ..api.parsers.amber_parser import AmberParser
         # Add other parsers as needed
         # ...
 
@@ -437,6 +474,8 @@ class DataProcessor:
             Source.OMIE: OmieParser,
             Source.AEMO: AemoParser,
             Source.EPEX: EpexParser,
+            Source.COMED: ComedParser,
+            Source.AMBER: AmberParser,
             # ... add mappings for other sources using Source.* constants ...
         }
 

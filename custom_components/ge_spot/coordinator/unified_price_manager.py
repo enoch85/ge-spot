@@ -314,11 +314,14 @@ class UnifiedPriceManager:
                 try:
                     from .data_validity import calculate_data_validity
                     current_interval_key = self._tz_service.get_current_interval_key()
+                    # Cached interval keys are in target_timezone
+                    target_timezone = str(self._tz_service.target_timezone)
                     data_validity = calculate_data_validity(
                         interval_prices=cached_data_for_decision.get("interval_prices", {}),
                         tomorrow_interval_prices=cached_data_for_decision.get("tomorrow_interval_prices", {}),
                         now=now,
-                        current_interval_key=current_interval_key
+                        current_interval_key=current_interval_key,
+                        target_timezone=target_timezone  # Keys are in this timezone
                     )
                     _LOGGER.debug(f"[{self.area}] Calculated data validity from cache: {data_validity}")
                 except Exception as e:
