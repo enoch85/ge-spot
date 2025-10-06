@@ -11,6 +11,7 @@ from ...const.sources import Source
 from ...const.currencies import Currency
 from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
+from ..interval_expander import convert_to_target_intervals
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +83,15 @@ class OmieParser(BasePriceParser):
         _LOGGER.debug(f"[OmieParser] Found {len(result['interval_raw'])} total interval prices after parsing available days.")
         if not result["interval_raw"]:
             _LOGGER.warning("[OmieParser] Parsing completed, but no interval prices were extracted from any provided data.")
+        else:
+            # OMIE provides hourly data (60-minute intervals)
+            # Expand to target interval (typically 15 minutes) by replicating hourly values
+            _LOGGER.debug(f"[OmieParser] Expanding {len(result['interval_raw'])} hourly prices to 15-minute intervals")
+            result["interval_raw"] = convert_to_target_intervals(
+                source_prices=result["interval_raw"],
+                source_interval_minutes=60  # OMIE provides hourly data
+            )
+            _LOGGER.debug(f"[OmieParser] After expansion: {len(result['interval_raw'])} interval prices")
 
         return result
 

@@ -33,7 +33,8 @@ class ComedParser(BasePriceParser):
         """
         result = {
             "interval_raw": {},  # Changed from interval_prices
-            "currency": Currency.CENTS  # ComEd API returns prices in cents/kWh, not USD/kWh
+            "currency": Currency.CENTS,  # ComEd API returns prices in cents/kWh, not USD/kWh
+            "timezone": SourceTimezone.API_TIMEZONES.get(Source.COMED, "America/Chicago")  # ComEd timezone
         }
 
         # Check for valid data

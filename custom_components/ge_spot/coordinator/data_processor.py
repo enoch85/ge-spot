@@ -425,6 +425,8 @@ class DataProcessor:
         from ..api.parsers.omie_parser import OmieParser
         from ..api.parsers.aemo_parser import AemoParser
         from ..api.parsers.epex_parser import EpexParser
+        from ..api.parsers.comed_parser import ComedParser
+        from ..api.parsers.amber_parser import AmberParser
         # Add other parsers as needed
         # ...
 
@@ -437,6 +439,8 @@ class DataProcessor:
             Source.OMIE: OmieParser,
             Source.AEMO: AemoParser,
             Source.EPEX: EpexParser,
+            Source.COMED: ComedParser,
+            Source.AMBER: AmberParser,
             # ... add mappings for other sources using Source.* constants ...
         }
 
