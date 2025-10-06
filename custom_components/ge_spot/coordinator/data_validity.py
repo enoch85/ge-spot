@@ -178,7 +178,6 @@ def calculate_data_validity(
     
     # Find the last valid interval timestamp
     all_intervals = []
-    today_date = now.date()
     
     # Determine which timezone to use for localizing interval keys
     # The interval keys (e.g., "04:15") are ALREADY in the target timezone
@@ -186,11 +185,16 @@ def calculate_data_validity(
         try:
             tz = ZoneInfo(target_timezone)
             _LOGGER.debug(f"Using target timezone for validity calculation: {target_timezone}")
+            # Get today's date in the TARGET timezone, not from 'now' which might be in a different TZ
+            now_in_target_tz = now.astimezone(tz)
+            today_date = now_in_target_tz.date()
         except Exception as e:
             _LOGGER.warning(f"Invalid target timezone '{target_timezone}': {e}. Falling back to HA timezone.")
             tz = None
+            today_date = now.date()
     else:
         tz = None
+        today_date = now.date()
     
     # Parse today's intervals
     for interval_key in interval_prices.keys():
