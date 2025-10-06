@@ -332,7 +332,7 @@ class DataProcessor:
                 today_complete_enough = len(found_keys) >= int(expected_intervals * 0.8)
 
                 if today_complete_enough:
-                    stats = self._calculate_statistics(final_today_prices)
+                    stats = self._calculate_statistics(final_today_prices, day_offset=0)
                     # Mark as complete only if all intervals are present
                     processed_result["statistics"] = stats.to_dict()
                     _LOGGER.debug(f"Calculated today's statistics for {self.area}: {processed_result['statistics']}") # Log today's stats
@@ -355,7 +355,7 @@ class DataProcessor:
                 tomorrow_complete_enough = len(found_keys) >= int(expected_intervals * 0.8)
 
                 if tomorrow_complete_enough:
-                    stats = self._calculate_statistics(final_tomorrow_prices)
+                    stats = self._calculate_statistics(final_tomorrow_prices, day_offset=1)
                      # Mark as complete only if all intervals are present
                     processed_result["tomorrow_statistics"] = stats.to_dict()
                     # Set tomorrow_valid if we have enough data for stats, even if not fully complete
@@ -446,11 +446,15 @@ class DataProcessor:
             return parser_class(timezone_service=self._tz_service)
         return None
 
-    def _calculate_statistics(self, interval_prices: Dict[str, float]) -> PriceStatistics:
+    def _calculate_statistics(self, interval_prices: Dict[str, float], day_offset: int = 0) -> PriceStatistics:
         """Calculate price statistics from a dictionary of interval prices (HH:MM keys).
         
         Also calculates timestamps for min/max values by finding the interval key with those values.
-        The timestamps are derived from the current day in the HA timezone.
+        The timestamps are derived from the specified day (today + day_offset) in the HA timezone.
+        
+        Args:
+            interval_prices: Dictionary of interval prices with HH:MM keys
+            day_offset: Number of days offset from today (0=today, 1=tomorrow)
         """
         prices = [p for p in interval_prices.values() if p is not None]
         if not prices:
@@ -465,25 +469,52 @@ class DataProcessor:
         min_timestamp = None
         max_timestamp = None
         
+        # Get the target date based on day_offset
+        from homeassistant.util import dt as dt_util
+        now = dt_util.now()
+        target_date = (now + timedelta(days=day_offset)).date()
+        
         for interval_key, price in interval_prices.items():
             if price == min_price and min_timestamp is None:
-                # Convert HH:MM key to full timestamp using today's date
+                # Convert HH:MM key to full timestamp using target date
                 try:
-                    from homeassistant.util import dt as dt_util
-                    now = dt_util.now()
                     hour, minute = map(int, interval_key.split(':'))
-                    timestamp_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    timestamp_dt = datetime.combine(
+                        target_date,
+                        datetime.min.time().replace(hour=hour, minute=minute)
+                    )
+                    # Make it timezone-aware using the HA timezone
+                    timestamp_dt = now.replace(
+                        year=target_date.year,
+                        month=target_date.month,
+                        day=target_date.day,
+                        hour=hour,
+                        minute=minute,
+                        second=0,
+                        microsecond=0
+                    )
                     min_timestamp = timestamp_dt.isoformat()
                 except (ValueError, AttributeError) as e:
                     _LOGGER.warning(f"Failed to convert interval key '{interval_key}' to timestamp: {e}")
                     
             if price == max_price and max_timestamp is None:
-                # Convert HH:MM key to full timestamp using today's date
+                # Convert HH:MM key to full timestamp using target date
                 try:
-                    from homeassistant.util import dt as dt_util
-                    now = dt_util.now()
                     hour, minute = map(int, interval_key.split(':'))
-                    timestamp_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    timestamp_dt = datetime.combine(
+                        target_date,
+                        datetime.min.time().replace(hour=hour, minute=minute)
+                    )
+                    # Make it timezone-aware using the HA timezone
+                    timestamp_dt = now.replace(
+                        year=target_date.year,
+                        month=target_date.month,
+                        day=target_date.day,
+                        hour=hour,
+                        minute=minute,
+                        second=0,
+                        microsecond=0
+                    )
                     max_timestamp = timestamp_dt.isoformat()
                 except (ValueError, AttributeError) as e:
                     _LOGGER.warning(f"Failed to convert interval key '{interval_key}' to timestamp: {e}")
