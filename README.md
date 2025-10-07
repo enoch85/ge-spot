@@ -113,7 +113,6 @@ After installation:
 - **Region/Area**: Select your electricity price area (e.g., SE4, DK1)
 - **Source Priority**: Order of data sources to try (first = highest priority)
 - **VAT Rate**: Set your applicable VAT percentage (e.g., 25 for 25%)
-- **Update Interval**: How often to refresh data (15, 30, or 60 minutes)
 
 ### Advanced Settings
 
