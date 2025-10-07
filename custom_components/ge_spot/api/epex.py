@@ -45,24 +45,25 @@ class EpexAPI(BasePriceAPI):
             # Define a buffer hour to consider it a failure (e.g., 16:00 CET)
             failure_check_hour_cet = 16
 
+            # Define a more robust check for valid EPEX data (not just HTML error/cookie page)
+            # This function must be defined OUTSIDE the conditional block since it's used in multiple places
+            def is_data_available(data):
+                if not data or not isinstance(data, str):
+                    return False
+                # Check if it's likely an HTML page instead of the data table
+                if data.strip().lower().startswith("<!doctype html"):
+                     # More specific check for table presence might be needed if error pages vary
+                     # For now, assume any DOCTYPE means it's not the expected data table snippet
+                     return False
+                # Basic check if it contains expected table markers (adjust if needed)
+                # This is brittle, relying on parser might be better if feasible here
+                return "<table" in data and "epexspot" in data.lower()
+
             should_fetch_tomorrow = now_cet.hour >= release_hour_cet
 
             if should_fetch_tomorrow:
                 async def fetch_tomorrow():
                     return await self._fetch_data(client, area, tomorrow)
-
-                # Define a more robust check for valid EPEX data (not just HTML error/cookie page)
-                def is_data_available(data):
-                    if not data or not isinstance(data, str):
-                        return False
-                    # Check if it's likely an HTML page instead of the data table
-                    if data.strip().lower().startswith("<!doctype html"):
-                         # More specific check for table presence might be needed if error pages vary
-                         # For now, assume any DOCTYPE means it's not the expected data table snippet
-                         return False
-                    # Basic check if it contains expected table markers (adjust if needed)
-                    # This is brittle, relying on parser might be better if feasible here
-                    return "<table" in data and "epexspot" in data.lower()
 
                 raw_tomorrow = await fetch_with_retry(
                     fetch_tomorrow,
