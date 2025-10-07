@@ -1,6 +1,6 @@
 # GE-Spot: Global Electricity Spot Prices Integration for Home Assistant
 
-![Version](https://img.shields.io/badge/version-1.3.1-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg)
+![Version](https://img.shields.io/badge/version-1.3.2-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg)
 
 > *"Hit the right spot with your energy prices"*
 
