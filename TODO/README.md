@@ -37,14 +37,8 @@ Add monitoring and user features:
 
 ### `future-features/`
 Long-term feature ideas:
-- Machine learning price prediction
-- Weather integration
-- Cost optimization recommendations
-- Historical analysis & reporting
-- Smart device integration
-- Energy dashboard integration
-- Geographic expansion
-- PyPI package
+- Weather integration (weather affects electricity prices)
+- Geographic expansion (add more markets)
 
 ## How to Use
 
