@@ -18,6 +18,7 @@ Home Assistant custom integration providing **electricity spot prices** from glo
 - [Usage Examples](#usage-examples)
 - [Troubleshooting](#troubleshooting)
 - [For Developers](#for-developers)
+- [Contributing](#contributing)
 - [Technical Architecture (Advanced)](#technical-architecture-advanced)
 
 ## Installation
@@ -466,6 +467,19 @@ custom_components/ge_spot/
 - **Unit Tests**: `pytest tests/pytest/unit/`
 - **Integration Tests**: `pytest tests/pytest/integration/`  
 - **Manual Testing**: `python -m tests.manual.integration.source_test AREA`
+
+### Contributing
+
+Want to help improve GE-Spot? Check out the **[TODO folder](/TODO)** for a list of tasks!
+
+We've organized contribution opportunities into categories:
+- **Testing** - Add tests for better reliability
+- **Code Quality** - Improve maintainability
+- **Documentation** - Help new contributors
+- **Enhancements** - Add monitoring and features
+- **Future Features** - Long-term ideas
+
+Pick something that interests you, no deadlines or pressure. See the [TODO/README.md](/TODO/README.md) for details.
 
 ---
 
