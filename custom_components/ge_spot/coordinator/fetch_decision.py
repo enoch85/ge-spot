@@ -157,6 +157,35 @@ class FetchDecisionMaker:
                 )
                 _LOGGER.debug(reason)
                 return False, reason
+        
+        # POST-WINDOW RETRY: After special window, check if we missed tomorrow's data
+        elif hour >= end_hour:
+            # If we don't have tomorrow's data and it's after the window, try to fetch
+            if data_validity.tomorrow_interval_count < Network.Defaults.REQUIRED_TOMORROW_INTERVALS:
+                reason = (
+                    f"After special window ({end_hour}:00) but missing tomorrow's data "
+                    f"(have {data_validity.tomorrow_interval_count} intervals, "
+                    f"need {Network.Defaults.REQUIRED_TOMORROW_INTERVALS}) - retry fetch"
+                )
+                _LOGGER.info(reason)
+                
+                # Check rate limiting - don't spam the API
+                from ..utils.rate_limiter import RateLimiter
+                should_skip, skip_reason = RateLimiter.should_skip_fetch(
+                    last_fetched=last_fetch,
+                    current_time=now,
+                    min_interval=fetch_interval_minutes
+                )
+                
+                if should_skip:
+                    reason = (
+                        f"After window but missing tomorrow data - rate limited: {skip_reason}. "
+                        f"Will retry in next update cycle."
+                    )
+                    _LOGGER.debug(reason)
+                    return False, reason
+                    
+                return True, reason
 
         # ALL GOOD: We have enough data
         reason = (
