@@ -119,9 +119,22 @@ class SourceInfo:
         ],
         Source.ENERGI_DATA_SERVICE: ["DK1", "DK2"],
         Source.ENERGY_CHARTS: [
-            "DE-LU", "FR", "NL", "BE", "AT", "CH", "PL",
-            "DK1", "DK2", "CZ", "HU", "IT-North", "SI",
-            "SE4", "NO2", "DE-AT-LU"
+            # Nordic regions (13 zones)
+            "SE1", "SE2", "SE3", "SE4",
+            "NO1", "NO2", "NO3", "NO4", "NO5", "NO2NSL",
+            "DK1", "DK2", "FI",
+            # Baltic states (3 zones)
+            "EE", "LT", "LV",
+            # Western Europe (6 zones)
+            "DE-LU", "FR", "NL", "BE", "AT", "CH",
+            # Central and Eastern Europe (11 zones)
+            "PL", "CZ", "SK", "HU", "RO", "BG",
+            "SI", "HR", "RS", "ME", "GR",
+            # Italy (6 zones)
+            "IT-North", "IT-South", "IT-Centre-North", "IT-Centre-South",
+            "IT-Sardinia", "IT-Sicily",
+            # Iberian Peninsula (2 zones)
+            "ES", "PT"
         ],
         Source.OMIE: ["ES", "PT"],
         Source.AEMO: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
@@ -133,21 +146,21 @@ class SourceInfo:
     # Map areas to recommended sources
     AREA_RECOMMENDED_SOURCES = {
         # Nordic countries
-        "DK1": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING],
-        "DK2": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING],
-        "SE1": [Source.NORDPOOL, Source.ENTSOE],
-        "SE2": [Source.NORDPOOL, Source.ENTSOE],
-        "SE3": [Source.NORDPOOL, Source.ENTSOE],
-        "SE4": [Source.NORDPOOL, Source.ENTSOE],
-        "FI": [Source.NORDPOOL, Source.ENTSOE],
-        "NO1": [Source.NORDPOOL, Source.ENTSOE],
-        "NO2": [Source.NORDPOOL, Source.ENTSOE],
-        "NO3": [Source.NORDPOOL, Source.ENTSOE],
-        "NO4": [Source.NORDPOOL, Source.ENTSOE],
-        "NO5": [Source.NORDPOOL, Source.ENTSOE],
-        "EE": [Source.NORDPOOL, Source.ENTSOE],
-        "LT": [Source.NORDPOOL, Source.ENTSOE],
-        "LV": [Source.NORDPOOL, Source.ENTSOE],
+        "DK1": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.ENERGY_CHARTS],
+        "DK2": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.ENERGY_CHARTS],
+        "SE1": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "SE2": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "SE3": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "SE4": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "FI": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "NO1": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "NO2": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "NO3": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "NO4": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "NO5": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "EE": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "LT": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
+        "LV": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
 
         # Central Europe
         "DE-LU": [Source.ENERGY_CHARTS, Source.ENTSOE],
@@ -161,8 +174,22 @@ class SourceInfo:
         "HU": [Source.ENERGY_CHARTS, Source.ENTSOE],
 
         # Southern Europe
-        "ES": [Source.ENTSOE, Source.OMIE],
-        "PT": [Source.ENTSOE, Source.OMIE],
+        "ES": [Source.ENERGY_CHARTS, Source.ENTSOE, Source.OMIE],
+        "PT": [Source.ENERGY_CHARTS, Source.ENTSOE, Source.OMIE],
+        "SK": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "RO": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "BG": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "SI": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "HR": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "RS": [Source.ENERGY_CHARTS],
+        "ME": [Source.ENERGY_CHARTS],
+        "GR": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "IT-North": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "IT-South": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "IT-Centre-North": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "IT-Centre-South": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "IT-Sardinia": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "IT-Sicily": [Source.ENERGY_CHARTS, Source.ENTSOE],
 
         # Australia
         "NSW1": [Source.AEMO, Source.AMBER],

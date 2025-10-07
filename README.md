@@ -59,10 +59,10 @@ The table below shows which price sources support specific regions:
 | SE1-4  | Sweden | ✓ | ✓ | ✓ | | | | | | |
 | DK1-2  | Denmark | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
 | NO1-5  | Norway | ✓ | ✓ | ✓ | | | | | | |
-| FI     | Finland | ✓ | ✓ | | | | | | | |
-| EE     | Estonia | ✓ | ✓ | | | | | | | |
-| LT     | Lithuania | ✓ | ✓ | | | | | | | |
-| LV     | Latvia | ✓ | | | | | | | | |
+| FI     | Finland | ✓ | ✓ | ✓ | | | | | | |
+| EE     | Estonia | ✓ | ✓ | ✓ | | | | | | |
+| LT     | Lithuania | ✓ | ✓ | ✓ | | | | | | |
+| LV     | Latvia | ✓ | | ✓ | | | | | | |
 | DE-LU  | Germany-Luxembourg | | ✓ | ✓ | | | | | | |
 | FR     | France | | ✓ | ✓ | | | | | | |
 | NL     | Netherlands | | ✓ | ✓ | | | | | | |
@@ -71,11 +71,23 @@ The table below shows which price sources support specific regions:
 | CH     | Switzerland | | ✓ | ✓ | | | | | | |
 | PL     | Poland | | ✓ | ✓ | | | | | | |
 | CZ     | Czech Republic | | ✓ | ✓ | | | | | | |
+| SK     | Slovakia | | ✓ | ✓ | | | | | | |
 | HU     | Hungary | | ✓ | ✓ | | | | | | |
+| RO     | Romania | | ✓ | ✓ | | | | | | |
+| BG     | Bulgaria | | ✓ | ✓ | | | | | | |
 | SI     | Slovenia | | ✓ | ✓ | | | | | | |
+| HR     | Croatia | | ✓ | ✓ | | | | | | |
+| RS     | Serbia | | ✓ | ✓ | | | | | | |
+| ME     | Montenegro | | | ✓ | | | | | | |
+| GR     | Greece | | ✓ | ✓ | | | | | | |
 | IT-North | Italy North | | ✓ | ✓ | | | | | | |
-| ES     | Spain | | ✓ | | | | ✓ | | | |
-| PT     | Portugal | | ✓ | | | | ✓ | | | |
+| IT-Centre-North | Italy Centre-North | | | ✓ | | | | | | |
+| IT-Centre-South | Italy Centre-South | | | ✓ | | | | | | |
+| IT-South | Italy South | | | ✓ | | | | | | |
+| IT-Sardinia | Italy Sardinia | | | ✓ | | | | | | |
+| IT-Sicily | Italy Sicily | | | ✓ | | | | | | |
+| ES     | Spain | | ✓ | ✓ | | | ✓ | | | |
+| PT     | Portugal | | ✓ | ✓ | | | ✓ | | | |
 | NSW1   | Australia NSW | | | | | | | ✓ | | ✓ |
 | QLD1   | Australia Queensland | | | | | | | ✓ | | ✓ |
 | SA1    | Australia South | | | | | | | ✓ | | ✓ |

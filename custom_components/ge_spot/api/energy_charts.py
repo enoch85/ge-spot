@@ -155,35 +155,38 @@ class EnergyChartsAPI(BasePriceAPI):
         """Map area code to Energy-Charts bidding zone.
 
         Args:
-            area: Area code (e.g., "DE-LU", "FR", "NL")
+            area: Area code (e.g., "DE-LU", "FR", "SE1")
 
         Returns:
             Bidding zone code for Energy-Charts API
         """
-        # Simple mapping for now - will be replaced with proper AreaMapping constant
-        # Energy-Charts uses these bidding zones:
-        # DE-LU, FR, NL, BE, AT, CH, PL, DK1, DK2, CZ, HU, SI, IT-North, SE4, NO2, DE-AT-LU
+        # Energy-Charts bidding zone mapping (38 zones across Europe)
+        # Source: https://energy-charts.info/charts/price_spot_market/
         
-        # Direct mapping for most areas
         bzn_mapping = {
-            "DE": "DE-LU",
-            "DE-LU": "DE-LU",
-            "LU": "DE-LU",
-            "FR": "FR",
-            "NL": "NL",
-            "BE": "BE",
-            "AT": "AT",
-            "CH": "CH",
-            "PL": "PL",
-            "DK1": "DK1",
-            "DK2": "DK2",
-            "CZ": "CZ",
-            "HU": "HU",
-            "SI": "SI",
+            # Nordic regions
+            "SE1": "SE1", "SE2": "SE2", "SE3": "SE3", "SE4": "SE4",
+            "NO1": "NO1", "NO2": "NO2", "NO3": "NO3", "NO4": "NO4", "NO5": "NO5",
+            "NO2NSL": "NO2NSL",
+            "DK1": "DK1", "DK2": "DK2",
+            "FI": "FI",
+            # Baltic states
+            "EE": "EE", "LT": "LT", "LV": "LV",
+            # Western Europe
+            "DE": "DE-LU", "DE-LU": "DE-LU", "LU": "DE-LU",
+            "FR": "FR", "NL": "NL", "BE": "BE", "AT": "AT", "CH": "CH",
+            # Central & Eastern Europe
+            "PL": "PL", "CZ": "CZ", "SK": "SK", "HU": "HU",
+            "RO": "RO", "BG": "BG", "SI": "SI", "HR": "HR", "RS": "RS", "ME": "ME", "GR": "GR",
+            # Italy zones
             "IT-North": "IT-North",
-            "SE4": "SE4",
-            "NO2": "NO2",
-            "DE-AT-LU": "DE-AT-LU"
+            "IT-South": "IT-South",
+            "IT-Centre-North": "IT-Centre-North",
+            "IT-Centre-South": "IT-Centre-South",
+            "IT-Sardinia": "IT-Sardinia",
+            "IT-Sicily": "IT-Sicily",
+            # Iberia
+            "ES": "ES", "PT": "PT",
         }
         
         return bzn_mapping.get(area, area)

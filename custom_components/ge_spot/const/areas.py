@@ -285,24 +285,55 @@ class AreaMapping:
         "CY": "Cyprus (CY)"
     }
 
-    # Energy-Charts bidding zones
+    # Energy-Charts bidding zones (38 zones across Europe)
     ENERGY_CHARTS_BZN = {
+        # Nordic regions
+        Area.SE1: "SE1",
+        Area.SE2: "SE2",
+        Area.SE3: "SE3",
+        Area.SE4: "SE4",
+        Area.NO1: "NO1",
+        Area.NO2: "NO2",
+        Area.NO3: "NO3",
+        Area.NO4: "NO4",
+        Area.NO5: "NO5",
+        "NO2NSL": "NO2NSL",  # Norway 2 NSL
+        Area.DK1: "DK1",
+        Area.DK2: "DK2",
+        Area.FI: "FI",
+        # Baltic states
+        Area.EE: "EE",
+        Area.LT: "LT",
+        Area.LV: "LV",
+        # Western Europe
         Area.DE_LU: "DE-LU",
         Area.FR: "FR",
         Area.NL: "NL",
         Area.BE: "BE",
         Area.AT: "AT",
         Area.CH: "CH",
+        # Central & Eastern Europe
         "PL": "PL",
-        Area.DK1: "DK1",
-        Area.DK2: "DK2",
         "CZ": "CZ",
+        "SK": "SK",
         "HU": "HU",
+        "RO": "RO",
+        "BG": "BG",
         "SI": "SI",
+        "HR": "HR",
+        "RS": "RS",
+        "ME": "ME",
+        "GR": "GR",
+        # Italy zones (6 zones)
         "IT-North": "IT-North",
-        Area.SE4: "SE4",
-        Area.NO2: "NO2",
-        "DE-AT-LU": "DE-AT-LU",
+        "IT-South": "IT-South",
+        "IT-Centre-North": "IT-Centre-North",
+        "IT-Centre-South": "IT-Centre-South",
+        "IT-Sardinia": "IT-Sardinia",
+        "IT-Sicily": "IT-Sicily",
+        # Iberia
+        Area.ES: "ES",
+        Area.PT: "PT",
     }
 
     # OMIE areas
