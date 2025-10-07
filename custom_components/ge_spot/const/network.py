@@ -33,6 +33,7 @@ class Network:
         STROMLIGNING = "https://stromligning.dk/api/prices"
         ECB = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
         OMIE_TEMPLATE = "https://www.omie.es/sites/default/files/dados/AGNO_{year}/MES_{month}/TXT/INT_PBC_EV_H_1_{day}_{month}_{year}_{day}_{month}_{year}.TXT"
+        ENERGY_CHARTS = "https://api.energy-charts.info"
 
 
 class ContentType:

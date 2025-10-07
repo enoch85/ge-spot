@@ -95,7 +95,7 @@ class SourceTimezone:
         Source.NORDPOOL: TimezoneName.UTC,  # Nordpool timestamps are in UTC (with 'Z' suffix)
         Source.ENERGI_DATA_SERVICE: TimezoneName.EUROPE_COPENHAGEN,  # HourUTC vs HourDK shows UTC+2
         Source.ENTSOE: TimezoneName.UTC,  # Timestamps have 'Z' suffix indicating UTC
-        Source.EPEX: TimezoneName.EUROPE_PARIS,  # Central European Time for EPEX market
+        Source.ENERGY_CHARTS: TimezoneName.EUROPE_BERLIN,  # CET/CEST for Energy-Charts API
         Source.OMIE: TimezoneName.EUROPE_MADRID,  # Spanish market uses local time
         Source.AEMO: TimezoneName.AUSTRALIA_SYDNEY,  # Australian east coast market timezone
         Source.STROMLIGNING: TimezoneName.EUROPE_COPENHAGEN,  # Danish service, uses consistent local time
@@ -107,7 +107,7 @@ class SourceTimezone:
         Source.NORDPOOL: "%Y-%m-%dT%H:%M:%S.%fZ",  # ISO format with milliseconds and Z suffix
         Source.ENERGI_DATA_SERVICE: "%Y-%m-%dT%H:%M:%S",  # ISO format without timezone
         Source.ENTSOE: "%Y%m%d%H%M",  # ENTSOE numeric format
-        Source.EPEX: "%Y-%m-%d %H:%M:%S",  # Standard datetime format
+        Source.ENERGY_CHARTS: "%Y-%m-%d",  # ISO date format for Energy-Charts
         Source.OMIE: "%d/%m/%Y %H:%M:%S",  # European date format
         Source.AEMO: "%Y-%m-%dT%H:%M:%S",  # ISO format without timezone
         Source.STROMLIGNING: "%Y-%m-%dT%H:%M:%S.%fZ",  # ISO format with milliseconds

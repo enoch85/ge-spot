@@ -128,14 +128,14 @@ def test_parsers():
         traceback.print_exc()
         return False
 
-    # Test 5: EPEX Parser
+    # Test 5: Energy-Charts Parser
     print()
-    print("TEST 5: EPEX Parser Structure")
+    print("TEST 5: Energy-Charts Parser Structure")
     print("-" * 80)
     try:
-        from custom_components.ge_spot.api.parsers.epex_parser import EpexParser
+        from custom_components.ge_spot.api.parsers.energy_charts_parser import EnergyChartsParser
 
-        parser = EpexParser()
+        parser = EnergyChartsParser()
 
         # Test with empty data
         result = parser.parse({})
@@ -144,10 +144,10 @@ def test_parsers():
         assert "interval_raw" in result, "Parser should return 'interval_raw'"
         assert "hourly_raw" not in result, "Parser should NOT return 'hourly_raw'"
 
-        print(f"✅ EPEX parser returns correct keys: {list(result.keys())}")
+        print(f"✅ Energy-Charts parser returns correct keys: {list(result.keys())}")
 
     except Exception as e:
-        print(f"❌ EPEX parser test failed: {e}")
+        print(f"❌ Energy-Charts parser test failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -162,6 +162,7 @@ def test_parsers():
     print("  ✅ All parsers return dict structures")
     print("  ✅ ComEd aggregation working (5-min → 15-min)")
     print("  ✅ AEMO aggregation working (5-min → 15-min)")
+    print("  ✅ Energy-Charts parsing working (15-min native data)")
     print()
 
     return True

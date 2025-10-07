@@ -53,7 +53,7 @@ _SCHEMAS = {
             "raw_data": {"type": "string", "optional": True}
         }
     }),
-    Source.EPEX: Schema({
+    Source.ENERGY_CHARTS: Schema({
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},

@@ -7,7 +7,7 @@ class Source:
     ENTSOE = "entsoe"
     ENERGI_DATA_SERVICE = "energi_data_service"
     AEMO = "aemo"
-    EPEX = "epex"
+    ENERGY_CHARTS = "energy_charts"
     OMIE = "omie"
     STROMLIGNING = "stromligning"
     COMED = "comed"
@@ -19,7 +19,7 @@ class Source:
         ENTSOE,
         ENERGI_DATA_SERVICE,
         AEMO,
-        EPEX,
+        ENERGY_CHARTS,
         OMIE,
         STROMLIGNING,
         COMED,
@@ -29,9 +29,9 @@ class Source:
     # Default source priority
     DEFAULT_PRIORITY = [
         NORDPOOL,
+        ENERGY_CHARTS,
         ENTSOE,
         ENERGI_DATA_SERVICE,
-        EPEX,
         OMIE,
         STROMLIGNING,
         AEMO,
@@ -45,7 +45,7 @@ class Source:
         ENTSOE: "ENTSO-E",
         ENERGI_DATA_SERVICE: "Energi Data Service",
         AEMO: "AEMO",
-        EPEX: "EPEX SPOT",
+        ENERGY_CHARTS: "Energy-Charts",
         OMIE: "OMIE",
         STROMLIGNING: "Strømligning",
         COMED: "ComEd Hourly Pricing",
@@ -58,7 +58,7 @@ class Source:
         ENTSOE: "https://transparency.entsoe.eu/",
         ENERGI_DATA_SERVICE: "https://www.energidataservice.dk/",
         AEMO: "https://aemo.com.au/",
-        EPEX: "https://www.epexspot.com/",
+        ENERGY_CHARTS: "https://energy-charts.info",
         OMIE: "https://www.omie.es/",
         STROMLIGNING: "https://www.stromligning.no/",
         COMED: "https://hourlypricing.comed.com/",
@@ -118,7 +118,11 @@ class SourceInfo:
             "IT", "SI", "HR", "GR", "PL", "CZ", "SK", "HU", "RO", "BG"
         ],
         Source.ENERGI_DATA_SERVICE: ["DK1", "DK2"],
-        Source.EPEX: ["DE-LU", "FR", "BE", "NL", "AT"],
+        Source.ENERGY_CHARTS: [
+            "DE-LU", "FR", "NL", "BE", "AT", "CH", "PL",
+            "DK1", "DK2", "CZ", "HU", "IT-North", "SI",
+            "SE4", "NO2", "DE-AT-LU"
+        ],
         Source.OMIE: ["ES", "PT"],
         Source.AEMO: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
         Source.STROMLIGNING: ["DK1", "DK2"],
@@ -146,11 +150,15 @@ class SourceInfo:
         "LV": [Source.NORDPOOL, Source.ENTSOE],
 
         # Central Europe
-        "DE-LU": [Source.ENTSOE, Source.EPEX],
-        "AT": [Source.ENTSOE, Source.EPEX],
-        "FR": [Source.ENTSOE, Source.EPEX],
-        "BE": [Source.ENTSOE, Source.EPEX],
-        "NL": [Source.ENTSOE, Source.EPEX],
+        "DE-LU": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "AT": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "FR": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "BE": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "NL": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "CH": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "PL": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "CZ": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "HU": [Source.ENERGY_CHARTS, Source.ENTSOE],
 
         # Southern Europe
         "ES": [Source.ENTSOE, Source.OMIE],

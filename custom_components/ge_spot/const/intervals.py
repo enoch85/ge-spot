@@ -12,7 +12,7 @@ class SourceIntervals:
         Source.ENTSOE: 360,         # Every 6 hours for ENTSO-E
         Source.NORDPOOL: 1440,      # Every 24 hours
         Source.ENERGI_DATA_SERVICE: 1440,
-        Source.EPEX: 1440,
+        Source.ENERGY_CHARTS: 15,   # Native 15-minute data updates
         Source.OMIE: 1440,
         Source.STROMLIGNING: 1440
     }

@@ -34,9 +34,9 @@ def create_api(source_type: str, config: Optional[Dict[str, Any]] = None, sessio
     elif source_type == Source.AEMO:
         from .aemo import AemoAPI
         return AemoAPI(config, session)
-    elif source_type == Source.EPEX:
-        from .epex import EpexAPI
-        return EpexAPI(config, session)
+    elif source_type == Source.ENERGY_CHARTS:
+        from .energy_charts import EnergyChartsAPI
+        return EnergyChartsAPI(config, session)
     elif source_type == Source.OMIE:
         from .omie import OmieAPI
         return OmieAPI(config, session)

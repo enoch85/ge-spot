@@ -285,13 +285,24 @@ class AreaMapping:
         "CY": "Cyprus (CY)"
     }
 
-    # EPEX areas
-    EPEX_AREAS = {
-        Area.DE_LU: "Germany-Luxembourg",
-        Area.FR: "France",
-        Area.BE: "Belgium",
-        Area.NL: "Netherlands",
-        Area.AT: "Austria",
+    # Energy-Charts bidding zones
+    ENERGY_CHARTS_BZN = {
+        Area.DE_LU: "DE-LU",
+        Area.FR: "FR",
+        Area.NL: "NL",
+        Area.BE: "BE",
+        Area.AT: "AT",
+        Area.CH: "CH",
+        "PL": "PL",
+        Area.DK1: "DK1",
+        Area.DK2: "DK2",
+        "CZ": "CZ",
+        "HU": "HU",
+        "SI": "SI",
+        "IT-North": "IT-North",
+        Area.SE4: "SE4",
+        Area.NO2: "NO2",
+        "DE-AT-LU": "DE-AT-LU",
     }
 
     # OMIE areas
@@ -326,7 +337,7 @@ class AreaMapping:
         'nordpool': NORDPOOL_AREAS,
         'energi_data_service': ENERGI_DATA_AREAS,
         'entsoe': ENTSOE_AREAS,
-        'epex': EPEX_AREAS,
+        'energy_charts': ENERGY_CHARTS_BZN,
         'omie': OMIE_AREAS,
         'aemo': AEMO_AREAS,
         'stromligning': STROMLIGNING_AREAS,
@@ -338,7 +349,7 @@ class AreaMapping:
         "nordpool": Area.SE4,
         "energi_data_service": Area.DK1,
         "entsoe": "10Y1001A1001A47J",  # SE4 EIC Code (updated)
-        "epex": Area.DE_LU,
+        "energy_charts": Area.DE_LU,
         "omie": Area.ES,
         "aemo": Area.NSW1,
         "stromligning": Area.DK1,
@@ -506,8 +517,8 @@ def get_available_sources(area: str) -> list:
     if area in AreaMapping.ENTSOE_AREAS or area in AreaMapping.ENTSOE_MAPPING:
         available_sources.append("entsoe")
 
-    if area in AreaMapping.EPEX_AREAS:
-        available_sources.append("epex")
+    if area in AreaMapping.ENERGY_CHARTS_BZN:
+        available_sources.append("energy_charts")
 
     if area in AreaMapping.OMIE_AREAS:
         available_sources.append("omie")

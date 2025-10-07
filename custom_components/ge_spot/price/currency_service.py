@@ -74,7 +74,7 @@ SOURCE_DEFAULT_CURRENCIES = {
     Source.NORDPOOL: Currency.EUR,
     Source.ENTSOE: Currency.EUR,
     Source.ENERGI_DATA_SERVICE: Currency.DKK,
-    Source.EPEX: Currency.EUR,
+    Source.ENERGY_CHARTS: Currency.EUR,
     Source.OMIE: Currency.EUR,
     Source.AEMO: Currency.AUD,
     Source.COMED: Currency.USD,

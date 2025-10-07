@@ -42,10 +42,10 @@ The integration supports multiple price data sources with automatic fallback cap
 
 - **Nordpool** - Nordic and Baltic countries
 - **ENTSO-E** - European Network of Transmission System Operators (requires API key)
+- **Energy-Charts** - European spot prices (Germany, France, Netherlands, Belgium, Austria, and more)
 - **Energi Data Service** - Denmark
 - **Stromligning** - Denmark  
 - **OMIE** - Spain and Portugal
-- **EPEX SPOT** - Central Europe
 - **AEMO** - Australian Energy Market Operator
 - **ComEd** - Chicago area real-time pricing
 - **Amber** - Australian residential pricing
@@ -54,20 +54,26 @@ The integration supports multiple price data sources with automatic fallback cap
 
 The table below shows which price sources support specific regions:
 
-| Region | Description | Nordpool | ENTSO-E | Energi Data | Stromligning | EPEX | OMIE | AEMO | ComEd | Amber |
-|--------|-------------|:--------:|:-------:|:-----------:|:------------:|:----:|:----:|:----:|:-----:|:-----:|
-| SE1-4  | Sweden | ✓ | ✓ | | | | | | | |
-| DK1-2  | Denmark | ✓ | ✓ | ✓ | ✓ | | | | | |
-| NO1-5  | Norway | ✓ | ✓ | | | | | | | |
+| Region | Description | Nordpool | ENTSO-E | Energy-Charts | Energi Data | Stromligning | OMIE | AEMO | ComEd | Amber |
+|--------|-------------|:--------:|:-------:|:-------------:|:-----------:|:------------:|:----:|:----:|:-----:|:-----:|
+| SE1-4  | Sweden | ✓ | ✓ | ✓ | | | | | | |
+| DK1-2  | Denmark | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
+| NO1-5  | Norway | ✓ | ✓ | ✓ | | | | | | |
 | FI     | Finland | ✓ | ✓ | | | | | | | |
 | EE     | Estonia | ✓ | ✓ | | | | | | | |
 | LT     | Lithuania | ✓ | ✓ | | | | | | | |
 | LV     | Latvia | ✓ | | | | | | | | |
-| DE-LU  | Germany | | ✓ | | | ✓ | | | | |
-| FR     | France | | ✓ | | | ✓ | | | | |
-| NL     | Netherlands | | ✓ | | | ✓ | | | | |
-| BE     | Belgium | | ✓ | | | ✓ | | | | |
-| AT     | Austria | | ✓ | | | ✓ | | | | |
+| DE-LU  | Germany-Luxembourg | | ✓ | ✓ | | | | | | |
+| FR     | France | | ✓ | ✓ | | | | | | |
+| NL     | Netherlands | | ✓ | ✓ | | | | | | |
+| BE     | Belgium | | ✓ | ✓ | | | | | | |
+| AT     | Austria | | ✓ | ✓ | | | | | | |
+| CH     | Switzerland | | ✓ | ✓ | | | | | | |
+| PL     | Poland | | ✓ | ✓ | | | | | | |
+| CZ     | Czech Republic | | ✓ | ✓ | | | | | | |
+| HU     | Hungary | | ✓ | ✓ | | | | | | |
+| SI     | Slovenia | | ✓ | ✓ | | | | | | |
+| IT-North | Italy North | | ✓ | ✓ | | | | | | |
 | ES     | Spain | | ✓ | | | | ✓ | | | |
 | PT     | Portugal | | ✓ | | | | ✓ | | | |
 | NSW1   | Australia NSW | | | | | | | ✓ | | ✓ |
@@ -172,10 +178,10 @@ GE-Spot intelligently handles different native resolutions from APIs:
 |--------|-------------|-------------------|
 | ENTSO-E | 15/30/60 min | Uses native 15-min when available, expands others |
 | Nordpool | 15/60 min | Uses native 15-min, expands hourly to 15-min |
+| Energy-Charts | 15 min | Uses native 15-min data (96 intervals/day) |
 | OMIE/Stromligning | 60 min | Expands hourly to 15-min (duplicates across 4 intervals) |
 | AEMO | 30 min trading | Expands to 15-min (duplicates across 2 intervals) |
 | ComEd | 5 min dispatch | Aggregates to 15-min (averages 3 values per interval) |
-| EPEX | 15 min | Uses native 15-min data |
 | Amber | 30 min | Expands to 15-min (duplicates across 2 intervals) |
 
 **Strategy**: All sources output 96 intervals per day (15-minute granularity) for consistent automation timing.
@@ -353,8 +359,8 @@ custom_components/ge_spot/
 │   │   └── ...                   # Other source-specific parsers
 │   ├── nordpool.py       # Nord Pool API client
 │   ├── entsoe.py         # ENTSO-E API client
+│   ├── energy_charts.py  # Energy-Charts API client
 │   ├── aemo.py           # AEMO API client
-│   ├── epex.py           # EPEX SPOT API client
 │   ├── omie.py           # OMIE API client
 │   ├── stromligning.py   # Strømligning API client
 │   ├── energi_data.py    # Energi Data Service API client
