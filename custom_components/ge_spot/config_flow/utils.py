@@ -12,7 +12,7 @@ SOURCE_AREA_MAPS = {
     Source.NORDPOOL: AreaMapping.NORDPOOL_AREAS,
     Source.ENERGI_DATA_SERVICE: AreaMapping.ENERGI_DATA_AREAS,
     Source.ENTSOE: AreaMapping.ENTSOE_AREAS,
-    Source.EPEX: AreaMapping.EPEX_AREAS,
+    Source.ENERGY_CHARTS: AreaMapping.ENERGY_CHARTS_BZN,
     Source.OMIE: AreaMapping.OMIE_AREAS,
     Source.AEMO: AreaMapping.AEMO_AREAS,
     Source.STROMLIGNING: AreaMapping.STROMLIGNING_AREAS,
@@ -22,9 +22,9 @@ SOURCE_AREA_MAPS = {
 # Define a list of API sources in priority order for UI display
 API_SOURCE_PRIORITIES = [
     Source.NORDPOOL,      # Highest priority
+    Source.ENERGY_CHARTS,
     Source.ENTSOE,
     Source.ENERGI_DATA_SERVICE,
-    Source.EPEX,
     Source.OMIE,
     Source.STROMLIGNING,
     Source.AEMO,

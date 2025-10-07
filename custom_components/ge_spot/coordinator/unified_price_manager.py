@@ -32,7 +32,7 @@ from .cache_manager import CacheManager # Import CacheManager
 from ..api.nordpool import NordpoolAPI
 from ..api.entsoe import EntsoeAPI
 from ..api.aemo import AemoAPI
-from ..api.epex import EpexAPI
+from ..api.energy_charts import EnergyChartsAPI
 from ..api.energi_data import EnergiDataAPI
 from ..api.amber import AmberAPI
 from ..api.comed import ComedAPI
@@ -156,7 +156,7 @@ class UnifiedPriceManager:
             Source.NORDPOOL: NordpoolAPI,
             Source.ENTSOE: EntsoeAPI,
             Source.AEMO: AemoAPI,
-            Source.EPEX: EpexAPI,
+            Source.ENERGY_CHARTS: EnergyChartsAPI,
             Source.ENERGI_DATA_SERVICE: EnergiDataAPI,
             Source.AMBER: AmberAPI,
             Source.COMED: ComedAPI,

@@ -3,7 +3,7 @@ from .nordpool_parser import NordpoolPriceParser
 from .entsoe_parser import EntsoePriceParser
 from .aemo_parser import AemoParser
 from .energi_data_parser import EnergiDataParser
-from .epex_parser import EpexParser
+from .energy_charts_parser import EnergyChartsParser
 from .omie_parser import OmieParser
 from .comed_parser import ComedParser
 from .stromligning_parser import StromligningParser
@@ -25,7 +25,7 @@ def get_parser_for_source(source_type: str, timezone_service=None):
         Source.ENTSOE: EntsoePriceParser,
         Source.AEMO: AemoParser,
         Source.ENERGI_DATA_SERVICE: EnergiDataParser,
-        Source.EPEX: EpexParser,
+        Source.ENERGY_CHARTS: EnergyChartsParser,
         Source.OMIE: OmieParser,
         Source.COMED: ComedParser,
         Source.STROMLIGNING: StromligningParser
@@ -44,7 +44,7 @@ __all__ = [
     "EntsoePriceParser",
     "AemoParser",
     "EnergiDataParser",
-    "EpexParser",
+    "EnergyChartsParser",
     "OmieParser",
     "ComedParser",
     "StromligningParser",
