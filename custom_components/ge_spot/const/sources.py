@@ -26,17 +26,29 @@ class Source:
         AMBER
     ]
 
+    # Sources known to be slow/unreliable - validated in background
+    # These sources get special treatment:
+    # - Run validation in background (don't block startup)
+    # - Longer timeout (Network.Defaults.SLOW_SOURCE_TIMEOUT)
+    # - Daily retry on failure during special hours
+    # - First refresh waits briefly for validation to prevent duplicate fetch
+    SLOW_SOURCES = [
+        ENERGY_CHARTS,  # Free API, no SLA, 30s+ response times common
+        # Add future slow sources here
+    ]
+
     # Default source priority
+    # Energy Charts is last due to slow/unreliable nature (see SLOW_SOURCES)
     DEFAULT_PRIORITY = [
         NORDPOOL,
-        ENERGY_CHARTS,
         ENTSOE,
         ENERGI_DATA_SERVICE,
         OMIE,
         STROMLIGNING,
         AEMO,
         AMBER,
-        COMED
+        COMED,
+        ENERGY_CHARTS
     ]
 
     # Source display names

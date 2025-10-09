@@ -123,3 +123,10 @@ class TimezoneConstants:
         "spring_forward_skip": True,  # Skip non-existent hours during spring forward
         "fall_back_first": True       # Use first occurrence during ambiguous fall back hours
     }
+
+class ValidationRetry:
+    """Constants for background validation retry logic."""
+    # Daily retry timing (seconds)
+    MAX_RANDOM_DELAY_SECONDS = 3600  # Random delay up to 1 hour within retry window
+    RETRY_CHECK_INTERVAL_SECONDS = 1800  # Check every 30 minutes if should retry
+

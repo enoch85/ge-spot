@@ -4,8 +4,10 @@ class Network:
     """Network-related constants."""
     class Defaults:
         """Default network parameters."""
-        TIMEOUT = 30
+        TIMEOUT = 30  # Standard timeout for reliable APIs (Nordpool, OMIE, ENTSO-E)
         PARALLEL_FETCH_TIMEOUT = 30  # Timeout for parallel fetches
+        SLOW_SOURCE_TIMEOUT = 120  # Timeout for slow/unreliable sources (runs async in background)
+        SLOW_SOURCE_VALIDATION_WAIT = 5  # Max seconds to wait for slow source validation before proceeding
         RETRY_COUNT = 3
         RETRY_BASE_DELAY = 2.0
         CACHE_TTL = 21600  # 6 hours in seconds

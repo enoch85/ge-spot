@@ -18,6 +18,7 @@ from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..const.network import Network
 from ..const.currencies import Currency
+from ..const.time import ValidationRetry
 from ..api import get_sources_for_region
 from ..api.base.base_price_api import BasePriceAPI
 from ..api.base.data_structure import StandardizedPriceData, create_standardized_price_data
@@ -89,6 +90,8 @@ class UnifiedPriceManager:
         self._fallback_sources = [] # Keep track of sources used as fallback
         self._using_cached_data = False
         self._validated_sources = set()  # Sources that have successfully returned usable data
+        self._disabled_sources = set()  # Sources that failed validation (temporarily disabled)
+        self._energy_charts_validation_task = None  # Track background validation task
 
         # Services and utilities
         self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
@@ -183,6 +186,15 @@ class UnifiedPriceManager:
         """Get list of validated source names."""
         return sorted(list(self._validated_sources))
 
+    def get_disabled_sources(self) -> List[str]:
+        """Get list of disabled source names (failed validation)."""
+        return sorted(list(self._disabled_sources))
+    
+    def get_enabled_sources(self) -> List[str]:
+        """Get list of currently enabled source names."""
+        all_sources = [cls(config={}).source_type for cls in self._api_classes]
+        return sorted([s for s in all_sources if s not in self._disabled_sources])
+
     async def validate_configured_sources_once(self) -> Dict[str, bool]:
         """Validate all configured sources during initial setup (one-time only).
         
@@ -191,22 +203,47 @@ class UnifiedPriceManager:
         - API keys are valid
         - Data can be fetched and parsed
         
+        Strategy:
+        - Reliable sources (Nordpool, OMIE, etc.): Blocking validation with data caching
+        - Energy Charts: Non-blocking background validation (doesn't delay startup)
+        
         Called ONLY during initial configuration, not on every restart.
         Failures are logged but don't block setup.
-        Runs all validations in parallel for speed.
+        Runs reliable sources in parallel for speed, Energy Charts in background.
         
         Returns:
             Dict mapping source names to validation results
         """
         session = async_get_clientsession(self.hass)
         now = dt_util.now()
+        today_date = now.date()
         
         _LOGGER.info(f"[{self.area}] Validating {len(self._api_classes)} configured source(s)")
         
-        async def validate_single_source(api_class):
-            """Validate a single API source."""
+        # Separate slow sources from reliable sources
+        reliable_sources = []
+        slow_source_apis = []
+        
+        for api_class in self._api_classes:
+            temp_instance = api_class(config={})
+            if temp_instance.source_type in Source.SLOW_SOURCES:
+                slow_source_apis.append(api_class)
+            else:
+                reliable_sources.append(api_class)
+        
+        async def validate_single_source(api_class, timeout=None):
+            """Validate a single API source.
+            
+            Args:
+                api_class: The API class to validate
+                timeout: Optional timeout override. If None, uses Network.Defaults.TIMEOUT
+            """
             temp_instance = api_class(config={})
             source_name = temp_instance.source_type
+            
+            # Use configured timeout if not overridden
+            if timeout is None:
+                timeout = Network.Defaults.TIMEOUT
             
             try:
                 api_instance = api_class(
@@ -215,51 +252,272 @@ class UnifiedPriceManager:
                     timezone_service=self._tz_service
                 )
                 
-                # Fetch minimal data (today only)
-                data = await api_instance.fetch_raw_data(
-                    area=self.area,
-                    session=session,
-                    reference_time=now
+                # Fetch minimal data (today only) with timeout
+                data = await asyncio.wait_for(
+                    api_instance.fetch_raw_data(
+                        area=self.area,
+                        session=session,
+                        reference_time=now
+                    ),
+                    timeout=timeout
                 )
                 
                 # Generic validation: Check raw_data exists and is not empty
-                # This confirms the API works without source-specific logic
                 raw_data = data.get('raw_data') if data and isinstance(data, dict) else None
                 is_valid = raw_data is not None and raw_data  # Not None and not empty
                 
                 if is_valid:
                     self._validated_sources.add(source_name)
-                    _LOGGER.info(f"[{self.area}] ✓ '{source_name}' validated")
-                else:
-                    _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation failed - no raw_data")
-                
-                return (source_name, is_valid)
+                    # Remove from disabled if it was previously disabled
+                    self._disabled_sources.discard(source_name)
                     
+                    # Store validated data in cache immediately
+                    # This prevents redundant fetches in async_config_entry_first_refresh()
+                    try:
+                        self._cache_manager.store(
+                            area=self.area,
+                            source=source_name,
+                            data=data,
+                            target_date=today_date
+                        )
+                        _LOGGER.info(f"[{self.area}] ✓ '{source_name}' validated and cached")
+                    except Exception as cache_err:
+                        _LOGGER.warning(f"[{self.area}] ✓ '{source_name}' validated but cache failed: {cache_err}")
+                else:
+                    # Disable source that failed validation
+                    self._disabled_sources.add(source_name)
+                    _LOGGER.warning(
+                        f"[{self.area}] ✗ '{source_name}' validation failed - source disabled "
+                        f"(will retry daily during special hours)"
+                    )
+                
+                return (source_name, is_valid, data if is_valid else None)
+                    
+            except asyncio.TimeoutError:
+                # Disable source that timed out during validation
+                self._disabled_sources.add(source_name)
+                _LOGGER.warning(
+                    f"[{self.area}] ✗ '{source_name}' validation timeout after {timeout}s - source disabled "
+                    f"(will retry daily during special hours)"
+                )
+                return (source_name, False, None)
             except Exception as e:
-                _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation error: {e}")
-                return (source_name, False)
+                # Disable source that errored during validation
+                self._disabled_sources.add(source_name)
+                _LOGGER.warning(
+                    f"[{self.area}] ✗ '{source_name}' validation error: {e} - source disabled "
+                    f"(will retry daily during special hours)"
+                )
+                return (source_name, False, None)
         
-        # Run all validations in parallel
+        # Validate reliable sources in parallel (BLOCKING - wait for results)
+        _LOGGER.info(f"[{self.area}] Validating {len(reliable_sources)} reliable source(s)...")
         results = await asyncio.gather(
-            *[validate_single_source(api_class) for api_class in self._api_classes],
+            *[validate_single_source(api_class) for api_class in reliable_sources],
             return_exceptions=True
         )
         
-        # Convert results to dict
+        # Start slow source validation in background (NON-BLOCKING)
+        if slow_source_apis:
+            slow_source_names = [api_class(config={}).source_type for api_class in slow_source_apis]
+            _LOGGER.info(
+                f"[{self.area}] Starting background validation for {len(slow_source_apis)} slow source(s): "
+                f"{', '.join(slow_source_names)}"
+            )
+            self._energy_charts_validation_task = asyncio.create_task(
+                self._validate_slow_sources_background(slow_source_apis, validate_single_source)
+            )
+        
+        # Convert results to dict and schedule retries for failed sources
         validation_results = {}
+        failed_reliable_sources = []
+        
         for result in results:
             if isinstance(result, Exception):
                 _LOGGER.error(f"[{self.area}] Validation task failed: {result}")
                 continue
-            if not isinstance(result, tuple) or len(result) != 2:
+            if not isinstance(result, tuple) or len(result) != 3:
                 _LOGGER.error(f"[{self.area}] Invalid validation result format: {result}")
                 continue
-            source_name, is_valid = result
+            source_name, is_valid, data = result
             validation_results[source_name] = is_valid
+            
+            # Track failed reliable sources for daily retry
+            if not is_valid:
+                # Find the API class for this failed source
+                for api_class in reliable_sources:
+                    if api_class(config={}).source_type == source_name:
+                        failed_reliable_sources.append(api_class)
+                        break
+        
+        # Schedule daily retry for failed reliable sources
+        if failed_reliable_sources:
+            failed_names = [cls(config={}).source_type for cls in failed_reliable_sources]
+            _LOGGER.info(
+                f"[{self.area}] Scheduling daily retry for {len(failed_reliable_sources)} "
+                f"failed reliable source(s): {', '.join(failed_names)}"
+            )
+            asyncio.create_task(
+                self._validate_failed_sources_background(failed_reliable_sources, validate_single_source, is_slow=False)
+            )
         
         validated_count = sum(1 for v in validation_results.values() if v)
-        _LOGGER.info(f"[{self.area}] Validation: {validated_count}/{len(validation_results)} sources validated")
+        total_checked = len(validation_results)
+        
+        status_msg = f"[{self.area}] Validation: {validated_count}/{total_checked} reliable sources validated"
+        if slow_source_apis:
+            slow_names = ', '.join(api_class(config={}).source_type for api_class in slow_source_apis)
+            status_msg += f" ({slow_names} validating in background)"
+        
+        if validated_count > 0:
+            _LOGGER.info(status_msg)
+        else:
+            _LOGGER.warning(f"{status_msg} - no sources validated successfully")
+        
         return validation_results
+
+    async def _validate_slow_sources_background(self, api_classes, validate_func):
+        """Validate slow/unreliable sources in background without blocking startup.
+        
+        Slow sources (defined in Source.SLOW_SOURCES) get special treatment:
+        - Longer timeout (Network.Defaults.SLOW_SOURCE_TIMEOUT)
+        - Non-blocking validation (runs in background)
+        - Daily retry on failure during special hours
+        
+        This prevents slow/unreliable APIs from blocking Home Assistant startup.
+        
+        Args:
+            api_classes: List of slow source API classes to validate
+            validate_func: The validation function to use
+        """
+        await self._validate_failed_sources_background(api_classes, validate_func, is_slow=True)
+
+    async def _validate_failed_sources_background(self, api_classes, validate_func, is_slow=False):
+        """Validate failed sources in background and schedule daily retries.
+        
+        Failed sources (both slow and reliable) are validated in background to prevent blocking:
+        - Slow sources: Use SLOW_SOURCE_TIMEOUT (120s)
+        - Reliable sources: Use standard TIMEOUT (30s)
+        - Both: Daily retry on failure during special hours
+        
+        Args:
+            api_classes: List of failed source API classes to validate
+            validate_func: The validation function to use
+            is_slow: Whether these are slow sources (affects timeout)
+        """
+        timeout = Network.Defaults.SLOW_SOURCE_TIMEOUT if is_slow else Network.Defaults.TIMEOUT
+        source_type = "slow" if is_slow else "reliable"
+        
+        for api_class in api_classes:
+            temp_instance = api_class(config={})
+            source_name = temp_instance.source_type
+            
+            _LOGGER.info(
+                f"[{self.area}] Background validation starting for '{source_name}' "
+                f"({source_type} source, {timeout}s timeout)"
+            )
+            
+            try:
+                # Initial validation attempt (non-blocking for startup)
+                result = await validate_func(api_class, timeout=timeout)
+                source_name, is_valid, data = result
+                
+                if is_valid:
+                    _LOGGER.info(f"[{self.area}] ✓ '{source_name}' background validation successful")
+                else:
+                    _LOGGER.warning(
+                        f"[{self.area}] ✗ '{source_name}' background validation failed - "
+                        f"will retry daily"
+                    )
+                    
+                    # Schedule daily retry during special hours
+                    asyncio.create_task(
+                        self._schedule_daily_source_retry(api_class, validate_func, source_name, is_slow)
+                    )
+                    
+            except Exception as e:
+                _LOGGER.error(f"[{self.area}] {source_name} background validation error: {e}")
+                # Schedule retry even on exception
+                asyncio.create_task(
+                    self._schedule_daily_source_retry(api_class, validate_func, source_name, is_slow)
+                )
+
+    async def _schedule_daily_source_retry(self, api_class, validate_func, source_name, is_slow=False):
+        """Schedule daily source validation retry during special hours.
+        
+        Retries once per 24 hours during configured special hour windows
+        (e.g., 13:00-15:00 when most EU markets publish data).
+        Random time within window to avoid thundering herd.
+        
+        Works for both slow and reliable sources:
+        - Slow sources: Use SLOW_SOURCE_TIMEOUT (120s)
+        - Reliable sources: Use standard TIMEOUT (30s)
+        
+        Args:
+            api_class: The source API class to validate
+            validate_func: The validation function to use
+            source_name: Name of the source for logging
+            is_slow: Whether this is a slow source (affects timeout)
+        """
+        import random
+        
+        timeout = Network.Defaults.SLOW_SOURCE_TIMEOUT if is_slow else Network.Defaults.TIMEOUT
+        source_type = "slow" if is_slow else "reliable"
+        last_retry = None
+        
+        while True:
+            now = dt_util.now()
+            
+            # Check if we're in special hours and haven't retried today
+            current_hour = now.hour
+            today_date = now.date()
+            
+            # Check if current hour is within any special hour window
+            # Special hours defined in Network.Defaults.SPECIAL_HOUR_WINDOWS (e.g., 13:00-15:00)
+            in_special_hours = any(
+                start <= current_hour < end 
+                for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS
+            )
+            
+            # Only retry once per day
+            should_retry = (
+                in_special_hours and 
+                (last_retry is None or last_retry.date() < today_date)
+            )
+            
+            if should_retry:
+                # Random delay within current hour to spread load
+                delay_seconds = random.randint(0, ValidationRetry.MAX_RANDOM_DELAY_SECONDS)
+                _LOGGER.info(
+                    f"[{self.area}] Scheduling '{source_name}' ({source_type}) retry in {delay_seconds}s "
+                    f"(daily validation attempt, {timeout}s timeout)"
+                )
+                await asyncio.sleep(delay_seconds)
+                
+                # Attempt validation with appropriate timeout for source type
+                try:
+                    result = await validate_func(api_class, timeout=timeout)
+                    returned_source_name, is_valid, data = result
+                    
+                    if is_valid:
+                        _LOGGER.info(
+                            f"[{self.area}] ✓ '{source_name}' ({source_type}) daily retry successful - "
+                            f"source re-enabled and will be used in next fetch"
+                        )
+                        return  # Validation succeeded, stop retrying (source already re-enabled by validate_func)
+                    else:
+                        _LOGGER.warning(
+                            f"[{self.area}] ✗ '{source_name}' ({source_type}) daily retry failed - "
+                            f"source remains disabled, will try tomorrow"
+                        )
+                        
+                except Exception as e:
+                    _LOGGER.warning(f"[{self.area}] '{source_name}' ({source_type}) daily retry error: {e}")
+                
+                last_retry = now
+            
+            # Sleep until next check
+            await asyncio.sleep(ValidationRetry.RETRY_CHECK_INTERVAL_SECONDS)
 
     async def _ensure_exchange_service(self):
         """Ensure the exchange service is initialized."""
@@ -289,6 +547,29 @@ class UnifiedPriceManager:
 
         # Ensure exchange service is initialized before fetching/processing
         await self._ensure_exchange_service()
+
+        # --- Wait for slow source background validation if running ---
+        # This prevents duplicate fetches when slow sources are priority #1
+        if self._energy_charts_validation_task and not self._energy_charts_validation_task.done():
+            _LOGGER.info(
+                f"[{self.area}] Waiting for slow source background validation to complete "
+                f"(prevents duplicate fetch, max {Network.Defaults.SLOW_SOURCE_VALIDATION_WAIT}s)..."
+            )
+            try:
+                # Wait configured time to avoid blocking too long
+                await asyncio.wait_for(
+                    self._energy_charts_validation_task,
+                    timeout=Network.Defaults.SLOW_SOURCE_VALIDATION_WAIT
+                )
+                _LOGGER.info(f"[{self.area}] Slow source validation completed, checking cache...")
+            except asyncio.TimeoutError:
+                _LOGGER.debug(
+                    f"[{self.area}] Slow source validation still running after "
+                    f"{Network.Defaults.SLOW_SOURCE_VALIDATION_WAIT}s, proceeding with fetch "
+                    f"(validation will continue in background)"
+                )
+            except Exception as e:
+                _LOGGER.warning(f"[{self.area}] Slow source validation error: {e}")
 
         # --- Decision to Fetch (using DataValidity) ---
         # Get current cache status to inform fetch decision
@@ -415,6 +696,25 @@ class UnifiedPriceManager:
             # Prepare API instances - pass necessary context
             # Ensure session is created correctly
             session = async_get_clientsession(self.hass)
+            
+            # Filter out disabled sources (those that failed validation)
+            enabled_api_classes = [
+                cls for cls in self._api_classes
+                if cls(config={}).source_type not in self._disabled_sources
+            ]
+            
+            # Log if any sources are disabled
+            if len(enabled_api_classes) < len(self._api_classes):
+                disabled_count = len(self._api_classes) - len(enabled_api_classes)
+                disabled_names = [
+                    cls(config={}).source_type for cls in self._api_classes
+                    if cls(config={}).source_type in self._disabled_sources
+                ]
+                _LOGGER.info(
+                    f"[{self.area}] Skipping {disabled_count} disabled source(s): {', '.join(disabled_names)} "
+                    f"(failed validation)"
+                )
+            
             api_instances = [
                 cls(
                     config=self.config,
@@ -422,7 +722,7 @@ class UnifiedPriceManager:
                     timezone_service=self._tz_service,
                     # Pass other context if needed by base class or specific APIs
                     # hass=self.hass, # Example if HASS instance is needed
-                ) for cls in self._api_classes
+                ) for cls in enabled_api_classes
             ]
 
             if not api_instances:

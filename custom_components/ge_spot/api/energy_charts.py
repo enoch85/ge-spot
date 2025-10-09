@@ -99,9 +99,10 @@ class EnergyChartsAPI(BasePriceAPI):
         
         _LOGGER.debug(f"Fetching Energy-Charts data for area: {area}, bzn: {bzn}")
 
-        # Request 3 days of data (yesterday, today, tomorrow)
-        # This ensures we have sufficient data around DST transitions
-        start_date = (reference_time - timedelta(days=1)).strftime("%Y-%m-%d")
+        # Request 2 days of data (today + tomorrow) to reduce API load
+        # Energy-Charts is slower with larger date ranges
+        # Start from today to ensure we capture current prices
+        start_date = reference_time.strftime("%Y-%m-%d")
         end_date = (reference_time + timedelta(days=1)).strftime("%Y-%m-%d")
 
         params = {
@@ -114,7 +115,7 @@ class EnergyChartsAPI(BasePriceAPI):
             response = await client.fetch(
                 f"{self.base_url}/price",
                 params=params,
-                timeout=Network.Defaults.TIMEOUT
+                timeout=Network.Defaults.SLOW_SOURCE_TIMEOUT  # Energy Charts is a slow source
             )
 
             if not response or not isinstance(response, dict):
