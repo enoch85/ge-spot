@@ -208,7 +208,8 @@ def calculate_data_validity(
                 interval_dt = dt_util.as_local(interval_dt)
             all_intervals.append(interval_dt)
         except (ValueError, AttributeError) as e:
-            _LOGGER.warning(f"Failed to parse interval key '{interval_key}': {e}")
+            # Malformed interval key - this IS a data problem
+            _LOGGER.warning(f"Malformed interval key '{interval_key}': {e}")
             continue
     
     # Parse tomorrow's intervals
@@ -225,7 +226,8 @@ def calculate_data_validity(
                 interval_dt = dt_util.as_local(interval_dt)
             all_intervals.append(interval_dt)
         except (ValueError, AttributeError) as e:
-            _LOGGER.warning(f"Failed to parse interval key '{interval_key}': {e}")
+            # Malformed interval key - this IS a data problem
+            _LOGGER.warning(f"Malformed interval key '{interval_key}': {e}")
             continue
     
     if all_intervals:

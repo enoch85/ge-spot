@@ -271,42 +271,34 @@ class UnifiedPriceManager:
                     # Remove from disabled if it was previously disabled
                     self._disabled_sources.discard(source_name)
                     
-                    # Store validated data in cache immediately
-                    # This prevents redundant fetches in async_config_entry_first_refresh()
-                    try:
-                        self._cache_manager.store(
-                            area=self.area,
-                            source=source_name,
-                            data=data,
-                            target_date=today_date
-                        )
-                        _LOGGER.info(f"[{self.area}] ✓ '{source_name}' validated and cached")
-                    except Exception as cache_err:
-                        _LOGGER.warning(f"[{self.area}] ✓ '{source_name}' validated but cache failed: {cache_err}")
+                    # NOTE: Don't cache RAW validation data - it lacks processed fields
+                    # (interval_prices, source_timezone, data_validity, etc.)
+                    # First fetch will parse and cache properly processed data
+                    _LOGGER.info(f"[{self.area}] ✓ '{source_name}' validated successfully")
                 else:
-                    # Disable source that failed validation
+                    # Disable source that failed validation (will retry daily - not a permanent failure)
                     self._disabled_sources.add(source_name)
-                    _LOGGER.warning(
-                        f"[{self.area}] ✗ '{source_name}' validation failed - source disabled "
-                        f"(will retry daily during special hours)"
+                    _LOGGER.debug(
+                        f"[{self.area}] '{source_name}' validation failed - temporarily disabled, "
+                        f"will retry daily"
                     )
                 
                 return (source_name, is_valid, data if is_valid else None)
                     
             except asyncio.TimeoutError:
-                # Disable source that timed out during validation
+                # Disable source that timed out during validation (will retry daily - not a permanent failure)
                 self._disabled_sources.add(source_name)
-                _LOGGER.warning(
-                    f"[{self.area}] ✗ '{source_name}' validation timeout after {timeout}s - source disabled "
-                    f"(will retry daily during special hours)"
+                _LOGGER.debug(
+                    f"[{self.area}] '{source_name}' validation timeout after {timeout}s - temporarily disabled, "
+                    f"will retry daily"
                 )
                 return (source_name, False, None)
             except Exception as e:
-                # Disable source that errored during validation
+                # Disable source that errored during validation (will retry daily - not a permanent failure)
                 self._disabled_sources.add(source_name)
-                _LOGGER.warning(
-                    f"[{self.area}] ✗ '{source_name}' validation error: {e} - source disabled "
-                    f"(will retry daily during special hours)"
+                _LOGGER.debug(
+                    f"[{self.area}] '{source_name}' validation error: {e} - temporarily disabled, "
+                    f"will retry daily"
                 )
                 return (source_name, False, None)
         
@@ -372,7 +364,8 @@ class UnifiedPriceManager:
         if validated_count > 0:
             _LOGGER.info(status_msg)
         else:
-            _LOGGER.warning(f"{status_msg} - no sources validated successfully")
+            # No sources validated, but we have daily retry - only error if truly broken
+            _LOGGER.debug(f"{status_msg} - sources will retry daily")
         
         return validation_results
 
@@ -506,13 +499,15 @@ class UnifiedPriceManager:
                         )
                         return  # Validation succeeded, stop retrying (source already re-enabled by validate_func)
                     else:
-                        _LOGGER.warning(
-                            f"[{self.area}] ✗ '{source_name}' ({source_type}) daily retry failed - "
-                            f"source remains disabled, will try tomorrow"
+                        # Failed retry is expected sometimes - will try again tomorrow
+                        _LOGGER.debug(
+                            f"[{self.area}] '{source_name}' ({source_type}) daily retry failed - "
+                            f"will try again tomorrow"
                         )
                         
                 except Exception as e:
-                    _LOGGER.warning(f"[{self.area}] '{source_name}' ({source_type}) daily retry error: {e}")
+                    # Exception during retry - will try again tomorrow
+                    _LOGGER.debug(f"[{self.area}] '{source_name}' ({source_type}) daily retry error: {e} - will try again tomorrow")
                 
                 last_retry = now
             
@@ -547,29 +542,6 @@ class UnifiedPriceManager:
 
         # Ensure exchange service is initialized before fetching/processing
         await self._ensure_exchange_service()
-
-        # --- Wait for slow source background validation if running ---
-        # This prevents duplicate fetches when slow sources are priority #1
-        if self._energy_charts_validation_task and not self._energy_charts_validation_task.done():
-            _LOGGER.info(
-                f"[{self.area}] Waiting for slow source background validation to complete "
-                f"(prevents duplicate fetch, max {Network.Defaults.SLOW_SOURCE_VALIDATION_WAIT}s)..."
-            )
-            try:
-                # Wait configured time to avoid blocking too long
-                await asyncio.wait_for(
-                    self._energy_charts_validation_task,
-                    timeout=Network.Defaults.SLOW_SOURCE_VALIDATION_WAIT
-                )
-                _LOGGER.info(f"[{self.area}] Slow source validation completed, checking cache...")
-            except asyncio.TimeoutError:
-                _LOGGER.debug(
-                    f"[{self.area}] Slow source validation still running after "
-                    f"{Network.Defaults.SLOW_SOURCE_VALIDATION_WAIT}s, proceeding with fetch "
-                    f"(validation will continue in background)"
-                )
-            except Exception as e:
-                _LOGGER.warning(f"[{self.area}] Slow source validation error: {e}")
 
         # --- Decision to Fetch (using DataValidity) ---
         # Get current cache status to inform fetch decision
@@ -711,8 +683,8 @@ class UnifiedPriceManager:
                     if cls(config={}).source_type in self._disabled_sources
                 ]
                 _LOGGER.info(
-                    f"[{self.area}] Skipping {disabled_count} disabled source(s): {', '.join(disabled_names)} "
-                    f"(failed validation)"
+                    f"[{self.area}] Skipping {disabled_count} temporarily disabled source(s): {', '.join(disabled_names)} "
+                    f"(will retry daily)"
                 )
             
             api_instances = [

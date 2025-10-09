@@ -68,7 +68,8 @@ class CacheManager:
         # FIX: Ensure the data dictionary itself contains source_timezone before storing
         source_timezone = data.get("source_timezone")
         if not source_timezone:
-            _LOGGER.warning(f"No source_timezone found in processed data for area {area}, source {source}. Cache entry may not be processable from cache.")
+            # This is normal during validation when storing raw data (before processing adds timezone)
+            _LOGGER.debug(f"No source_timezone in data for area {area}, source {source} - may be raw validation data")
             # Optionally, add a default or raise an error if this should never happen
         else:
             # Ensure the key is present in the data dictionary being stored
