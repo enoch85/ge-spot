@@ -60,29 +60,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass, area, currency, timedelta(minutes=update_interval), config
     )
 
-    # Validate configured sources (one-time, blocking on first boot)
-    try:
-        await coordinator.price_manager.validate_configured_sources_once()
-    except Exception as e:
-        _LOGGER.warning(f"Initial source validation error (non-critical): {e}")
-
     register_shutdown_task(hass)
-    
-    # Skip first_refresh for slow sources - let coordinator fetch async on first update
-    # This prevents 100+ second startup delays when cache is empty
-    source_priority = config.get("source_priority", SourceInfo.get_sources_for_area(area))
-    uses_slow_source = any(src in Source.SLOW_SOURCES for src in source_priority)
-    has_cache = coordinator.price_manager._cache_manager.get_data(area, date.today()) is not None
-    
-    if uses_slow_source and not has_cache:
-        slow_sources = [src for src in source_priority if src in Source.SLOW_SOURCES]
-        _LOGGER.info(
-            f"Slow source(s) configured for {area} with no cache "
-            f"({', '.join(slow_sources)}) - skipping first refresh, "
-            f"sensors will populate on first update"
-        )
-    else:
+
+    # Always run first_refresh to ensure sensors have data before creation
+    # fetch_data() will validate sources implicitly and use fallback if needed
+    try:
         await coordinator.async_config_entry_first_refresh()
+    except Exception as e:
+        _LOGGER.error(
+            f"First refresh failed for {area}: {e}. "
+            f"Sensor will be unavailable until next update cycle."
+        )
+        # Don't block HA boot - coordinator will retry on next interval
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
