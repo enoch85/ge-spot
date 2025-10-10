@@ -222,10 +222,81 @@ class UnifiedPriceManager:
             else:
                  _LOGGER.warning("DataProcessor does not have _exchange_service attribute to set.")
 
+    async def _schedule_daily_retry(self, source_name: str, api_class: Type[BasePriceAPI]):
+        """Schedule daily retry for a failed source during special hours.
+        
+        Retries once per day during configured windows (e.g., 13:00-15:00).
+        Uses same exponential backoff as normal fetch via FallbackManager.
+        
+        Args:
+            source_name: Name of the source to retry
+            api_class: API class to retry
+        """
+        import random
+        
+        last_retry = None
+        
+        while True:
+            now = dt_util.now()
+            current_hour = now.hour
+            today_date = now.date()
+            
+            # Check if we're in a special hour window
+            in_special_hours = any(
+                start <= current_hour < end 
+                for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS
+            )
+            
+            # Only retry once per day
+            should_retry = (
+                in_special_hours and 
+                (last_retry is None or last_retry.date() < today_date)
+            )
+            
+            if should_retry:
+                # Random delay within current hour to spread load
+                from ..const.time import ValidationRetry
+                delay_seconds = random.randint(0, ValidationRetry.MAX_RANDOM_DELAY_SECONDS)
+                _LOGGER.info(
+                    f"[{self.area}] Daily retry for '{source_name}' in {delay_seconds}s"
+                )
+                await asyncio.sleep(delay_seconds)
+                
+                # Trigger a forced fetch (will try this source again)
+                try:
+                    result = await self.fetch_data(force=True)
+                    
+                    # Check if this specific source succeeded
+                    if result and result.get("data_source") == source_name:
+                        _LOGGER.info(
+                            f"[{self.area}] ✓ '{source_name}' daily retry successful - "
+                            f"source re-enabled"
+                        )
+                        self._retry_scheduled.discard(source_name)
+                        return  # Success, stop retrying
+                    else:
+                        _LOGGER.debug(
+                            f"[{self.area}] '{source_name}' daily retry failed, "
+                            f"will try again tomorrow"
+                        )
+                        
+                except Exception as e:
+                    _LOGGER.warning(
+                        f"[{self.area}] Error during '{source_name}' daily retry: {e}"
+                    )
+                
+                last_retry = now
+            
+            # Sleep until next check (1 hour)
+            await asyncio.sleep(3600)
 
     async def fetch_data(self, force: bool = False) -> Dict[str, Any]:
-        """Fetch price data considering rate limits and caching.
-
+        """Fetch price data with implicit source validation.
+        
+        Sources are validated implicitly during fetch:
+        - Success → Source marked as working (failure timestamp cleared)
+        - Failure → Source marked as failed, skipped for 24 hours, daily retry scheduled
+        
         Args:
             force: Whether to force fetch even if rate limited
 
@@ -505,6 +576,28 @@ class UnifiedPriceManager:
             self._attempted_sources = result.get("attempted_sources", []) if result else []
             self._active_source = "None"
             self._fallback_sources = self._attempted_sources # All attempted sources failed or processing failed
+
+            # Implicit validation: Mark all attempted sources as failed and schedule daily retry
+            if self._attempted_sources:
+                _LOGGER.info(
+                    f"[{self.area}] Marking {len(self._attempted_sources)} failed source(s): "
+                    f"{', '.join(self._attempted_sources)}"
+                )
+                for source_name in self._attempted_sources:
+                    # Mark source as failed with current timestamp
+                    self._failed_sources[source_name] = now
+                    
+                    # Schedule daily retry if not already scheduled
+                    if source_name not in self._retry_scheduled:
+                        _LOGGER.info(f"[{self.area}] Scheduling daily retry for '{source_name}'")
+                        # Find the API class for this source
+                        for cls in self._api_classes:
+                            if cls(config={}).source_type == source_name:
+                                asyncio.create_task(
+                                    self._schedule_daily_retry(source_name, cls)
+                                )
+                                self._retry_scheduled.add(source_name)
+                                break
 
             # Try to use cached data as a last resort - specify today's date
             cached_data = self._cache_manager.get_data(
