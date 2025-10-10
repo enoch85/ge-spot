@@ -19,25 +19,25 @@ _LOGGER = logging.getLogger(__name__)
 
 class AemoAPI(BasePriceAPI):
     """API client for AEMO NEMWEB Pre-dispatch Reports.
-    
+
     AEMO (Australian Energy Market Operator) provides 30-minute trading interval
     forecasts through NEMWEB Pre-dispatch Reports. Files are updated every 30 minutes
     and contain ~55 trading intervals (40+ hour forecast horizon).
-    
+
     Data source: http://www.nemweb.com.au/Reports/Current/PredispatchIS_Reports/
-    
+
     Regions supported:
     - NSW1 - New South Wales
-    - QLD1 - Queensland  
+    - QLD1 - Queensland
     - SA1  - South Australia
     - TAS1 - Tasmania
     - VIC1 - Victoria
     """
 
     def __init__(
-        self, 
-        config: Optional[Dict[str, Any]] = None, 
-        session: Optional[aiohttp.ClientSession] = None, 
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        session: Optional[aiohttp.ClientSession] = None,
         timezone_service=None
     ):
         """Initialize the API client.
@@ -81,7 +81,7 @@ class AemoAPI(BasePriceAPI):
             # Step 1: Get latest pre-dispatch file URL
             _LOGGER.debug("Fetching NEMWEB pre-dispatch directory listing")
             file_url = await self._get_latest_predispatch_file(client)
-            
+
             if not file_url:
                 _LOGGER.error("Could not find latest pre-dispatch file")
                 return None
@@ -118,7 +118,7 @@ class AemoAPI(BasePriceAPI):
         except Exception as e:
             _LOGGER.error(f"Error fetching NEMWEB pre-dispatch data: {e}", exc_info=True)
             return None
-        
+
         finally:
             if session is None and client:
                 await client.close()
@@ -191,7 +191,7 @@ class AemoAPI(BasePriceAPI):
         """
         try:
             timeout_obj = aiohttp.ClientTimeout(total=Network.Defaults.HTTP_TIMEOUT * 2)
-            
+
             if client.session:
                 # Use existing session
                 async with client.session.get(url, timeout=timeout_obj) as response:
@@ -231,7 +231,7 @@ class AemoAPI(BasePriceAPI):
             "TAS1": "Australia/Hobart",      # Tasmania
             "VIC1": "Australia/Melbourne"    # Victoria
         }
-        
+
         return timezone_map.get(area, "Australia/Sydney")
 
     def get_parser_for_area(self, area: str):

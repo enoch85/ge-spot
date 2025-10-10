@@ -15,7 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class EnergyChartsAPI(BasePriceAPI):
     """Energy-Charts API implementation.
-    
+
     Energy-Charts provides electricity price data from Fraunhofer ISE.
     Data source: Bundesnetzagentur | SMARD.de
     License: CC BY 4.0
@@ -74,9 +74,9 @@ class EnergyChartsAPI(BasePriceAPI):
                 await client.close()
 
     async def _fetch_data(
-        self, 
-        client: ApiClient, 
-        area: str, 
+        self,
+        client: ApiClient,
+        area: str,
         reference_time: Optional[datetime] = None
     ) -> Dict[str, Any]:
         """Fetch data from Energy-Charts API.
@@ -96,7 +96,7 @@ class EnergyChartsAPI(BasePriceAPI):
         # Energy-Charts uses bidding zone codes like DE-LU, FR, NL, etc.
         # For now, we'll use direct mapping - this will be enhanced with proper area mapping
         bzn = self._map_area_to_bzn(area)
-        
+
         _LOGGER.debug(f"Fetching Energy-Charts data for area: {area}, bzn: {bzn}")
 
         # Request 2 days of data (today + tomorrow) to reduce API load
@@ -162,7 +162,7 @@ class EnergyChartsAPI(BasePriceAPI):
         """
         # Energy-Charts bidding zone mapping (38 zones across Europe)
         # Source: https://energy-charts.info/charts/price_spot_market/
-        
+
         bzn_mapping = {
             # Nordic regions
             "SE1": "SE1", "SE2": "SE2", "SE3": "SE3", "SE4": "SE4",
@@ -188,5 +188,5 @@ class EnergyChartsAPI(BasePriceAPI):
             # Iberia
             "ES": "ES", "PT": "PT",
         }
-        
+
         return bzn_mapping.get(area, area)

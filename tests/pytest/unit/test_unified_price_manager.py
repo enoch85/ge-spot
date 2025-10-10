@@ -148,7 +148,7 @@ def auto_mock_core_dependencies():
 
         # Configure default return values for mocks
         mock_get_sources.return_value = [Source.NORDPOOL, Source.ENTSOE]
-        mock_fallback_manager.return_value.fetch_with_fallbacks = AsyncMock(return_value=MOCK_SUCCESS_RESULT)
+        mock_fallback_manager.return_value.fetch_with_fallback = AsyncMock(return_value=MOCK_SUCCESS_RESULT)
         mock_cache_manager.return_value.get_data = MagicMock(return_value=None)
         mock_cache_manager.return_value.store = MagicMock()
         mock_data_processor.return_value.process = AsyncMock(return_value=MOCK_PROCESSED_RESULT)
@@ -226,7 +226,7 @@ class TestUnifiedPriceManager:
     async def test_fetch_data_success_first_source(self, manager, auto_mock_core_dependencies):
         """Test successful fetch using the primary source."""
         # Arrange: Mocks already configured for success by default fixture
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_cache_store = auto_mock_core_dependencies["cache_manager"].return_value.store
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
@@ -235,7 +235,7 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
 
         # Assert
-        mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallbacks should be called once"
+        mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallback should be called once"
 
         # Verify processor called with correct raw data
         mock_processor.assert_awaited_once(), \
@@ -264,7 +264,7 @@ class TestUnifiedPriceManager:
         """Test that cache created is valid shortly after creation (within rate limit)."""
         # Arrange
         mock_now = auto_mock_core_dependencies["now"]
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
         mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
@@ -336,7 +336,7 @@ class TestUnifiedPriceManager:
     async def test_fetch_data_success_fallback_source(self, manager, auto_mock_core_dependencies):
         """Test successful fetch using a fallback source when primary fails."""
         # Arrange
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
 
@@ -359,7 +359,7 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
 
         # Assert
-        mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallbacks should be called once"
+        mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallback should be called once"
 
         # Verify processor called with fallback data
         mock_processor.assert_awaited_once_with(fallback_success_result), \
@@ -388,7 +388,7 @@ class TestUnifiedPriceManager:
     async def test_fetch_data_failure_all_sources_no_cache(self, manager, auto_mock_core_dependencies):
         """Test failure when all sources fail and no cache is available - critical production scenario."""
         # Arrange
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
@@ -407,7 +407,7 @@ class TestUnifiedPriceManager:
         await cancel_retry_tasks(manager)
 
         # Assert
-        mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallbacks should be called once"
+        mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallback should be called once"
 
         # Check cache was attempted (no TTL check anymore)
         # The call happens inside the except block or the failure block
@@ -441,7 +441,7 @@ class TestUnifiedPriceManager:
     async def test_fetch_data_failure_all_sources_uses_cache(self, manager, auto_mock_core_dependencies):
         """Test failure when all sources fail but valid cache is available - common fallback scenario."""
         # Arrange
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
@@ -458,7 +458,7 @@ class TestUnifiedPriceManager:
         await cancel_retry_tasks(manager)
 
         # Assert
-        mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallbacks should be called once"
+        mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallback should be called once"
 
         # Check cache was attempted (no TTL check anymore)
         assert mock_cache_get.call_count >= 1, \
@@ -509,7 +509,7 @@ class TestUnifiedPriceManager:
         """Test that rate limiting prevents fetch and uses cache - prevents API abuse."""
         # Arrange
         mock_now = auto_mock_core_dependencies["now"]
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
 
@@ -536,7 +536,7 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
 
         # Assert
-        mock_fallback.assert_not_awaited(), "FallbackManager.fetch_with_fallbacks should not be called due to rate limiting"
+        mock_fallback.assert_not_awaited(), "FallbackManager.fetch_with_fallback should not be called due to rate limiting"
         assert mock_cache_get.call_count >= 1, \
             f"CacheManager.get_data should be called when rate limited, got {mock_cache_get.call_args}"
         call_kwargs = mock_cache_get.call_args[1]
@@ -563,7 +563,7 @@ class TestUnifiedPriceManager:
         """Test rate limiting when no cache is available - rare but important edge case."""
         # Arrange
         mock_now = auto_mock_core_dependencies["now"]
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
 
@@ -595,7 +595,7 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
 
         # Assert
-        mock_fallback.assert_not_awaited(), "FallbackManager.fetch_with_fallbacks should not be called due to rate limiting"
+        mock_fallback.assert_not_awaited(), "FallbackManager.fetch_with_fallback should not be called due to rate limiting"
         assert mock_cache_get.call_count >= 1, \
             f"CacheManager.get_data should be called when rate limited, got {mock_cache_get.call_args}"
         call_kwargs = mock_cache_get.call_args[1]
@@ -617,7 +617,7 @@ class TestUnifiedPriceManager:
     async def test_fetch_data_with_malformed_api_response(self, manager, auto_mock_core_dependencies):
         """Test handling of malformed API response - real-world scenario with broken API."""
         # Arrange
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
 
@@ -671,7 +671,7 @@ class TestUnifiedPriceManager:
     async def test_fetch_data_with_out_of_bounds_prices(self, manager, auto_mock_core_dependencies):
         """Test handling of anomalous price values - real-world scenario of price spikes."""
         # Arrange
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
 
         # Normal result structure but with extreme prices at 15-minute intervals
@@ -721,7 +721,7 @@ class TestUnifiedPriceManager:
     async def test_fetch_data_with_currency_conversion(self, manager, auto_mock_core_dependencies):
         """Test proper currency conversion in real-world scenarios with differing currencies."""
         # Arrange
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_exchange_service = auto_mock_core_dependencies["get_exchange_service"].return_value
 
@@ -776,7 +776,7 @@ class TestUnifiedPriceManager:
     async def test_fetch_data_with_timezone_conversion(self, manager, auto_mock_core_dependencies):
         """Test correct timezone conversion - critical for international markets."""
         # Arrange
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_tz_service = auto_mock_core_dependencies["tz_service"].return_value
 
@@ -829,7 +829,7 @@ class TestUnifiedPriceManager:
     async def test_consecutive_failures_backoff(self, manager, auto_mock_core_dependencies):
         """Test implicit validation - failed sources are skipped for 24h."""
         # Arrange
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_now = auto_mock_core_dependencies["now"]
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
@@ -897,7 +897,7 @@ class TestUnifiedPriceManager:
         # 4. Retry success clears failure markers
         # 5. Retry failure updates failure timestamp and continues 24h cycle
         
-        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallbacks
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_now = auto_mock_core_dependencies["now"]
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data

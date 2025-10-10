@@ -129,14 +129,6 @@ class TimezoneService:
 
         return self.parser.parse(timestamp_str, source_timezone)
 
-    def convert_to_ha_timezone(self, dt):
-        """Convert datetime to Home Assistant timezone.
-        DEPRECATED - Use convert_to_target_timezone for clarity.
-        Kept for backward compatibility if needed, but should be phased out.
-        """
-        _LOGGER.warning("convert_to_ha_timezone is deprecated. Use convert_to_target_timezone.")
-        return self.convert_to_target_timezone(dt)
-
     def convert_to_target_timezone(self, dt):
         """Convert datetime to the effective target timezone (HA or Area).
 

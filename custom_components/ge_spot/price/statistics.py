@@ -24,17 +24,17 @@ def calculate_statistics(interval_prices: Dict[str, float]) -> PriceStatistics:
     # Find timestamps for min and max prices
     min_timestamp = None
     max_timestamp = None
-    
+
     for interval_key, price in interval_prices.items():
         if price == min_price and min_timestamp is None:
             # Store the interval key as-is (HH:MM format)
             # The calling code can convert to full timestamp if needed
             min_timestamp = interval_key
-            
+
         if price == max_price and max_timestamp is None:
             # Store the interval key as-is (HH:MM format)
             max_timestamp = interval_key
-            
+
         # Stop if we found both
         if min_timestamp and max_timestamp:
             break

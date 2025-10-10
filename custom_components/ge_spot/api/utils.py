@@ -72,7 +72,7 @@ def get_now(reference_time=None, hass=None):
     # Convert to local time if Home Assistant instance provided
     if hass:
         tz_service = TimezoneService(hass)
-        return tz_service.convert_to_ha_timezone(now)
+        return tz_service.convert_to_target_timezone(now)
 
     return now
 

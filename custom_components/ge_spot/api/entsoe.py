@@ -101,7 +101,7 @@ class EntsoeAPI(BasePriceAPI):
             Config.API_KEY,
             self.config.get(Config.API_KEY) or self.config.get("api_key") or "NOT FOUND"
         )
-        
+
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
         if not api_key:
             _LOGGER.error(
@@ -349,7 +349,7 @@ class EntsoeAPI(BasePriceAPI):
             # Include the original raw data for potential debugging/caching
             parsed_data["raw_data"] = raw_data
 
-            # Remove any legacy keys if they exist (backward compatibility cleanup)
+            # Clean up legacy keys if they exist
             legacy_keys = ["hourly_prices", "hourly_raw"]
             for key in legacy_keys:
                 if key in parsed_data:

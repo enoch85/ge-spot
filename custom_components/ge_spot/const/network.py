@@ -10,11 +10,11 @@ class Network:
         RETRY_BASE_TIMEOUT = 2        # Initial timeout: 2 seconds
         RETRY_TIMEOUT_MULTIPLIER = 3  # Each retry: 3x previous (2s → 6s → 18s)
         RETRY_COUNT = 3               # Total attempts per source
-        
+
         # HTTP layer timeout (for individual network requests)
         # This is a safety net - FallbackManager controls the actual timeout strategy
         HTTP_TIMEOUT = 30  # seconds - basic HTTP request timeout
-        
+
         CACHE_TTL = 21600  # 6 hours in seconds
         USER_AGENT = "HomeAssistantGESpot/1.0"
 
@@ -28,7 +28,7 @@ class Network:
             (0, 1),   # 00:00-01:00 - For today's new prices
             (13, 15), # 13:00-15:00 - For tomorrow's data (most EU markets publish around 13:00-14:00 CET)
         ]
-        
+
         # Data validity settings (in intervals, assuming 15-min intervals = 96/day)
         DATA_SAFETY_BUFFER_INTERVALS = 8  # Fetch when we have less than 8 intervals remaining (~2 hours)
         REQUIRED_TOMORROW_INTERVALS = 76  # Require at least 76 intervals (~80% of 96) to consider tomorrow data "complete"

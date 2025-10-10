@@ -58,9 +58,7 @@ def retry_with_backoff(
     *,
     max_retries: int = 3,
     strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF,
-    source_type: str = "unknown",
-    max_attempts=None,  # For backward compatibility
-    base_delay=None     # For backward compatibility
+    source_type: str = "unknown"
 ):
     """Run a function with retry logic.
 
@@ -82,16 +80,10 @@ def retry_with_backoff(
         max_retries: Maximum number of retries
         strategy: Retry strategy to use
         source_type: The source type identifier
-        max_attempts: Alias for max_retries for compatibility
-        base_delay: Base delay for retries
 
     Returns:
         Decorated function or function result
     """
-    # Handle compatibility parameters
-    if max_attempts is not None:
-        max_retries = max_attempts
-
     # Used as a decorator with arguments @retry_with_backoff(...)
     if func is None:
         return functools.partial(

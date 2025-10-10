@@ -168,18 +168,18 @@ class ComedParser(BasePriceParser):
                         millis = int(item["millisUTC"])
                         timestamp = datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
                         price = float(item["price"])
-                        
+
                         # Store with ISO timestamp (5-minute granularity)
                         interval_key = timestamp.isoformat()
                         five_min_prices[interval_key] = price
-                        
+
                         # Extract current price from first item if it's the most recent
                         if item == data[0]:
                             result["current_price"] = price
                     except (ValueError, TypeError) as e:
                         _LOGGER.debug(f"Skipping invalid data point: {e}")
                         continue
-            
+
             # Use centralized conversion to convert 5-min data to target intervals
             if five_min_prices:
                 converted_prices = convert_to_target_intervals(five_min_prices, source_interval_minutes=5)

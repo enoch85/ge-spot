@@ -49,11 +49,11 @@ class GSpotOptionsFlow(OptionsFlow):
                 # Handle API key updates if present in user input
                 if f"{Source.ENTSOE}_api_key" in user_input:
                     api_key = user_input[f"{Source.ENTSOE}_api_key"]
-                    
+
                     # If field is empty but we have an existing key, preserve it
                     if not api_key and existing_api_key:
                         api_key = existing_api_key
-                    
+
                     # Save/update the API key if we have one
                     if api_key:
                         # Only validate and save if key has changed
@@ -76,7 +76,7 @@ class GSpotOptionsFlow(OptionsFlow):
                                     self.hass.config_entries.async_get_entry(self.entry_id),
                                     data=updated_data
                                 )
-                    
+
                     # Remove the API key field from options to avoid duplication
                     user_input.pop(f"{Source.ENTSOE}_api_key")
 

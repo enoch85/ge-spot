@@ -12,20 +12,20 @@ _LOGGER = logging.getLogger(__name__)
 
 class EnergyChartsParser(BasePriceParser):
     """Parser for Energy-Charts API responses.
-    
+
     Energy-Charts API returns data with:
     - unix_seconds: Array of unix timestamps (seconds since epoch)
     - price: Array of prices in EUR/MWh
     - unit: "EUR / MWh"
     - license_info: Attribution information
-    
+
     This parser converts unix timestamps to ISO format and builds
     the interval_raw dictionary required by the data processor.
     """
 
     def __init__(self, timezone_service=None):
         """Initialize the parser.
-        
+
         Args:
             timezone_service: Optional timezone service
         """
@@ -96,10 +96,10 @@ class EnergyChartsParser(BasePriceParser):
                 # Convert unix timestamp to datetime UTC
                 dt_utc = datetime.fromtimestamp(timestamp, tz=timezone.utc)
                 interval_key_iso = dt_utc.isoformat()
-                
+
                 # Store price (already in EUR/MWh)
                 interval_raw[interval_key_iso] = float(price)
-                
+
             except (ValueError, TypeError) as e:
                 _LOGGER.error(
                     f"[EnergyChartsParser] Failed to parse timestamp {timestamp} "
@@ -130,18 +130,18 @@ class EnergyChartsParser(BasePriceParser):
         return result
 
     def _create_empty_result(
-        self, 
-        original_data: Dict[str, Any], 
-        timezone: str = "Europe/Berlin", 
+        self,
+        original_data: Dict[str, Any],
+        timezone: str = "Europe/Berlin",
         currency: str = Currency.EUR
     ) -> Dict[str, Any]:
         """Helper to create a standard empty result structure.
-        
+
         Args:
             original_data: Original data dictionary
             timezone: Timezone string (default: Europe/Berlin)
             currency: Currency string (default: EUR)
-            
+
         Returns:
             Empty result dictionary with proper structure
         """
@@ -167,7 +167,7 @@ class EnergyChartsParser(BasePriceParser):
         if not isinstance(data, dict):
             _LOGGER.warning(f"[{self.__class__.__name__}] Data is not a dictionary")
             return False
-        
+
         required_fields = ["interval_raw", "currency", "timezone", "source_unit"]
         for field in required_fields:
             if field not in data or not data[field]:
@@ -188,7 +188,7 @@ class EnergyChartsParser(BasePriceParser):
             except ValueError:
                 _LOGGER.warning(f"[{self.__class__.__name__}] Invalid timestamp key '{key}'")
                 return False
-            
+
             # Validate price is numeric
             if not isinstance(value, (float, int)):
                 _LOGGER.warning(f"[{self.__class__.__name__}] Non-numeric price '{value}'")

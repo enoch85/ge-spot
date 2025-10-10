@@ -56,7 +56,7 @@ class TimeInterval:
         elif TimeInterval.DEFAULT == TimeInterval.HOURLY:
             return 60
         return 15
-    
+
     @staticmethod
     def get_interval_seconds() -> int:
         """Get interval duration in seconds."""

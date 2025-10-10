@@ -24,7 +24,7 @@ from ..api.base.base_price_api import BasePriceAPI
 from ..api.base.data_structure import StandardizedPriceData, create_standardized_price_data
 from ..api.base.session_manager import close_session
 from ..timezone.service import TimezoneService # Added import
-from ..utils.exchange_service import ExchangeService, get_exchange_service # Import get_exchange_service
+from ..utils.exchange_service import ExchangeRateService, get_exchange_service
 from .data_processor import DataProcessor
 from .fallback_manager import FallbackManager # Import the new FallbackManager
 from .cache_manager import CacheManager # Import CacheManager
@@ -74,13 +74,13 @@ class UnifiedPriceManager:
         self.currency = currency
         self.config = config
         self._coordinator_created_at = dt_util.utcnow()  # Track when coordinator was created for better rate limit messaging
-        
+
         # Debug: Log config keys to diagnose API key issue
         _LOGGER.debug(
             f"UnifiedPriceManager init for {area}: config keys={list(config.keys())}, "
             f"api_key={'PRESENT' if config.get(Config.API_KEY) or config.get('api_key') else 'MISSING'}"
         )
-        
+
         self.timezone_service = TimezoneService(
             hass=hass,
             area=area,
@@ -94,7 +94,7 @@ class UnifiedPriceManager:
         self._attempted_sources = []
         self._fallback_sources = [] # Keep track of sources used as fallback
         self._using_cached_data = False
-        
+
         # Track failed sources for implicit validation
         # Dict[str, datetime] - Maps source name to last failure time (None = never failed or succeeded after failure)
         self._failed_sources = {}
@@ -105,7 +105,7 @@ class UnifiedPriceManager:
         self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
         self._fallback_manager = FallbackManager()
         self._cache_manager = CacheManager(hass=hass, config=config) # Instantiate CacheManager
-        self._exchange_service = None # Initialize exchange service attribute
+        self._exchange_service: ExchangeRateService | None = None # Initialize exchange service attribute
 
         # Data processor
         self._data_processor = DataProcessor(
@@ -203,7 +203,7 @@ class UnifiedPriceManager:
             src for src, last_fail in self._failed_sources.items()
             if last_fail is not None
         ])
-    
+
     def get_enabled_sources(self) -> List[str]:
         """Get list of currently enabled source names."""
         all_sources = [cls(config={}).source_type for cls in self._api_classes]
@@ -224,35 +224,35 @@ class UnifiedPriceManager:
 
     async def _schedule_daily_retry(self, source_name: str, api_class: Type[BasePriceAPI]):
         """Schedule daily retry for a failed source during special hours.
-        
+
         Retries once per day during configured windows (e.g., 13:00-15:00).
         Uses same exponential backoff as normal fetch via FallbackManager.
-        
+
         Args:
             source_name: Name of the source to retry
             api_class: API class to retry
         """
         import random
-        
+
         last_retry = None
-        
+
         while True:
             now = dt_util.now()
             current_hour = now.hour
             today_date = now.date()
-            
+
             # Check if we're in a special hour window
             in_special_hours = any(
-                start <= current_hour < end 
+                start <= current_hour < end
                 for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS
             )
-            
+
             # Only retry once per day
             should_retry = (
-                in_special_hours and 
+                in_special_hours and
                 (last_retry is None or last_retry.date() < today_date)
             )
-            
+
             if should_retry:
                 # Random delay within current hour to spread load
                 from ..const.time import ValidationRetry
@@ -261,11 +261,11 @@ class UnifiedPriceManager:
                     f"[{self.area}] Daily retry for '{source_name}' in {delay_seconds}s"
                 )
                 await asyncio.sleep(delay_seconds)
-                
+
                 # Trigger a forced fetch (will try this source again)
                 try:
                     result = await self.fetch_data(force=True)
-                    
+
                     # Check if this specific source succeeded
                     if result and result.get("data_source") == source_name:
                         _LOGGER.info(
@@ -279,24 +279,24 @@ class UnifiedPriceManager:
                             f"[{self.area}] '{source_name}' daily retry failed, "
                             f"will try again tomorrow"
                         )
-                        
+
                 except Exception as e:
                     _LOGGER.warning(
                         f"[{self.area}] Error during '{source_name}' daily retry: {e}"
                     )
-                
+
                 last_retry = now
-            
+
             # Sleep until next check (1 hour)
             await asyncio.sleep(3600)
 
     async def fetch_data(self, force: bool = False) -> Dict[str, Any]:
         """Fetch price data with implicit source validation.
-        
+
         Sources are validated implicitly during fetch:
         - Success → Source marked as working (failure timestamp cleared)
         - Failure → Source marked as failed, skipped for 24 hours, daily retry scheduled
-        
+
         Args:
             force: Whether to force fetch even if rate limited
 
@@ -320,7 +320,7 @@ class UnifiedPriceManager:
         # Extract data validity from cache if available
         from .data_validity import DataValidity
         data_validity = DataValidity()  # Default: no valid data
-        
+
         if cached_data_for_decision:
             # Extract DataValidity from cached data
             if "data_validity" in cached_data_for_decision:
@@ -379,11 +379,11 @@ class UnifiedPriceManager:
                 # 1. Rate-limited with no current interval data (common after config reload/HA restart)
                 # 2. Parser/source change invalidated cache
                 # 3. First run or cache cleared
-                
+
                 # Check if this is shortly after coordinator creation (config reload/HA restart)
                 time_since_creation = now - self._coordinator_created_at
                 grace_period = timedelta(minutes=5)  # 5 minute grace period after reload
-                
+
                 if time_since_creation < grace_period and "rate limited" in fetch_reason.lower():
                     # Rate limiting after recent reload - this is expected, log as INFO
                     minutes_until_fetch = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
@@ -450,20 +450,20 @@ class UnifiedPriceManager:
             # Prepare API instances - pass necessary context
             # Ensure session is created correctly
             session = async_get_clientsession(self.hass)
-            
+
             # Filter out recently failed sources (within last 24 hours)
             # Unless force=True, which bypasses the 24h filter
             enabled_api_classes = []
             for cls in self._api_classes:
                 source_name = cls(config={}).source_type
                 last_failure = self._failed_sources.get(source_name)
-                
+
                 # Skip sources that failed recently (within 24 hours), unless forced
                 if not force and last_failure and (now - last_failure).total_seconds() < 86400:
                     continue
-                    
+
                 enabled_api_classes.append(cls)
-            
+
             # Log if any sources are skipped
             if len(enabled_api_classes) < len(self._api_classes):
                 disabled_count = len(self._api_classes) - len(enabled_api_classes)
@@ -475,7 +475,7 @@ class UnifiedPriceManager:
                     f"[{self.area}] Skipping {disabled_count} recently failed source(s): {', '.join(disabled_names)} "
                     f"(will retry during daily window)"
                 )
-            
+
             api_instances = [
                 cls(
                     config=self.config,
@@ -503,13 +503,11 @@ class UnifiedPriceManager:
                 return await self._generate_empty_result(error="No API sources configured")
 
             # Fetch with fallback using the new manager
-            result = await self._fallback_manager.fetch_with_fallbacks(
-                apis=api_instances,
+            result = await self._fallback_manager.fetch_with_fallback(
+                api_instances=api_instances,
                 area=self.area,
-                currency=self.currency, # Pass target currency (conversion handled later)
                 reference_time=now,
-                hass=self.hass, # Pass hass if needed by APIs
-                session=session, # Pass session
+                session=session,
             )
 
             # --- DEBUG LOGGING START ---
@@ -533,7 +531,7 @@ class UnifiedPriceManager:
                 has_today = processed_data and processed_data.get("interval_prices")
                 has_tomorrow = processed_data and processed_data.get("tomorrow_interval_prices")
                 has_valid_data = has_today or has_tomorrow
-                
+
                 if processed_data and has_valid_data and "error" not in processed_data:
                     _LOGGER.info(f"[{self.area}] Successfully processed data. Today: {len(processed_data.get('interval_prices', {}))}, Tomorrow: {len(processed_data.get('tomorrow_interval_prices', {}))}")
                     self._consecutive_failures = 0
@@ -587,7 +585,7 @@ class UnifiedPriceManager:
                 for source_name in self._attempted_sources:
                     # Mark source as failed with current timestamp
                     self._failed_sources[source_name] = now
-                    
+
                     # Schedule daily retry if not already scheduled
                     if source_name not in self._retry_scheduled:
                         _LOGGER.info(f"[{self.area}] Scheduling daily retry for '{source_name}'")
@@ -843,21 +841,21 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
             if not data.get("has_data"):
                  # Log specific error if available
                  error_msg = data.get("error", "No data returned from price manager or data marked as invalid")
-                 
+
                  # Check if this is a rate limit situation shortly after coordinator creation
                  time_since_creation = datetime.now(tz=dt_util.UTC) - self.price_manager._coordinator_created_at
                  grace_period = timedelta(minutes=5)
-                 
+
                  if time_since_creation < grace_period and "rate limited" in error_msg.lower():
                      # Rate limiting after recent reload - log as DEBUG, not WARNING
                      _LOGGER.debug(
-                         "Update pending for area %s: %s (rate limit protection after reload)", 
+                         "Update pending for area %s: %s (rate limit protection after reload)",
                          self.area, error_msg
                      )
                  else:
                      # Unexpected situation - log as WARNING
                      _LOGGER.warning("Update failed for area %s: %s", self.area, error_msg)
-                 
+
                  # Return the empty/error data structure from the manager
                  return data
             # Data is valid

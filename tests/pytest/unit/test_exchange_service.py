@@ -34,8 +34,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from custom_components.ge_spot.utils.exchange_service import (
     ExchangeRateService,
-    get_exchange_service,
-    ExchangeService  # This is now an alias for ExchangeRateService
+    get_exchange_service
 )
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.const.defaults import Defaults

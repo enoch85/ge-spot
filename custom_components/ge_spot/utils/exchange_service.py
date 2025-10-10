@@ -51,7 +51,7 @@ class ExchangeRateService:
             await self.session.close()
             self.session = None
 
-    @retry_with_backoff(max_attempts=Network.Defaults.RETRY_COUNT)
+    @retry_with_backoff(max_retries=Network.Defaults.RETRY_COUNT)
     async def _fetch_ecb_rates(self):
         """Fetch exchange rates from European Central Bank API."""
         await self._ensure_session()
@@ -380,6 +380,3 @@ async def get_exchange_service(session=None):
         await _EXCHANGE_SERVICE.get_rates()  # Initialize rates
 
     return _EXCHANGE_SERVICE
-
-# Alias for backward compatibility
-ExchangeService = ExchangeRateService

@@ -80,7 +80,7 @@ class EnergiDataParser(BasePriceParser):
         # DayAheadPrices dataset provides native 15-minute intervals (since Sept 30, 2025)
         # No expansion needed - data is already in correct interval format
         interval_prices_iso = {}
-        
+
         for record in records:
             try:
                 # DayAheadPrices format: TimeDK and DayAheadPriceDKK
