@@ -190,8 +190,8 @@ class TestTimestampHandling:
         day_type = parser.classify_timestamp_day(early_tomorrow_utc, timezones["utc"])
         assert day_type == "tomorrow", f"Expected 'tomorrow', got '{day_type}' for {early_tomorrow_utc} in UTC"
 
-        # Should be "today" in US Eastern
-        day_type = parser.classify_timestamp_day(early_tomorrow_utc, timezones["us_eastern"])
+        # Should be "today" in US Eastern (need to pass date_context to avoid defaulting to yesterday)
+        day_type = parser.classify_timestamp_day(early_tomorrow_utc, timezones["us_eastern"], test_dates["today"])
         assert day_type == "today", f"Expected 'today', got '{day_type}' for {early_tomorrow_utc} in US Eastern" # FIXED Assertion
 
 

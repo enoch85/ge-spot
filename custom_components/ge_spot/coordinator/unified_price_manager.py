@@ -73,6 +73,7 @@ class UnifiedPriceManager:
         self.area = area
         self.currency = currency
         self.config = config
+        self._coordinator_created_at = dt_util.utcnow()  # Track when coordinator was created for better rate limit messaging
         
         # Debug: Log config keys to diagnose API key issue
         _LOGGER.debug(
@@ -306,11 +307,8 @@ class UnifiedPriceManager:
                 
                 if is_auth_error:
                     self._disabled_sources.add(source_name)
-                    _LOGGER.error(
-                        f"[{self.area}] '{source_name}' authentication failed: {e}. "
-                        f"To fix: Settings → Devices & Services → Global Electricity Spot Prices → "
-                        f"Configure → add your API key."
-                    )
+                    # Don't log error here - already logged at API layer with user instructions
+                    # Just mark as disabled and return auth error flag
                     return (source_name, False, None, AUTH_ERROR)
                 
                 # Other errors = temporary disable (will retry daily)
@@ -643,13 +641,28 @@ class UnifiedPriceManager:
                 return await self._process_result(data_copy, is_cached=True)
             else:
                 # No cache available - this can happen when:
-                # 1. Rate-limited with no current interval data
+                # 1. Rate-limited with no current interval data (common after config reload/HA restart)
                 # 2. Parser/source change invalidated cache
                 # 3. First run or cache cleared
-                _LOGGER.error(
-                    f"Fetch skipped for {self.area} but no cached data available. "
-                    f"Reason: {fetch_reason}"
-                )
+                
+                # Check if this is shortly after coordinator creation (config reload/HA restart)
+                time_since_creation = now - self._coordinator_created_at
+                grace_period = timedelta(minutes=5)  # 5 minute grace period after reload
+                
+                if time_since_creation < grace_period and "rate limited" in fetch_reason.lower():
+                    # Rate limiting after recent reload - this is expected, log as INFO
+                    minutes_until_fetch = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+                    _LOGGER.info(
+                        f"[{self.area}] Data will update within {minutes_until_fetch} minutes "
+                        f"(rate limit protection active after configuration reload). "
+                        f"Reason: {fetch_reason}"
+                    )
+                else:
+                    # Unexpected situation - log as ERROR
+                    _LOGGER.error(
+                        f"Fetch skipped for {self.area} but no cached data available. "
+                        f"Reason: {fetch_reason}"
+                    )
                 return await self._generate_empty_result(error=f"No cache and no fetch: {fetch_reason}")
 
 
@@ -1066,7 +1079,21 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
             if not data.get("has_data"):
                  # Log specific error if available
                  error_msg = data.get("error", "No data returned from price manager or data marked as invalid")
-                 _LOGGER.warning("Update failed for area %s: %s", self.area, error_msg)
+                 
+                 # Check if this is a rate limit situation shortly after coordinator creation
+                 time_since_creation = datetime.now(tz=dt_util.UTC) - self.price_manager._coordinator_created_at
+                 grace_period = timedelta(minutes=5)
+                 
+                 if time_since_creation < grace_period and "rate limited" in error_msg.lower():
+                     # Rate limiting after recent reload - log as DEBUG, not WARNING
+                     _LOGGER.debug(
+                         "Update pending for area %s: %s (rate limit protection after reload)", 
+                         self.area, error_msg
+                     )
+                 else:
+                     # Unexpected situation - log as WARNING
+                     _LOGGER.warning("Update failed for area %s: %s", self.area, error_msg)
+                 
                  # Return the empty/error data structure from the manager
                  return data
             # Data is valid

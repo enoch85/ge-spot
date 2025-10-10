@@ -290,10 +290,8 @@ class ErrorHandler:
 
                 # Determine if we should retry
                 if retry_count >= max_retries or not self.should_retry(error_type, retry_count, max_retries):
-                    _LOGGER.error(
-                        f"Error in {self.source_type} API call (attempt {retry_count + 1}/{max_retries + 1}): {error}. "
-                        f"Classified as {error_type}. Not retrying."
-                    )
+                    # Don't log here - error already logged at source (API layer)
+                    # Just re-raise to let coordinator handle it
                     raise error
 
                 # Calculate retry delay

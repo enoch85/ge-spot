@@ -105,10 +105,13 @@ class EntsoeAPI(BasePriceAPI):
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
         if not api_key:
             _LOGGER.error(
-                "No API key provided for ENTSO-E. Config keys available: %s",
+                "No API key provided for %s. To fix: Settings → Devices & Services → "
+                "Global Electricity Spot Prices → Configure → add your API key. "
+                "Config keys available: %s",
+                self.source_type,
                 list(self.config.keys())
             )
-            raise ValueError("No API key provided for ENTSO-E")
+            raise ValueError(f"No API key provided for {self.source_type}")
 
         # Use the provided reference time or current UTC time
         if reference_time is None:
