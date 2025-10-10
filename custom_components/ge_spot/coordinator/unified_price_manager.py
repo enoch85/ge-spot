@@ -43,6 +43,10 @@ from ..api.stromligning import StromligningAPI
 
 _LOGGER = logging.getLogger(__name__)
 
+# Validation result constants for clarity
+AUTH_ERROR = True      # Validation failed due to authentication (no retry)
+NOT_AUTH_ERROR = False # Validation failed for other reasons (will retry)
+
 # Rate Limiting Lock
 _FETCH_LOCK = asyncio.Lock()
 _LAST_FETCH_TIME = {} # Dictionary to store last fetch time per area
@@ -275,6 +279,7 @@ class UnifiedPriceManager:
                     # (interval_prices, source_timezone, data_validity, etc.)
                     # First fetch will parse and cache properly processed data
                     _LOGGER.info(f"[{self.area}] ✓ '{source_name}' validated successfully")
+                    return (source_name, True, data, NOT_AUTH_ERROR)
                 else:
                     # Disable source that failed validation (will retry daily - not a permanent failure)
                     self._disabled_sources.add(source_name)
@@ -282,8 +287,7 @@ class UnifiedPriceManager:
                         f"[{self.area}] '{source_name}' validation failed - temporarily disabled, "
                         f"will retry daily"
                     )
-                
-                return (source_name, is_valid, data if is_valid else None)
+                    return (source_name, False, None, NOT_AUTH_ERROR)
                     
             except asyncio.TimeoutError:
                 # Disable source that timed out during validation (will retry daily - not a permanent failure)
@@ -292,15 +296,30 @@ class UnifiedPriceManager:
                     f"[{self.area}] '{source_name}' validation timeout after {timeout}s - temporarily disabled, "
                     f"will retry daily"
                 )
-                return (source_name, False, None)
+                return (source_name, False, None, NOT_AUTH_ERROR)
             except Exception as e:
-                # Disable source that errored during validation (will retry daily - not a permanent failure)
+                error_msg = str(e).lower()
+                
+                # Authentication errors = permanent disable (no daily retry)
+                # Check for common authentication error keywords
+                is_auth_error = any(keyword in error_msg for keyword in ["api key", "authentication", "unauthorized", "forbidden", "401", "403"])
+                
+                if is_auth_error:
+                    self._disabled_sources.add(source_name)
+                    _LOGGER.error(
+                        f"[{self.area}] '{source_name}' authentication failed: {e}. "
+                        f"To fix: Settings → Devices & Services → Global Electricity Spot Prices → "
+                        f"Configure → add your API key."
+                    )
+                    return (source_name, False, None, AUTH_ERROR)
+                
+                # Other errors = temporary disable (will retry daily)
                 self._disabled_sources.add(source_name)
                 _LOGGER.debug(
                     f"[{self.area}] '{source_name}' validation error: {e} - temporarily disabled, "
                     f"will retry daily"
                 )
-                return (source_name, False, None)
+                return (source_name, False, None, NOT_AUTH_ERROR)
         
         # Validate reliable sources in parallel (BLOCKING - wait for results)
         _LOGGER.info(f"[{self.area}] Validating {len(reliable_sources)} reliable source(s)...")
@@ -328,14 +347,14 @@ class UnifiedPriceManager:
             if isinstance(result, Exception):
                 _LOGGER.error(f"[{self.area}] Validation task failed: {result}")
                 continue
-            if not isinstance(result, tuple) or len(result) != 3:
+            if not isinstance(result, tuple) or len(result) != 4:  # Now expecting 4 elements
                 _LOGGER.error(f"[{self.area}] Invalid validation result format: {result}")
                 continue
-            source_name, is_valid, data = result
+            source_name, is_valid, data, is_auth_error = result
             validation_results[source_name] = is_valid
             
-            # Track failed reliable sources for daily retry
-            if not is_valid:
+            # Track failed reliable sources for daily retry (skip auth errors)
+            if not is_valid and not is_auth_error:
                 # Find the API class for this failed source
                 for api_class in reliable_sources:
                     if api_class(config={}).source_type == source_name:
@@ -413,20 +432,27 @@ class UnifiedPriceManager:
             try:
                 # Initial validation attempt (non-blocking for startup)
                 result = await validate_func(api_class, timeout=timeout)
-                source_name, is_valid, data = result
+                source_name, is_valid, data, is_auth_error = result
                 
                 if is_valid:
                     _LOGGER.info(f"[{self.area}] ✓ '{source_name}' background validation successful")
                 else:
-                    _LOGGER.warning(
-                        f"[{self.area}] ✗ '{source_name}' background validation failed - "
-                        f"will retry daily"
-                    )
-                    
-                    # Schedule daily retry during special hours
-                    asyncio.create_task(
-                        self._schedule_daily_source_retry(api_class, validate_func, source_name, is_slow)
-                    )
+                    if is_auth_error:
+                        # Don't schedule retry for auth errors (requires user config fix)
+                        _LOGGER.debug(
+                            f"[{self.area}] '{source_name}' background validation failed due to "
+                            f"authentication - skipping retry schedule"
+                        )
+                    else:
+                        _LOGGER.warning(
+                            f"[{self.area}] ✗ '{source_name}' background validation failed - "
+                            f"will retry daily"
+                        )
+                        
+                        # Schedule daily retry during special hours
+                        asyncio.create_task(
+                            self._schedule_daily_source_retry(api_class, validate_func, source_name, is_slow)
+                        )
                     
             except Exception as e:
                 _LOGGER.error(f"[{self.area}] {source_name} background validation error: {e}")
@@ -490,7 +516,7 @@ class UnifiedPriceManager:
                 # Attempt validation with appropriate timeout for source type
                 try:
                     result = await validate_func(api_class, timeout=timeout)
-                    returned_source_name, is_valid, data = result
+                    returned_source_name, is_valid, data, is_auth_error = result
                     
                     if is_valid:
                         _LOGGER.info(
@@ -499,11 +525,19 @@ class UnifiedPriceManager:
                         )
                         return  # Validation succeeded, stop retrying (source already re-enabled by validate_func)
                     else:
-                        # Failed retry is expected sometimes - will try again tomorrow
-                        _LOGGER.debug(
-                            f"[{self.area}] '{source_name}' ({source_type}) daily retry failed - "
-                            f"will try again tomorrow"
-                        )
+                        if is_auth_error:
+                            # Auth error on retry - stop trying (requires user config fix)
+                            _LOGGER.warning(
+                                f"[{self.area}] ✗ '{source_name}' ({source_type}) daily retry failed due to "
+                                f"authentication - stopping retries until config fixed"
+                            )
+                            return  # Stop retrying auth errors
+                        else:
+                            # Failed retry is expected sometimes - will try again tomorrow
+                            _LOGGER.debug(
+                                f"[{self.area}] '{source_name}' ({source_type}) daily retry failed - "
+                                f"will try again tomorrow"
+                            )
                         
                 except Exception as e:
                     # Exception during retry - will try again tomorrow
