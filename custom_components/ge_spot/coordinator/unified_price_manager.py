@@ -207,40 +207,40 @@ class UnifiedPriceManager:
 
     def get_failed_source_details(self) -> List[Dict[str, Any]]:
         """Get detailed information about failed sources.
-        
+
         Returns:
             List of dicts with source name, failure time, and retry time
         """
         failed_details = []
         now = dt_util.now()
-        
+
         for source_name, failure_time in self._failed_sources.items():
             if failure_time is not None:  # Source has failed
                 # Calculate next health check time
                 next_check = self._calculate_next_health_check(now)
-                
+
                 failed_details.append({
                     "source": source_name,
                     "failed_at": failure_time.isoformat(),
                     "retry_at": next_check.isoformat() if next_check else None,
                 })
-        
+
         return sorted(failed_details, key=lambda x: x["source"])
 
     def _calculate_next_health_check(self, from_time: datetime) -> Optional[datetime]:
         """Calculate when the next health check will occur.
-        
+
         Returns the start of the next special hour window.
         """
         current_hour = from_time.hour
         today = from_time.date()
-        
+
         # Check windows for today
         for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS:
             if current_hour < start:
                 # Haven't reached this window yet today
                 return from_time.replace(hour=start, minute=0, second=0, microsecond=0)
-        
+
         # All windows passed for today, use first window tomorrow
         if Network.Defaults.SPECIAL_HOUR_WINDOWS:
             first_window_start = Network.Defaults.SPECIAL_HOUR_WINDOWS[0][0]
@@ -254,7 +254,7 @@ class UnifiedPriceManager:
                 second=0,
                 microsecond=0
             )
-        
+
         return None
 
     async def _ensure_exchange_service(self):
@@ -271,31 +271,31 @@ class UnifiedPriceManager:
 
     async def _schedule_health_check(self):
         """Schedule daily health check for ALL sources during special hours.
-        
+
         Validates all configured sources once per day during special hour windows.
         Uses FallbackManager's exponential backoff for each source independently.
         """
         import random
-        
+
         last_check_date = None
-        
+
         while True:
             now = dt_util.now()
             current_hour = now.hour
             today_date = now.date()
-            
+
             # Check if we're in a special hour window
             in_special_hours = any(
                 start <= current_hour < end
                 for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS
             )
-            
+
             # Only check once per day
             should_check = (
                 in_special_hours and
                 (last_check_date is None or last_check_date < today_date)
             )
-            
+
             if should_check:
                 # Random delay within current hour to spread load
                 delay_seconds = random.randint(0, ValidationRetry.MAX_RANDOM_DELAY_SECONDS)
@@ -304,19 +304,19 @@ class UnifiedPriceManager:
                     f"(validating {len(self._api_classes)} sources)"
                 )
                 await asyncio.sleep(delay_seconds)
-                
+
                 # Validate ALL sources
                 await self._validate_all_sources()
-                
+
                 last_check_date = now.date()
                 self._last_health_check = now
-            
+
             # Sleep 1 hour and check again (will naturally land in window tomorrow)
             await asyncio.sleep(3600)
 
     async def _validate_all_sources(self):
         """Validate ALL configured sources independently.
-        
+
         Unlike normal fetch (stops at first success), this tries EVERY source
         to get complete health status. Each source is tested with exponential
         backoff (2s → 6s → 18s) via FallbackManager logic.
@@ -326,14 +326,14 @@ class UnifiedPriceManager:
             "validated": [],
             "failed": []
         }
-        
+
         _LOGGER.info(f"[{self.area}] Starting health check for {len(self._api_classes)} sources")
-        
+
         session = async_get_clientsession(self.hass)
-        
+
         for api_class in self._api_classes:
             source_name = api_class(config={}).source_type
-            
+
             try:
                 # Create API instance with correct parameters (same as normal fetch)
                 api_instance = api_class(
@@ -341,7 +341,7 @@ class UnifiedPriceManager:
                     session=session,
                     timezone_service=self._tz_service,
                 )
-                
+
                 # Try fetching with FallbackManager's exponential backoff
                 # Pass single source to FallbackManager
                 result = await self._fallback_manager.fetch_with_fallback(
@@ -350,7 +350,7 @@ class UnifiedPriceManager:
                     reference_time=now,
                     session=session
                 )
-                
+
                 # Check if source returned valid data
                 if result and result.get("raw_data"):
                     # Success - clear failure timestamp
@@ -361,7 +361,7 @@ class UnifiedPriceManager:
                     # No data - mark as failed
                     self._failed_sources[source_name] = now
                     results["failed"].append(source_name)
-                    
+
                     # Count validated sources for user context
                     validated_count = len([s for s in self._failed_sources.values() if s is None])
                     _LOGGER.warning(
@@ -369,12 +369,12 @@ class UnifiedPriceManager:
                         f"Will retry during next daily health check. "
                         f"({validated_count} other source(s) available)"
                     )
-                    
+
             except Exception as e:
                 # Error - mark as failed
                 self._failed_sources[source_name] = now
                 results["failed"].append(source_name)
-                
+
                 # Count validated sources for user context
                 validated_count = len([s for s in self._failed_sources.values() if s is None])
                 _LOGGER.warning(
@@ -383,7 +383,7 @@ class UnifiedPriceManager:
                     f"({validated_count} other source(s) available)",
                     exc_info=True
                 )
-        
+
         # Log summary
         _LOGGER.info(
             f"[{self.area}] Health check complete: "
@@ -687,7 +687,7 @@ class UnifiedPriceManager:
                 for source_name in self._attempted_sources:
                     # Mark source as failed with current timestamp
                     self._failed_sources[source_name] = now
-                
+
                 # Schedule health check task (once) if not already running
                 if not self._health_check_scheduled:
                     _LOGGER.info(
