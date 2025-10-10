@@ -114,8 +114,7 @@ class EnergyChartsAPI(BasePriceAPI):
         try:
             response = await client.fetch(
                 f"{self.base_url}/price",
-                params=params,
-                timeout=Network.Defaults.SLOW_SOURCE_TIMEOUT  # Energy Charts is a slow source
+                params=params
             )
 
             if not response or not isinstance(response, dict):
