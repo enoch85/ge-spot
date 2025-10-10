@@ -126,7 +126,6 @@ class StromligningAPI(BasePriceAPI):
             url = f"{self._get_base_url()}?priceArea={area}&supplier={supplier}"
             response = await client.fetch(
                 url,
-                headers=headers,
                 timeout=Network.Defaults.HTTP_TIMEOUT,
             )
 

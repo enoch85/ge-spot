@@ -44,7 +44,7 @@ class AmberAPI(BasePriceAPI):
         Returns:
             Base URL as string
         """
-        return getattr(Amber, 'BASE_URL', Network.URLs.AMBER) # Use constant if defined
+        return Amber.BASE_URL
 
     @retry_with_backoff(max_attempts=Network.Defaults.RETRY_COUNT)
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
@@ -80,7 +80,7 @@ class AmberAPI(BasePriceAPI):
 
         try:
             # Fetch data from Amber API
-            response = await client.fetch(
+            data = await client.fetch(
                 url,
                 headers=headers,
                 timeout=Network.Defaults.HTTP_TIMEOUT,

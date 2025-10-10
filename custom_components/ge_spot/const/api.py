@@ -117,6 +117,9 @@ class SourceTimezone:
 
 class Amber:
     """Amber Energy API constants."""
+    # Base URL for Amber API
+    BASE_URL = "https://api.amber.com.au/v1"
+    
     # Default currency for Australia
     DEFAULT_CURRENCY = "AUD"
 
