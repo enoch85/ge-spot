@@ -60,7 +60,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass, area, currency, timedelta(minutes=update_interval), config
     )
 
-    # Validate configured sources (one-time, non-blocking)
+    # Validate configured sources (one-time, blocking on first boot)
     try:
         await coordinator.price_manager.validate_configured_sources_once()
     except Exception as e:
