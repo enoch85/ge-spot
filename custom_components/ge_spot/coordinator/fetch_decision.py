@@ -17,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class FetchDecisionMaker:
     """Decision maker for when to fetch new data.
-    
+
     Uses DataValidity to make clear, timestamp-based decisions about when to fetch.
     Goal: Only fetch 1-2 times per day (typically at 13:00 for tomorrow's data).
     """
@@ -60,7 +60,7 @@ class FetchDecisionMaker:
             current_interval_key = self._tz_service.get_current_interval_key()
             reason = f"No data for current interval ({current_interval_key}) - fetching data immediately"
             _LOGGER.info(reason)  # INFO level: expected on reload, not an error
-            
+
             # Respect rate limiting to avoid hammering the API
             if last_fetch:
                 from ..utils.rate_limiter import RateLimiter
@@ -69,14 +69,14 @@ class FetchDecisionMaker:
                     current_time=now,
                     min_interval=fetch_interval_minutes
                 )
-                
+
                 if should_skip:
                     reason = f"No current interval data, but rate limited ({skip_reason})"
                     # INFO level: This is expected when parser changes or cache invalidation happens
                     # The system will fall back to any available cached data
                     _LOGGER.info(reason)
                     return False, reason
-            
+
             return True, reason
 
         # Initial fetch check (never fetched before)
@@ -87,7 +87,7 @@ class FetchDecisionMaker:
 
         # Calculate how much data we have left
         intervals_remaining = data_validity.intervals_remaining(now)
-        
+
         _LOGGER.debug(
             f"Data validity check: {intervals_remaining} intervals remaining, validity: {data_validity}"
         )
@@ -99,7 +99,7 @@ class FetchDecisionMaker:
                 f"(safety buffer: {Network.Defaults.DATA_SAFETY_BUFFER_INTERVALS} intervals) - fetching"
             )
             _LOGGER.info(reason)
-            
+
             # Check rate limiting
             from ..utils.rate_limiter import RateLimiter
             should_skip, skip_reason = RateLimiter.should_skip_fetch(
@@ -107,23 +107,23 @@ class FetchDecisionMaker:
                 current_time=now,
                 min_interval=fetch_interval_minutes
             )
-            
+
             if should_skip:
                 reason = f"Low on data but rate limited: {skip_reason}"
                 _LOGGER.warning(reason)
                 return False, reason
-                
+
             return True, reason
 
         # SPECIAL WINDOW CHECK: During tomorrow data fetch window (13:00-15:00) - time to fetch tomorrow's data
         hour = now.hour
         # Use the second window from SPECIAL_HOUR_WINDOWS which is for tomorrow's data
         start_hour, end_hour = Network.Defaults.SPECIAL_HOUR_WINDOWS[1]
-        
+
         if start_hour <= hour < end_hour:
             # Check if we already have tomorrow's complete data
             tomorrow_date = now.date() + timedelta(days=1)
-            
+
             # Check against the required interval threshold (76 intervals = 80% of 96)
             if data_validity.tomorrow_interval_count < Network.Defaults.REQUIRED_TOMORROW_INTERVALS:
                 reason = (
@@ -132,7 +132,7 @@ class FetchDecisionMaker:
                     f"need {Network.Defaults.REQUIRED_TOMORROW_INTERVALS}) - fetching"
                 )
                 _LOGGER.info(reason)
-                
+
                 # Check rate limiting
                 from ..utils.rate_limiter import RateLimiter
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
@@ -140,7 +140,7 @@ class FetchDecisionMaker:
                     current_time=now,
                     min_interval=fetch_interval_minutes
                 )
-                
+
                 if should_skip:
                     reason = (
                         f"Special window but rate limited: {skip_reason}. "
@@ -148,7 +148,7 @@ class FetchDecisionMaker:
                     )
                     _LOGGER.info(reason)
                     return False, reason
-                    
+
                 return True, reason
             else:
                 reason = (
@@ -157,7 +157,7 @@ class FetchDecisionMaker:
                 )
                 _LOGGER.debug(reason)
                 return False, reason
-        
+
         # POST-WINDOW RETRY: After special window, check if we missed tomorrow's data
         elif hour >= end_hour:
             # If we don't have tomorrow's data and it's after the window, try to fetch
@@ -168,7 +168,7 @@ class FetchDecisionMaker:
                     f"need {Network.Defaults.REQUIRED_TOMORROW_INTERVALS}) - retry fetch"
                 )
                 _LOGGER.info(reason)
-                
+
                 # Check rate limiting - don't spam the API
                 from ..utils.rate_limiter import RateLimiter
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
@@ -176,7 +176,7 @@ class FetchDecisionMaker:
                     current_time=now,
                     min_interval=fetch_interval_minutes
                 )
-                
+
                 if should_skip:
                     reason = (
                         f"After window but missing tomorrow data - rate limited: {skip_reason}. "
@@ -184,7 +184,7 @@ class FetchDecisionMaker:
                     )
                     _LOGGER.debug(reason)
                     return False, reason
-                    
+
                 return True, reason
 
         # ALL GOOD: We have enough data

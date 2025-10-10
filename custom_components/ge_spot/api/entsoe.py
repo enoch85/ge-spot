@@ -101,14 +101,17 @@ class EntsoeAPI(BasePriceAPI):
             Config.API_KEY,
             self.config.get(Config.API_KEY) or self.config.get("api_key") or "NOT FOUND"
         )
-        
+
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
         if not api_key:
             _LOGGER.error(
-                "No API key provided for ENTSO-E. Config keys available: %s",
+                "No API key provided for %s. To fix: Settings → Devices & Services → "
+                "Global Electricity Spot Prices → Configure → add your API key. "
+                "Config keys available: %s",
+                self.source_type,
                 list(self.config.keys())
             )
-            raise ValueError("No API key provided for ENTSO-E")
+            raise ValueError(f"No API key provided for {self.source_type}")
 
         # Use the provided reference time or current UTC time
         if reference_time is None:
@@ -158,7 +161,7 @@ class EntsoeAPI(BasePriceAPI):
                         self.base_url,
                         params=params,
                         headers=headers,
-                        timeout=Network.Defaults.TIMEOUT
+                        timeout=Network.Defaults.HTTP_TIMEOUT
                     )
 
                     # --- Refined Error Handling ---
@@ -256,7 +259,7 @@ class EntsoeAPI(BasePriceAPI):
             }
 
             async def fetch_tomorrow():
-                return await client.fetch(self.base_url, params=params_tomorrow, headers=headers, timeout=Network.Defaults.TIMEOUT)
+                return await client.fetch(self.base_url, params=params_tomorrow, headers=headers, timeout=Network.Defaults.HTTP_TIMEOUT)
 
             def is_data_available(data):
                 # Check for non-empty string containing the success marker
@@ -346,7 +349,7 @@ class EntsoeAPI(BasePriceAPI):
             # Include the original raw data for potential debugging/caching
             parsed_data["raw_data"] = raw_data
 
-            # Remove any legacy keys if they exist (backward compatibility cleanup)
+            # Clean up legacy keys if they exist
             legacy_keys = ["hourly_prices", "hourly_raw"]
             for key in legacy_keys:
                 if key in parsed_data:

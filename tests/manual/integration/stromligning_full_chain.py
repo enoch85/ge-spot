@@ -172,17 +172,12 @@ async def main():
             today_prices = prices_by_date[today]
             logger.info(f"\nFound {len(today_prices)} price points for today ({today})")
 
-            if len(today_prices) == 24:
-                logger.info("✓ Complete set of 24 hourly prices for today")
+            if len(today_prices) >= 96:
+                logger.info("✓ Complete set of 96 15-minute interval prices for today")
+            elif len(today_prices) >= 90:
+                logger.info(f"✓ Nearly complete data: Found {len(today_prices)} 15-minute intervals (expected 96)")
             else:
-                logger.warning(f"⚠ Incomplete data: Found only {len(today_prices)} hourly prices for today (expected 24)")
-
-                # List missing hours for better debugging
-                all_hours = set(f"{h:02d}:00" for h in range(24))
-                found_hours = set(today_prices.keys())
-                missing_hours = all_hours - found_hours
-                if missing_hours:
-                    logger.warning(f"Missing hours today: {', '.join(sorted(missing_hours))}")
+                logger.warning(f"⚠ Incomplete data: Found only {len(today_prices)} 15-minute intervals for today (expected 96)")
         else:
             logger.warning(f"\nWarning: No prices found for today ({today})")
 
@@ -194,17 +189,12 @@ async def main():
             tomorrow_prices = prices_by_date[tomorrow]
             logger.info(f"\nFound {len(tomorrow_prices)} price points for tomorrow ({tomorrow})")
 
-            if len(tomorrow_prices) == 24:
-                logger.info("✓ Complete set of 24 hourly prices for tomorrow")
+            if len(tomorrow_prices) >= 96:
+                logger.info("✓ Complete set of 96 15-minute interval prices for tomorrow")
+            elif len(tomorrow_prices) >= 90:
+                logger.info(f"✓ Nearly complete data: Found {len(tomorrow_prices)} 15-minute intervals (expected 96)")
             else:
-                logger.warning(f"⚠ Incomplete data: Found only {len(tomorrow_prices)} hourly prices for tomorrow (expected 24)")
-
-                # List missing hours for better debugging
-                all_hours = set(f"{h:02d}:00" for h in range(24))
-                found_hours = set(tomorrow_prices.keys())
-                missing_hours = all_hours - found_hours
-                if missing_hours:
-                    logger.warning(f"Missing hours tomorrow: {', '.join(sorted(missing_hours))}")
+                logger.warning(f"⚠ Incomplete data: Found only {len(tomorrow_prices)} 15-minute intervals for tomorrow (expected 96)")
         elif expect_tomorrow_data:
             logger.warning(f"\nWarning: No prices found for tomorrow ({tomorrow}) even though it's expected")
         else:

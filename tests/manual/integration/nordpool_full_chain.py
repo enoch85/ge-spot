@@ -338,6 +338,9 @@ async def main():
 
     # Use async with for the session within NordpoolAPI
     async with aiohttp.ClientSession() as session:
+        # Mark session as external so APIs don't close it
+        session._is_external = True
+        
         # Initialize the API client
         api = NordpoolAPI(session=session)
 
@@ -474,15 +477,39 @@ async def main():
                 # Use source_currency from parsed_data
                 target_currency = Currency.SEK if area.startswith('SE') else Currency.EUR
 
+                # Use the split_into_today_tomorrow method from TimezoneConverter
+                today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(normalized_prices)
+                logger.info(f"Split into today ({len(today_prices)} intervals) and tomorrow ({len(tomorrow_prices)} intervals)")
+
+                # Debug: Check if we're losing intervals during split
+                logger.debug(f"Before split: {len(normalized_prices)} normalized prices")
+                logger.debug(f"After split: today={len(today_prices)}, tomorrow={len(tomorrow_prices)}, total={len(today_prices) + len(tomorrow_prices)}")
+                if len(today_prices) + len(tomorrow_prices) < len(normalized_prices):
+                    logger.warning(f"⚠️ Lost {len(normalized_prices) - len(today_prices) - len(tomorrow_prices)} intervals during split!")
+                    # Sample some keys to see the format
+                    sample_keys = list(normalized_prices.keys())[:5]
+                    logger.debug(f"Sample normalized keys: {sample_keys}")
+                    sample_today = list(today_prices.keys())[:5] if today_prices else []
+                    logger.debug(f"Sample today keys: {sample_today}")
+                    sample_tomorrow = list(tomorrow_prices.keys())[:5] if tomorrow_prices else []
+                    logger.debug(f"Sample tomorrow keys: {sample_tomorrow}")
+
+                # Step 3: Currency conversion (local currency -> target currency if needed)
                 logger.info(f"\nConverting prices from {source_currency} to {target_currency}...")
                 # Fix: Pass the existing session to the exchange rate service
                 exchange_service = DebugExchangeRateService(session=session)
+                
+                # Combine today and tomorrow prices for conversion (they have time-only keys)
+                all_prices_to_convert = {}
+                all_prices_to_convert.update(today_prices)
+                all_prices_to_convert.update(tomorrow_prices)
+                
                 try:
                     await exchange_service.get_rates(force_refresh=True)
 
                     # Convert prices and from MWh to kWh
                     converted_prices = {}
-                    for hour_key, price_info in normalized_prices.items():
+                    for hour_key, price_info in all_prices_to_convert.items():
                         # Extract price from dict structure
                         price = price_info["price"] if isinstance(price_info, dict) else price_info
                         price_converted = price
@@ -501,7 +528,7 @@ async def main():
                     logger.info("Continuing with unconverted prices")
                     # Provide fallback conversion for demo purposes
                     converted_prices = {}
-                    for hour_key, price_info in normalized_prices.items():
+                    for hour_key, price_info in all_prices_to_convert.items():
                         price = price_info["price"] if isinstance(price_info, dict) else price_info
                         # Apply a simple fixed exchange rate as fallback
                         fallback_rate = 11.0 if target_currency == Currency.SEK else 1.0
@@ -509,23 +536,6 @@ async def main():
                         # Convert to kWh
                         price_kwh = price_converted / 1000
                         converted_prices[hour_key] = price_kwh
-
-                # Use the split_into_today_tomorrow method from TimezoneConverter
-                today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(normalized_prices)
-                logger.info(f"Split into today ({len(today_prices)} intervals) and tomorrow ({len(tomorrow_prices)} intervals)")
-
-                # Debug: Check if we're losing intervals during split
-                logger.debug(f"Before split: {len(normalized_prices)} normalized prices")
-                logger.debug(f"After split: today={len(today_prices)}, tomorrow={len(tomorrow_prices)}, total={len(today_prices) + len(tomorrow_prices)}")
-                if len(today_prices) + len(tomorrow_prices) < len(normalized_prices):
-                    logger.warning(f"⚠️ Lost {len(normalized_prices) - len(today_prices) - len(tomorrow_prices)} intervals during split!")
-                    # Sample some keys to see the format
-                    sample_keys = list(normalized_prices.keys())[:5]
-                    logger.debug(f"Sample normalized keys: {sample_keys}")
-                    sample_today = list(today_prices.keys())[:5] if today_prices else []
-                    logger.debug(f"Sample today keys: {sample_today}")
-                    sample_tomorrow = list(tomorrow_prices.keys())[:5] if tomorrow_prices else []
-                    logger.debug(f"Sample tomorrow keys: {sample_tomorrow}")
 
                 # Prepare processed data for caching (similar to what DataProcessor would do)
                 timestamp = datetime.now(timezone.utc)

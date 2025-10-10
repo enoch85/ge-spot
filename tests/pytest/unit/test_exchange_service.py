@@ -34,8 +34,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from custom_components.ge_spot.utils.exchange_service import (
     ExchangeRateService,
-    get_exchange_service,
-    ExchangeService  # This is now an alias for ExchangeRateService
+    get_exchange_service
 )
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.const.defaults import Defaults
@@ -387,3 +386,56 @@ async def test_convert_currency_missing_rates(exchange_service):
         )
 
     assert "Missing exchange rates" in str(exc_info.value), "Should raise error for missing currency"
+
+
+@pytest.mark.asyncio
+async def test_fetch_ecb_rates_uses_instance_session():
+    """Regression test: Ensure _fetch_ecb_rates uses self.session, not undefined 'session' variable.
+    
+    This test catches a bug where the code used 'session.get()' instead of 'self.session.get()',
+    causing a NameError when the exchange service tried to fetch rates.
+    
+    Bug history: When updating HTTP_TIMEOUT constant, 'session' was incorrectly used instead of 'self.session'.
+    """
+    # Arrange - Create service without passing a session (will create its own)
+    service = ExchangeRateService()
+    
+    # Create a proper mock for the async context manager
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.text = AsyncMock(return_value=MOCK_ECB_XML_RESPONSE)
+    
+    # Mock session with proper async context manager support
+    mock_get = MagicMock()
+    mock_get.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_get.__aexit__ = AsyncMock(return_value=None)
+    
+    mock_session = MagicMock()
+    mock_session.get = MagicMock(return_value=mock_get)
+    mock_session.close = AsyncMock()  # Mock the close method
+    
+    service.session = mock_session
+    
+    # Act - Call _fetch_ecb_rates which should use self.session
+    try:
+        result = await service._fetch_ecb_rates()
+        
+        # Assert - Verify the session was used correctly
+        # If the code incorrectly used 'session' instead of 'self.session', 
+        # this would raise NameError: name 'session' is not defined
+        mock_session.get.assert_called_once()
+        call_args = mock_session.get.call_args
+        
+        # Verify the correct URL and timeout were used
+        assert call_args[0][0] == Network.URLs.ECB, "Should call ECB URL"
+        assert call_args[1]["timeout"] == Network.Defaults.HTTP_TIMEOUT, "Should use HTTP_TIMEOUT constant"
+        
+        # Verify result is parsed correctly (should have parsed the XML)
+        assert result is not None, "Should return parsed rates"
+        assert isinstance(result, dict), "Should return dictionary of rates"
+        assert Currency.USD in result, "Should include USD in parsed rates"
+        
+    except NameError as e:
+        if "session" in str(e):
+            pytest.fail(f"BUG DETECTED: Code uses undefined 'session' variable instead of 'self.session': {e}")
+        raise

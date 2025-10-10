@@ -45,8 +45,9 @@ async def main():
     entsoe_code = AreaMapping.ENTSOE_MAPPING.get(area_code, area_code)
     logger.info(f"Testing ENTSOE API for area: {area_code} (EIC: {entsoe_code})")
 
-    # Initialize API
-    api = EntsoeAPI(api_key)
+    # Initialize API with config dictionary
+    config = {"api_key": api_key}
+    api = EntsoeAPI(config)
 
     # Test connection
     logger.info("Testing API connection...")
@@ -54,15 +55,27 @@ async def main():
         # Fetch raw data
         logger.info("Fetching data from ENTSOE API...")
         raw_data = await api.fetch_raw_data(entsoe_code)
-        if not isinstance(raw_data, dict):
-            logger.error(f"ENTSOE API returned a non-dict response: {raw_data}")
+        
+        # Check if fetch failed (returns None or error dict)
+        if raw_data is None:
+            logger.error("ENTSOE API returned None (fetch failed)")
             return 1
+        
+        if isinstance(raw_data, dict) and "error" in raw_data:
+            logger.error(f"ENTSOE API returned error: {raw_data.get('error')}")
+            return 1
+        
+        if not isinstance(raw_data, dict):
+            logger.error(f"ENTSOE API returned unexpected type: {type(raw_data)}")
+            return 1
+            
         logger.info("Successfully fetched raw data")
-        # Parse data
+        
+        # Parse data using the parser directly
         logger.info("Parsing raw data...")
-        parsed_data = await api.parse_raw_data(raw_data)
+        parsed_data = api.parser.parse(raw_data)
 
-        if not parsed_data or not parsed_data.get("interval_prices"):
+        if not parsed_data or not parsed_data.get("interval_raw"):
             logger.error("Failed to parse data or no interval prices returned")
             return 1
 
@@ -71,16 +84,20 @@ async def main():
         logger.info(f"Source: {parsed_data.get('source')}")
         logger.info(f"Area: {parsed_data.get('area')}")
         logger.info(f"Currency: {parsed_data.get('currency')}")
-        logger.info(f"API Timezone: {parsed_data.get('api_timezone')}")
-        logger.info(f"Fetched at: {parsed_data.get('fetched_at')}")
+        logger.info(f"API Timezone: {parsed_data.get('timezone')}")
+        logger.info(f"Fetched at: {parsed_data.get('fetched_at', 'N/A')}")
 
         # Format interval prices into a table
         logger.info("\nInterval Prices:")
         logger.info(f"{'Timestamp':<25} | {'Price':<10}")
         logger.info("-" * 38)
 
-        for timestamp, price in sorted(parsed_data.get("interval_prices", {}).items()):
+        interval_raw = parsed_data.get("interval_raw", {})
+        for timestamp, price in sorted(interval_raw.items())[:20]:  # Show first 20
             logger.info(f"{timestamp:<25} | {price:<10.5f}")
+        
+        total_intervals = len(interval_raw)
+        logger.info(f"\n... (showing 20 of {total_intervals} total intervals)")
 
         logger.info("\nTest completed successfully")
         return 0

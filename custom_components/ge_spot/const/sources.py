@@ -27,16 +27,18 @@ class Source:
     ]
 
     # Default source priority
+    # All sources use same exponential timeout (2s → 6s → 18s)
+    # Reliable sources tried first, unreliable sources last
     DEFAULT_PRIORITY = [
         NORDPOOL,
-        ENERGY_CHARTS,
         ENTSOE,
         ENERGI_DATA_SERVICE,
         OMIE,
         STROMLIGNING,
         AEMO,
         AMBER,
-        COMED
+        COMED,
+        ENERGY_CHARTS
     ]
 
     # Source display names

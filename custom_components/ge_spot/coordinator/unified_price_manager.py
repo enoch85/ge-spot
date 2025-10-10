@@ -18,12 +18,13 @@ from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..const.network import Network
 from ..const.currencies import Currency
+from ..const.time import ValidationRetry
 from ..api import get_sources_for_region
 from ..api.base.base_price_api import BasePriceAPI
 from ..api.base.data_structure import StandardizedPriceData, create_standardized_price_data
 from ..api.base.session_manager import close_session
 from ..timezone.service import TimezoneService # Added import
-from ..utils.exchange_service import ExchangeService, get_exchange_service # Import get_exchange_service
+from ..utils.exchange_service import ExchangeRateService, get_exchange_service
 from .data_processor import DataProcessor
 from .fallback_manager import FallbackManager # Import the new FallbackManager
 from .cache_manager import CacheManager # Import CacheManager
@@ -41,6 +42,10 @@ from ..api.stromligning import StromligningAPI
 
 
 _LOGGER = logging.getLogger(__name__)
+
+# Validation result constants for clarity
+AUTH_ERROR = True      # Validation failed due to authentication (no retry)
+NOT_AUTH_ERROR = False # Validation failed for other reasons (will retry)
 
 # Rate Limiting Lock
 _FETCH_LOCK = asyncio.Lock()
@@ -68,13 +73,14 @@ class UnifiedPriceManager:
         self.area = area
         self.currency = currency
         self.config = config
-        
+        self._coordinator_created_at = dt_util.utcnow()  # Track when coordinator was created for better rate limit messaging
+
         # Debug: Log config keys to diagnose API key issue
         _LOGGER.debug(
             f"UnifiedPriceManager init for {area}: config keys={list(config.keys())}, "
             f"api_key={'PRESENT' if config.get(Config.API_KEY) or config.get('api_key') else 'MISSING'}"
         )
-        
+
         self.timezone_service = TimezoneService(
             hass=hass,
             area=area,
@@ -88,13 +94,18 @@ class UnifiedPriceManager:
         self._attempted_sources = []
         self._fallback_sources = [] # Keep track of sources used as fallback
         self._using_cached_data = False
-        self._validated_sources = set()  # Sources that have successfully returned usable data
+
+        # Track failed sources for implicit validation
+        # Dict[str, datetime] - Maps source name to last failure time (None = never failed or succeeded after failure)
+        self._failed_sources = {}
+        # Set[str] - Sources with scheduled daily retry tasks
+        self._retry_scheduled = set()
 
         # Services and utilities
         self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
         self._fallback_manager = FallbackManager()
         self._cache_manager = CacheManager(hass=hass, config=config) # Instantiate CacheManager
-        self._exchange_service = None # Initialize exchange service attribute
+        self._exchange_service: ExchangeRateService | None = None # Initialize exchange service attribute
 
         # Data processor
         self._data_processor = DataProcessor(
@@ -180,86 +191,24 @@ class UnifiedPriceManager:
         _LOGGER.info(f"Configured sources for area {self.area}: {configured_source_names}")
 
     def get_validated_sources(self) -> List[str]:
-        """Get list of validated source names."""
-        return sorted(list(self._validated_sources))
+        """Get list of validated source names (sources that succeeded at least once)."""
+        return sorted([
+            src for src, last_fail in self._failed_sources.items()
+            if last_fail is None  # None = never failed OR succeeded after last failure
+        ])
 
-    async def validate_configured_sources_once(self) -> Dict[str, bool]:
-        """Validate all configured sources during initial setup (one-time only).
-        
-        Fetches actual data with minimal date range (today only) to verify:
-        - API is accessible
-        - API keys are valid
-        - Data can be fetched and parsed
-        
-        Called ONLY during initial configuration, not on every restart.
-        Failures are logged but don't block setup.
-        Runs all validations in parallel for speed.
-        
-        Returns:
-            Dict mapping source names to validation results
-        """
-        session = async_get_clientsession(self.hass)
-        now = dt_util.now()
-        
-        _LOGGER.info(f"[{self.area}] Validating {len(self._api_classes)} configured source(s)")
-        
-        async def validate_single_source(api_class):
-            """Validate a single API source."""
-            temp_instance = api_class(config={})
-            source_name = temp_instance.source_type
-            
-            try:
-                api_instance = api_class(
-                    config=self.config,
-                    session=session,
-                    timezone_service=self._tz_service
-                )
-                
-                # Fetch minimal data (today only)
-                data = await api_instance.fetch_raw_data(
-                    area=self.area,
-                    session=session,
-                    reference_time=now
-                )
-                
-                # Generic validation: Check raw_data exists and is not empty
-                # This confirms the API works without source-specific logic
-                raw_data = data.get('raw_data') if data and isinstance(data, dict) else None
-                is_valid = raw_data is not None and raw_data  # Not None and not empty
-                
-                if is_valid:
-                    self._validated_sources.add(source_name)
-                    _LOGGER.info(f"[{self.area}] ✓ '{source_name}' validated")
-                else:
-                    _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation failed - no raw_data")
-                
-                return (source_name, is_valid)
-                    
-            except Exception as e:
-                _LOGGER.warning(f"[{self.area}] ✗ '{source_name}' validation error: {e}")
-                return (source_name, False)
-        
-        # Run all validations in parallel
-        results = await asyncio.gather(
-            *[validate_single_source(api_class) for api_class in self._api_classes],
-            return_exceptions=True
-        )
-        
-        # Convert results to dict
-        validation_results = {}
-        for result in results:
-            if isinstance(result, Exception):
-                _LOGGER.error(f"[{self.area}] Validation task failed: {result}")
-                continue
-            if not isinstance(result, tuple) or len(result) != 2:
-                _LOGGER.error(f"[{self.area}] Invalid validation result format: {result}")
-                continue
-            source_name, is_valid = result
-            validation_results[source_name] = is_valid
-        
-        validated_count = sum(1 for v in validation_results.values() if v)
-        _LOGGER.info(f"[{self.area}] Validation: {validated_count}/{len(validation_results)} sources validated")
-        return validation_results
+    def get_disabled_sources(self) -> List[str]:
+        """Get list of disabled source names (sources that failed recently)."""
+        return sorted([
+            src for src, last_fail in self._failed_sources.items()
+            if last_fail is not None
+        ])
+
+    def get_enabled_sources(self) -> List[str]:
+        """Get list of currently enabled source names."""
+        all_sources = [cls(config={}).source_type for cls in self._api_classes]
+        disabled = self.get_disabled_sources()
+        return sorted([s for s in all_sources if s not in disabled])
 
     async def _ensure_exchange_service(self):
         """Ensure the exchange service is initialized."""
@@ -273,9 +222,80 @@ class UnifiedPriceManager:
             else:
                  _LOGGER.warning("DataProcessor does not have _exchange_service attribute to set.")
 
+    async def _schedule_daily_retry(self, source_name: str, api_class: Type[BasePriceAPI]):
+        """Schedule daily retry for a failed source during special hours.
+
+        Retries once per day during configured windows (e.g., 13:00-15:00).
+        Uses same exponential backoff as normal fetch via FallbackManager.
+
+        Args:
+            source_name: Name of the source to retry
+            api_class: API class to retry
+        """
+        import random
+
+        last_retry = None
+
+        while True:
+            now = dt_util.now()
+            current_hour = now.hour
+            today_date = now.date()
+
+            # Check if we're in a special hour window
+            in_special_hours = any(
+                start <= current_hour < end
+                for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS
+            )
+
+            # Only retry once per day
+            should_retry = (
+                in_special_hours and
+                (last_retry is None or last_retry.date() < today_date)
+            )
+
+            if should_retry:
+                # Random delay within current hour to spread load
+                from ..const.time import ValidationRetry
+                delay_seconds = random.randint(0, ValidationRetry.MAX_RANDOM_DELAY_SECONDS)
+                _LOGGER.info(
+                    f"[{self.area}] Daily retry for '{source_name}' in {delay_seconds}s"
+                )
+                await asyncio.sleep(delay_seconds)
+
+                # Trigger a forced fetch (will try this source again)
+                try:
+                    result = await self.fetch_data(force=True)
+
+                    # Check if this specific source succeeded
+                    if result and result.get("data_source") == source_name:
+                        _LOGGER.info(
+                            f"[{self.area}] ✓ '{source_name}' daily retry successful - "
+                            f"source re-enabled"
+                        )
+                        self._retry_scheduled.discard(source_name)
+                        return  # Success, stop retrying
+                    else:
+                        _LOGGER.debug(
+                            f"[{self.area}] '{source_name}' daily retry failed, "
+                            f"will try again tomorrow"
+                        )
+
+                except Exception as e:
+                    _LOGGER.warning(
+                        f"[{self.area}] Error during '{source_name}' daily retry: {e}"
+                    )
+
+                last_retry = now
+
+            # Sleep until next check (1 hour)
+            await asyncio.sleep(3600)
 
     async def fetch_data(self, force: bool = False) -> Dict[str, Any]:
-        """Fetch price data considering rate limits and caching.
+        """Fetch price data with implicit source validation.
+
+        Sources are validated implicitly during fetch:
+        - Success → Source marked as working (failure timestamp cleared)
+        - Failure → Source marked as failed, skipped for 24 hours, daily retry scheduled
 
         Args:
             force: Whether to force fetch even if rate limited
@@ -300,7 +320,7 @@ class UnifiedPriceManager:
         # Extract data validity from cache if available
         from .data_validity import DataValidity
         data_validity = DataValidity()  # Default: no valid data
-        
+
         if cached_data_for_decision:
             # Extract DataValidity from cached data
             if "data_validity" in cached_data_for_decision:
@@ -356,13 +376,28 @@ class UnifiedPriceManager:
                 return await self._process_result(data_copy, is_cached=True)
             else:
                 # No cache available - this can happen when:
-                # 1. Rate-limited with no current interval data
+                # 1. Rate-limited with no current interval data (common after config reload/HA restart)
                 # 2. Parser/source change invalidated cache
                 # 3. First run or cache cleared
-                _LOGGER.error(
-                    f"Fetch skipped for {self.area} but no cached data available. "
-                    f"Reason: {fetch_reason}"
-                )
+
+                # Check if this is shortly after coordinator creation (config reload/HA restart)
+                time_since_creation = now - self._coordinator_created_at
+                grace_period = timedelta(minutes=5)  # 5 minute grace period after reload
+
+                if time_since_creation < grace_period and "rate limited" in fetch_reason.lower():
+                    # Rate limiting after recent reload - this is expected, log as INFO
+                    minutes_until_fetch = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+                    _LOGGER.info(
+                        f"[{self.area}] Data will update within {minutes_until_fetch} minutes "
+                        f"(rate limit protection active after configuration reload). "
+                        f"Reason: {fetch_reason}"
+                    )
+                else:
+                    # Unexpected situation - log as ERROR
+                    _LOGGER.error(
+                        f"Fetch skipped for {self.area} but no cached data available. "
+                        f"Reason: {fetch_reason}"
+                    )
                 return await self._generate_empty_result(error=f"No cache and no fetch: {fetch_reason}")
 
 
@@ -415,6 +450,32 @@ class UnifiedPriceManager:
             # Prepare API instances - pass necessary context
             # Ensure session is created correctly
             session = async_get_clientsession(self.hass)
+
+            # Filter out recently failed sources (within last 24 hours)
+            # Unless force=True, which bypasses the 24h filter
+            enabled_api_classes = []
+            for cls in self._api_classes:
+                source_name = cls(config={}).source_type
+                last_failure = self._failed_sources.get(source_name)
+
+                # Skip sources that failed recently (within 24 hours), unless forced
+                if not force and last_failure and (now - last_failure).total_seconds() < 86400:
+                    continue
+
+                enabled_api_classes.append(cls)
+
+            # Log if any sources are skipped
+            if len(enabled_api_classes) < len(self._api_classes):
+                disabled_count = len(self._api_classes) - len(enabled_api_classes)
+                disabled_names = [
+                    cls(config={}).source_type for cls in self._api_classes
+                    if cls not in enabled_api_classes
+                ]
+                _LOGGER.info(
+                    f"[{self.area}] Skipping {disabled_count} recently failed source(s): {', '.join(disabled_names)} "
+                    f"(will retry during daily window)"
+                )
+
             api_instances = [
                 cls(
                     config=self.config,
@@ -422,7 +483,7 @@ class UnifiedPriceManager:
                     timezone_service=self._tz_service,
                     # Pass other context if needed by base class or specific APIs
                     # hass=self.hass, # Example if HASS instance is needed
-                ) for cls in self._api_classes
+                ) for cls in enabled_api_classes
             ]
 
             if not api_instances:
@@ -442,13 +503,11 @@ class UnifiedPriceManager:
                 return await self._generate_empty_result(error="No API sources configured")
 
             # Fetch with fallback using the new manager
-            result = await self._fallback_manager.fetch_with_fallbacks(
-                apis=api_instances,
+            result = await self._fallback_manager.fetch_with_fallback(
+                api_instances=api_instances,
                 area=self.area,
-                currency=self.currency, # Pass target currency (conversion handled later)
                 reference_time=now,
-                hass=self.hass, # Pass hass if needed by APIs
-                session=session, # Pass session
+                session=session,
             )
 
             # --- DEBUG LOGGING START ---
@@ -472,7 +531,7 @@ class UnifiedPriceManager:
                 has_today = processed_data and processed_data.get("interval_prices")
                 has_tomorrow = processed_data and processed_data.get("tomorrow_interval_prices")
                 has_valid_data = has_today or has_tomorrow
-                
+
                 if processed_data and has_valid_data and "error" not in processed_data:
                     _LOGGER.info(f"[{self.area}] Successfully processed data. Today: {len(processed_data.get('interval_prices', {}))}, Tomorrow: {len(processed_data.get('tomorrow_interval_prices', {}))}")
                     self._consecutive_failures = 0
@@ -482,12 +541,12 @@ class UnifiedPriceManager:
                     self._using_cached_data = False
                     processed_data["using_cached_data"] = False
 
-                    # Track source validation
+                    # Track source as successful (clear any failure timestamp)
                     validated_source = self._active_source
                     if validated_source and validated_source not in ("unknown", "None", None):
-                        if validated_source not in self._validated_sources:
-                            self._validated_sources.add(validated_source)
-                            _LOGGER.info(f"[{self.area}] Source '{validated_source}' validated")
+                        # Clear failure timestamp (None = source is working)
+                        self._failed_sources[validated_source] = None
+                        _LOGGER.debug(f"[{self.area}] Source '{validated_source}' marked as working")
 
                     # Cache the successfully processed data
                     self._cache_manager.store(
@@ -516,6 +575,28 @@ class UnifiedPriceManager:
             self._attempted_sources = result.get("attempted_sources", []) if result else []
             self._active_source = "None"
             self._fallback_sources = self._attempted_sources # All attempted sources failed or processing failed
+
+            # Implicit validation: Mark all attempted sources as failed and schedule daily retry
+            if self._attempted_sources:
+                _LOGGER.info(
+                    f"[{self.area}] Marking {len(self._attempted_sources)} failed source(s): "
+                    f"{', '.join(self._attempted_sources)}"
+                )
+                for source_name in self._attempted_sources:
+                    # Mark source as failed with current timestamp
+                    self._failed_sources[source_name] = now
+
+                    # Schedule daily retry if not already scheduled
+                    if source_name not in self._retry_scheduled:
+                        _LOGGER.info(f"[{self.area}] Scheduling daily retry for '{source_name}'")
+                        # Find the API class for this source
+                        for cls in self._api_classes:
+                            if cls(config={}).source_type == source_name:
+                                asyncio.create_task(
+                                    self._schedule_daily_retry(source_name, cls)
+                                )
+                                self._retry_scheduled.add(source_name)
+                                break
 
             # Try to use cached data as a last resort - specify today's date
             cached_data = self._cache_manager.get_data(
@@ -760,7 +841,21 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
             if not data.get("has_data"):
                  # Log specific error if available
                  error_msg = data.get("error", "No data returned from price manager or data marked as invalid")
-                 _LOGGER.warning("Update failed for area %s: %s", self.area, error_msg)
+
+                 # Check if this is a rate limit situation shortly after coordinator creation
+                 time_since_creation = datetime.now(tz=dt_util.UTC) - self.price_manager._coordinator_created_at
+                 grace_period = timedelta(minutes=5)
+
+                 if time_since_creation < grace_period and "rate limited" in error_msg.lower():
+                     # Rate limiting after recent reload - log as DEBUG, not WARNING
+                     _LOGGER.debug(
+                         "Update pending for area %s: %s (rate limit protection after reload)",
+                         self.area, error_msg
+                     )
+                 else:
+                     # Unexpected situation - log as WARNING
+                     _LOGGER.warning("Update failed for area %s: %s", self.area, error_msg)
+
                  # Return the empty/error data structure from the manager
                  return data
             # Data is valid

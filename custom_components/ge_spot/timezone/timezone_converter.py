@@ -161,7 +161,7 @@ class TimezoneConverter:
 
         # Check if keys have date information (like '2025-04-29 10:00')
         has_date_in_keys = any(" " in key for key in normalized_prices.keys())
-        
+
         _LOGGER.debug(f"split_into_today_tomorrow: Received {len(normalized_prices)} normalized prices. has_date_in_keys={has_date_in_keys}. Sample keys: {list(normalized_prices.keys())[:5]}")
 
         if has_date_in_keys:

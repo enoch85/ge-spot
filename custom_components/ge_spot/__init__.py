@@ -1,6 +1,6 @@
 """Integration for electricity spot prices."""
 import logging
-from datetime import timedelta
+from datetime import date, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -15,6 +15,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 from .const.config import Config
 from .const.defaults import Defaults
 from .const.network import Network
+from .const.sources import Source, SourceInfo
 from .coordinator import UnifiedPriceCoordinator  # Import only the new coordinator
 from .api.base.session_manager import register_shutdown_task
 from .utils.exchange_service import get_exchange_service
@@ -59,14 +60,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass, area, currency, timedelta(minutes=update_interval), config
     )
 
-    # Validate configured sources (one-time, non-blocking)
-    try:
-        await coordinator.price_manager.validate_configured_sources_once()
-    except Exception as e:
-        _LOGGER.warning(f"Initial source validation error (non-critical): {e}")
-
     register_shutdown_task(hass)
-    await coordinator.async_config_entry_first_refresh()
+
+    # Always run first_refresh to ensure sensors have data before creation
+    # fetch_data() will validate sources implicitly and use fallback if needed
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception as e:
+        _LOGGER.error(
+            f"First refresh failed for {area}: {e}. "
+            f"Sensor will be unavailable until next update cycle."
+        )
+        # Don't block HA boot - coordinator will retry on next interval
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator

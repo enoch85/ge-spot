@@ -6,7 +6,6 @@ from typing import Any, Dict, Optional, List, Tuple
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from ..price import ElectricityPriceAdapter
 from ..utils.exchange_service import get_exchange_service, ExchangeRateService
 from ..timezone.source_tz import get_source_timezone
 from ..const.config import Config
@@ -326,7 +325,7 @@ class DataProcessor:
                 next_interval_key = self._tz_service.get_next_interval_key()
                 processed_result["current_interval_key"] = current_interval_key
                 processed_result["next_interval_key"] = next_interval_key
-                
+
                 # Use parser-provided current price if available (for real-time APIs like ComEd)
                 # Otherwise, look up the price for the current interval key
                 if not is_cached_data and 'parser_current_price' in locals() and parser_current_price is not None:
@@ -337,13 +336,13 @@ class DataProcessor:
                     )
                 else:
                     processed_result["current_price"] = final_today_prices.get(current_interval_key)
-                
+
                 # Use parser-provided next price if available
                 if not is_cached_data and 'parser_next_price' in locals() and parser_next_price is not None:
                     processed_result["next_interval_price"] = parser_next_price
                 else:
                     processed_result["next_interval_price"] = final_today_prices.get(next_interval_key)
-                
+
                 # Fallback for interval-based pricing when current interval doesn't exist yet
                 # This handles cases where we have interval data but the current interval is incomplete
                 if processed_result["current_price"] is None and source_name == Source.COMED:
@@ -424,12 +423,12 @@ class DataProcessor:
         try:
             from .data_validity import calculate_data_validity
             from homeassistant.util import dt as dt_util
-            
+
             now = dt_util.now()
             current_interval_key = processed_result.get("current_interval_key") or self._tz_service.get_current_interval_key()
             # The interval_prices keys are already in target_timezone, so use that for validity timestamps
             target_timezone = str(self._tz_service.target_timezone)
-            
+
             validity = calculate_data_validity(
                 interval_prices=processed_result["interval_prices"],
                 tomorrow_interval_prices=processed_result["tomorrow_interval_prices"],
@@ -437,10 +436,10 @@ class DataProcessor:
                 current_interval_key=current_interval_key,
                 target_timezone=target_timezone  # Keys are in this timezone
             )
-            
+
             processed_result["data_validity"] = validity.to_dict()
             _LOGGER.info(f"Data validity for {self.area}: {validity}")
-            
+
         except Exception as e:
             _LOGGER.error(f"Error calculating data validity for {self.area}: {e}", exc_info=True)
             # Add empty validity on error
@@ -487,10 +486,10 @@ class DataProcessor:
 
     def _calculate_statistics(self, interval_prices: Dict[str, float], day_offset: int = 0) -> PriceStatistics:
         """Calculate price statistics from a dictionary of interval prices (HH:MM keys).
-        
+
         Also calculates timestamps for min/max values by finding the interval key with those values.
         The timestamps are derived from the specified day (today + day_offset) in the HA timezone.
-        
+
         Args:
             interval_prices: Dictionary of interval prices with HH:MM keys
             day_offset: Number of days offset from today (0=today, 1=tomorrow)
@@ -507,12 +506,12 @@ class DataProcessor:
         # Get the first occurrence of min/max values
         min_timestamp = None
         max_timestamp = None
-        
+
         # Get the target date based on day_offset
         from homeassistant.util import dt as dt_util
         now = dt_util.now()
         target_date = (now + timedelta(days=day_offset)).date()
-        
+
         for interval_key, price in interval_prices.items():
             if price == min_price and min_timestamp is None:
                 # Convert HH:MM key to full timestamp using target date
@@ -535,7 +534,7 @@ class DataProcessor:
                     min_timestamp = timestamp_dt.isoformat()
                 except (ValueError, AttributeError) as e:
                     _LOGGER.warning(f"Failed to convert interval key '{interval_key}' to timestamp: {e}")
-                    
+
             if price == max_price and max_timestamp is None:
                 # Convert HH:MM key to full timestamp using target date
                 try:
@@ -557,7 +556,7 @@ class DataProcessor:
                     max_timestamp = timestamp_dt.isoformat()
                 except (ValueError, AttributeError) as e:
                     _LOGGER.warning(f"Failed to convert interval key '{interval_key}' to timestamp: {e}")
-                    
+
             # Stop if we found both
             if min_timestamp and max_timestamp:
                 break

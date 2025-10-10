@@ -1,6 +1,6 @@
 """Price parsers for different API sources."""
 from .nordpool_parser import NordpoolPriceParser
-from .entsoe_parser import EntsoePriceParser
+from .entsoe_parser import EntsoeParser
 from .aemo_parser import AemoParser
 from .energi_data_parser import EnergiDataParser
 from .energy_charts_parser import EnergyChartsParser
@@ -22,7 +22,7 @@ def get_parser_for_source(source_type: str, timezone_service=None):
     """
     parsers = {
         Source.NORDPOOL: NordpoolPriceParser,
-        Source.ENTSOE: EntsoePriceParser,
+        Source.ENTSOE: EntsoeParser,
         Source.AEMO: AemoParser,
         Source.ENERGI_DATA_SERVICE: EnergiDataParser,
         Source.ENERGY_CHARTS: EnergyChartsParser,
@@ -41,7 +41,7 @@ def get_parser_for_source(source_type: str, timezone_service=None):
 
 __all__ = [
     "NordpoolPriceParser",
-    "EntsoePriceParser",
+    "EntsoeParser",
     "AemoParser",
     "EnergiDataParser",
     "EnergyChartsParser",

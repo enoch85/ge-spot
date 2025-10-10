@@ -64,8 +64,8 @@ class OmieAPI(BasePriceAPI):
 
         response_text = await client.fetch(
             url,
-            timeout=Network.Defaults.TIMEOUT,
-            encoding='iso-8859-1',
+            timeout=Network.Defaults.HTTP_TIMEOUT,
+            encoding='iso-8859-1',  # OMIE uses ISO-8859-1 encoding for Spanish text
             response_format='text'
         )
 

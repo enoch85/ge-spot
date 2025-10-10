@@ -308,7 +308,7 @@ class TimezoneProvider:
             List of interval start datetimes
         """
         from ..const.time import TimeInterval
-        
+
         # Get start of day
         day_start = self.get_day_start(dt)
 

@@ -138,23 +138,23 @@ class BaseElectricityPriceSensor(SensorEntity):
             if isinstance(validity_dict, dict):
                 # Add data validity info for monitoring
                 data_validity_info = {}
-                
+
                 if validity_dict.get("data_valid_until"):
                     data_validity_info["data_valid_until"] = validity_dict["data_valid_until"]
-                
+
                 if validity_dict.get("last_valid_interval"):
                     data_validity_info["last_valid_interval"] = validity_dict["last_valid_interval"]
-                
+
                 data_validity_info["interval_count"] = validity_dict.get("interval_count", 0)
                 data_validity_info["today_intervals"] = validity_dict.get("today_interval_count", 0)
                 data_validity_info["tomorrow_intervals"] = validity_dict.get("tomorrow_interval_count", 0)
                 data_validity_info["has_current_interval"] = validity_dict.get("has_current_interval", False)
-                
+
                 # Calculate intervals remaining (if we have validity data)
                 if validity_dict.get("data_valid_until"):
                     from homeassistant.util import dt as dt_util
                     from ..coordinator.data_validity import DataValidity
-                    
+
                     try:
                         # Reconstruct DataValidity to calculate intervals_remaining
                         validity = DataValidity.from_dict(validity_dict)
@@ -163,7 +163,7 @@ class BaseElectricityPriceSensor(SensorEntity):
                         data_validity_info["intervals_remaining"] = intervals_remaining
                     except Exception as e:
                         _LOGGER.warning(f"Failed to calculate intervals_remaining: {e}")
-                
+
                 attrs["data_validity"] = data_validity_info
 
         # Add interval prices if available, rounding float values
