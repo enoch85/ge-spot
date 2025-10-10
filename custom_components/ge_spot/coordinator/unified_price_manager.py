@@ -92,8 +92,9 @@ class UnifiedPriceManager:
         # Track failed sources for implicit validation
         # Dict[str, datetime] - Maps source name to last failure time (None = never failed or succeeded after failure)
         self._failed_sources = {}
-        # Set[str] - Sources with scheduled daily retry tasks
-        self._retry_scheduled = set()
+        # Single flag for health check task (replaces per-source retry tracking)
+        self._health_check_scheduled = False
+        self._last_health_check = None  # datetime of last health check
 
         # Services and utilities
         self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
@@ -204,6 +205,58 @@ class UnifiedPriceManager:
         disabled = self.get_disabled_sources()
         return sorted([s for s in all_sources if s not in disabled])
 
+    def get_failed_source_details(self) -> List[Dict[str, Any]]:
+        """Get detailed information about failed sources.
+        
+        Returns:
+            List of dicts with source name, failure time, and retry time
+        """
+        failed_details = []
+        now = dt_util.now()
+        
+        for source_name, failure_time in self._failed_sources.items():
+            if failure_time is not None:  # Source has failed
+                # Calculate next health check time
+                next_check = self._calculate_next_health_check(now)
+                
+                failed_details.append({
+                    "source": source_name,
+                    "failed_at": failure_time.isoformat(),
+                    "retry_at": next_check.isoformat() if next_check else None,
+                })
+        
+        return sorted(failed_details, key=lambda x: x["source"])
+
+    def _calculate_next_health_check(self, from_time: datetime) -> Optional[datetime]:
+        """Calculate when the next health check will occur.
+        
+        Returns the start of the next special hour window.
+        """
+        current_hour = from_time.hour
+        today = from_time.date()
+        
+        # Check windows for today
+        for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS:
+            if current_hour < start:
+                # Haven't reached this window yet today
+                return from_time.replace(hour=start, minute=0, second=0, microsecond=0)
+        
+        # All windows passed for today, use first window tomorrow
+        if Network.Defaults.SPECIAL_HOUR_WINDOWS:
+            first_window_start = Network.Defaults.SPECIAL_HOUR_WINDOWS[0][0]
+            tomorrow = today + timedelta(days=1)
+            return from_time.replace(
+                year=tomorrow.year,
+                month=tomorrow.month,
+                day=tomorrow.day,
+                hour=first_window_start,
+                minute=0,
+                second=0,
+                microsecond=0
+            )
+        
+        return None
+
     async def _ensure_exchange_service(self):
         """Ensure the exchange service is initialized."""
         if self._exchange_service is None:
@@ -216,73 +269,127 @@ class UnifiedPriceManager:
             else:
                  _LOGGER.warning("DataProcessor does not have _exchange_service attribute to set.")
 
-    async def _schedule_daily_retry(self, source_name: str, api_class: Type[BasePriceAPI]):
-        """Schedule daily retry for a failed source during special hours.
-
-        Retries once per day during configured windows (e.g., 13:00-15:00).
-        Uses same exponential backoff as normal fetch via FallbackManager.
-
-        Args:
-            source_name: Name of the source to retry
-            api_class: API class to retry
+    async def _schedule_health_check(self):
+        """Schedule daily health check for ALL sources during special hours.
+        
+        Validates all configured sources once per day during special hour windows.
+        Uses FallbackManager's exponential backoff for each source independently.
         """
         import random
-
-        last_retry = None
-
+        
+        last_check_date = None
+        
         while True:
             now = dt_util.now()
             current_hour = now.hour
             today_date = now.date()
-
+            
             # Check if we're in a special hour window
             in_special_hours = any(
                 start <= current_hour < end
                 for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS
             )
-
-            # Only retry once per day
-            should_retry = (
+            
+            # Only check once per day
+            should_check = (
                 in_special_hours and
-                (last_retry is None or last_retry.date() < today_date)
+                (last_check_date is None or last_check_date < today_date)
             )
-
-            if should_retry:
+            
+            if should_check:
                 # Random delay within current hour to spread load
-                from ..const.time import ValidationRetry
                 delay_seconds = random.randint(0, ValidationRetry.MAX_RANDOM_DELAY_SECONDS)
                 _LOGGER.info(
-                    f"[{self.area}] Daily retry for '{source_name}' in {delay_seconds}s"
+                    f"[{self.area}] Daily health check starting in {delay_seconds}s "
+                    f"(validating {len(self._api_classes)} sources)"
                 )
                 await asyncio.sleep(delay_seconds)
-
-                # Trigger a forced fetch (will try this source again)
-                try:
-                    result = await self.fetch_data(force=True)
-
-                    # Check if this specific source succeeded
-                    if result and result.get("data_source") == source_name:
-                        _LOGGER.info(
-                            f"[{self.area}] ✓ '{source_name}' daily retry successful - "
-                            f"source re-enabled"
-                        )
-                        self._retry_scheduled.discard(source_name)
-                        return  # Success, stop retrying
-                    else:
-                        _LOGGER.debug(
-                            f"[{self.area}] '{source_name}' daily retry failed, "
-                            f"will try again tomorrow"
-                        )
-
-                except Exception as e:
-                    _LOGGER.warning(
-                        f"[{self.area}] Error during '{source_name}' daily retry: {e}"
-                    )
-
-                last_retry = now
-
-            # Sleep until next check (1 hour)
+                
+                # Validate ALL sources
+                await self._validate_all_sources()
+                
+                last_check_date = now.date()
+                self._last_health_check = now
+            
+            # Sleep 1 hour and check again (will naturally land in window tomorrow)
             await asyncio.sleep(3600)
+
+    async def _validate_all_sources(self):
+        """Validate ALL configured sources independently.
+        
+        Unlike normal fetch (stops at first success), this tries EVERY source
+        to get complete health status. Each source is tested with exponential
+        backoff (2s → 6s → 18s) via FallbackManager logic.
+        """
+        now = dt_util.now()
+        results = {
+            "validated": [],
+            "failed": []
+        }
+        
+        _LOGGER.info(f"[{self.area}] Starting health check for {len(self._api_classes)} sources")
+        
+        for api_class in self._api_classes:
+            source_name = api_class(config={}).source_type
+            
+            try:
+                # Create API instance
+                api_kwargs = {
+                    "area": self.area,
+                    "currency": self.currency,
+                    "config": self.config,
+                }
+                api_instance = api_class(**api_kwargs)
+                
+                # Try fetching with FallbackManager's exponential backoff
+                # Pass single source to FallbackManager
+                result = await self._fallback_manager.fetch_with_fallback(
+                    api_instances=[api_instance],
+                    area=self.area,
+                    reference_time=now,
+                    session=async_get_clientsession(self.hass)
+                )
+                
+                # Check if source returned valid data
+                if result and result.get("raw_data"):
+                    # Success - clear failure timestamp
+                    self._failed_sources[source_name] = None
+                    results["validated"].append(source_name)
+                    _LOGGER.info(f"[{self.area}] Health check: '{source_name}' ✓ validated")
+                else:
+                    # No data - mark as failed
+                    self._failed_sources[source_name] = now
+                    results["failed"].append(source_name)
+                    
+                    # Count validated sources for user context
+                    validated_count = len([s for s in self._failed_sources.values() if s is None])
+                    _LOGGER.warning(
+                        f"[{self.area}] Health check: '{source_name}' ✗ no data returned. "
+                        f"Will retry during next daily health check. "
+                        f"({validated_count} other source(s) available)"
+                    )
+                    
+            except Exception as e:
+                # Error - mark as failed
+                self._failed_sources[source_name] = now
+                results["failed"].append(source_name)
+                
+                # Count validated sources for user context
+                validated_count = len([s for s in self._failed_sources.values() if s is None])
+                _LOGGER.warning(
+                    f"[{self.area}] Health check: '{source_name}' ✗ failed: {e}. "
+                    f"Will retry during next daily health check. "
+                    f"({validated_count} other source(s) available)",
+                    exc_info=True
+                )
+        
+        # Log summary
+        _LOGGER.info(
+            f"[{self.area}] Health check complete: "
+            f"{len(results['validated'])} validated, {len(results['failed'])} failed. "
+            f"Validated: {', '.join(results['validated']) or 'none'}. "
+            f"Failed: {', '.join(results['failed']) or 'none'}"
+        )
 
     async def fetch_data(self, force: bool = False) -> Dict[str, Any]:
         """Fetch price data with implicit source validation.
@@ -570,7 +677,7 @@ class UnifiedPriceManager:
             self._active_source = "None"
             self._fallback_sources = self._attempted_sources # All attempted sources failed or processing failed
 
-            # Implicit validation: Mark all attempted sources as failed and schedule daily retry
+            # Mark attempted sources as failed
             if self._attempted_sources:
                 _LOGGER.info(
                     f"[{self.area}] Marking {len(self._attempted_sources)} failed source(s): "
@@ -579,18 +686,15 @@ class UnifiedPriceManager:
                 for source_name in self._attempted_sources:
                     # Mark source as failed with current timestamp
                     self._failed_sources[source_name] = now
-
-                    # Schedule daily retry if not already scheduled
-                    if source_name not in self._retry_scheduled:
-                        _LOGGER.info(f"[{self.area}] Scheduling daily retry for '{source_name}'")
-                        # Find the API class for this source
-                        for cls in self._api_classes:
-                            if cls(config={}).source_type == source_name:
-                                asyncio.create_task(
-                                    self._schedule_daily_retry(source_name, cls)
-                                )
-                                self._retry_scheduled.add(source_name)
-                                break
+                
+                # Schedule health check task (once) if not already running
+                if not self._health_check_scheduled:
+                    _LOGGER.info(
+                        f"[{self.area}] Scheduling daily health check task "
+                        f"(will validate all {len(self._api_classes)} sources)"
+                    )
+                    asyncio.create_task(self._schedule_health_check())
+                    self._health_check_scheduled = True
 
             # Try to use cached data as a last resort - specify today's date
             cached_data = self._cache_manager.get_data(
@@ -686,6 +790,11 @@ class UnifiedPriceManager:
 
             # Add validated sources (what's been tested and working)
             processed_data["validated_sources"] = self.get_validated_sources()
+
+            # Add failed source details with timestamps
+            failed_source_details = self.get_failed_source_details()
+            if failed_source_details:
+                processed_data["failed_sources"] = failed_source_details
 
             return processed_data
         except Exception as proc_err:

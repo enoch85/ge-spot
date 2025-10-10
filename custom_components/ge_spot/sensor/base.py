@@ -106,6 +106,11 @@ class BaseElectricityPriceSensor(SensorEntity):
         if validated_sources:
             source_info["validated_sources"] = validated_sources
 
+        # Show failed sources with details
+        failed_sources = self.coordinator.data.get("failed_sources")
+        if failed_sources:
+            source_info["failed_sources"] = failed_sources
+
         # Show active source (what's currently used)
         active_source = self.coordinator.data.get("data_source")
         if active_source and active_source not in ("unknown", "None"):
