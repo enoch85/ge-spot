@@ -161,7 +161,7 @@ class EntsoeAPI(BasePriceAPI):
                         self.base_url,
                         params=params,
                         headers=headers,
-                        timeout=Network.Defaults.TIMEOUT
+                        timeout=Network.Defaults.HTTP_TIMEOUT
                     )
 
                     # --- Refined Error Handling ---
@@ -259,7 +259,7 @@ class EntsoeAPI(BasePriceAPI):
             }
 
             async def fetch_tomorrow():
-                return await client.fetch(self.base_url, params=params_tomorrow, headers=headers, timeout=Network.Defaults.TIMEOUT)
+                return await client.fetch(self.base_url, params=params_tomorrow, headers=headers, timeout=Network.Defaults.HTTP_TIMEOUT)
 
             def is_data_available(data):
                 # Check for non-empty string containing the success marker

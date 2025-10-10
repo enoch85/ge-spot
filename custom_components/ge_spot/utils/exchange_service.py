@@ -58,7 +58,7 @@ class ExchangeRateService:
 
         try:
             async with self.session.get(Network.URLs.ECB,
-                                      timeout=Network.Defaults.TIMEOUT) as response:
+                                      timeout=Network.Defaults.HTTP_TIMEOUT) as response:
                 if response.status != 200:
                     _LOGGER.error("Failed to fetch exchange rates: HTTP %s", response.status)
                     return None

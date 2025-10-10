@@ -452,13 +452,14 @@ class UnifiedPriceManager:
             session = async_get_clientsession(self.hass)
             
             # Filter out recently failed sources (within last 24 hours)
+            # Unless force=True, which bypasses the 24h filter
             enabled_api_classes = []
             for cls in self._api_classes:
                 source_name = cls(config={}).source_type
                 last_failure = self._failed_sources.get(source_name)
                 
-                # Skip sources that failed recently (within 24 hours)
-                if last_failure and (now - last_failure).total_seconds() < 86400:
+                # Skip sources that failed recently (within 24 hours), unless forced
+                if not force and last_failure and (now - last_failure).total_seconds() < 86400:
                     continue
                     
                 enabled_api_classes.append(cls)

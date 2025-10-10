@@ -138,7 +138,7 @@ class AemoAPI(BasePriceAPI):
             # Fetch directory HTML
             html = await client.fetch(
                 Aemo.NEMWEB_PREDISPATCH_URL,
-                timeout=Network.Defaults.TIMEOUT,
+                timeout=Network.Defaults.HTTP_TIMEOUT,
                 response_format='text'
             )
 
@@ -190,7 +190,7 @@ class AemoAPI(BasePriceAPI):
             Binary file content, or None if download fails
         """
         try:
-            timeout_obj = aiohttp.ClientTimeout(total=Network.Defaults.TIMEOUT * 2)
+            timeout_obj = aiohttp.ClientTimeout(total=Network.Defaults.HTTP_TIMEOUT * 2)
             
             if client.session:
                 # Use existing session

@@ -126,8 +126,8 @@ class StromligningAPI(BasePriceAPI):
             url = f"{self._get_base_url()}?priceArea={area}&supplier={supplier}"
             response = await client.fetch(
                 url,
-                timeout=Network.Defaults.TIMEOUT,
-                response_format='json'
+                headers=headers,
+                timeout=Network.Defaults.HTTP_TIMEOUT,
             )
 
             # Check for API-level errors reported in the JSON response

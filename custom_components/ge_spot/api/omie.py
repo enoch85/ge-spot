@@ -62,11 +62,9 @@ class OmieAPI(BasePriceAPI):
         )
         _LOGGER.debug(f"[OmieAPI] Attempting to fetch OMIE data from URL: {url}")
 
-        response_text = await client.fetch(
+        response = await client.fetch(
             url,
-            timeout=Network.Defaults.TIMEOUT,
-            encoding='iso-8859-1',
-            response_format='text'
+            timeout=Network.Defaults.HTTP_TIMEOUT,
         )
 
         if isinstance(response_text, dict) and response_text.get("error"):

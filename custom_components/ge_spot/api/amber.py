@@ -80,11 +80,10 @@ class AmberAPI(BasePriceAPI):
 
         try:
             # Fetch data from Amber API
-            data = await client.fetch(
+            response = await client.fetch(
                 url,
                 headers=headers,
-                timeout=Network.Defaults.TIMEOUT,
-                response_format='json'
+                timeout=Network.Defaults.HTTP_TIMEOUT,
             )
 
             if not data or not isinstance(data, list):
