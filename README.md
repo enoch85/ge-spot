@@ -142,9 +142,11 @@ After installation:
 ### Reliability Features
 
 - **Rate limiting** - Minimum 15-minute intervals 
-- **Automatic retries** - Exponential backoff for failed requests
+- **Automatic retries** - Exponential backoff for failed requests (2s → 6s → 18s)
 - **Data caching** - Persistent storage with TTL
 - **Source fallback** - Try all sources in priority order
+- **Daily health check** - All configured sources validated once per day during special windows
+- **Source health monitoring** - Track which sources are working vs failed, with retry schedules
 
 ## Architecture
 
@@ -345,6 +347,28 @@ Then set this sensor as your energy cost sensor in the Energy Dashboard settings
 - **Missing tomorrow prices** - Available after 13:00 CET daily
 - **96 data points** - Correct! 15-minute intervals = 96 per day
 
+**Source Health Monitoring:**
+
+Check sensor attributes for source health information:
+
+```yaml
+sensor.gespot_current_price_se4:
+  attributes:
+    source_info:
+      active_source: "nordpool"           # Currently used source
+      validated_sources:                   # Sources that are working
+        - "nordpool"
+        - "entsoe"
+      failed_sources:                      # Sources that failed (if any)
+        - source: "energy_charts"
+          failed_at: "2025-10-10T17:36:42+02:00"
+          retry_at: "2025-10-11T13:00:00+02:00"
+```
+
+- **validated_sources**: List of sources that have been tested and are working
+- **failed_sources**: List of sources that failed, with timestamps and retry schedule
+- **active_source**: The source currently providing data
+
 **Diagnostics:**
 - Check sensor attributes: `data_source`, `active_source`, `using_cached_data`
 - Review Home Assistant logs for `ge_spot` errors
@@ -510,9 +534,13 @@ flowchart TD
     API2 --> |"Failed"| MarkFailed2["Mark source 2 failed"]
     APIN --> |"Failed"| MarkFailedN["Mark source N failed"]
     
-    MarkFailed1 --> ScheduleRetry["Schedule Daily Retry<br/>(13:00-15:00)"]
-    MarkFailed2 --> ScheduleRetry
-    MarkFailedN --> ScheduleRetry
+    MarkFailed1 --> ScheduleHealthCheck["Schedule Daily Health Check<br/>(if not running)"]
+    MarkFailed2 --> ScheduleHealthCheck
+    MarkFailedN --> ScheduleHealthCheck
+    
+    ScheduleHealthCheck -.-> |"Special window<br/>(00:00-01:00 or 13:00-15:00)"| HealthCheck["Validate ALL sources<br/>(daily health check)"]
+    HealthCheck --> UpdateAllStatus["Update all source statuses"]
+    UpdateAllStatus -.-> FilterSources
     
     Parser1 --> ClearFailed["Clear failure status<br/>(timestamp = None)"]
     Parser2 --> ClearFailed
@@ -615,17 +643,23 @@ flowchart TD
         RLUpdate["update_last_fetch(source, area)"] --> StoreTime["Store current timestamp"]
     end
     
-    subgraph FailedSourceTracking["Failed Source Tracking (NEW in v1.3.3)"]
+    subgraph FailedSourceTracking["Source Health & Validation (v1.3.3+)"]
         direction TB
         FailedDict["self._failed_sources<br/>Dict[str, datetime | None]"] --> CheckStatus{"Check source status"}
-        CheckStatus --> |"timestamp = None"| SourceOK["Source working<br/>(include in fetch)"]
+        CheckStatus --> |"timestamp = None"| SourceOK["Source validated<br/>(include in fetch)"]
         CheckStatus --> |"timestamp exists"| CheckAge{"Age > 24 hours?"}
         CheckAge --> |"Yes"| SourceReady["Ready for retry<br/>(include in fetch)"]
         CheckAge --> |"No"| SourceDisabled["Source disabled<br/>(skip for now)"]
         
         OnSuccess["On API success"] --> ClearTimestamp["Set timestamp = None"]
         OnFailure["On API failure"] --> SetTimestamp["Set timestamp = now()"]
-        SetTimestamp --> ScheduleDailyRetry["Schedule daily retry<br/>(if not scheduled)"]
+        SetTimestamp --> ScheduleHealthCheck["Schedule daily health check<br/>(if not running)"]
+        
+        HealthCheckTask["Daily Health Check Task"] --> WaitWindow["Wait for special hour<br/>(00:00-01:00 or 13:00-15:00)"]
+        WaitWindow --> RandomDelay["Random delay 0-3600s<br/>(spread load)"]
+        RandomDelay --> ValidateAll["Validate ALL sources<br/>(not just failed)"]
+        ValidateAll --> UpdateStatus["Update all source statuses"]
+        UpdateStatus --> Sleep["Sleep 1 hour<br/>(repeat tomorrow)"]
     end
     
     subgraph Integration["Integration Flow"]

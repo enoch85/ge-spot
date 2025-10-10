@@ -329,17 +329,18 @@ class UnifiedPriceManager:
         
         _LOGGER.info(f"[{self.area}] Starting health check for {len(self._api_classes)} sources")
         
+        session = async_get_clientsession(self.hass)
+        
         for api_class in self._api_classes:
             source_name = api_class(config={}).source_type
             
             try:
-                # Create API instance
-                api_kwargs = {
-                    "area": self.area,
-                    "currency": self.currency,
-                    "config": self.config,
-                }
-                api_instance = api_class(**api_kwargs)
+                # Create API instance with correct parameters (same as normal fetch)
+                api_instance = api_class(
+                    config=self.config,
+                    session=session,
+                    timezone_service=self._tz_service,
+                )
                 
                 # Try fetching with FallbackManager's exponential backoff
                 # Pass single source to FallbackManager
@@ -347,7 +348,7 @@ class UnifiedPriceManager:
                     api_instances=[api_instance],
                     area=self.area,
                     reference_time=now,
-                    session=async_get_clientsession(self.hass)
+                    session=session
                 )
                 
                 # Check if source returned valid data

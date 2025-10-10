@@ -45,19 +45,20 @@ from custom_components.ge_spot.const.config import Config
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.const.time import TimeInterval
 
-# Helper function to cancel background retry tasks
-async def cancel_retry_tasks(manager):
-    """Cancel all background retry tasks to prevent lingering tasks in tests."""
+# Helper function to cancel background health check tasks
+async def cancel_health_check_tasks(manager):
+    """Cancel all background health check tasks to prevent lingering tasks in tests."""
     import asyncio
-    # Clear retry schedule
-    for source_name in list(manager._retry_scheduled):
-        manager._retry_scheduled.discard(source_name)
-    # Cancel all pending tasks with schedule_daily_retry
+    # Cancel all pending tasks with schedule_health_check
     for task in asyncio.all_tasks():
         if hasattr(task, 'get_coro'):
             coro_str = str(task.get_coro())
-            if '_schedule_daily_retry' in coro_str:
+            if '_schedule_health_check' in coro_str or '_validate_all_sources' in coro_str:
                 task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
                 try:
                     await task
                 except asyncio.CancelledError:
@@ -404,7 +405,7 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
         
         # Cleanup background tasks
-        await cancel_retry_tasks(manager)
+        await cancel_health_check_tasks(manager)
 
         # Assert
         mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallback should be called once"
@@ -455,7 +456,7 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
         
         # Cleanup background tasks
-        await cancel_retry_tasks(manager)
+        await cancel_health_check_tasks(manager)
 
         # Assert
         mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallback should be called once"
@@ -644,7 +645,7 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
         
         # Cleanup background tasks
-        await cancel_retry_tasks(manager)
+        await cancel_health_check_tasks(manager)
 
         # Assert
         # Fallback manager was called
@@ -885,7 +886,7 @@ class TestUnifiedPriceManager:
         assert manager._failed_sources[Source.NORDPOOL] is None, "Nordpool failure should be cleared on success"
         
         # Cleanup background tasks before finishing
-        await cancel_retry_tasks(manager)
+        await cancel_health_check_tasks(manager)
 
     @pytest.mark.asyncio
     async def test_daily_retry_window_success_and_failure(self, manager, auto_mock_core_dependencies, monkeypatch):
@@ -902,11 +903,11 @@ class TestUnifiedPriceManager:
         mock_now = auto_mock_core_dependencies["now"]
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
         
-        # Mock _schedule_daily_retry to avoid background task complications in tests
-        async def mock_schedule_retry(source_name: str, api_class):
-            pass  # No-op for testing - we're testing the 24h filter logic, not the retry scheduler
+        # Mock _schedule_health_check to avoid background task complications in tests
+        async def mock_schedule_health_check():
+            pass  # No-op for testing - we're testing the 24h filter logic, not the health check scheduler
         
-        monkeypatch.setattr(manager, "_schedule_daily_retry", mock_schedule_retry)
+        monkeypatch.setattr(manager, "_schedule_health_check", mock_schedule_health_check)
         
         # Clear the rate limiting state to start fresh
         from custom_components.ge_spot.coordinator.unified_price_manager import _LAST_FETCH_TIME
@@ -1071,3 +1072,152 @@ class TestUnifiedPriceManager:
         assert manager._consecutive_failures == 0, "Success resets counter even on forced fetch"
         assert manager._failed_sources[Source.NORDPOOL] is None, "Force fetch success clears failures"
         assert result_7.get("has_data") is True, "Data available on forced success"
+
+
+class TestHealthCheck:
+    """Test the daily health check functionality."""
+
+    @pytest.fixture
+    def manager(self, auto_mock_core_dependencies):
+        """Provides an initialized UnifiedPriceManager instance for tests."""
+        hass = MockHass()
+        config = {
+            Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
+            Config.API_KEY: "test_key",
+            Config.SOURCE_PRIORITY: [Source.NORDPOOL, Source.ENTSOE],
+            Config.VAT: Defaults.VAT_RATE,
+            Config.INCLUDE_VAT: Defaults.INCLUDE_VAT,
+        }
+        manager_instance = UnifiedPriceManager(
+            hass=hass,
+            area="SE1",
+            currency="SEK",
+            config=config,
+        )
+        manager_instance._exchange_service = auto_mock_core_dependencies["get_exchange_service"].return_value
+        if hasattr(manager_instance._data_processor, '_exchange_service'):
+            manager_instance._data_processor._exchange_service = manager_instance._exchange_service
+        return manager_instance
+
+    async def cancel_health_check_tasks(self):
+        """Cancel any lingering health check tasks."""
+        for task in asyncio.all_tasks():
+            if hasattr(task, 'get_coro'):
+                coro_str = str(task.get_coro())
+                if '_schedule_health_check' in coro_str or '_validate_all_sources' in coro_str:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+
+    @pytest.mark.asyncio
+    async def test_health_check_scheduled_on_failure(self, manager, auto_mock_core_dependencies):
+        """Test that health check task is scheduled when all sources fail."""
+        try:
+            # Arrange
+            mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
+            mock_fallback.return_value = MOCK_FAILURE_RESULT
+            auto_mock_core_dependencies["data_processor"].return_value.process.return_value = MOCK_EMPTY_PROCESSED_RESULT
+
+            # Act
+            await manager.fetch_data()
+
+            # Assert
+            assert manager._health_check_scheduled is True, "Health check should be scheduled after all sources fail"
+        finally:
+            # Cleanup
+            await self.cancel_health_check_tasks()
+
+    @pytest.mark.asyncio
+    async def test_health_check_only_scheduled_once(self, manager, auto_mock_core_dependencies):
+        """Test that health check task is not scheduled multiple times."""
+        try:
+            # Arrange
+            mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
+            mock_fallback.return_value = MOCK_FAILURE_RESULT
+            auto_mock_core_dependencies["data_processor"].return_value.process.return_value = MOCK_EMPTY_PROCESSED_RESULT
+
+            # Act - multiple failures
+            await manager.fetch_data()
+            first_scheduled = manager._health_check_scheduled
+
+            await manager.fetch_data()
+            await manager.fetch_data()
+
+            # Assert - flag set once
+            assert manager._health_check_scheduled is True, "Health check should be scheduled"
+            assert first_scheduled is True, "Health check scheduled on first failure"
+        finally:
+            # Cleanup
+            await self.cancel_health_check_tasks()
+
+    @pytest.mark.asyncio
+    async def test_validate_all_sources_success(self, manager, auto_mock_core_dependencies):
+        """Test _validate_all_sources marks all working sources as validated."""
+        # Arrange
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
+        mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+
+        # Mark sources as failed first
+        now = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
+        manager._failed_sources["nordpool"] = now
+        manager._failed_sources["entsoe"] = now
+
+        # Act
+        await manager._validate_all_sources()
+
+        # Assert - all sources cleared
+        assert manager._failed_sources["nordpool"] is None, "Nordpool should be cleared after successful validation"
+        assert manager._failed_sources["entsoe"] is None, "ENTSOE should be cleared after successful validation"
+
+    @pytest.mark.asyncio
+    async def test_validate_all_sources_partial_failure(self, manager, auto_mock_core_dependencies):
+        """Test _validate_all_sources handles mixed success/failure."""
+        # Arrange
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
+
+        # First source succeeds, second fails
+        mock_fallback.side_effect = [
+            {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}},  # nordpool success
+            MOCK_FAILURE_RESULT  # entsoe failure
+        ]
+
+        # Act
+        await manager._validate_all_sources()
+
+        # Assert
+        assert manager._failed_sources.get("nordpool") is None, "Nordpool should succeed"
+        assert manager._failed_sources.get("entsoe") is not None, "ENTSOE should fail"
+
+    def test_failed_source_details_format(self, manager):
+        """Test get_failed_source_details returns correct format."""
+        # Arrange
+        now = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
+        manager._failed_sources = {
+            "nordpool": None,  # Working
+            "energy_charts": now - timedelta(hours=2),  # Failed 2h ago
+        }
+
+        # Act
+        details = manager.get_failed_source_details()
+
+        # Assert
+        assert len(details) == 1, "Should have one failed source"
+        assert details[0]["source"] == "energy_charts", "Should be energy_charts"
+        assert "failed_at" in details[0], "Should have failed_at timestamp"
+        assert "retry_at" in details[0], "Should have retry_at timestamp"
+
+    def test_next_health_check_calculation(self, manager):
+        """Test _calculate_next_health_check returns correct next window."""
+        # Test at 12:00 - should return 13:00 (start of 13-15 window)
+        test_time = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
+        next_check = manager._calculate_next_health_check(test_time)
+        assert next_check.hour == 13, f"Should return 13:00, got {next_check.hour}:00"
+        assert next_check.date() == test_time.date(), "Should be same day"
+
+        # Test at 16:00 - should return next day 00:00 (first window)
+        test_time = datetime(2025, 4, 26, 16, 0, 0, tzinfo=timezone.utc)
+        next_check = manager._calculate_next_health_check(test_time)
+        assert next_check.hour == 0, f"Should return 00:00, got {next_check.hour}:00"
+        assert next_check.date() == test_time.date() + timedelta(days=1), "Should be next day"
