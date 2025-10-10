@@ -493,20 +493,32 @@ flowchart TD
     Coord --> UPM["UnifiedPriceManager"]
     
     UPM --> FetchDecision["FetchDecision"]
-    FetchDecision --> |"Rate limit OK"| FallbackMgr["FallbackManager"]
+    FetchDecision --> |"Should fetch"| FilterSources["Filter Failed Sources<br/>(24h timeout)"]
     FetchDecision --> |"Rate limited"| Cache["CacheManager.get()"]
     
-    FallbackMgr --> API1["API Client 1"]
-    FallbackMgr --> API2["API Client 2"] 
-    FallbackMgr --> APIN["API Client N"]
+    FilterSources --> FallbackMgr["FallbackManager<br/>(Exponential Backoff:<br/>2s → 6s → 18s)"]
     
-    API1 --> Parser1["Parser 1"]
-    API2 --> Parser2["Parser 2"]
-    APIN --> ParserN["Parser N"]
+    FallbackMgr --> |"Try source 1"| API1["API Client 1<br/>(attempt 1-3)"]
+    FallbackMgr --> |"Try source 2"| API2["API Client 2<br/>(attempt 1-3)"] 
+    FallbackMgr --> |"Try source N"| APIN["API Client N<br/>(attempt 1-3)"]
     
-    Parser1 --> RawData["Raw Standardized Data"]
-    Parser2 --> RawData
-    ParserN --> RawData
+    API1 --> |"Success"| Parser1["Parser 1"]
+    API2 --> |"Success"| Parser2["Parser 2"]
+    APIN --> |"Success"| ParserN["Parser N"]
+    
+    API1 --> |"Failed"| MarkFailed1["Mark source 1 failed<br/>(timestamp = now)"]
+    API2 --> |"Failed"| MarkFailed2["Mark source 2 failed"]
+    APIN --> |"Failed"| MarkFailedN["Mark source N failed"]
+    
+    MarkFailed1 --> ScheduleRetry["Schedule Daily Retry<br/>(13:00-15:00)"]
+    MarkFailed2 --> ScheduleRetry
+    MarkFailedN --> ScheduleRetry
+    
+    Parser1 --> ClearFailed["Clear failure status<br/>(timestamp = None)"]
+    Parser2 --> ClearFailed
+    ParserN --> ClearFailed
+    
+    ClearFailed --> RawData["Raw Standardized Data"]
     
     RawData --> DataProcessor["DataProcessor"]
     
@@ -523,27 +535,54 @@ flowchart TD
     Cache --> |"Cache hit"| Sensors
     Cache --> |"Cache miss"| EmptyResult["Empty Result"]
     EmptyResult --> Sensors
+    
+    ScheduleRetry -.-> |"Next day<br/>13:00-15:00"| FilterSources
 ```
 
 ### 2. Fetch Decision Logic
 
 ```mermaid
 flowchart TD
-    Start["Coordinator Update Trigger"] --> RateCheck{"Rate Limit Check"}
+    Start["Coordinator Update Trigger"] --> RateCheck{"Rate Limit Check<br/>(15 min minimum)"}
     
     RateCheck --> |"< 15 min since last fetch"| UseCache["Use Cached Data"]
     RateCheck --> |"≥ 15 min since last fetch"| TimeCheck{"Time-based Logic"}
     
-    TimeCheck --> |"12:30-14:30 CET"| HighFreq["High Frequency Mode"]
+    TimeCheck --> |"12:30-14:30 CET"| HighFreq["High Frequency Mode<br/>(Tomorrow data available)"]
     TimeCheck --> |"Other times"| NormalFreq["Normal Frequency Mode"]
     
-    HighFreq --> |"Every 15 min"| FetchData["Attempt Data Fetch"]
-    NormalFreq --> |"Every 30-60 min"| FetchData
+    HighFreq --> |"Every 15 min"| FilterSources["Filter Sources"]
+    NormalFreq --> |"Every 30-60 min"| FilterSources
     
-    FetchData --> FallbackMgr["FallbackManager"]
-    FallbackMgr --> |"Success"| ProcessData["Process & Cache"]
-    FallbackMgr --> |"All sources failed"| UseCache
+    FilterSources --> CheckFailed{"Check Failed Sources"}
+    CheckFailed --> |"Source failed < 24h ago"| SkipSource["Skip Source<br/>(use next in priority)"]
+    CheckFailed --> |"Source OK or > 24h"| IncludeSource["Include Source"]
     
+    SkipSource --> MoreSources{"More sources?"}
+    IncludeSource --> MoreSources
+    
+    MoreSources --> |"Yes"| CheckFailed
+    MoreSources --> |"No sources available"| UseCache
+    MoreSources --> |"Has available sources"| FetchData["Attempt Data Fetch"]
+    
+    FetchData --> FallbackMgr["FallbackManager<br/>(Exponential Backoff)"]
+    
+    FallbackMgr --> AttemptAPI["Try API Call"]
+    AttemptAPI --> Attempt1{"Attempt 1<br/>(timeout: 2s)"}
+    Attempt1 --> |"Success"| MarkSuccess["Clear failure status<br/>(timestamp = None)"]
+    Attempt1 --> |"Timeout/Error"| Attempt2{"Attempt 2<br/>(timeout: 6s)"}
+    Attempt2 --> |"Success"| MarkSuccess
+    Attempt2 --> |"Timeout/Error"| Attempt3{"Attempt 3<br/>(timeout: 18s)"}
+    Attempt3 --> |"Success"| MarkSuccess
+    Attempt3 --> |"Timeout/Error"| SourceFailed["Mark Source Failed<br/>(timestamp = now)"]
+    
+    SourceFailed --> DailyRetry["Schedule Daily Retry<br/>(13:00-15:00)"]
+    DailyRetry --> TryNext["Try Next Source"]
+    
+    TryNext --> |"More sources"| AttemptAPI
+    TryNext --> |"All failed"| UseCache
+    
+    MarkSuccess --> ProcessData["Process & Cache"]
     ProcessData --> UpdateSensors["Update Sensors"]
     UseCache --> UpdateSensors
     
@@ -557,7 +596,7 @@ flowchart TD
     subgraph CacheManager["Cache Manager"]
         direction TB
         CacheGet["get(key)"] --> CacheCheck{"Cache exists & valid?"}
-        CacheCheck --> |"Yes"| CacheHit["Return cached data"]
+        CacheCheck --> |"Yes"| CacheHit["Return cached data<br/>(deep copy to prevent mutation)"]
         CacheCheck --> |"No"| CacheMiss["Return None"]
         
         CacheStore["store(key, data, ttl)"] --> Serialize["Serialize data"]
@@ -570,18 +609,34 @@ flowchart TD
     subgraph RateLimiter["Rate Limiter"]
         direction TB
         RLCheck["check_rate_limit(source, area)"] --> LastFetch{"Last fetch time"}
-        LastFetch --> |"< 15 min ago"| Blocked["Rate Limited"]
+        LastFetch --> |"< 15 min ago"| Blocked["Rate Limited<br/>(use cache)"]
         LastFetch --> |"≥ 15 min ago"| Allowed["Fetch Allowed"]
         
         RLUpdate["update_last_fetch(source, area)"] --> StoreTime["Store current timestamp"]
     end
     
+    subgraph FailedSourceTracking["Failed Source Tracking (NEW in v1.3.3)"]
+        direction TB
+        FailedDict["self._failed_sources<br/>Dict[str, datetime | None]"] --> CheckStatus{"Check source status"}
+        CheckStatus --> |"timestamp = None"| SourceOK["Source working<br/>(include in fetch)"]
+        CheckStatus --> |"timestamp exists"| CheckAge{"Age > 24 hours?"}
+        CheckAge --> |"Yes"| SourceReady["Ready for retry<br/>(include in fetch)"]
+        CheckAge --> |"No"| SourceDisabled["Source disabled<br/>(skip for now)"]
+        
+        OnSuccess["On API success"] --> ClearTimestamp["Set timestamp = None"]
+        OnFailure["On API failure"] --> SetTimestamp["Set timestamp = now()"]
+        SetTimestamp --> ScheduleDailyRetry["Schedule daily retry<br/>(if not scheduled)"]
+    end
+    
     subgraph Integration["Integration Flow"]
         FetchRequest["Fetch Request"] --> RLCheck
         Blocked --> CacheGet
-        Allowed --> APICall["API Call"]
-        APICall --> |"Success"| CacheStore
-        APICall --> |"Failure"| CacheGet
+        Allowed --> FilterDisabled["Filter disabled sources<br/>(< 24h since failure)"]
+        FilterDisabled --> APICall["API Call with<br/>Exponential Backoff"]
+        APICall --> |"Success"| OnSuccess
+        APICall --> |"Failure (all attempts)"| OnFailure
+        OnSuccess --> CacheStore
+        OnFailure --> CacheGet
         RLUpdate --> CacheStore
     end
 ```
@@ -590,40 +645,70 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    FallbackStart["FallbackManager.fetch()"] --> GetSources["Get priority sources for area"]
-    GetSources --> SourceLoop{"More sources to try?"}
+    FallbackStart["FallbackManager.fetch_with_fallback()"] --> GetSources["Get priority sources for area"]
+    GetSources --> FilterFailed["Filter out failed sources<br/>(timestamp < 24h)"]
+    FilterFailed --> SourceLoop{"More sources to try?"}
     
     SourceLoop --> |"Yes"| NextSource["Get next source"]
-    SourceLoop --> |"No"| FallbackFail["All sources failed"]
+    SourceLoop --> |"No"| FallbackFail["All sources failed or disabled"]
     
     NextSource --> CreateAPI["Create API client"]
-    CreateAPI --> APIFetch["api.fetch_raw_data()"]
+    CreateAPI --> RetryLoop["Exponential Backoff Retry Loop"]
     
-    APIFetch --> |"Success"| ValidateData{"Data valid?"}
-    APIFetch --> |"Network Error"| LogError["Log error"]
-    APIFetch --> |"API Error"| LogError
-    APIFetch --> |"Timeout"| LogError
+    subgraph RetryLoop["Retry with Exponential Backoff"]
+        direction TB
+        Try1["Attempt 1: timeout=2s"] --> Check1{"Success?"}
+        Check1 --> |"Yes"| Success1["✓ Return data"]
+        Check1 --> |"No"| Try2["Attempt 2: timeout=6s"]
+        Try2 --> Check2{"Success?"}
+        Check2 --> |"Yes"| Success2["✓ Return data"]
+        Check2 --> |"No"| Try3["Attempt 3: timeout=18s"]
+        Try3 --> Check3{"Success?"}
+        Check3 --> |"Yes"| Success3["✓ Return data"]
+        Check3 --> |"No"| Failed["✗ Source failed"]
+    end
+    
+    Success1 --> ValidateData{"Data valid?"}
+    Success2 --> ValidateData
+    Success3 --> ValidateData
     
     ValidateData --> |"Valid"| ParseData["Parse with source parser"]
-    ValidateData --> |"Invalid"| LogError
+    ValidateData --> |"Invalid"| LogError["Log error"]
     
-    ParseData --> |"Success"| FallbackSuccess["Return parsed data"]
+    ParseData --> |"Success"| MarkWorking["Clear failure status<br/>(self._failed_sources[source] = None)"]
     ParseData --> |"Parse Error"| LogError
+    
+    MarkWorking --> FallbackSuccess["Return parsed data"]
+    
+    Failed --> MarkFailed["Mark source as failed<br/>(self._failed_sources[source] = now)"]
+    MarkFailed --> ScheduleRetry["Schedule daily retry task<br/>(if not already scheduled)"]
+    ScheduleRetry --> LogError
     
     LogError --> SourceLoop
     
     FallbackSuccess --> End["Success - data ready for processing"]
     FallbackFail --> End2["Failure - use cache or empty result"]
     
+    subgraph DailyRetry["Daily Retry Mechanism"]
+        direction TB
+        WaitWindow["Wait for special hour window<br/>(13:00-15:00)"] --> RandomDelay["Random delay (0-3600s)<br/>to spread load"]
+        RandomDelay --> ForceRetry["Force retry attempt<br/>(ignores 24h filter)"]
+        ForceRetry --> RetrySuccess{"Retry successful?"}
+        RetrySuccess --> |"Yes"| ClearFailure["Clear failure status"]
+        RetrySuccess --> |"No"| KeepFailed["Keep as failed<br/>(retry tomorrow)"]
+    end
+    
     subgraph SourcePriority["Source Priority Example"]
         direction TB
         SE4["SE4 (Sweden)"] --> |"1st"| Nordpool["Nord Pool"]
-        SE4 --> |"2nd"| ENTSOE["ENTSO-E"]
+        SE4 --> |"2nd"| EnergyCharts["Energy-Charts"]
+        SE4 --> |"3rd"| ENTSOE["ENTSO-E"]
         
         DK1["DK1 (Denmark)"] --> |"1st"| NordpoolDK["Nord Pool"]
-        DK1 --> |"2nd"| ENTSODK["ENTSO-E"] 
-        DK1 --> |"3rd"| EnergiData["Energi Data Service"]
-        DK1 --> |"4th"| Stromligning["Strømligning"]
+        DK1 --> |"2nd"| EnergyChartsDK["Energy-Charts"]
+        DK1 --> |"3rd"| ENTSODK["ENTSO-E"] 
+        DK1 --> |"4th"| EnergiData["Energi Data Service"]
+        DK1 --> |"5th"| Stromligning["Strømligning"]
     end
 ```
 

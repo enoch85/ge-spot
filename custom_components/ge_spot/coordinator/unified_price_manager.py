@@ -81,12 +81,6 @@ class UnifiedPriceManager:
             f"api_key={'PRESENT' if config.get(Config.API_KEY) or config.get('api_key') else 'MISSING'}"
         )
 
-        self.timezone_service = TimezoneService(
-            hass=hass,
-            area=area,
-            config=config
-        )
-
         # API sources and tracking
         self._supported_sources = get_sources_for_region(area)
         self._source_priority = config.get(Config.SOURCE_PRIORITY, Source.DEFAULT_PRIORITY)
