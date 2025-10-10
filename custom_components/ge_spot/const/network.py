@@ -4,12 +4,13 @@ class Network:
     """Network-related constants."""
     class Defaults:
         """Default network parameters."""
-        TIMEOUT = 30  # Standard timeout for reliable APIs (Nordpool, OMIE, ENTSO-E)
-        PARALLEL_FETCH_TIMEOUT = 30  # Timeout for parallel fetches
-        SLOW_SOURCE_TIMEOUT = 120  # Timeout for slow/unreliable sources (runs async in background)
-        SLOW_SOURCE_VALIDATION_WAIT = 5  # Max seconds to wait for slow source validation before proceeding
-        RETRY_COUNT = 3
-        RETRY_BASE_DELAY = 2.0
+        # Exponential backoff configuration for source retry
+        # Timeout progression: 2s → 6s → 18s (factor of 3)
+        # Total max time per source: 2s + 6s + 18s = 26 seconds
+        RETRY_BASE_TIMEOUT = 2        # Initial timeout: 2 seconds
+        RETRY_TIMEOUT_MULTIPLIER = 3  # Each retry: 3x previous (2s → 6s → 18s)
+        RETRY_COUNT = 3               # Total attempts per source
+        
         CACHE_TTL = 21600  # 6 hours in seconds
         USER_AGENT = "HomeAssistantGESpot/1.0"
 

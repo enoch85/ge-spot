@@ -46,8 +46,7 @@ class AmberAPI(BasePriceAPI):
         """
         return getattr(Amber, 'BASE_URL', Network.URLs.AMBER) # Use constant if defined
 
-    @retry_with_backoff(max_attempts=Network.Defaults.RETRY_COUNT,
-                       base_delay=Network.Defaults.RETRY_BASE_DELAY)
+    @retry_with_backoff(max_attempts=Network.Defaults.RETRY_COUNT)
     async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Dict[str, Any]:
         """Fetch raw data from Amber API.
 
