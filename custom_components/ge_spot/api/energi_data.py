@@ -57,7 +57,12 @@ class EnergiDataAPI(BasePriceAPI):
         client = ApiClient(session=session or self.session)
         try:
             # Use UTC for all reference times
-            reference_time = kwargs.get('reference_time', datetime.datetime.now(timezone.utc))
+            reference_time = kwargs.get('reference_time')
+            if reference_time is None:
+                reference_time = datetime.datetime.now(timezone.utc)
+            else:
+                # Convert to UTC if it's not already (coordinator may pass local timezone)
+                reference_time = reference_time.astimezone(timezone.utc)
 
             # Always compute today and tomorrow based on reference time
             today = reference_time.strftime("%Y-%m-%d")

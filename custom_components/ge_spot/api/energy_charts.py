@@ -91,6 +91,9 @@ class EnergyChartsAPI(BasePriceAPI):
         """
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
+        else:
+            # Convert to UTC if it's not already (coordinator may pass local timezone)
+            reference_time = reference_time.astimezone(timezone.utc)
 
         # Map area to bidding zone (bzn)
         # Energy-Charts uses bidding zone codes like DE-LU, FR, NL, etc.

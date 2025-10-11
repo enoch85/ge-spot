@@ -92,6 +92,9 @@ class NordpoolAPI(BasePriceAPI):
         """
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
+        else:
+            # Convert to UTC if it's not already (coordinator may pass local timezone)
+            reference_time = reference_time.astimezone(timezone.utc)
 
         # Map from area code to delivery area
         delivery_area = AreaMapping.NORDPOOL_DELIVERY.get(area, area)

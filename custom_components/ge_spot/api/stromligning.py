@@ -59,7 +59,13 @@ class StromligningAPI(BasePriceAPI):
         Returns:
             Dictionary containing raw data and metadata for the parser.
         """
-        reference_time = kwargs.get('reference_time', datetime.now(timezone.utc))
+        reference_time = kwargs.get('reference_time')
+        if reference_time is None:
+            reference_time = datetime.now(timezone.utc)
+        else:
+            # Convert to UTC if it's not already (coordinator may pass local timezone)
+            reference_time = reference_time.astimezone(timezone.utc)
+            
         client = ApiClient(session=session or self.session)
         try:
             # Fetch the raw JSON response from the API
@@ -108,6 +114,9 @@ class StromligningAPI(BasePriceAPI):
         """
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
+        else:
+            # Convert to UTC if it's not already (coordinator may pass local timezone)
+            reference_time = reference_time.astimezone(timezone.utc)
 
         # Retrieve supplier from configuration using the constant
         supplier = self.config.get(Config.CONF_STROMLIGNING_SUPPLIER)
