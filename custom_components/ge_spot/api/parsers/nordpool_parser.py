@@ -16,7 +16,7 @@ class NordpoolParser(BasePriceParser):
 
     def __init__(self, source: str = Source.NORDPOOL, timezone_service=None):
         """Initialize the parser.
-        
+
         Args:
             source: Source identifier (defaults to Source.NORDPOOL)
             timezone_service: Optional timezone service

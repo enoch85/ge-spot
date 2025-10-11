@@ -30,7 +30,7 @@ class AemoParser(BasePriceParser):
 
     def __init__(self, source: str = Source.AEMO, timezone_service=None):
         """Initialize the parser.
-        
+
         Args:
             source: Source identifier (defaults to Source.AEMO)
             timezone_service: Optional timezone service

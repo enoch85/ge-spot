@@ -14,7 +14,7 @@ class AmberParser(BasePriceParser):
 
     def __init__(self, source: str = Source.AMBER, timezone_service=None):
         """Initialize the parser.
-        
+
         Args:
             source: Source identifier (defaults to Source.AMBER)
             timezone_service: Optional timezone service

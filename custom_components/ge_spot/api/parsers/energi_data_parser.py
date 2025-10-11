@@ -18,7 +18,7 @@ class EnergiDataParser(BasePriceParser):
 
     def __init__(self, source: str = Source.ENERGI_DATA_SERVICE, timezone_service=None):
         """Initialize the parser.
-        
+
         Args:
             source: Source identifier (defaults to Source.ENERGI_DATA_SERVICE)
             timezone_service: Optional timezone service

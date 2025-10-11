@@ -18,7 +18,7 @@ class StromligningParser(BasePriceParser):
 
     def __init__(self, source: str = Source.STROMLIGNING, timezone_service=None):
         """Initialize the parser.
-        
+
         Args:
             source: Source identifier (defaults to Source.STROMLIGNING)
             timezone_service: Optional timezone service
