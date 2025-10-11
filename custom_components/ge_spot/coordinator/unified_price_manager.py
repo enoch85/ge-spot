@@ -142,6 +142,25 @@ class UnifiedPriceManager:
         # Configure source priorities and API class mappings
         self._configure_sources()
 
+    def is_in_grace_period(self) -> bool:
+        """Check if we're within the grace period after coordinator creation.
+        
+        During the grace period (first 5 minutes after reload/startup), we're more
+        lenient with validation failures and rate limiting to avoid clearing sensors
+        unnecessarily.
+        
+        Returns:
+            True if within grace period, False otherwise
+        """
+        try:
+            now = dt_util.utcnow()
+            time_since_creation = now - self._coordinator_created_at
+            grace_period = timedelta(minutes=Network.Defaults.GRACE_PERIOD_MINUTES)
+            return time_since_creation < grace_period
+        except (TypeError, AttributeError):
+            # If anything fails, assume no grace period
+            return False
+
     def _configure_sources(self):
         """Configure source priorities and API class mappings."""
         # Filter source_priority to only include supported sources for this area
@@ -515,10 +534,7 @@ class UnifiedPriceManager:
                 # 3. First run or cache cleared
 
                 # Check if this is shortly after coordinator creation (config reload/HA restart)
-                time_since_creation = now - self._coordinator_created_at
-                grace_period = timedelta(minutes=5)  # 5 minute grace period after reload
-
-                if time_since_creation < grace_period and "rate limited" in fetch_reason.lower():
+                if self.is_in_grace_period() and "rate limited" in fetch_reason.lower():
                     # Rate limiting after recent reload - this is expected, log as INFO
                     minutes_until_fetch = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
                     _LOGGER.info(
@@ -1002,10 +1018,7 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                  error_msg = data.get("error", "No data returned from price manager or data marked as invalid")
 
                  # Check if this is a rate limit situation shortly after coordinator creation
-                 time_since_creation = datetime.now(tz=dt_util.UTC) - self.price_manager._coordinator_created_at
-                 grace_period = timedelta(minutes=5)
-
-                 if time_since_creation < grace_period and "rate limited" in error_msg.lower():
+                 if self.price_manager.is_in_grace_period() and "rate limited" in error_msg.lower():
                      # Rate limiting after recent reload - log as DEBUG, not WARNING
                      _LOGGER.debug(
                          "Update pending for area %s: %s (rate limit protection after reload)",

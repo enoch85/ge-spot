@@ -127,7 +127,6 @@ class DataProcessor:
             _LOGGER.error("Failed to initialize currency converter")
             raise RuntimeError("Currency converter could not be initialized.")
 
-
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         # Accepts raw data from API adapter (e.g., entsoe.py)
         # Expects keys: 'interval_raw', 'timezone', 'currency', 'source_name', ...
@@ -180,6 +179,24 @@ class DataProcessor:
                     # Pass the entire cached dictionary to the parser.
                     # The modified EntsoeParser will look for XML within this dict.
                     parsed_data = parser.parse(data)
+                    
+                    # Validate parsed data (checks for current interval price)
+                    if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
+                        # Check if we're in grace period (use manager's method if available)
+                        in_grace_period = (hasattr(self._manager, 'is_in_grace_period') and 
+                                         self._manager.is_in_grace_period())
+                        
+                        if in_grace_period:
+                            # During grace period, continue with cached data even if validation fails
+                            _LOGGER.info(
+                                f"[{self.area}] Cached data validation failed for source '{source_name}' but within grace period "
+                                f"after reload - continuing with available cached data"
+                            )
+                        else:
+                            # Outside grace period, treat as invalid cache
+                            _LOGGER.warning(f"[{self.area}] Cached data validation failed for source '{source_name}' - treating as invalid cache")
+                            return self._generate_empty_processed_result(data, error=f"Cached data validation failed: missing current interval")
+                    
                     input_interval_raw = parsed_data.get("interval_raw")
                     input_source_timezone = parsed_data.get("timezone")
                     input_source_currency = parsed_data.get("currency")
@@ -202,6 +219,26 @@ class DataProcessor:
                 # Pass the entire raw dictionary from FallbackManager/API Adapter to the parser
                 parsed_data = parser.parse(data)
                 _LOGGER.debug(f"[{self.area}] Parser {parser.__class__.__name__} output keys: {list(parsed_data.keys())}")
+                
+                # Validate parsed data (checks for current interval price)
+                if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
+                    # Check if we're in grace period (use manager's method if available)
+                    in_grace_period = (hasattr(self._manager, 'is_in_grace_period') and 
+                                     self._manager.is_in_grace_period())
+                    
+                    if in_grace_period:
+                        # During grace period, validation failure is not critical
+                        # Log as info and continue processing what we have
+                        _LOGGER.info(
+                            f"[{self.area}] Validation failed for source '{source_name}' but within grace period "
+                            f"after reload - continuing with available data"
+                        )
+                        # Continue processing - don't trigger fallback during grace period
+                    else:
+                        # Outside grace period, validation failure triggers fallback
+                        _LOGGER.warning(f"[{self.area}] Parsed data validation failed for source '{source_name}' - will trigger fallback")
+                        return self._generate_empty_processed_result(data, error=f"Validation failed: source '{source_name}' missing current interval data")
+                
                 input_interval_raw = parsed_data.get("interval_raw")
                 input_source_timezone = parsed_data.get("timezone")
                 input_source_currency = parsed_data.get("currency")

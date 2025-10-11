@@ -38,6 +38,11 @@ from custom_components.ge_spot.api.base.data_structure import PriceStatistics
 from tests.lib.mocks.hass import MockHass
 
 # Sample test data for processing
+# Use current time to ensure validation passes
+_now = datetime.now(zoneinfo.ZoneInfo("Europe/Stockholm"))
+_current_interval = _now.replace(minute=(_now.minute // 15) * 15, second=0, microsecond=0)
+_next_interval = _current_interval + timedelta(minutes=15)
+
 SAMPLE_RAW_DATA = {
     "source": "nordpool",  # Use lowercase source name from Source constants
     "area": "SE4",
@@ -51,13 +56,13 @@ SAMPLE_RAW_DATA = {
         "today": {
             "multiAreaEntries": [
                 {
-                    "deliveryStart": "2025-04-26T10:00:00+02:00",
+                    "deliveryStart": _current_interval.isoformat(),
                     "entryPerArea": {
                         "SE4": 1.5
                     }
                 },
                 {
-                    "deliveryStart": "2025-04-26T11:00:00+02:00",
+                    "deliveryStart": _next_interval.isoformat(),
                     "entryPerArea": {
                         "SE4": 2.0
                     }
@@ -293,9 +298,9 @@ class TestDataProcessor:
 
     @pytest.mark.asyncio
     async def test_process_with_currency_converter_failure(self, processor_dependencies, mock_exchange_service):
-        """Test process method handling when currency converter is not needed (same currency)."""
-        # This test verifies that DataProcessor can successfully process data even if
-        # the currency converter is None (no conversion needed when source == target currency)
+        """Test process method handling when currency converter works with same currency."""
+        # This test verifies that DataProcessor can successfully process data
+        # when source and target currency match (still needs converter for unit conversion)
         
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
@@ -306,19 +311,28 @@ class TestDataProcessor:
             manager=MagicMock(spec=[])
         )
 
-        # Mock _ensure_exchange_service to set exchange service but NOT currency converter
+        # Mock currency converter to return prices unchanged (same currency)
+        mock_converter = AsyncMock()
+        mock_converter.convert_interval_prices.return_value = (
+            {"2025-10-11 17:30": 1.5, "2025-10-11 17:45": 2.0},  # Converted prices (same as input)
+            None,  # No exchange rate
+            None   # No rate timestamp
+        )
+
+        # Mock _ensure_exchange_service to set both exchange service and currency converter
         async def mock_ensure_exchange():
             processor._exchange_service = mock_exchange_service
-            # Deliberately NOT setting _currency_converter to simulate no conversion needed
+            processor._currency_converter = mock_converter
 
         with patch.object(processor, '_ensure_exchange_service', side_effect=mock_ensure_exchange):
             # Call process - should succeed without error since source and target currency match
             result = await processor.process(SAMPLE_RAW_DATA)
 
-            # Assert processing succeeded (no conversion needed for same currency)
+            # Assert processing succeeded
             assert result is not None, "Process should return a result"
-            # When source currency matches target, no error expected
             assert "interval_prices" in result, "Result should contain interval_prices"
+            # Verify converter was called even though currency is the same (for unit conversion)
+            assert mock_converter.convert_interval_prices.called
 
     @pytest.mark.asyncio
     async def test_successful_data_processing(self, processor_dependencies, mock_exchange_service):
@@ -389,3 +403,75 @@ class TestDataProcessor:
                     assert result.get("target_currency") == "SEK", f"Target currency should be set, got: {result.get('target_currency')}"
                     assert "statistics" in result, "Result should include statistics"
                     # Note: complete_data will be False because we only have 2 prices, but that's OK for this unit test
+
+
+    @pytest.mark.asyncio
+    async def test_validation_failure_triggers_fallback(self, processor_dependencies, mock_exchange_service):
+        """Test that when validation fails (missing current interval), processing returns error to trigger fallback."""
+        # This test verifies that the new validation logic correctly fails when current interval is missing
+        # after the morning cutoff time (01:00), which should trigger fallback to next source
+        
+        # Create mock manager
+        mock_manager = MagicMock()
+        mock_manager._exchange_service = mock_exchange_service
+        mock_manager.is_in_grace_period.return_value = False  # NOT in grace period - validation should fail strictly
+        
+        # Create processor
+        processor = DataProcessor(
+            hass=processor_dependencies["hass"],
+            area=processor_dependencies["area"],
+            target_currency=processor_dependencies["target_currency"],
+            config=processor_dependencies["config"],
+            tz_service=processor_dependencies["tz_service"],
+            manager=mock_manager
+        )
+        
+        # Create test data WITHOUT current interval (future data only)
+        # Use tomorrow's data to simulate ENTSO-E behavior at 16:00
+        stockholm_tz = zoneinfo.ZoneInfo("Europe/Stockholm")
+        tomorrow = datetime.now(stockholm_tz) + timedelta(days=1)
+        tomorrow_10am = tomorrow.replace(hour=10, minute=0, second=0, microsecond=0)
+        tomorrow_11am = tomorrow.replace(hour=11, minute=0, second=0, microsecond=0)
+        
+        future_only_data = {
+            "source": "entsoe",
+            "area": "SE4",
+            "currency": "EUR",
+            "timezone": "Etc/UTC",
+            "unit": "MWh",
+            "attempted_sources": ["entsoe"],
+            "error": None,
+            "raw_data": {
+                "today": {
+                    "multiAreaEntries": [
+                        {
+                            "deliveryStart": tomorrow_10am.isoformat(),
+                            "entryPerArea": {
+                                "SE4": 1.5
+                            }
+                        },
+                        {
+                            "deliveryStart": tomorrow_11am.isoformat(),
+                            "entryPerArea": {
+                                "SE4": 2.0
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+        
+        # Patch _ensure_exchange_service
+        with patch.object(processor, '_ensure_exchange_service', AsyncMock()):
+            # Act - process the future-only data
+            result = await processor.process(future_only_data)
+            
+            # Assert - should return error to trigger fallback
+            assert result is not None, "Process should return a result"
+            assert "error" in result, f"Result should contain an error to trigger fallback, got: {result}"
+            assert "validation failed" in result["error"].lower() or "missing current interval" in result["error"].lower(), \
+                f"Error should mention validation failure or missing current interval, got: {result.get('error')}"
+            
+            # Should indicate the source that failed
+            assert "entsoe" in result.get("error", "").lower() or result.get("attempted_sources") == ["entsoe"], \
+                f"Error should reference the failed source"

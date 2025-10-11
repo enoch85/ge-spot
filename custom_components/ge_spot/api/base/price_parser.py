@@ -80,9 +80,8 @@ class BasePriceParser(ABC):
         # Check if current interval price is available when expected
         current_price = self._get_current_price(data["interval_raw"])
         if current_price is None:
-            _LOGGER.warning(f"{self.source}: Current interval price not found in interval_raw")
-            # Allow validation to pass even if current interval is missing (e.g., data for future only)
-            # return False # Temporarily commented out to allow future data validation
+            _LOGGER.warning(f"{self.source}: Current interval price not found in interval_raw - failing validation to try next source")
+            return False  # Fail validation to trigger fallback
 
         # Check if next interval price is available when it should be (within the same target timezone day)
         target_tz = self.timezone_service.target_timezone # FIX: Access attribute directly
