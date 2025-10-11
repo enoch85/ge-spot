@@ -1,5 +1,6 @@
 """Data processor for electricity spot prices."""
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, List, Tuple
 
@@ -360,7 +361,7 @@ class DataProcessor:
                 # Allow statistics if at least 80% of intervals are present
                 from ..const.time import TimeInterval
                 expected_intervals = TimeInterval.get_intervals_per_day()
-                today_complete_enough = len(found_keys) >= int(expected_intervals * 0.8)
+                today_complete_enough = len(found_keys) >= math.ceil(expected_intervals * 0.8)
 
                 if today_complete_enough:
                     stats = self._calculate_statistics(final_today_prices, day_offset=0)
@@ -370,7 +371,7 @@ class DataProcessor:
                 else:
                     missing_keys = sorted(list(today_keys - found_keys))
                     # Update warning message threshold
-                    _LOGGER.warning(f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need {int(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
+                    _LOGGER.warning(f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
                     processed_result["statistics"] = PriceStatistics().to_dict()
             else:
                 _LOGGER.warning(f"No final prices for today available after processing for area {self.area}, skipping stats.")
@@ -383,7 +384,7 @@ class DataProcessor:
                 # Allow statistics if at least 80% of intervals are present
                 from ..const.time import TimeInterval
                 expected_intervals = TimeInterval.get_intervals_per_day()
-                tomorrow_complete_enough = len(found_keys) >= int(expected_intervals * 0.8)
+                tomorrow_complete_enough = len(found_keys) >= math.ceil(expected_intervals * 0.8)
 
                 if tomorrow_complete_enough:
                     stats = self._calculate_statistics(final_tomorrow_prices, day_offset=1)
@@ -395,7 +396,7 @@ class DataProcessor:
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
                     # Update warning message threshold
-                    _LOGGER.warning(f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need {int(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
+                    _LOGGER.warning(f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
                     processed_result["tomorrow_statistics"] = PriceStatistics().to_dict()
             else:
                 # No tomorrow prices, ensure stats reflect incompleteness
