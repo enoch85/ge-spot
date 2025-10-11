@@ -80,9 +80,8 @@ class BasePriceParser(ABC):
         # Check if current interval price is available when expected
         current_price = self._get_current_price(data["interval_raw"])
         if current_price is None:
-            _LOGGER.warning(f"{self.source}: Current interval price not found in interval_raw")
-            # Allow validation to pass even if current interval is missing (e.g., data for future only)
-            # return False # Temporarily commented out to allow future data validation
+            _LOGGER.warning(f"{self.source}: Current interval price not found in interval_raw - failing validation to try next source")
+            return False  # Fail validation to trigger fallback
 
         # Check if next interval price is available when it should be (within the same target timezone day)
         target_tz = self.timezone_service.target_timezone # FIX: Access attribute directly
@@ -353,7 +352,8 @@ class BasePriceParser(ABC):
                 _LOGGER.debug(f"Skipping invalid key format in interval_raw: {key}")
                 continue
 
-        _LOGGER.warning(f"{self.source}: Could not find current interval price for {iso_key}")
+        # Changed to DEBUG - validation method will log the WARNING
+        _LOGGER.debug(f"{self.source}: Could not find current interval price for {iso_key}")
         return None
 
     def _get_next_interval_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
@@ -384,7 +384,8 @@ class BasePriceParser(ABC):
                 _LOGGER.debug(f"Skipping invalid key format in interval_raw: {key}")
                 continue
 
-        _LOGGER.warning(f"{self.source}: Could not find next interval price for {iso_key}")
+        # Changed to DEBUG - validation method will log WARNING if needed
+        _LOGGER.debug(f"{self.source}: Could not find next interval price for {iso_key}")
         return None
 
     def _calculate_day_average(self, interval_raw: Dict[str, float], day: str = "today") -> Optional[float]:

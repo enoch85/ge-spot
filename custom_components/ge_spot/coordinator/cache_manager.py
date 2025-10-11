@@ -129,7 +129,10 @@ class CacheManager:
                     return entry_data # Return the data part directly
 
         # If specific source not found/expired or not specified, search all entries for the area AND date
-        _LOGGER.debug(f"No specific source hit for '{source}'. Searching all entries for area {area} and date {target_date.isoformat()}.")
+        # Only log if source was specified but not found (actual fallback scenario)
+        if source is not None:
+            _LOGGER.debug(f"Specific source '{source}' not found or expired. Searching all entries for area {area} and date {target_date.isoformat()}.")
+        # When source=None, searching all entries is expected behavior - no log needed
         valid_entries_with_timestamp = []
         all_entries_info = self._price_cache.get_info().get("entries", {})
         target_date_str = target_date.isoformat()

@@ -90,10 +90,6 @@ class BaseElectricityPriceSensor(SensorEntity):
         }
 
         # Add timestamps if available
-        # Corrected: Use 'last_update' key
-        if "last_update" in self.coordinator.data:
-            attrs["last_updated"] = self.coordinator.data["last_update"]
-
         # Corrected: Use 'last_fetch_attempt' key
         if "last_fetch_attempt" in self.coordinator.data:
             attrs["last_api_fetch"] = self.coordinator.data["last_fetch_attempt"]
@@ -170,6 +166,13 @@ class BaseElectricityPriceSensor(SensorEntity):
                         _LOGGER.warning(f"Failed to calculate intervals_remaining: {e}")
 
                 attrs["data_validity"] = data_validity_info
+
+        # Add error information if present (for diagnostics)
+        if "error" in self.coordinator.data and self.coordinator.data["error"]:
+            error_info = {"message": self.coordinator.data["error"]}
+            if "error_code" in self.coordinator.data and self.coordinator.data["error_code"]:
+                error_info["code"] = self.coordinator.data["error_code"]
+            attrs["error"] = error_info
 
         # Add interval prices if available, rounding float values
         if "interval_prices" in self.coordinator.data:

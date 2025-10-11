@@ -266,68 +266,70 @@ class TestUnifiedPriceManager:
         mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
 
-        # --- First call: Successful fetch, populates cache ---
-        # Time is frozen at 12:00:00 UTC
-        mock_fallback.return_value = MOCK_SUCCESS_RESULT
-        mock_processor.return_value = MOCK_PROCESSED_RESULT
-        await manager.fetch_data()
+        # Mock is_in_grace_period to return False so rate limiting works as expected
+        with patch.object(manager, 'is_in_grace_period', return_value=False):
+            # --- First call: Successful fetch, populates cache ---
+            # Time is frozen at 12:00:00 UTC
+            mock_fallback.return_value = MOCK_SUCCESS_RESULT
+            mock_processor.return_value = MOCK_PROCESSED_RESULT
+            await manager.fetch_data()
 
-        # Verify cache was updated - store() is called with keyword args
-        mock_cache_update.assert_called_once()
-        # Check that store was called with correct area and source
-        call_kwargs = mock_cache_update.call_args[1]
-        assert call_kwargs['area'] == 'SE1'
-        assert call_kwargs['source'] == Source.NORDPOOL
-        assert 'data' in call_kwargs
-        # Capture the data that was supposedly cached
-        # In a real scenario, CacheManager would store this internally.
-        # For the test, we assume MOCK_PROCESSED_RESULT was stored.
+            # Verify cache was updated - store() is called with keyword args
+            mock_cache_update.assert_called_once()
+            # Check that store was called with correct area and source
+            call_kwargs = mock_cache_update.call_args[1]
+            assert call_kwargs['area'] == 'SE1'
+            assert call_kwargs['source'] == Source.NORDPOOL
+            assert 'data' in call_kwargs
+            # Capture the data that was supposedly cached
+            # In a real scenario, CacheManager would store this internally.
+            # For the test, we assume MOCK_PROCESSED_RESULT was stored.
 
-        # --- Second call: Shortly after, within rate limit ---
-        # Reset mocks for the second call
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        mock_cache_get.reset_mock()
-        mock_cache_update.reset_mock()
+            # --- Second call: Shortly after, within rate limit ---
+            # Reset mocks for the second call
+            mock_fallback.reset_mock()
+            mock_processor.reset_mock()
+            mock_cache_get.reset_mock()
+            mock_cache_update.reset_mock()
 
-        # Configure cache get to return the data from the first call
-        # Simulate CacheManager returning the previously stored data
-        mock_cache_get.return_value = MOCK_PROCESSED_RESULT
-        # Configure processor to return this cached data when called
-        mock_processor.return_value = MOCK_PROCESSED_RESULT
+            # Configure cache get to return the data from the first call
+            # Simulate CacheManager returning the previously stored data
+            mock_cache_get.return_value = MOCK_PROCESSED_RESULT
+            # Configure processor to return this cached data when called
+            mock_processor.return_value = MOCK_PROCESSED_RESULT
 
-        # Advance time slightly (e.g., 1 minute), still within rate limit
-        freezer = freeze_time("2025-04-26 12:01:00 UTC")
-        freezer.start()
-        mock_now.return_value = datetime(2025, 4, 26, 12, 1, 0, tzinfo=timezone.utc)
+            # Advance time slightly (e.g., 1 minute), still within rate limit
+            freezer = freeze_time("2025-04-26 12:01:00 UTC")
+            freezer.start()
+            mock_now.return_value = datetime(2025, 4, 26, 12, 1, 0, tzinfo=timezone.utc)
 
-        # Act: Fetch again
-        result = await manager.fetch_data()
+            # Act: Fetch again
+            result = await manager.fetch_data()
 
-        # Assert
-        # API should not be called due to rate limiting
-        mock_fallback.assert_not_awaited(), "API fetch should be skipped due to rate limit"
-        # Cache should be checked (with target_date, no max_age_minutes)
-        assert mock_cache_get.call_count >= 1, "CacheManager.get_data should be called"
-        # Verify area is passed (target_date will be today's date from dt_util.now().date())
-        call_kwargs = mock_cache_get.call_args[1]
-        assert call_kwargs.get('area') == manager.area, "Cache should be called with correct area"
-        
-        # Check processor was called once (don't check exact args since code adds metadata)
-        mock_processor.assert_awaited_once()
-        # Verify processor was called with cached data (check key fields)
-        process_call_args = mock_processor.call_args[0][0]
-        assert process_call_args.get("interval_prices") == MOCK_PROCESSED_RESULT.get("interval_prices"), \
-            "Processor should be called with cached interval_prices"
-        assert process_call_args.get("using_cached_data") is True, \
-            "Processor input should have using_cached_data=True"
+            # Assert
+            # API should not be called due to rate limiting
+            mock_fallback.assert_not_awaited(), "API fetch should be skipped due to rate limit"
+            # Cache should be checked (with target_date, no max_age_minutes)
+            assert mock_cache_get.call_count >= 1, "CacheManager.get_data should be called"
+            # Verify area is passed (target_date will be today's date from dt_util.now().date())
+            call_kwargs = mock_cache_get.call_args[1]
+            assert call_kwargs.get('area') == manager.area, "Cache should be called with correct area"
+            
+            # Check processor was called once (don't check exact args since code adds metadata)
+            mock_processor.assert_awaited_once()
+            # Verify processor was called with cached data (check key fields)
+            process_call_args = mock_processor.call_args[0][0]
+            assert process_call_args.get("interval_prices") == MOCK_PROCESSED_RESULT.get("interval_prices"), \
+                "Processor should be called with cached interval_prices"
+            assert process_call_args.get("using_cached_data") is True, \
+                "Processor input should have using_cached_data=True"
 
-        # Result should indicate cached data was used
-        assert result.get("using_cached_data") is True, "Result should indicate cached data was used"
-        assert result.get("interval_prices") == MOCK_PROCESSED_RESULT.get("interval_prices"), "Result prices should match cached data"
+            # Result should indicate cached data was used
+            assert result.get("using_cached_data") is True, "Result should indicate cached data was used"
+            assert result.get("interval_prices") == MOCK_PROCESSED_RESULT.get("interval_prices"), "Result prices should match cached data"
 
-        # Stop the time freezer
-        freezer.stop()
+            # Stop the time freezer
+            freezer.stop()
 
     @pytest.mark.asyncio
     async def test_fetch_data_success_fallback_source(self, manager, auto_mock_core_dependencies):
@@ -510,49 +512,52 @@ class TestUnifiedPriceManager:
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
 
-        # First call - successful fetch
-        now_time = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
-        mock_now.return_value = now_time
-        mock_fallback.return_value = MOCK_SUCCESS_RESULT
-        mock_processor.return_value = MOCK_PROCESSED_RESULT
-        await manager.fetch_data()
+        # Mock is_in_grace_period to return False so rate limiting works as expected
+        with patch.object(manager, 'is_in_grace_period', return_value=False):
+            # First call - successful fetch
+            now_time = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
+            mock_now.return_value = now_time
+            mock_fallback.return_value = MOCK_SUCCESS_RESULT
+            mock_processor.return_value = MOCK_PROCESSED_RESULT
+            await manager.fetch_data()
 
-        # Reset mocks for second call
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        mock_cache_get.reset_mock() # Reset get_data mock
-        mock_cache_get.return_value = MOCK_CACHED_RESULT # Make cache available
-        # Assume processor returns cached data when processing cached input
-        mock_processor.return_value = MOCK_CACHED_RESULT
+            # Reset mocks for second call
+            mock_fallback.reset_mock()
+            mock_processor.reset_mock()
+            mock_cache_get.reset_mock() # Reset get_data mock
+            mock_cache_get.return_value = MOCK_CACHED_RESULT # Make cache available
+            # Assume processor returns cached data when processing cached input
+            mock_processor.return_value = MOCK_CACHED_RESULT
 
-        # Advance time slightly, but less than min interval (e.g., 3 minutes for a 5 minute interval)
-        min_interval_minutes = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
-        mock_now.return_value = now_time + timedelta(minutes=min_interval_minutes / 2)
+            # Advance time slightly, but less than min interval (e.g., 3 minutes for a 5 minute interval)
+            min_interval_minutes = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+            mock_now.return_value = now_time + timedelta(minutes=min_interval_minutes / 2)
 
-        # Act - Second call should use cache due to rate limiting
-        result = await manager.fetch_data()
+            # Act - Second call should use cache due to rate limiting
+            result = await manager.fetch_data()
 
-        # Assert
-        mock_fallback.assert_not_awaited(), "FallbackManager.fetch_with_fallback should not be called due to rate limiting"
-        assert mock_cache_get.call_count >= 1, \
-            f"CacheManager.get_data should be called when rate limited, got {mock_cache_get.call_args}"
-        call_kwargs = mock_cache_get.call_args[1]
-        assert call_kwargs.get('area') == manager.area, "Cache should be called with correct area"
-        
-        # Check processor was called once (don't check exact args since code adds metadata)
-        mock_processor.assert_awaited_once()
-        # Verify processor was called with cached data (check key fields)
-        process_call_args = mock_processor.call_args[0][0]
-        assert process_call_args.get("interval_prices") == MOCK_CACHED_RESULT.get("interval_prices"), \
-            "Processor should be called with cached interval_prices"
-        assert process_call_args.get("using_cached_data") is True, \
-            "Processor input should have using_cached_data=True"
+            # Assert
+            mock_fallback.assert_not_awaited(), "FallbackManager.fetch_with_fallback should not be called due to rate limiting"
+            assert mock_cache_get.call_count >= 1, \
+                f"CacheManager.get_data should be called when rate limited, got {mock_cache_get.call_args}"
+            call_kwargs = mock_cache_get.call_args[1]
+            assert call_kwargs.get('area') == manager.area, "Cache should be called with correct area"
+            
+            # Check processor was called once (don't check exact args since code adds metadata)
+            mock_processor.assert_awaited_once()
+            # Verify processor was called with cached data (check key fields)
+            process_call_args = mock_processor.call_args[0][0]
+            assert process_call_args.get("interval_prices") == MOCK_CACHED_RESULT.get("interval_prices"), \
+                "Processor should be called with cached interval_prices"
+            assert process_call_args.get("using_cached_data") is True, \
+                "Processor input should have using_cached_data=True"
 
-        # Check result uses cached data
-        expected_result = {**MOCK_CACHED_RESULT, "using_cached_data": True} # Ensure flag is True
-        # Compare key fields
-        assert result.get("using_cached_data") is True, "using_cached_data flag should be True"
-        assert result.get("interval_prices") == MOCK_CACHED_RESULT.get("interval_prices"), "Prices should match cached data"
+            # Check result uses cached data
+            expected_result = {**MOCK_CACHED_RESULT, "using_cached_data": True} # Ensure flag is True
+            # Compare key fields
+            assert result.get("using_cached_data") is True, "using_cached_data flag should be True"
+            assert result.get("interval_prices") == MOCK_CACHED_RESULT.get("interval_prices"), "Prices should match cached data"
+
 
 
     @pytest.mark.asyncio
@@ -564,51 +569,54 @@ class TestUnifiedPriceManager:
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
 
-        # First call - successful fetch
-        now_time = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
-        mock_now.return_value = now_time
-        mock_fallback.return_value = MOCK_SUCCESS_RESULT
-        mock_processor.return_value = MOCK_PROCESSED_RESULT
-        await manager.fetch_data()
+        # Mock is_in_grace_period to return False so rate limiting works as expected
+        with patch.object(manager, 'is_in_grace_period', return_value=False):
+            # First call - successful fetch
+            now_time = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
+            mock_now.return_value = now_time
+            mock_fallback.return_value = MOCK_SUCCESS_RESULT
+            mock_processor.return_value = MOCK_PROCESSED_RESULT
+            await manager.fetch_data()
 
-        # Reset mocks for second call
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        mock_cache_get.reset_mock()
-        mock_cache_get.return_value = None # No cache
+            # Reset mocks for second call
+            mock_fallback.reset_mock()
+            mock_processor.reset_mock()
+            mock_cache_get.reset_mock()
+            mock_cache_get.return_value = None # No cache
 
-        # Prepare empty result for rate limited case
-        # The processor will be called by _generate_empty_result
-        # Let's configure it to return what _generate_empty_result expects _process_result to return
-        # This is complex, let's assume _generate_empty_result works correctly and compare the final output
-        empty_result = await manager._generate_empty_result(error="Rate limited, no cache available")
-        mock_processor.return_value = empty_result # Mock processor to return the final expected structure
+            # Prepare empty result for rate limited case
+            # The processor will be called by _generate_empty_result
+            # Let's configure it to return what _generate_empty_result expects _process_result to return
+            # This is complex, let's assume _generate_empty_result works correctly and compare the final output
+            empty_result = await manager._generate_empty_result(error="Rate limited, no cache available")
+            mock_processor.return_value = empty_result # Mock processor to return the final expected structure
 
-        # Advance time slightly, but less than min interval
-        min_interval_minutes = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
-        mock_now.return_value = now_time + timedelta(minutes=min_interval_minutes / 2)
+            # Advance time slightly, but less than min interval
+            min_interval_minutes = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+            mock_now.return_value = now_time + timedelta(minutes=min_interval_minutes / 2)
 
-        # Act - Second call should try cache but find none
-        result = await manager.fetch_data()
+            # Act - Second call should try cache but find none
+            result = await manager.fetch_data()
 
-        # Assert
-        mock_fallback.assert_not_awaited(), "FallbackManager.fetch_with_fallback should not be called due to rate limiting"
-        assert mock_cache_get.call_count >= 1, \
-            f"CacheManager.get_data should be called when rate limited, got {mock_cache_get.call_args}"
-        call_kwargs = mock_cache_get.call_args[1]
-        assert call_kwargs.get('area') == manager.area, "Cache should be called with correct area"
-        # Processor is called by _generate_empty_result -> _process_result
-        # mock_processor.assert_awaited_once(), "DataProcessor.process should be called once to generate empty result"
-        # CORRECTION: _generate_empty_result does NOT call process. Remove assertion.
+            # Assert
+            mock_fallback.assert_not_awaited(), "FallbackManager.fetch_with_fallback should not be called due to rate limiting"
+            assert mock_cache_get.call_count >= 1, \
+                f"CacheManager.get_data should be called when rate limited, got {mock_cache_get.call_args}"
+            call_kwargs = mock_cache_get.call_args[1]
+            assert call_kwargs.get('area') == manager.area, "Cache should be called with correct area"
+            # Processor is called by _generate_empty_result -> _process_result
+            # mock_processor.assert_awaited_once(), "DataProcessor.process should be called once to generate empty result"
+            # CORRECTION: _generate_empty_result does NOT call process. Remove assertion.
 
-        # Check result is empty with rate limit error
-        # Compare key fields
-        error_msg = result.get("error", "").lower()
-        assert "rate limit" in error_msg, f"Error should mention rate limiting, got: {result.get('error', '')}"
-        # using_cached_data is False because no cache was found (not True because cache was attempted)
-        assert result.get("using_cached_data") is False, "using_cached_data flag should be False (no cache found)"
-        assert not result.get("interval_prices"), "interval_prices should be empty"
-        assert result.get("has_data") is False, "has_data should be False"
+            # Check result is empty with rate limit error
+            # Compare key fields
+            error_msg = result.get("error", "").lower()
+            assert "rate limit" in error_msg, f"Error should mention rate limiting, got: {result.get('error', '')}"
+            # using_cached_data is False because no cache was found (not True because cache was attempted)
+            assert result.get("using_cached_data") is False, "using_cached_data flag should be False (no cache found)"
+            assert not result.get("interval_prices"), "interval_prices should be empty"
+            assert result.get("has_data") is False, "has_data should be False"
+
 
     @pytest.mark.asyncio
     async def test_fetch_data_with_malformed_api_response(self, manager, auto_mock_core_dependencies):

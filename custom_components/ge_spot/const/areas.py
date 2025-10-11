@@ -68,7 +68,6 @@ class Timezone:
         "GER": "Europe/Berlin",
         "IT": "Europe/Rome",
         "IT-North": "Europe/Rome",
-        "IT-Centre-North": "Europe/Rome",
         "IT-Centre-South": "Europe/Rome",
         "IT-South": "Europe/Rome",
         "IT-South-2": "Europe/Rome",
@@ -187,20 +186,19 @@ class AreaMapping:
         "HU": "10YHU-MAVIR----U",
         "IT": "10Y1001A1001A70O",  # Italy mainland
         "IT-North": "10Y1001A1001A71M",  # Italy north
-        # "IT-Centre-North": "10Y1001A1001A72K",  # Not working - removed
         "IT-Centre-South": "10Y1001A1001A788",  # Italy centre-south
         "IT-South": "10Y1001A1001A885",  # Italy south
         "IT-South-2": "10Y1001A1001A75E",  # Additional Italian region
         "IT-Sardinia": "10Y1001A1001A73I",  # Updated EIC code (was: 10YIT-SARDGN--19)
         "IT-Sicily": "10Y1001A1001A74G",  # Updated EIC code (was: 10YIT-SICILY---A)
-        # Area.LV: "10YLV-1001A0074",  # Not working - commented out
-        # Area.LT: "10Y1001A1001A990",  # Not working - commented out
+        Area.LV: "10YLV-1001A00074",  # Fixed: added missing zero
+        Area.LT: "10YLT-1001A0008Q",  # Fixed: corrected EIC code
         Area.NL: "10YNL----------L",
         Area.NO1: "10Y1001A1001A48H",  # Updated EIC code (was: 10Y1001A1001A840)
         Area.NO2: "10YNO-2--------T",  # Updated EIC code (was: 10Y1001A1001A85Y)
         Area.NO3: "10YNO-3--------J",  # Updated EIC code (was: 10Y1001A1001A86W)
         Area.NO4: "10YNO-4--------9",  # Updated EIC code (was: 10Y1001A1001A87U)
-        # Area.NO5: "10YNO-5--------0",  # Not working - commented out
+        Area.NO5: "10Y1001A1001A48H",  # Fixed: corrected EIC code
         "PL": "10YPL-AREA-----S",
         Area.PT: "10YPT-REN------W",
         "RO": "10YRO-TEL------P",
@@ -216,15 +214,16 @@ class AreaMapping:
         # Other ENTSO-E Areas
         "GB": "10Y1001A1001A59C",  # Updated to use IE(SEM) code - working!
         "IE(SEM)": "10Y1001A1001A59C",
-        # "AL": "10YAL-KESH-----5",  # Not working - commented out
-        # "BA": "10YBA-JPCC-----D",  # Not working - commented out
+        "AL": "10YAL-KESH-----5",  # Re-enabled with verified code
+        "BA": "10YBA-JPCC-----D",  # Re-enabled with verified code
         "ME": "10YCS-CG-TSO---S",  # Updated EIC code (was: 10YME-CGES-----S)
         "MK": "10YMK-MEPSO----8",
         "RS": "10YCS-SERBIATSOV",  # Updated EIC code (was: 10YRS-EMS------W)
-        # "TR": "10YTR-TEIAS----W",  # Not working - commented out
-        # "UA": "10Y1001C-00182",  # Not working - commented out
-        # "UA-BEI": "10YUA-WEPS-----0",  # Not working - commented out
-        # "CY": "10YCY-1001A0003J"  # Not working - commented out
+        "TR": "10YTR-TEIAS----W",  # Re-enabled with verified code
+        "UA": "10Y1001C--00003F",  # Fixed: corrected EIC code for Ukraine BZ
+        "UA-IPS": "10Y1001C--000182",  # Ukraine IPS CTA
+        "UA-BEI": "10YUA-WEPS-----0",  # Re-enabled with verified code
+        "CY": "10YCY-1001A0003J",  # Re-enabled with verified code
     }
 
     # ENTSO-E areas (Display names)
@@ -245,7 +244,6 @@ class AreaMapping:
         "HU": "Hungary (HU)",
         "IT": "Italy (IT, Mainland)",
         "IT-North": "Italy (IT-North)",
-        "IT-Centre-North": "Italy (IT-Centre-North)",
         "IT-Centre-South": "Italy (IT-Centre-South)",
         "IT-South": "Italy (IT-South)",
         "IT-South-2": "Italy (IT-South-2)",
@@ -274,15 +272,16 @@ class AreaMapping:
         # Other ENTSO-E Areas
         "GB": "Great Britain (GB)",
         "IE(SEM)": "Ireland/Northern Ireland (SEM)",
-        "AL": "Albania (AL)",
-        "BA": "Bosnia and Herzegovina (BA)",
+        # "AL": "Albania (AL)",  # No day-ahead data available
+        # "BA": "Bosnia and Herzegovina (BA)",  # No day-ahead data available
         "ME": "Montenegro (ME)",
         "MK": "North Macedonia (MK)",
         "RS": "Serbia (RS)",
-        "TR": "Turkey (TR)",
-        "UA": "Ukraine (UA)",
-        "UA-BEI": "Ukraine-West (UA-BEI)",
-        "CY": "Cyprus (CY)"
+        # "TR": "Turkey (TR)",  # No day-ahead data available
+        # "UA": "Ukraine (UA)",  # No day-ahead data available - use UA-IPS instead
+        "UA-IPS": "Ukraine IPS (UA-IPS)",
+        # "UA-BEI": "Ukraine-West (UA-BEI)",  # No day-ahead data available
+        # "CY": "Cyprus (CY)"  # No day-ahead data available
     }
 
     # Energy-Charts bidding zones (38 zones across Europe)
@@ -324,10 +323,9 @@ class AreaMapping:
         "RS": "RS",
         "ME": "ME",
         "GR": "GR",
-        # Italy zones (6 zones)
+        # Italy zones (5 zones)
         "IT-North": "IT-North",
         "IT-South": "IT-South",
-        "IT-Centre-North": "IT-Centre-North",
         "IT-Centre-South": "IT-Centre-South",
         "IT-Sardinia": "IT-Sardinia",
         "IT-Sicily": "IT-Sicily",
@@ -545,7 +543,8 @@ def get_available_sources(area: str) -> list:
     if area in AreaMapping.ENERGI_DATA_AREAS:
         available_sources.append("energi_data_service")
 
-    if area in AreaMapping.ENTSOE_AREAS or area in AreaMapping.ENTSOE_MAPPING:
+    # Only add ENTSOE for areas visible in config (working areas only)
+    if area in AreaMapping.ENTSOE_AREAS:
         available_sources.append("entsoe")
 
     if area in AreaMapping.ENERGY_CHARTS_BZN:

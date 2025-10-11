@@ -45,6 +45,9 @@
     "error": {
       "no_sources_for_region": "No data sources available for this region",
       "error_sources_for_region": "Error retrieving sources for region",
+      "no_sources_available": "This area has no available data sources. Please select a different area.",
+      "entsoe_no_eic_code": "This area only supports ENTSO-E but is missing the required EIC code. The area cannot be configured at this time.",
+      "no_working_sources": "None of the data sources for this area are currently functional. Please try a different area.",
       "api_key_required": "API key is required",
       "invalid_api_key": "Invalid API key. Please check the key or try again later.",
       "supplier_id_required": "Supplier ID is required for Strømligning",

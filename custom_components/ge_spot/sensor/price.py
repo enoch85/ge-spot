@@ -72,19 +72,6 @@ class PriceValueSensor(BaseElectricityPriceSensor):
         """Return the state attributes."""
         attrs = super().extra_state_attributes
 
-        # Add formatted timestamps with prices for current price sensor
-        if self._sensor_type == "current_price" and self.coordinator.data:
-            # Use processed interval prices from coordinator data
-            today_prices = self.coordinator.data.get("interval_prices")
-            if today_prices:
-                attrs["today_with_timestamps"] = self._format_timestamp_display(today_prices)
-
-            # Add tomorrow prices if valid and available
-            if self.coordinator.data.get("tomorrow_valid", False):
-                tomorrow_prices = self.coordinator.data.get("tomorrow_interval_prices")
-                if tomorrow_prices:
-                    attrs["tomorrow_with_timestamps"] = self._format_timestamp_display(tomorrow_prices)
-
         # Add additional attributes if provided
         if self._additional_attrs and self.coordinator.data:
             additional = self._additional_attrs(self.coordinator.data)

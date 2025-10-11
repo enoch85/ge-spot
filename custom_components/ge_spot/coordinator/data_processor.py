@@ -1,5 +1,6 @@
 """Data processor for electricity spot prices."""
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, List, Tuple
 
@@ -126,7 +127,6 @@ class DataProcessor:
             _LOGGER.error("Failed to initialize currency converter")
             raise RuntimeError("Currency converter could not be initialized.")
 
-
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         # Accepts raw data from API adapter (e.g., entsoe.py)
         # Expects keys: 'interval_raw', 'timezone', 'currency', 'source_name', ...
@@ -179,6 +179,13 @@ class DataProcessor:
                     # Pass the entire cached dictionary to the parser.
                     # The modified EntsoeParser will look for XML within this dict.
                     parsed_data = parser.parse(data)
+
+                    # Validate parsed data (checks for current interval price)
+                    if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
+                        # Validation failed - cached data is incomplete, treat as invalid
+                        _LOGGER.debug(f"[{self.area}] Cached data validation failed for source '{source_name}' - treating as invalid cache")
+                        return self._generate_empty_processed_result(data, error=f"Cached data validation failed: missing current interval")
+
                     input_interval_raw = parsed_data.get("interval_raw")
                     input_source_timezone = parsed_data.get("timezone")
                     input_source_currency = parsed_data.get("currency")
@@ -201,6 +208,13 @@ class DataProcessor:
                 # Pass the entire raw dictionary from FallbackManager/API Adapter to the parser
                 parsed_data = parser.parse(data)
                 _LOGGER.debug(f"[{self.area}] Parser {parser.__class__.__name__} output keys: {list(parsed_data.keys())}")
+
+                # Validate parsed data (checks for current interval price)
+                if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
+                    # Validation failed - data is incomplete, trigger fallback to next source
+                    _LOGGER.debug(f"[{self.area}] Parsed data validation failed for source '{source_name}' - triggering fallback to next source")
+                    return self._generate_empty_processed_result(data, error=f"Validation failed: source '{source_name}' missing current interval data")
+
                 input_interval_raw = parsed_data.get("interval_raw")
                 input_source_timezone = parsed_data.get("timezone")
                 input_source_currency = parsed_data.get("currency")
@@ -360,7 +374,7 @@ class DataProcessor:
                 # Allow statistics if at least 80% of intervals are present
                 from ..const.time import TimeInterval
                 expected_intervals = TimeInterval.get_intervals_per_day()
-                today_complete_enough = len(found_keys) >= int(expected_intervals * 0.8)
+                today_complete_enough = len(found_keys) >= math.ceil(expected_intervals * 0.8)
 
                 if today_complete_enough:
                     stats = self._calculate_statistics(final_today_prices, day_offset=0)
@@ -370,7 +384,7 @@ class DataProcessor:
                 else:
                     missing_keys = sorted(list(today_keys - found_keys))
                     # Update warning message threshold
-                    _LOGGER.warning(f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need {int(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
+                    _LOGGER.warning(f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
                     processed_result["statistics"] = PriceStatistics().to_dict()
             else:
                 _LOGGER.warning(f"No final prices for today available after processing for area {self.area}, skipping stats.")
@@ -383,7 +397,7 @@ class DataProcessor:
                 # Allow statistics if at least 80% of intervals are present
                 from ..const.time import TimeInterval
                 expected_intervals = TimeInterval.get_intervals_per_day()
-                tomorrow_complete_enough = len(found_keys) >= int(expected_intervals * 0.8)
+                tomorrow_complete_enough = len(found_keys) >= math.ceil(expected_intervals * 0.8)
 
                 if tomorrow_complete_enough:
                     stats = self._calculate_statistics(final_tomorrow_prices, day_offset=1)
@@ -395,7 +409,7 @@ class DataProcessor:
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
                     # Update warning message threshold
-                    _LOGGER.warning(f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need {int(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
+                    _LOGGER.warning(f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}")
                     processed_result["tomorrow_statistics"] = PriceStatistics().to_dict()
             else:
                 # No tomorrow prices, ensure stats reflect incompleteness

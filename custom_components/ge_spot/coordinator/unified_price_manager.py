@@ -19,6 +19,7 @@ from ..const.display import DisplayUnit
 from ..const.network import Network
 from ..const.currencies import Currency
 from ..const.time import ValidationRetry
+from ..const.errors import Errors, ErrorDetails
 from ..api import get_sources_for_region
 from ..api.base.base_price_api import BasePriceAPI
 from ..api.base.data_structure import StandardizedPriceData, create_standardized_price_data
@@ -96,6 +97,7 @@ class UnifiedPriceManager:
         self._health_check_scheduled = False
         self._health_check_task: Optional[asyncio.Task] = None  # Reference to health check task for lifecycle management
         self._last_health_check = None  # datetime of last health check
+        self._last_check_window = None  # Track last window hour checked (e.g., 0 or 13)
 
         # Services and utilities
         self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
@@ -140,6 +142,25 @@ class UnifiedPriceManager:
 
         # Configure source priorities and API class mappings
         self._configure_sources()
+
+    def is_in_grace_period(self) -> bool:
+        """Check if we're within the grace period after coordinator creation.
+
+        During the grace period (first 5 minutes after reload/startup), we're more
+        lenient with validation failures and rate limiting to avoid clearing sensors
+        unnecessarily.
+
+        Returns:
+            True if within grace period, False otherwise
+        """
+        try:
+            now = dt_util.utcnow()
+            time_since_creation = now - self._coordinator_created_at
+            grace_period = timedelta(minutes=Network.Defaults.GRACE_PERIOD_MINUTES)
+            return time_since_creation < grace_period
+        except (TypeError, AttributeError):
+            # If anything fails, assume no grace period
+            return False
 
     def _configure_sources(self):
         """Configure source priorities and API class mappings."""
@@ -273,15 +294,13 @@ class UnifiedPriceManager:
     async def _schedule_health_check(self, run_immediately: bool = False):
         """Schedule daily health check for ALL sources during special hours.
 
-        Validates all configured sources once per day during special hour windows.
+        Validates all configured sources once per window per day during special hour windows.
         Uses FallbackManager's exponential backoff for each source independently.
 
         Args:
             run_immediately: If True, runs validation immediately on first call (for boot-time validation)
         """
         import random
-
-        last_check_date = None
 
         # Run immediately in background if requested (non-blocking)
         if run_immediately:
@@ -293,7 +312,6 @@ class UnifiedPriceManager:
             )
             try:
                 await self._validate_all_sources()
-                last_check_date = dt_util.now().date()
                 self._last_health_check = dt_util.now()
             except Exception as e:
                 _LOGGER.error(f"[{self.area}] Health check failed: {e}", exc_info=True)
@@ -301,37 +319,52 @@ class UnifiedPriceManager:
         while True:
             now = dt_util.now()
             current_hour = now.hour
-            today_date = now.date()
 
-            # Check if we're in a special hour window
-            in_special_hours = any(
-                start <= current_hour < end
-                for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS
-            )
+            # Find which window we're in (if any)
+            current_window_start = None
+            for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS:
+                if start <= current_hour < end:
+                    current_window_start = start
+                    break
 
-            # Only check once per day
+            # Check if we should run health check:
+            # - We're in a window AND
+            # - Either we never checked, OR we checked a different window
             should_check = (
-                in_special_hours and
-                (last_check_date is None or last_check_date < today_date)
+                current_window_start is not None and
+                self._last_check_window != current_window_start
             )
 
             if should_check:
                 # Random delay within current hour to spread load
                 delay_seconds = random.randint(0, ValidationRetry.MAX_RANDOM_DELAY_SECONDS)
+                window_end = current_window_start + 1  # Get end hour for this window
+                for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS:
+                    if start == current_window_start:
+                        window_end = end
+                        break
+
                 _LOGGER.info(
                     f"[{self.area}] Daily health check starting in {delay_seconds}s "
-                    f"(validating {len(self._api_classes)} sources)"
+                    f"(window: {current_window_start:02d}:00-{window_end:02d}:00, "
+                    f"validating {len(self._api_classes)} sources)"
                 )
                 await asyncio.sleep(delay_seconds)
 
                 # Validate ALL sources
                 await self._validate_all_sources()
 
-                last_check_date = now.date()
+                # Mark this window as checked
+                self._last_check_window = current_window_start
                 self._last_health_check = now
 
-            # Sleep 1 hour and check again (will naturally land in window tomorrow)
-            await asyncio.sleep(3600)
+                _LOGGER.debug(
+                    f"[{self.area}] Health check complete for window {current_window_start:02d}:00"
+                )
+
+            # Sleep 15 minutes and check again (faster than 1 hour)
+            # This ensures we don't miss window transitions
+            await asyncio.sleep(900)  # 15 minutes
 
     async def _validate_all_sources(self):
         """Validate ALL configured sources independently.
@@ -416,7 +449,7 @@ class UnifiedPriceManager:
 
         Sources are validated implicitly during fetch:
         - Success → Source marked as working (failure timestamp cleared)
-        - Failure → Source marked as failed, skipped for 24 hours, daily retry scheduled
+        - Failure → Source marked as failed, skipped until next health check validates it
 
         Args:
             force: Whether to force fetch even if rate limited
@@ -481,7 +514,8 @@ class UnifiedPriceManager:
             now=now,
             last_fetch=last_fetch_for_decision,
             data_validity=data_validity,
-            fetch_interval_minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+            fetch_interval_minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES,
+            in_grace_period=self.is_in_grace_period()
         )
 
         if not force and not should_fetch_from_api:
@@ -502,10 +536,7 @@ class UnifiedPriceManager:
                 # 3. First run or cache cleared
 
                 # Check if this is shortly after coordinator creation (config reload/HA restart)
-                time_since_creation = now - self._coordinator_created_at
-                grace_period = timedelta(minutes=5)  # 5 minute grace period after reload
-
-                if time_since_creation < grace_period and "rate limited" in fetch_reason.lower():
+                if self.is_in_grace_period() and "rate limited" in fetch_reason.lower():
                     # Rate limiting after recent reload - this is expected, log as INFO
                     minutes_until_fetch = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
                     _LOGGER.info(
@@ -519,7 +550,10 @@ class UnifiedPriceManager:
                         f"Fetch skipped for {self.area} but no cached data available. "
                         f"Reason: {fetch_reason}"
                     )
-                return await self._generate_empty_result(error=f"No cache and no fetch: {fetch_reason}")
+                return await self._generate_empty_result(
+                    error=f"No cache and no fetch: {fetch_reason}",
+                    error_code=Errors.NO_DATA
+                )
 
 
         # --- Rate Limiting Lock (moved after initial fetch decision) ---
@@ -529,7 +563,9 @@ class UnifiedPriceManager:
             last_fetch_for_rate_limit = _LAST_FETCH_TIME.get(area_key)
             min_interval = timedelta(minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES)
 
-            if not force and last_fetch_for_rate_limit:
+            # Also respect grace period in the second rate limit check
+            # Grace period allows immediate fallback attempts after HA restart
+            if not force and not self.is_in_grace_period() and last_fetch_for_rate_limit:
                 time_since_last_fetch = now - last_fetch_for_rate_limit
                 if time_since_last_fetch < min_interval:
                     next_fetch_allowed_in_seconds = (min_interval - time_since_last_fetch).total_seconds()
@@ -558,7 +594,10 @@ class UnifiedPriceManager:
                             f"Rate limited for {self.area} (after decision check), no cached data available for today ({today_date}). "
                             f"Next fetch in {next_fetch_allowed_in_seconds:.1f}s"
                         )
-                        return await self._generate_empty_result(error="Rate limited (after decision), no cache available")
+                        return await self._generate_empty_result(
+                            error="Rate limited (after decision), no cache available",
+                            error_code=Errors.RATE_LIMITED
+                        )
 
             # If not rate limited or forced, proceed to fetch. Update fetch timestamp.
             _LOGGER.info(f"Proceeding with API fetch for area {self.area} (Reason: {fetch_reason}, Force: {force})")
@@ -608,20 +647,62 @@ class UnifiedPriceManager:
             ]
 
             if not api_instances:
-                _LOGGER.error(f"No API sources available/configured for area {self.area}")
-                self._consecutive_failures += 1
-                # Try cache before giving up - specify today's date
-                cached_data = self._cache_manager.get_data(
-                    area=self.area,
-                    target_date=today_date # Specify today
-                )
-                if cached_data:
-                    _LOGGER.warning("No APIs available for %s, using cached data.", self.area)
-                    cached_data["using_cached_data"] = True
-                    processed_cached_data = await self._process_result(cached_data, is_cached=True)
-                    processed_cached_data["using_cached_data"] = True # Ensure flag is set
-                    return processed_cached_data
-                return await self._generate_empty_result(error="No API sources configured")
+                # Distinguish between "no sources configured" vs "all temporarily disabled"
+                if not self._api_classes:
+                    # No API classes at all - permanent configuration issue
+                    _LOGGER.error(f"No API sources configured for area {self.area}")
+                    self._consecutive_failures += 1
+                    error_msg = ErrorDetails.get_message(
+                        Errors.NO_SOURCES_CONFIGURED,
+                        area=self.area
+                    )
+                    # Try cache before giving up
+                    cached_data = self._cache_manager.get_data(
+                        area=self.area,
+                        target_date=today_date
+                    )
+                    if cached_data:
+                        _LOGGER.warning("No APIs configured for %s, using cached data.", self.area)
+                        cached_data["using_cached_data"] = True
+                        processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                        processed_cached_data["using_cached_data"] = True
+                        return processed_cached_data
+                    return await self._generate_empty_result(
+                        error=error_msg,
+                        error_code=Errors.NO_SOURCES_CONFIGURED
+                    )
+                else:
+                    # Has API classes but all are temporarily disabled due to failures
+                    next_check = self._calculate_next_health_check(now)
+                    next_check_str = next_check.strftime('%H:%M') if next_check else 'soon'
+                    _LOGGER.warning(
+                        f"All {len(self._api_classes)} API source(s) temporarily disabled due to recent failures. "
+                        f"Next health check: {next_check_str}"
+                    )
+                    self._consecutive_failures += 1
+                    error_msg = ErrorDetails.get_message(
+                        Errors.ALL_SOURCES_DISABLED,
+                        count=len(self._api_classes),
+                        next_check=next_check_str
+                    )
+                    # Try cache - this is a temporary situation
+                    cached_data = self._cache_manager.get_data(
+                        area=self.area,
+                        target_date=today_date
+                    )
+                    if cached_data:
+                        _LOGGER.info("All sources disabled, using cached data for %s.", self.area)
+                        cached_data["using_cached_data"] = True
+                        processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                        processed_cached_data["using_cached_data"] = True
+                        # Add error info to indicate temporary situation
+                        processed_cached_data["error"] = error_msg
+                        processed_cached_data["error_code"] = Errors.ALL_SOURCES_DISABLED
+                        return processed_cached_data
+                    return await self._generate_empty_result(
+                        error=error_msg,
+                        error_code=Errors.ALL_SOURCES_DISABLED
+                    )
 
             # Fetch with fallback using the new manager
             result = await self._fallback_manager.fetch_with_fallback(
@@ -680,7 +761,8 @@ class UnifiedPriceManager:
                 else:
                     # Processing failed to produce interval_raw or marked as no data
                     error_info = processed_data.get("error", "Processing failed to produce valid data") if processed_data else "Processing returned None or empty"
-                    _LOGGER.error(f"[{self.area}] Failed to process fetched data. Error: {error_info}")
+                    # Changed to DEBUG - validation already logged the specific failure
+                    _LOGGER.debug(f"[{self.area}] Failed to process fetched data. Error: {error_info}")
                     # Fall through to failure handling (try cache)
 
             # Handle fetch failure (result is None or the error dict from FallbackManager) OR processing failure
@@ -691,7 +773,8 @@ class UnifiedPriceManager:
                  error_info = "No result from FallbackManager"
             # If processing failed, error_info might have been set in the 'else' block above
 
-            _LOGGER.error(f"Failed to get valid processed data for area {self.area}. Error: {error_info}")
+            # Changed to DEBUG - specific errors already logged by parser/processor
+            _LOGGER.debug(f"Failed to get valid processed data for area {self.area}. Error: {error_info}")
             self._consecutive_failures += 1
             self._attempted_sources = result.get("attempted_sources", []) if result else []
             self._active_source = "None"
@@ -730,10 +813,19 @@ class UnifiedPriceManager:
                 processed_cached_data["using_cached_data"] = True # Ensure flag is set
                 return processed_cached_data
             else:
-                _LOGGER.error("All sources/processing failed for %s and no usable cache available for today (%s).", self.area, today_date)
+                # Format the list of attempted sources for user-friendly error message
+                attempted_sources_str = ", ".join(self._attempted_sources) if self._attempted_sources else "unknown"
+                _LOGGER.error(
+                    "Attempted sources failed for %s and no usable cache available for today (%s). "
+                    "Attempted sources: %s",
+                    self.area, today_date, attempted_sources_str
+                )
                 self._using_cached_data = True # Indicate we intended to use cache but failed
                 # Generate empty result if fetch and cache fail
-                return await self._generate_empty_result(error=f"Fetch/Processing failed: {error_info}")
+                return await self._generate_empty_result(
+                    error=f"Fetch/Processing failed: {error_info}",
+                    error_code=Errors.API_ERROR
+                )
 
         except Exception as e:
             _LOGGER.error(f"Unexpected error during fetch_data for area {self.area}: {e}", exc_info=True)
@@ -756,7 +848,10 @@ class UnifiedPriceManager:
                  return processed_cached_data
             else:
                  # Generate empty result if no cache
-                 return await self._generate_empty_result(error=f"Unexpected error: {str(e)}")
+                 return await self._generate_empty_result(
+                     error=f"Unexpected error: {str(e)}",
+                     error_code=Errors.API_ERROR
+                 )
 
 
     async def _process_result(self, result: Dict[str, Any], is_cached: bool = False) -> Dict[str, Any]:
@@ -775,7 +870,10 @@ class UnifiedPriceManager:
         # Basic validation
         if not result or not isinstance(result, dict):
             _LOGGER.error(f"Invalid result provided for processing area {self.area}")
-            return await self._generate_empty_result(error="Invalid data structure for processing")
+            return await self._generate_empty_result(
+                error="Invalid data structure for processing",
+                error_code=Errors.INVALID_DATA
+            )
 
         # Add/update metadata before processing
         result["area"] = self.area
@@ -819,14 +917,18 @@ class UnifiedPriceManager:
             return processed_data
         except Exception as proc_err:
             _LOGGER.error(f"Error processing data for area {self.area}: {proc_err}", exc_info=True)
-            return await self._generate_empty_result(error=f"Processing error: {proc_err}")
+            return await self._generate_empty_result(
+                error=f"Processing error: {proc_err}",
+                error_code=Errors.API_ERROR
+            )
 
 
-    async def _generate_empty_result(self, error: Optional[str] = None) -> Dict[str, Any]:
+    async def _generate_empty_result(self, error: Optional[str] = None, error_code: Optional[str] = None) -> Dict[str, Any]:
         """Generate an empty result when data is unavailable.
 
         Args:
-            error: Optional error message to include.
+            error: Human-readable error message
+            error_code: Machine-readable error code for programmatic handling
 
         Returns:
             Empty result dictionary with standard structure.
@@ -851,6 +953,7 @@ class UnifiedPriceManager:
             "consecutive_failures": self._consecutive_failures,
             "last_fetch_attempt": _LAST_FETCH_TIME.get(self.area, now).isoformat() if _LAST_FETCH_TIME.get(self.area) else now.isoformat(),
             "error": error or f"Failed to fetch data after {self._consecutive_failures} attempts",
+            "error_code": error_code,  # Add error code for programmatic handling
             "has_data": False,
             "last_update": now.isoformat(),
             "vat_rate": self.vat_rate * 100,
@@ -989,10 +1092,7 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                  error_msg = data.get("error", "No data returned from price manager or data marked as invalid")
 
                  # Check if this is a rate limit situation shortly after coordinator creation
-                 time_since_creation = datetime.now(tz=dt_util.UTC) - self.price_manager._coordinator_created_at
-                 grace_period = timedelta(minutes=5)
-
-                 if time_since_creation < grace_period and "rate limited" in error_msg.lower():
+                 if self.price_manager.is_in_grace_period() and "rate limited" in error_msg.lower():
                      # Rate limiting after recent reload - log as DEBUG, not WARNING
                      _LOGGER.debug(
                          "Update pending for area %s: %s (rate limit protection after reload)",
@@ -1016,7 +1116,10 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                 # If no previous data, return an empty structure consistent with manager's output
                 # Use try-except in case manager itself fails during error generation
                 try:
-                    return await self.price_manager._generate_empty_result(error=f"Coordinator update error: {e}")
+                    return await self.price_manager._generate_empty_result(
+                        error=f"Coordinator update error: {e}",
+                        error_code=Errors.API_ERROR
+                    )
                 except Exception as gen_err:
                     _LOGGER.error("Failed to generate empty result during coordinator error handling: %s", gen_err)
                     # Return a minimal dict if empty result generation fails

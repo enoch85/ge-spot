@@ -516,9 +516,12 @@ flowchart TD
     Config["User Configuration"] --> Coord["UnifiedPriceCoordinator"]
     Coord --> UPM["UnifiedPriceManager"]
     
-    UPM --> FetchDecision["FetchDecision"]
-    FetchDecision --> |"Should fetch"| FilterSources["Filter Failed Sources<br/>(24h timeout)"]
-    FetchDecision --> |"Rate limited"| Cache["CacheManager.get()"]
+    UPM --> LoadCache["Load Cached Data<br/>(with DataValidity)"]
+    LoadCache --> ExtractValidity["Extract DataValidity"]
+    ExtractValidity --> FetchDecision["FetchDecisionMaker<br/>(DataValidity-driven)"]
+    
+    FetchDecision --> |"Should fetch"| FilterSources["Pre-filter Failed Sources<br/>(skip sources with failure timestamp)"]
+    FetchDecision --> |"Rate limited or<br/>data still valid"| UseCache["Use Cached Data"]
     
     FilterSources --> FallbackMgr["FallbackManager<br/>(Exponential Backoff:<br/>2s → 6s → 18s)"]
     
@@ -534,18 +537,19 @@ flowchart TD
     API2 --> |"Failed"| MarkFailed2["Mark source 2 failed"]
     APIN --> |"Failed"| MarkFailedN["Mark source N failed"]
     
-    MarkFailed1 --> ScheduleHealthCheck["Schedule Daily Health Check<br/>(if not running)"]
-    MarkFailed2 --> ScheduleHealthCheck
-    MarkFailedN --> ScheduleHealthCheck
+    MarkFailed1 -.-> HealthCheckBG["Continuous Health Check Task<br/>(running in background)"]
+    MarkFailed2 -.-> HealthCheckBG
+    MarkFailedN -.-> HealthCheckBG
     
-    ScheduleHealthCheck -.-> |"Special window<br/>(00:00-01:00 or 13:00-15:00)"| HealthCheck["Validate ALL sources<br/>(daily health check)"]
+    HealthCheckBG -.-> |"Every 15 min check<br/>for special windows<br/>(00:00-01:00 or 13:00-15:00)"| HealthCheck["Validate ALL sources<br/>(during window)"]
     HealthCheck --> UpdateAllStatus["Update all source statuses"]
     UpdateAllStatus -.-> FilterSources
     
-    Parser1 --> ClearFailed["Clear failure status<br/>(timestamp = None)"]
-    Parser2 --> ClearFailed
-    ParserN --> ClearFailed
+    Parser1 --> Validate["Validate Parsed Data"]
+    Parser2 --> Validate
+    ParserN --> Validate
     
+    Validate --> |"Valid"| ClearFailed["Clear failure status<br/>(timestamp = None)"]
     ClearFailed --> RawData["Raw Standardized Data"]
     
     RawData --> DataProcessor["DataProcessor"]
@@ -555,65 +559,73 @@ flowchart TD
         TZ["Timezone Conversion"] --> Currency["Currency Conversion"]
         Currency --> VAT["VAT Application"]
         VAT --> Stats["Statistics Calculation"]
+        Stats --> CalcValidity["Calculate DataValidity"]
     end
     
-    DataProcessor --> CacheStore["CacheManager.store()"]
+    DataProcessor --> CacheStore["CacheManager.store()<br/>(with DataValidity)"]
     CacheStore --> Sensors["Home Assistant Sensors"]
     
-    Cache --> |"Cache hit"| Sensors
-    Cache --> |"Cache miss"| EmptyResult["Empty Result"]
-    EmptyResult --> Sensors
-    
-    ScheduleRetry -.-> |"Next day<br/>13:00-15:00"| FilterSources
+    UseCache --> Sensors
 ```
 
 ### 2. Fetch Decision Logic
 
 ```mermaid
 flowchart TD
-    Start["Coordinator Update Trigger"] --> RateCheck{"Rate Limit Check<br/>(15 min minimum)"}
+    Start["Coordinator Update Trigger"] --> LoadCache["Load Cache + DataValidity"]
+    LoadCache --> CheckCurrent{"DataValidity:<br/>has_current_interval?"}
     
-    RateCheck --> |"< 15 min since last fetch"| UseCache["Use Cached Data"]
-    RateCheck --> |"≥ 15 min since last fetch"| TimeCheck{"Time-based Logic"}
+    CheckCurrent --> |"FALSE<br/>(CRITICAL)"| RateLimitCritical{"Rate Limited?"}
+    CheckCurrent --> |"TRUE"| CheckInitial{"First fetch ever?"}
     
-    TimeCheck --> |"12:30-14:30 CET"| HighFreq["High Frequency Mode<br/>(Tomorrow data available)"]
-    TimeCheck --> |"Other times"| NormalFreq["Normal Frequency Mode"]
+    RateLimitCritical --> |"Yes"| UseCache["Use Cached Data<br/>(if available)"]
+    RateLimitCritical --> |"No"| FetchNow["FETCH IMMEDIATELY<br/>(no current data)"]
     
-    HighFreq --> |"Every 15 min"| FilterSources["Filter Sources"]
-    NormalFreq --> |"Every 30-60 min"| FilterSources
+    CheckInitial --> |"Yes (never fetched)"| FetchNow
+    CheckInitial --> |"No"| CheckBuffer{"DataValidity:<br/>intervals_remaining<br/>< 8 intervals?"}
     
-    FilterSources --> CheckFailed{"Check Failed Sources"}
-    CheckFailed --> |"Source failed < 24h ago"| SkipSource["Skip Source<br/>(use next in priority)"]
-    CheckFailed --> |"Source OK or > 24h"| IncludeSource["Include Source"]
+    CheckBuffer --> |"Yes<br/>(running low)"| RateLimitBuffer{"Rate Limited?"}
+    CheckBuffer --> |"No"| CheckTomorrowWindow{"In tomorrow window?<br/>(13:00-15:00)"}
     
-    SkipSource --> MoreSources{"More sources?"}
-    IncludeSource --> MoreSources
+    RateLimitBuffer --> |"Yes"| UseCache
+    RateLimitBuffer --> |"No"| FetchNow
     
-    MoreSources --> |"Yes"| CheckFailed
-    MoreSources --> |"No sources available"| UseCache
-    MoreSources --> |"Has available sources"| FetchData["Attempt Data Fetch"]
+    CheckTomorrowWindow --> |"Yes"| CheckTomorrowData{"DataValidity:<br/>tomorrow_interval_count<br/>< 76?"}
+    CheckTomorrowWindow --> |"No"| CheckRateLimit{"Rate Limited?<br/>(< 15 min)"}
     
-    FetchData --> FallbackMgr["FallbackManager<br/>(Exponential Backoff)"]
+    CheckTomorrowData --> |"Yes<br/>(need tomorrow)"| RateLimitTomorrow{"Rate Limited?"}
+    CheckTomorrowData --> |"No<br/>(have tomorrow)"| CheckRateLimit
     
-    FallbackMgr --> AttemptAPI["Try API Call"]
-    AttemptAPI --> Attempt1{"Attempt 1<br/>(timeout: 2s)"}
-    Attempt1 --> |"Success"| MarkSuccess["Clear failure status<br/>(timestamp = None)"]
-    Attempt1 --> |"Timeout/Error"| Attempt2{"Attempt 2<br/>(timeout: 6s)"}
-    Attempt2 --> |"Success"| MarkSuccess
-    Attempt2 --> |"Timeout/Error"| Attempt3{"Attempt 3<br/>(timeout: 18s)"}
-    Attempt3 --> |"Success"| MarkSuccess
-    Attempt3 --> |"Timeout/Error"| SourceFailed["Mark Source Failed<br/>(timestamp = now)"]
+    RateLimitTomorrow --> |"Yes"| UseCache
+    RateLimitTomorrow --> |"No"| FetchNow
     
-    SourceFailed --> DailyRetry["Schedule Daily Retry<br/>(13:00-15:00)"]
-    DailyRetry --> TryNext["Try Next Source"]
+    CheckRateLimit --> |"Yes"| UseCache
+    CheckRateLimit --> |"No"| FetchNow
     
-    TryNext --> |"More sources"| AttemptAPI
-    TryNext --> |"All failed"| UseCache
+    FetchNow --> PreFilter["Pre-filter Failed Sources<br/>(before FallbackManager)"]
+    PreFilter --> CheckAvailable{"Any sources<br/>available?"}
     
-    MarkSuccess --> ProcessData["Process & Cache"]
+    CheckAvailable --> |"No"| UseCache
+    CheckAvailable --> |"Yes"| FallbackMgr["FallbackManager<br/>(try each source)"]
+    
+    FallbackMgr --> Attempt1{"Source 1<br/>Attempt 1 (2s)"}
+    Attempt1 --> |"Success"| Success["Parse & Validate Data"]
+    Attempt1 --> |"Fail"| Attempt2{"Source 1<br/>Attempt 2 (6s)"}
+    Attempt2 --> |"Success"| Success
+    Attempt2 --> |"Fail"| Attempt3{"Source 1<br/>Attempt 3 (18s)"}
+    Attempt3 --> |"Success"| Success
+    Attempt3 --> |"Fail"| NextSource{"More sources?"}
+    
+    NextSource --> |"Yes"| Attempt1
+    NextSource --> |"No"| AllFailed["All Sources Failed"]
+    
+    AllFailed --> UseCache
+    
+    Success --> ClearFailed["Clear failure status<br/>(timestamp = None)"]
+    ClearFailed --> ProcessData["Process & Cache<br/>(with new DataValidity)"]
     ProcessData --> UpdateSensors["Update Sensors"]
-    UseCache --> UpdateSensors
     
+    UseCache --> UpdateSensors
     UpdateSensors --> End["Wait for Next Update"]
 ```
 
@@ -623,11 +635,11 @@ flowchart TD
 flowchart TD
     subgraph CacheManager["Cache Manager"]
         direction TB
-        CacheGet["get(key)"] --> CacheCheck{"Cache exists & valid?"}
-        CacheCheck --> |"Yes"| CacheHit["Return cached data<br/>(deep copy to prevent mutation)"]
+        CacheGet["get(area, target_date, source)"] --> CacheCheck{"Cache exists & valid?"}
+        CacheCheck --> |"Yes"| CacheHit["Return cached data<br/>(with DataValidity)<br/>(deep copy to prevent mutation)"]
         CacheCheck --> |"No"| CacheMiss["Return None"]
         
-        CacheStore["store(key, data, ttl)"] --> Serialize["Serialize data"]
+        CacheStore["store(area, source, data, timestamp, target_date)"] --> Serialize["Serialize data<br/>(includes DataValidity)"]
         Serialize --> WriteFile["Write to .storage/"]
         
         CacheCleanup["cleanup()"] --> FindExpired["Find expired entries"]
@@ -636,37 +648,41 @@ flowchart TD
     
     subgraph RateLimiter["Rate Limiter"]
         direction TB
-        RLCheck["check_rate_limit(source, area)"] --> LastFetch{"Last fetch time"}
+        RLCheck["should_skip_fetch()"] --> GracePeriod{"In grace period?<br/>(startup/reload)"}
+        GracePeriod --> |"Yes"| AllowFetch["Allow Fetch<br/>(bypass rate limit)"]
+        GracePeriod --> |"No"| LastFetch{"Last fetch time"}
         LastFetch --> |"< 15 min ago"| Blocked["Rate Limited<br/>(use cache)"]
-        LastFetch --> |"≥ 15 min ago"| Allowed["Fetch Allowed"]
+        LastFetch --> |"≥ 15 min ago"| AllowFetch
         
         RLUpdate["update_last_fetch(source, area)"] --> StoreTime["Store current timestamp"]
     end
     
-    subgraph FailedSourceTracking["Source Health & Validation (v1.3.3+)"]
+    subgraph FailedSourceTracking["Source Health & Validation"]
         direction TB
-        FailedDict["self._failed_sources<br/>Dict[str, datetime | None]"] --> CheckStatus{"Check source status"}
+        FailedDict["self._failed_sources<br/>Dict[str, Optional[datetime]]"] --> CheckStatus{"Check source status"}
         CheckStatus --> |"timestamp = None"| SourceOK["Source validated<br/>(include in fetch)"]
-        CheckStatus --> |"timestamp exists"| CheckAge{"Age > 24 hours?"}
-        CheckAge --> |"Yes"| SourceReady["Ready for retry<br/>(include in fetch)"]
-        CheckAge --> |"No"| SourceDisabled["Source disabled<br/>(skip for now)"]
+        CheckStatus --> |"timestamp exists"| SourceDisabled["Source disabled<br/>(skip until health check)"]
         
         OnSuccess["On API success"] --> ClearTimestamp["Set timestamp = None"]
         OnFailure["On API failure"] --> SetTimestamp["Set timestamp = now()"]
-        SetTimestamp --> ScheduleHealthCheck["Schedule daily health check<br/>(if not running)"]
         
-        HealthCheckTask["Daily Health Check Task"] --> WaitWindow["Wait for special hour<br/>(00:00-01:00 or 13:00-15:00)"]
-        WaitWindow --> RandomDelay["Random delay 0-3600s<br/>(spread load)"]
-        RandomDelay --> ValidateAll["Validate ALL sources<br/>(not just failed)"]
-        ValidateAll --> UpdateStatus["Update all source statuses"]
-        UpdateStatus --> Sleep["Sleep 1 hour<br/>(repeat tomorrow)"]
+        HealthCheckTask["Health Check Background Task<br/>(started at init, runs continuously)"] --> CheckLoop["Sleep 15 minutes"]
+        CheckLoop --> InWindow{"In special window?<br/>(00:00-01:00 or 13:00-15:00)"}
+        InWindow --> |"No"| CheckLoop
+        InWindow --> |"Yes"| CheckLastWindow{"Last window hour checked<br/>!= current window hour?"}
+        CheckLastWindow --> |"Same window"| CheckLoop
+        CheckLastWindow --> |"Different window"| RandomDelay["Random delay 0-3600s<br/>(spread load)"]
+        RandomDelay --> ValidateAll["Validate ALL sources<br/>(not just failed ones)"]
+        ValidateAll --> UpdateStatus["Update all source statuses<br/>(clear or set timestamps)"]
+        UpdateStatus --> MarkWindow["Mark window hour checked<br/>(0 or 13)"]
+        MarkWindow --> CheckLoop
     end
     
     subgraph Integration["Integration Flow"]
         FetchRequest["Fetch Request"] --> RLCheck
         Blocked --> CacheGet
-        Allowed --> FilterDisabled["Filter disabled sources<br/>(< 24h since failure)"]
-        FilterDisabled --> APICall["API Call with<br/>Exponential Backoff"]
+        AllowFetch --> PreFilter["Pre-filter disabled sources<br/>(sources with failure timestamp)"]
+        PreFilter --> APICall["API Call with<br/>Exponential Backoff"]
         APICall --> |"Success"| OnSuccess
         APICall --> |"Failure (all attempts)"| OnFailure
         OnSuccess --> CacheStore
@@ -679,15 +695,13 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    FallbackStart["FallbackManager.fetch_with_fallback()"] --> GetSources["Get priority sources for area"]
-    GetSources --> FilterFailed["Filter out failed sources<br/>(timestamp < 24h)"]
-    FilterFailed --> SourceLoop{"More sources to try?"}
+    FallbackStart["FallbackManager.fetch_with_fallback()"] --> GetSources["Get enabled API instances<br/>(already pre-filtered)"]
+    GetSources --> SourceLoop{"More sources to try?"}
     
     SourceLoop --> |"Yes"| NextSource["Get next source"]
-    SourceLoop --> |"No"| FallbackFail["All sources failed or disabled"]
+    SourceLoop --> |"No"| FallbackFail["All sources failed"]
     
-    NextSource --> CreateAPI["Create API client"]
-    CreateAPI --> RetryLoop["Exponential Backoff Retry Loop"]
+    NextSource --> RetryLoop["Exponential Backoff Retry Loop"]
     
     subgraph RetryLoop["Retry with Exponential Backoff"]
         direction TB
@@ -715,21 +729,22 @@ flowchart TD
     MarkWorking --> FallbackSuccess["Return parsed data"]
     
     Failed --> MarkFailed["Mark source as failed<br/>(self._failed_sources[source] = now)"]
-    MarkFailed --> ScheduleRetry["Schedule daily retry task<br/>(if not already scheduled)"]
-    ScheduleRetry --> LogError
+    MarkFailed --> LogError
     
     LogError --> SourceLoop
     
     FallbackSuccess --> End["Success - data ready for processing"]
     FallbackFail --> End2["Failure - use cache or empty result"]
     
-    subgraph DailyRetry["Daily Retry Mechanism"]
+    subgraph HealthCheckValidation["Continuous Health Check (Background Task)"]
         direction TB
-        WaitWindow["Wait for special hour window<br/>(13:00-15:00)"] --> RandomDelay["Random delay (0-3600s)<br/>to spread load"]
-        RandomDelay --> ForceRetry["Force retry attempt<br/>(ignores 24h filter)"]
-        ForceRetry --> RetrySuccess{"Retry successful?"}
-        RetrySuccess --> |"Yes"| ClearFailure["Clear failure status"]
-        RetrySuccess --> |"No"| KeepFailed["Keep as failed<br/>(retry tomorrow)"]
+        BGTask["Health check task runs continuously<br/>(started at initialization)"] --> Sleep["Sleep 15 minutes"]
+        Sleep --> WindowCheck{"In special window?<br/>(00:00-01:00 or 13:00-15:00)"}
+        WindowCheck --> |"No"| Sleep
+        WindowCheck --> |"Yes, new window"| RandomDelay["Random delay (0-3600s)"]
+        RandomDelay --> ValidateAllSources["Validate ALL sources<br/>(failed + working)"]
+        ValidateAllSources --> UpdateStatuses["Update all source statuses:<br/>• Success → timestamp = None<br/>• Failure → timestamp = now"]
+        UpdateStatuses --> Sleep
     end
     
     subgraph SourcePriority["Source Priority Example"]
