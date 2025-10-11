@@ -278,8 +278,8 @@ series:
         return d;
       };
       return [
-        ...Object.entries(entity.attributes.today_with_timestamps || {}).map(([t, v]) => [timeToTimestamp(t), v]),
-        ...Object.entries(entity.attributes.tomorrow_with_timestamps || {}).map(([t, v]) => [timeToTimestamp(t, 1), v])
+        ...Object.entries(entity.attributes.interval_prices || {}).map(([t, v]) => [timeToTimestamp(t), v]),
+        ...Object.entries(entity.attributes.tomorrow_interval_prices || {}).map(([t, v]) => [timeToTimestamp(t, 1), v])
       ].sort((a, b) => a[0] - b[0]);
     color_threshold:
       - value: -50
