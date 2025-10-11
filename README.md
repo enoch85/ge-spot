@@ -517,7 +517,7 @@ flowchart TD
     Coord --> UPM["UnifiedPriceManager"]
     
     UPM --> FetchDecision["FetchDecision"]
-    FetchDecision --> |"Should fetch"| FilterSources["Filter Failed Sources<br/>(24h timeout)"]
+    FetchDecision --> |"Should fetch"| FilterSources["Filter Failed Sources<br/>(skip sources with failure timestamp)"]
     FetchDecision --> |"Rate limited"| Cache["CacheManager.get()"]
     
     FilterSources --> FallbackMgr["FallbackManager<br/>(Exponential Backoff:<br/>2s → 6s → 18s)"]
@@ -583,8 +583,8 @@ flowchart TD
     NormalFreq --> |"Every 30-60 min"| FilterSources
     
     FilterSources --> CheckFailed{"Check Failed Sources"}
-    CheckFailed --> |"Source failed < 24h ago"| SkipSource["Skip Source<br/>(use next in priority)"]
-    CheckFailed --> |"Source OK or > 24h"| IncludeSource["Include Source"]
+    CheckFailed --> |"Source has failure timestamp"| SkipSource["Skip Source<br/>(use next in priority)"]
+    CheckFailed --> |"Source validated (no timestamp)"| IncludeSource["Include Source"]
     
     SkipSource --> MoreSources{"More sources?"}
     IncludeSource --> MoreSources
@@ -643,29 +643,32 @@ flowchart TD
         RLUpdate["update_last_fetch(source, area)"] --> StoreTime["Store current timestamp"]
     end
     
-    subgraph FailedSourceTracking["Source Health & Validation (v1.3.3+)"]
+    subgraph FailedSourceTracking["Source Health & Validation (v1.4.0+)"]
         direction TB
         FailedDict["self._failed_sources<br/>Dict[str, datetime | None]"] --> CheckStatus{"Check source status"}
         CheckStatus --> |"timestamp = None"| SourceOK["Source validated<br/>(include in fetch)"]
-        CheckStatus --> |"timestamp exists"| CheckAge{"Age > 24 hours?"}
-        CheckAge --> |"Yes"| SourceReady["Ready for retry<br/>(include in fetch)"]
-        CheckAge --> |"No"| SourceDisabled["Source disabled<br/>(skip for now)"]
+        CheckStatus --> |"timestamp exists"| SourceDisabled["Source disabled<br/>(skip until health check)"]
         
         OnSuccess["On API success"] --> ClearTimestamp["Set timestamp = None"]
         OnFailure["On API failure"] --> SetTimestamp["Set timestamp = now()"]
         SetTimestamp --> ScheduleHealthCheck["Schedule daily health check<br/>(if not running)"]
         
-        HealthCheckTask["Daily Health Check Task"] --> WaitWindow["Wait for special hour<br/>(00:00-01:00 or 13:00-15:00)"]
-        WaitWindow --> RandomDelay["Random delay 0-3600s<br/>(spread load)"]
+        HealthCheckTask["Daily Health Check Task"] --> CheckLoop{"Every 15 minutes"}
+        CheckLoop --> InWindow{"In special window?<br/>(00:00-01:00 or 13:00-15:00)"}
+        InWindow --> |"No"| CheckLoop
+        InWindow --> |"Yes"| CheckLastWindow{"Last window checked<br/>!= current window?"}
+        CheckLastWindow --> |"Same window"| CheckLoop
+        CheckLastWindow --> |"Different window"| RandomDelay["Random delay 0-3600s<br/>(spread load)"]
         RandomDelay --> ValidateAll["Validate ALL sources<br/>(not just failed)"]
         ValidateAll --> UpdateStatus["Update all source statuses"]
-        UpdateStatus --> Sleep["Sleep 1 hour<br/>(repeat tomorrow)"]
+        UpdateStatus --> MarkWindow["Mark window checked<br/>(window hour: 0 or 13)"]
+        MarkWindow --> CheckLoop
     end
     
     subgraph Integration["Integration Flow"]
         FetchRequest["Fetch Request"] --> RLCheck
         Blocked --> CacheGet
-        Allowed --> FilterDisabled["Filter disabled sources<br/>(< 24h since failure)"]
+        Allowed --> FilterDisabled["Filter disabled sources<br/>(sources with failure timestamp)"]
         FilterDisabled --> APICall["API Call with<br/>Exponential Backoff"]
         APICall --> |"Success"| OnSuccess
         APICall --> |"Failure (all attempts)"| OnFailure
@@ -680,7 +683,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     FallbackStart["FallbackManager.fetch_with_fallback()"] --> GetSources["Get priority sources for area"]
-    GetSources --> FilterFailed["Filter out failed sources<br/>(timestamp < 24h)"]
+    GetSources --> FilterFailed["Filter out failed sources<br/>(sources with failure timestamp)"]
     FilterFailed --> SourceLoop{"More sources to try?"}
     
     SourceLoop --> |"Yes"| NextSource["Get next source"]
@@ -726,7 +729,7 @@ flowchart TD
     subgraph DailyRetry["Daily Retry Mechanism"]
         direction TB
         WaitWindow["Wait for special hour window<br/>(13:00-15:00)"] --> RandomDelay["Random delay (0-3600s)<br/>to spread load"]
-        RandomDelay --> ForceRetry["Force retry attempt<br/>(ignores 24h filter)"]
+        RandomDelay --> ForceRetry["Force retry attempt<br/>(validates all sources)"]
         ForceRetry --> RetrySuccess{"Retry successful?"}
         RetrySuccess --> |"Yes"| ClearFailure["Clear failure status"]
         RetrySuccess --> |"No"| KeepFailed["Keep as failed<br/>(retry tomorrow)"]

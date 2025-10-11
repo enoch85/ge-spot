@@ -96,6 +96,7 @@ class UnifiedPriceManager:
         self._health_check_scheduled = False
         self._health_check_task: Optional[asyncio.Task] = None  # Reference to health check task for lifecycle management
         self._last_health_check = None  # datetime of last health check
+        self._last_check_window = None  # Track last window hour checked (e.g., 0 or 13)
 
         # Services and utilities
         self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
@@ -273,15 +274,13 @@ class UnifiedPriceManager:
     async def _schedule_health_check(self, run_immediately: bool = False):
         """Schedule daily health check for ALL sources during special hours.
 
-        Validates all configured sources once per day during special hour windows.
+        Validates all configured sources once per window per day during special hour windows.
         Uses FallbackManager's exponential backoff for each source independently.
 
         Args:
             run_immediately: If True, runs validation immediately on first call (for boot-time validation)
         """
         import random
-
-        last_check_date = None
 
         # Run immediately in background if requested (non-blocking)
         if run_immediately:
@@ -293,7 +292,6 @@ class UnifiedPriceManager:
             )
             try:
                 await self._validate_all_sources()
-                last_check_date = dt_util.now().date()
                 self._last_health_check = dt_util.now()
             except Exception as e:
                 _LOGGER.error(f"[{self.area}] Health check failed: {e}", exc_info=True)
@@ -301,37 +299,52 @@ class UnifiedPriceManager:
         while True:
             now = dt_util.now()
             current_hour = now.hour
-            today_date = now.date()
 
-            # Check if we're in a special hour window
-            in_special_hours = any(
-                start <= current_hour < end
-                for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS
-            )
+            # Find which window we're in (if any)
+            current_window_start = None
+            for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS:
+                if start <= current_hour < end:
+                    current_window_start = start
+                    break
 
-            # Only check once per day
+            # Check if we should run health check:
+            # - We're in a window AND
+            # - Either we never checked, OR we checked a different window
             should_check = (
-                in_special_hours and
-                (last_check_date is None or last_check_date < today_date)
+                current_window_start is not None and
+                self._last_check_window != current_window_start
             )
 
             if should_check:
                 # Random delay within current hour to spread load
                 delay_seconds = random.randint(0, ValidationRetry.MAX_RANDOM_DELAY_SECONDS)
+                window_end = current_window_start + 1  # Get end hour for this window
+                for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS:
+                    if start == current_window_start:
+                        window_end = end
+                        break
+                
                 _LOGGER.info(
                     f"[{self.area}] Daily health check starting in {delay_seconds}s "
-                    f"(validating {len(self._api_classes)} sources)"
+                    f"(window: {current_window_start:02d}:00-{window_end:02d}:00, "
+                    f"validating {len(self._api_classes)} sources)"
                 )
                 await asyncio.sleep(delay_seconds)
 
                 # Validate ALL sources
                 await self._validate_all_sources()
 
-                last_check_date = now.date()
+                # Mark this window as checked
+                self._last_check_window = current_window_start
                 self._last_health_check = now
+                
+                _LOGGER.debug(
+                    f"[{self.area}] Health check complete for window {current_window_start:02d}:00"
+                )
 
-            # Sleep 1 hour and check again (will naturally land in window tomorrow)
-            await asyncio.sleep(3600)
+            # Sleep 15 minutes and check again (faster than 1 hour)
+            # This ensures we don't miss window transitions
+            await asyncio.sleep(900)  # 15 minutes
 
     async def _validate_all_sources(self):
         """Validate ALL configured sources independently.
@@ -416,7 +429,7 @@ class UnifiedPriceManager:
 
         Sources are validated implicitly during fetch:
         - Success → Source marked as working (failure timestamp cleared)
-        - Failure → Source marked as failed, skipped for 24 hours, daily retry scheduled
+        - Failure → Source marked as failed, skipped until next health check validates it
 
         Args:
             force: Whether to force fetch even if rate limited
