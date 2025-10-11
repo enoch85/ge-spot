@@ -14,15 +14,15 @@ from ..const.attributes import Attributes
 from ..const.config import Config
 from ..const.currencies import Currency, CurrencyInfo
 from ..const.defaults import Defaults
-from ..const.display import DisplayUnit # Ensure DisplayUnit is imported
-from ..const.network import Network # Import Network
+from ..const.display import DisplayUnit
+from ..const.network import Network
 
 _LOGGER = logging.getLogger(__name__)
 
 class BaseElectricityPriceSensor(SensorEntity):
     """Base sensor for electricity prices."""
 
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_state_class = None  # Prices are instantaneous, not totals. History still recorded.
     _attr_device_class = SensorDeviceClass.MONETARY
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):

@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, Optional, Callable
 from datetime import datetime
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.util import dt as dt_util
 
 from .base import BaseElectricityPriceSensor
@@ -180,8 +180,8 @@ class TomorrowAveragePriceSensor(TomorrowSensorMixin, PriceValueSensor):
 
 class PriceStatisticSensor(PriceValueSensor):
     """Sensor for price statistics (average, min, max)."""
-    device_class    = SensorDeviceClass.MONETARY
-    state_class     = SensorStateClass.MEASUREMENT  # Prices are instantaneous measurements, not cumulative totals
+    device_class = SensorDeviceClass.MONETARY
+    state_class = None
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix, stat_type):
         """Initialize the price statistic sensor."""
@@ -215,8 +215,8 @@ class PriceStatisticSensor(PriceValueSensor):
 
 class PriceDifferenceSensor(PriceValueSensor):
     """Sensor for price difference between two values."""
-    device_class    = SensorDeviceClass.MONETARY
-    state_class     = SensorStateClass.MEASUREMENT  # Prices are instantaneous measurements, not cumulative totals
+    device_class = SensorDeviceClass.MONETARY
+    state_class = None
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix, value1_key, value2_key):
         """Initialize the price difference sensor."""
@@ -262,8 +262,8 @@ class PriceDifferenceSensor(PriceValueSensor):
 
 class PricePercentSensor(PriceValueSensor):
     """Sensor for price percentage relative to a reference value."""
-    device_class    = SensorDeviceClass.MONETARY
-    state_class     = None  # Percent is not a monetary total, so set to None
+    device_class = SensorDeviceClass.MONETARY
+    state_class = None
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix, value_key, reference_key):
         """Initialize the price percentage sensor."""
