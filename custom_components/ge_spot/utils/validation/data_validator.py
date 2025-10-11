@@ -16,7 +16,7 @@ _SCHEMAS = {
         "properties": {
             "data": {"type": "object", "optional": True},
             "currency": {"type": "string", "optional": True},
-            "interval_prices": {"type": "object", "optional": True},
+            "today_interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
@@ -26,7 +26,7 @@ _SCHEMAS = {
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "interval_prices": {"type": "object", "optional": True},
+            "today_interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
@@ -37,7 +37,7 @@ _SCHEMAS = {
         "properties": {
             "records": {"type": "array", "optional": True},
             "currency": {"type": "string", "optional": True},
-            "interval_prices": {"type": "object", "optional": True},
+            "today_interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
@@ -47,7 +47,7 @@ _SCHEMAS = {
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "interval_prices": {"type": "object", "optional": True},
+            "today_interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
@@ -57,7 +57,7 @@ _SCHEMAS = {
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "interval_prices": {"type": "object", "optional": True},
+            "today_interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
@@ -67,7 +67,7 @@ _SCHEMAS = {
         "type": "object",
         "properties": {
             "currency": {"type": "string", "optional": True},
-            "interval_prices": {"type": "object", "optional": True},
+            "today_interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
@@ -78,7 +78,7 @@ _SCHEMAS = {
         "properties": {
             "prices": {"type": "array", "optional": True},
             "currency": {"type": "string", "optional": True},
-            "interval_prices": {"type": "object", "optional": True},
+            "today_interval_prices": {"type": "object", "optional": True},
             "current_price": {"type": "number", "optional": True},
             "next_interval_price": {"type": "number", "optional": True},
             "raw_data": {"type": "string", "optional": True}
@@ -91,7 +91,7 @@ _DEFAULT_SCHEMA = Schema({
     "type": "object",
     "properties": {
         "currency": {"type": "string", "optional": True},
-        "interval_prices": {"type": "object", "optional": True},
+        "today_interval_prices": {"type": "object", "optional": True},
         "current_price": {"type": "number", "optional": True},
         "next_interval_price": {"type": "number", "optional": True},
         "raw_data": {"type": "string", "optional": True}

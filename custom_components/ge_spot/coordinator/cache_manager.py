@@ -194,7 +194,7 @@ class CacheManager:
                             data_copy = dict(entry_data)
 
                             # Move tomorrow's prices to today's prices
-                            data_copy["interval_prices"] = data_copy["tomorrow_interval_prices"]
+                            data_copy["today_interval_prices"] = data_copy["tomorrow_interval_prices"]
                             data_copy["tomorrow_interval_prices"] = {}
 
                             # Mark as migrated for debugging purposes

@@ -218,7 +218,7 @@ class TimezoneConverter:
 # Example usage (would be in DataProcessor):
 # tz_converter = TimezoneConverter(self._tz_service)
 # final_today, final_tomorrow = tz_converter.normalize_today_and_tomorrow_prices(
-#     raw_data.get("interval_prices"), # Assuming raw data structure
+#     raw_data.get("today_interval_prices"), # Assuming raw data structure
 #     raw_data.get("tomorrow_interval_prices_raw"), # Assuming raw data structure
 #     raw_data.get("api_timezone")
 # )

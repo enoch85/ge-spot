@@ -66,51 +66,61 @@ BASE_PRICES_DK1 = [32.61, 30.82, 29.15, 29.36, 28.98, 29.91, 33.22, 30.70, 18.65
                    51.20, 54.33, 31.63, 30.43]
 
 # Generate 15-minute interval mock data (96 intervals per day)
-# Using October 2025 dates to match current test date context
+# Use dynamic dates based on current time to avoid test failures
+def get_test_date():
+    """Get today's date for test data generation."""
+    from datetime import datetime
+    return datetime.now().strftime("%Y-%m-%d")
+
+def get_yesterday_date():
+    """Get yesterday's date for updatedAt timestamp."""
+    from datetime import datetime, timedelta
+    return (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%dT10:55:58.9728151Z")
+
 SAMPLE_NORDPOOL_RESPONSES = {
     "SE3": {
-        "deliveryDateCET": "2025-10-02",
+        "deliveryDateCET": get_test_date(),
         "version": 2,
-        "updatedAt": "2025-10-01T10:55:58.9728151Z",
+        "updatedAt": get_yesterday_date(),
         "deliveryAreas": ["SE3"],
         "market": "DayAhead",
-        "multiAreaEntries": generate_15min_intervals("2025-10-02", BASE_PRICES_SE3, "SE3"),
+        "multiAreaEntries": lambda: generate_15min_intervals(get_test_date(), BASE_PRICES_SE3, "SE3"),
         "currency": "EUR",
         "exchangeRate": 1,
         "areaStates": [{"state": "Final", "areas": ["SE3"]}],
         "areaAverages": [{"areaCode": "SE3", "price": 20.26}]
     },
     "FI": {
-        "deliveryDateCET": "2025-10-02",
+        "deliveryDateCET": get_test_date(),
         "version": 2,
-        "updatedAt": "2025-10-01T10:55:58.9728151Z",
+        "updatedAt": get_yesterday_date(),
         "deliveryAreas": ["FI"],
         "market": "DayAhead",
-        "multiAreaEntries": generate_15min_intervals("2025-10-02", BASE_PRICES_FI, "FI"),
+        "multiAreaEntries": lambda: generate_15min_intervals(get_test_date(), BASE_PRICES_FI, "FI"),
         "currency": "EUR",
         "exchangeRate": 1,
         "areaStates": [{"state": "Final", "areas": ["FI"]}],
         "areaAverages": [{"areaCode": "FI", "price": 21.26}]
     },
     "NO1": {
-        "deliveryDateCET": "2025-10-02",
+        "deliveryDateCET": get_test_date(),
         "version": 2,
-        "updatedAt": "2025-10-01T10:55:58.9728151Z",
+        "updatedAt": get_yesterday_date(),
         "deliveryAreas": ["NO1"],
         "market": "DayAhead",
-        "multiAreaEntries": generate_15min_intervals("2025-10-02", BASE_PRICES_NO1, "NO1"),
+        "multiAreaEntries": lambda: generate_15min_intervals(get_test_date(), BASE_PRICES_NO1, "NO1"),
         "currency": "EUR",
         "exchangeRate": 1,
         "areaStates": [{"state": "Final", "areas": ["NO1"]}],
         "areaAverages": [{"areaCode": "NO1", "price": 15.26}]
     },
     "DK1": {
-        "deliveryDateCET": "2025-10-02",
+        "deliveryDateCET": get_test_date(),
         "version": 2,
-        "updatedAt": "2025-10-01T10:55:58.9728151Z",
+        "updatedAt": get_yesterday_date(),
         "deliveryAreas": ["DK1"],
         "market": "DayAhead",
-        "multiAreaEntries": generate_15min_intervals("2025-10-02", BASE_PRICES_DK1, "DK1"),
+        "multiAreaEntries": lambda: generate_15min_intervals(get_test_date(), BASE_PRICES_DK1, "DK1"),
         "currency": "EUR",
         "exchangeRate": 1,
         "areaStates": [{"state": "Final", "areas": ["DK1"]}],
@@ -123,14 +133,24 @@ BASE_PRICES_TOMORROW = [28.65, 27.36, 26.98, 27.91, 30.22, 31.70, 35.65, 40.41, 
                         39.40, 38.63, 36.60, 35.14, 34.15, 35.46, 43.82, 48.45, 50.20, 47.33,
                         43.63, 40.43, 38.21, 36.82]
 
+def get_tomorrow_date():
+    """Get tomorrow's date for test data generation."""
+    from datetime import datetime, timedelta
+    return (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+def get_today_afternoon():
+    """Get today's afternoon timestamp for updatedAt."""
+    from datetime import datetime
+    return datetime.now().strftime("%Y-%m-%dT13:10:22.1234567Z")
+
 SAMPLE_NORDPOOL_TOMORROW_RESPONSES = {
     "SE3": {
-        "deliveryDateCET": "2025-10-03",
+        "deliveryDateCET": get_tomorrow_date(),
         "version": 2,
-        "updatedAt": "2025-10-02T13:10:22.1234567Z",
+        "updatedAt": get_today_afternoon(),
         "deliveryAreas": ["SE3"],
         "market": "DayAhead",
-        "multiAreaEntries": generate_15min_intervals("2025-10-03", BASE_PRICES_TOMORROW, "SE3"),
+        "multiAreaEntries": lambda: generate_15min_intervals(get_tomorrow_date(), BASE_PRICES_TOMORROW, "SE3"),
         "currency": "EUR",
         "exchangeRate": 1,
         "areaStates": [{"state": "Final", "areas": ["SE3"]}],
@@ -161,10 +181,26 @@ async def test_nordpool_live_fetch_parse(area, monkeypatch):
     # Create a modified version of fetch_raw_data that returns our mock data
     async def mock_fetch_raw_data(self, area, **kwargs):
         # Create a mock response structure matching what the real API returns
+        # Get the template and call lambda for multiAreaEntries if it exists
+        area_response = SAMPLE_NORDPOOL_RESPONSES.get(area, SAMPLE_NORDPOOL_RESPONSES["SE3"]).copy()
+        tomorrow_response = SAMPLE_NORDPOOL_TOMORROW_RESPONSES.get("SE3").copy()
+        
+        # Call lambda functions to generate current date data
+        if callable(area_response.get("multiAreaEntries")):
+            area_response["multiAreaEntries"] = area_response["multiAreaEntries"]()
+        if callable(tomorrow_response.get("multiAreaEntries")):
+            tomorrow_response["multiAreaEntries"] = tomorrow_response["multiAreaEntries"]()
+        
+        # Update dynamic dates
+        area_response["deliveryDateCET"] = get_test_date()
+        area_response["updatedAt"] = get_yesterday_date()
+        tomorrow_response["deliveryDateCET"] = get_tomorrow_date()
+        tomorrow_response["updatedAt"] = get_today_afternoon()
+        
         response = {
             "raw_data": {
-                "today": SAMPLE_NORDPOOL_RESPONSES.get(area, SAMPLE_NORDPOOL_RESPONSES["SE3"]),
-                "tomorrow": SAMPLE_NORDPOOL_TOMORROW_RESPONSES.get("SE3"),  # Use SE3 as default
+                "today": area_response,
+                "tomorrow": tomorrow_response,
             },
             "timezone": "Europe/Oslo",  # Nordpool uses Central European Time
             "currency": "EUR",

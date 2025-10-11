@@ -55,7 +55,7 @@ class StandardizedPriceData:
     currency: str
     fetched_at: str  # ISO format datetime string
     reference_time: Optional[str] = None  # ISO format datetime string
-    interval_prices: Dict[str, float] = field(default_factory=dict)  # Key: HH:MM, Value: price
+    today_interval_prices: Dict[str, float] = field(default_factory=dict)  # Key: HH:MM, Value: price
     raw_prices: List[IntervalPrice] = field(default_factory=list)
     current_price: Optional[float] = None
     next_interval_price: Optional[float] = None
@@ -82,7 +82,7 @@ class StandardizedPriceData:
             "area": self.area,
             "currency": self.currency,
             "fetched_at": self.fetched_at,
-            "interval_prices": self.interval_prices,
+            "today_interval_prices": self.today_interval_prices,
             "current_price": self.current_price,
             "next_interval_price": self.next_interval_price,
             "vat_included": self.vat_included,
@@ -145,7 +145,7 @@ def create_standardized_price_data(
     source: str,
     area: str,
     currency: str,
-    interval_prices: Dict[str, float],
+    today_interval_prices: Dict[str, float],
     reference_time: Optional[datetime] = None,
     api_timezone: Optional[str] = None,
     vat_rate: Optional[float] = None,
@@ -161,7 +161,7 @@ def create_standardized_price_data(
         source: Source identifier
         area: Area code
         currency: Currency code
-        interval_prices: Interval prices dictionary (RAW, from parser, likely ISO keys)
+        today_interval_prices: Today's interval prices dictionary (RAW, from parser, likely ISO keys)
         reference_time: Optional reference time
         api_timezone: Optional API timezone
         vat_rate: Optional VAT rate
@@ -181,9 +181,9 @@ def create_standardized_price_data(
     # REMOVED: Statistics calculation
     # REMOVED: Current/Next interval price calculation
 
-    # Create raw_prices list from the input interval_prices (assuming ISO keys from parser)
+    # Create raw_prices list from the input today_interval_prices (assuming ISO keys from parser)
     raw_prices_list = []
-    for interval_key, price in interval_prices.items():
+    for interval_key, price in today_interval_prices.items():
         try:
             # Attempt to parse ISO string key
             dt_obj = datetime.fromisoformat(interval_key.replace('Z', '+00:00'))
@@ -211,7 +211,7 @@ def create_standardized_price_data(
         currency=currency,
         fetched_at=now.isoformat(),
         reference_time=reference_time.isoformat() if reference_time else None,
-        interval_prices=interval_prices, # Store the RAW interval prices dict from parser
+        today_interval_prices=today_interval_prices, # Store the RAW interval prices dict from parser
         raw_prices=raw_prices_list,
         api_timezone=api_timezone,
         vat_rate=vat_rate,

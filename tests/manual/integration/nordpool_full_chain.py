@@ -544,7 +544,7 @@ async def main():
                     "area": area,
                     "currency": source_currency,
                     "target_currency": target_currency,
-                    "interval_prices": today_prices,  # Coordinator uses interval_prices for processed data
+                    "today_interval_prices": today_prices,  # Coordinator uses interval_prices for processed data
                     "tomorrow_interval_prices": tomorrow_prices,  # Changed from tomorrow_hourly_prices
                     "converted_prices": converted_prices,
                     "source_timezone": source_timezone, # Use timezone from parser

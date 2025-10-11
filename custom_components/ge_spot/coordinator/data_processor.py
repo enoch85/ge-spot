@@ -36,7 +36,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # NOTE: All API modules should return raw, unprocessed data in this standardized format:
 # {
-#     "interval_prices": {"HH:MM" or ISO: price, ...},
+#     "today_interval_prices": {"HH:MM" or ISO: price, ...},
 #     "currency": str,
 #     "timezone": str,
 #     "area": str,
@@ -301,7 +301,7 @@ class DataProcessor:
             "target_currency": self.target_currency,
             "source_timezone": input_source_timezone, # Store the actual source timezone used
             "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None,
-            "interval_prices": final_today_prices,
+            "today_interval_prices": final_today_prices,
             "tomorrow_interval_prices": final_tomorrow_prices,
             "raw_interval_prices_original": input_interval_raw, # Store the raw prices that went INTO normalization
             "current_price": None,
@@ -444,7 +444,7 @@ class DataProcessor:
             target_timezone = str(self._tz_service.target_timezone)
 
             validity = calculate_data_validity(
-                interval_prices=processed_result["interval_prices"],
+                interval_prices=processed_result["today_interval_prices"],
                 tomorrow_interval_prices=processed_result["tomorrow_interval_prices"],
                 now=now,
                 current_interval_key=current_interval_key,
@@ -460,7 +460,7 @@ class DataProcessor:
             from .data_validity import DataValidity
             processed_result["data_validity"] = DataValidity().to_dict()
 
-        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}")
+        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['today_interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}")
         return processed_result
 
     def _get_parser(self, source_name: str) -> Optional[BasePriceParser]:
@@ -593,9 +593,9 @@ class DataProcessor:
             "target_currency": self.target_currency,
             "source_timezone": data.get("source_timezone"),
             "target_timezone": str(self._tz_service.area_timezone) if self._tz_service else None, # Use area_timezone as suggested by error
-            "interval_prices": {},
+            "today_interval_prices": {},
             "tomorrow_interval_prices": {},
-            "raw_interval_prices_original": data.get("interval_prices"), # Store original if available
+            "raw_interval_prices_original": data.get("today_interval_prices"), # Store original if available
             "current_price": None,
             "next_interval_price": None,
             "current_interval_key": None,

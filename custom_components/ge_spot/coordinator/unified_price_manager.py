@@ -491,7 +491,7 @@ class UnifiedPriceManager:
                     # Cached interval keys are in target_timezone
                     target_timezone = str(self._tz_service.target_timezone)
                     data_validity = calculate_data_validity(
-                        interval_prices=cached_data_for_decision.get("interval_prices", {}),
+                        interval_prices=cached_data_for_decision.get("today_interval_prices", {}),
                         tomorrow_interval_prices=cached_data_for_decision.get("tomorrow_interval_prices", {}),
                         now=now,
                         current_interval_key=current_interval_key,
@@ -730,7 +730,7 @@ class UnifiedPriceManager:
                 processed_data = await self._process_result(result)
 
                 # Check if processing yielded valid data (either today OR tomorrow prices)
-                has_today = processed_data and processed_data.get("interval_prices")
+                has_today = processed_data and processed_data.get("today_interval_prices")
                 has_tomorrow = processed_data and processed_data.get("tomorrow_interval_prices")
                 has_valid_data = has_today or has_tomorrow
 
@@ -888,7 +888,7 @@ class UnifiedPriceManager:
         try:
             processed_data = await self._data_processor.process(result)
             # Set has_data flag if we have either today OR tomorrow prices
-            has_today = bool(processed_data.get("interval_prices"))
+            has_today = bool(processed_data.get("today_interval_prices"))
             has_tomorrow = bool(processed_data.get("tomorrow_interval_prices"))
             processed_data["has_data"] = has_today or has_tomorrow
             processed_data["last_update"] = dt_util.now().isoformat() # Timestamp the processing time
@@ -944,7 +944,7 @@ class UnifiedPriceManager:
             "area": self.area,
             "currency": self.currency,
             "target_currency": self.currency,
-            "interval_prices": {},
+            "today_interval_prices": {},
             "raw_data": None,
             "source_timezone": None,
             "attempted_sources": self._attempted_sources,
