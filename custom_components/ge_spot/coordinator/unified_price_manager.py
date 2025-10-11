@@ -94,6 +94,7 @@ class UnifiedPriceManager:
         self._failed_sources = {}
         # Single flag for health check task (replaces per-source retry tracking)
         self._health_check_scheduled = False
+        self._health_check_task: Optional[asyncio.Task] = None  # Reference to health check task for lifecycle management
         self._last_health_check = None  # datetime of last health check
 
         # Services and utilities
@@ -571,15 +572,15 @@ class UnifiedPriceManager:
             # Ensure session is created correctly
             session = async_get_clientsession(self.hass)
 
-            # Filter out recently failed sources (within last 24 hours)
-            # Unless force=True, which bypasses the 24h filter
+            # Use all configured sources - health check validates them during special windows
+            # force=True bypasses failed source tracking entirely
             enabled_api_classes = []
             for cls in self._api_classes:
                 source_name = cls(config={}).source_type
                 last_failure = self._failed_sources.get(source_name)
 
-                # Skip sources that failed recently (within 24 hours), unless forced
-                if not force and last_failure and (now - last_failure).total_seconds() < 86400:
+                # Skip failed sources during regular fetches (health check will validate them)
+                if not force and last_failure:
                     continue
 
                 enabled_api_classes.append(cls)
@@ -593,7 +594,7 @@ class UnifiedPriceManager:
                 ]
                 _LOGGER.info(
                     f"[{self.area}] Skipping {disabled_count} recently failed source(s): {', '.join(disabled_names)} "
-                    f"(will retry during daily window)"
+                    f"(will be retried during next health check window)"
                 )
 
             api_instances = [
@@ -712,7 +713,7 @@ class UnifiedPriceManager:
                         f"[{self.area}] Scheduling daily health check task "
                         f"(will validate all {len(self._api_classes)} sources)"
                     )
-                    asyncio.create_task(self._schedule_health_check())
+                    self._health_check_task = asyncio.create_task(self._schedule_health_check())
                     self._health_check_scheduled = True
 
             # Try to use cached data as a last resort - specify today's date
@@ -891,7 +892,16 @@ class UnifiedPriceManager:
             _LOGGER.debug(f"Fresh data fetched after cache clear: has_data={fresh_data.get('has_data')}")
             
             # Schedule health check to validate all sources after manual cache clear
-            asyncio.create_task(self._schedule_health_check(run_immediately=True))
+            # Cancel existing health check task if running
+            if self._health_check_task and not self._health_check_task.done():
+                _LOGGER.debug(f"[{self.area}] Cancelling existing health check task before creating new one")
+                self._health_check_task.cancel()
+                try:
+                    await self._health_check_task
+                except asyncio.CancelledError:
+                    pass
+            
+            self._health_check_task = asyncio.create_task(self._schedule_health_check(run_immediately=True))
             _LOGGER.info(f"[{self.area}] Scheduled health check after cache clear")
             
             return fresh_data
@@ -899,6 +909,15 @@ class UnifiedPriceManager:
 
     async def async_close(self):
         """Close any open sessions and resources."""
+        # Cancel health check task if running
+        if self._health_check_task and not self._health_check_task.done():
+            _LOGGER.debug(f"[{self.area}] Cancelling health check task during shutdown")
+            self._health_check_task.cancel()
+            try:
+                await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+        
         # Close the exchange service session if it was initialized
         if self._exchange_service:
             await self._exchange_service.close()

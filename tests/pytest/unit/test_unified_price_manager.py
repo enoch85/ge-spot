@@ -59,10 +59,6 @@ async def cancel_health_check_tasks(manager):
                     await task
                 except asyncio.CancelledError:
                     pass
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
 
 # Mock data for successful fetch
 # Using 15-minute intervals (HH:MM format) to match TimeInterval.QUARTER_HOURLY configuration
@@ -890,13 +886,14 @@ class TestUnifiedPriceManager:
 
     @pytest.mark.asyncio
     async def test_daily_retry_window_success_and_failure(self, manager, auto_mock_core_dependencies, monkeypatch):
-        """Test comprehensive source validation lifecycle: failures, 24h skip, retry success, retry failure."""
+        """Test comprehensive source validation lifecycle with health check integration."""
         # This test validates the complete implicit validation flow:
         # 1. Initial failure marks sources with timestamp
-        # 2. Subsequent fetches within 24h skip failed sources
-        # 3. After 24h, sources are retried automatically
+        # 2. Subsequent regular fetches skip failed sources (health check will validate them)
+        # 3. force=True bypasses the filter and allows immediate retry
         # 4. Retry success clears failure markers
-        # 5. Retry failure updates failure timestamp and continues 24h cycle
+        # 5. Retry failure updates failure timestamp and continues cycle
+        # Note: Health check validates sources during special windows, not 24h timer
         
         mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
@@ -958,25 +955,25 @@ class TestUnifiedPriceManager:
         assert manager._failed_sources[Source.NORDPOOL] == first_failure_time_nordpool, \
             "Failure timestamp unchanged when sources skipped"
         
-        # ========== SCENARIO 3: Fetch After 24h - Retry Success ==========
-        # After 24h, sources should be retried and succeed
+        # ========== SCENARIO 3: Force Fetch - Bypasses Failed Source Filter ==========
+        # force=True bypasses the failed source filter and retries immediately
         
         mock_fallback.reset_mock()
         mock_processor.reset_mock()
         mock_cache_get.reset_mock()
         
-        # Advance time by 25 hours total (past 24h window)
-        mock_now.return_value = initial_time + timedelta(hours=25)
+        # Advance time by 2 hours (still within previous 24h window - but force bypasses it)
+        mock_now.return_value = initial_time + timedelta(hours=4)
         _LAST_FETCH_TIME.clear()  # Clear rate limit
         
         # Configure for successful retry
         mock_fallback.return_value = MOCK_SUCCESS_RESULT
         mock_processor.return_value = MOCK_PROCESSED_RESULT
         
-        result_3 = await manager.fetch_data()
+        result_3 = await manager.fetch_data(force=True)
         
-        # Verify sources were retried and success cleared failures
-        assert mock_fallback.await_count == 1, "API should be called after 24h window"
+        # Verify sources were retried (force=True bypasses filter) and success cleared failures
+        assert mock_fallback.await_count == 1, "API should be called when force=True"
         assert manager._consecutive_failures == 0, "Success resets consecutive failure counter"
         assert manager._failed_sources[Source.NORDPOOL] is None, "Successful source clears failure marker"
         # Note: ENTSOE was never tried because NORDPOOL succeeded (fallback stops at first success)
@@ -992,7 +989,7 @@ class TestUnifiedPriceManager:
         mock_cache_get.reset_mock()
         
         # Advance time by 2 hours
-        second_failure_time_start = initial_time + timedelta(hours=27)
+        second_failure_time_start = initial_time + timedelta(hours=6)
         mock_now.return_value = second_failure_time_start
         _LAST_FETCH_TIME.clear()
         
@@ -1010,68 +1007,8 @@ class TestUnifiedPriceManager:
         assert manager._consecutive_failures == 1, "Consecutive failures restart at 1"
         assert result_4.get("has_data") is False, "No data on second failure"
         
-        # ========== SCENARIO 5: Fetch Within 24h of Second Failure (Skipped Again) ==========
-        
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        
-        mock_now.return_value = second_failure_time_start + timedelta(hours=5)
-        _LAST_FETCH_TIME.clear()
-        
-        empty_res_5 = await manager._generate_empty_result(error="No API sources available")
-        mock_processor.return_value = empty_res_5
-        
-        result_5 = await manager.fetch_data()
-        
-        assert mock_fallback.await_count == 0, "Sources still skipped within 24h of second failure"
-        assert manager._failed_sources[Source.NORDPOOL] == second_failure_time_nordpool, \
-            "Failure timestamp unchanged"
-        
-        # ========== SCENARIO 6: Retry After 24h - Failure Again ==========
-        # After 24h from second failure, retry but fail again
-        
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        
-        third_attempt_time = second_failure_time_start + timedelta(hours=26)
-        mock_now.return_value = third_attempt_time
-        _LAST_FETCH_TIME.clear()
-        
-        mock_fallback.return_value = MOCK_FAILURE_RESULT
-        empty_res_6 = await manager._generate_empty_result(error=f"All sources failed: {MOCK_FAILURE_RESULT['error']}")
-        mock_processor.return_value = empty_res_6
-        
-        result_6 = await manager.fetch_data()
-        
-        # Verify retry was attempted but failed, updating timestamp
-        assert mock_fallback.await_count == 1, "API called for retry after 24h"
-        third_failure_time_nordpool = manager._failed_sources[Source.NORDPOOL]
-        assert third_failure_time_nordpool == third_attempt_time, "Failure timestamp updated to retry time"
-        assert third_failure_time_nordpool > second_failure_time_nordpool, "Third timestamp later than second"
-        # Counter went: 1 (scenario 4) → 2 (scenario 5 skip) → 3 (scenario 6 retry fail)
-        assert manager._consecutive_failures == 3, "Consecutive failures increment through skip and retry failure"
-        assert result_6.get("has_data") is False, "No data on retry failure"
-        
-        # ========== SCENARIO 7: Force Fetch Bypasses 24h Filter ==========
-        # Even within 24h window, force=True should bypass filter
-        
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        
-        # Only 1 hour after third failure (well within 24h)
-        mock_now.return_value = third_attempt_time + timedelta(hours=1)
-        _LAST_FETCH_TIME.clear()
-        
-        mock_fallback.return_value = MOCK_SUCCESS_RESULT
-        mock_processor.return_value = MOCK_PROCESSED_RESULT
-        
-        result_7 = await manager.fetch_data(force=True)
-        
-        # Verify force bypassed 24h filter
-        assert mock_fallback.await_count == 1, "Force=True bypasses 24h filter"
-        assert manager._consecutive_failures == 0, "Success resets counter even on forced fetch"
-        assert manager._failed_sources[Source.NORDPOOL] is None, "Force fetch success clears failures"
-        assert result_7.get("has_data") is True, "Data available on forced success"
+        # Cleanup background tasks before finishing
+        await cancel_health_check_tasks(manager)
 
 
 class TestHealthCheck:
