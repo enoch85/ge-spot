@@ -269,15 +269,33 @@ class UnifiedPriceManager:
             else:
                  _LOGGER.warning("DataProcessor does not have _exchange_service attribute to set.")
 
-    async def _schedule_health_check(self):
+    async def _schedule_health_check(self, run_immediately: bool = False):
         """Schedule daily health check for ALL sources during special hours.
 
         Validates all configured sources once per day during special hour windows.
         Uses FallbackManager's exponential backoff for each source independently.
+        
+        Args:
+            run_immediately: If True, runs validation immediately on first call (for boot-time validation)
         """
         import random
 
         last_check_date = None
+
+        # Run immediately in background if requested (non-blocking)
+        if run_immediately:
+            # Add delay to let HA finish booting
+            await asyncio.sleep(10)
+            _LOGGER.info(
+                f"[{self.area}] Running immediate health check in background "
+                f"(validating {len(self._api_classes)} sources)"
+            )
+            try:
+                await self._validate_all_sources()
+                last_check_date = dt_util.now().date()
+                self._last_health_check = dt_util.now()
+            except Exception as e:
+                _LOGGER.error(f"[{self.area}] Health check failed: {e}", exc_info=True)
 
         while True:
             now = dt_util.now()
@@ -871,6 +889,11 @@ class UnifiedPriceManager:
             # Force a new fetch - this will return fresh data
             fresh_data = await self.fetch_data(force=True)
             _LOGGER.debug(f"Fresh data fetched after cache clear: has_data={fresh_data.get('has_data')}")
+            
+            # Schedule health check to validate all sources after manual cache clear
+            asyncio.create_task(self._schedule_health_check(run_immediately=True))
+            _LOGGER.info(f"[{self.area}] Scheduled health check after cache clear")
+            
             return fresh_data
         return None
 

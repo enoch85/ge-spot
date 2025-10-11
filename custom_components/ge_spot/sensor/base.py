@@ -22,7 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 class BaseElectricityPriceSensor(SensorEntity):
     """Base sensor for electricity prices."""
 
-    _attr_state_class = SensorStateClass.TOTAL
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.MONETARY
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):

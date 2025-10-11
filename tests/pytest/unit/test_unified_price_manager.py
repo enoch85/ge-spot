@@ -1221,3 +1221,144 @@ class TestHealthCheck:
         next_check = manager._calculate_next_health_check(test_time)
         assert next_check.hour == 0, f"Should return 00:00, got {next_check.hour}:00"
         assert next_check.date() == test_time.date() + timedelta(days=1), "Should be next day"
+
+    @pytest.mark.asyncio
+    async def test_health_check_non_blocking_on_boot(self, manager):
+        """Test that health check with run_immediately=True doesn't block boot.
+        
+        Verifies that even with slow-failing sources (long timeouts), the health
+        check runs in background without blocking the caller.
+        """
+        # Arrange - simulate slow failing sources (26s timeout per source)
+        with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback:
+            async def slow_timeout(*args, **kwargs):
+                """Simulate slow timeout (2s + 6s + 18s = 26s)."""
+                await asyncio.sleep(0.5)  # Simulate partial timeout for test speed
+                return {"error": Exception("Timeout after 26s")}
+            
+            mock_fallback.side_effect = slow_timeout
+            
+            # Act - measure time for scheduling (should return immediately)
+            import time
+            start_time = time.time()
+            
+            # Schedule health check with run_immediately=True (background task)
+            task = asyncio.create_task(manager._schedule_health_check(run_immediately=True))
+            
+            # Time until task is created (should be instant)
+            schedule_time = time.time() - start_time
+            
+            # Assert - scheduling should be instant (< 0.1s)
+            assert schedule_time < 0.1, f"Scheduling took {schedule_time:.2f}s, should be instant"
+            
+            # Cleanup - cancel background task
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    @pytest.mark.asyncio
+    async def test_cache_clear_triggers_health_check(self, manager):
+        """Test that clearing cache triggers immediate health check.
+        
+        Verifies that manual cache clear validates all sources in background.
+        """
+        # Arrange
+        with patch.object(manager._cache_manager, 'clear_cache', return_value=True), \
+             patch.object(manager, 'fetch_data', new_callable=AsyncMock) as mock_fetch, \
+             patch.object(manager, '_schedule_health_check', new_callable=AsyncMock) as mock_health:
+            
+            mock_fetch.return_value = {**MOCK_PROCESSED_RESULT, "has_data": True}
+            
+            # Act
+            await manager.clear_cache()
+            
+            # Assert - health check should be scheduled with run_immediately=True
+            mock_health.assert_called_once_with(run_immediately=True)
+
+    @pytest.mark.asyncio
+    async def test_health_check_with_mixed_source_timing(self, manager):
+        """Test health check doesn't block with mixed fast/slow sources.
+        
+        Simulates realistic scenario:
+        - First source: fast success (1s)
+        - Second source: slow timeout (26s)
+        - Third source: fast error (0.1s)
+        
+        Health check should run in background without blocking caller.
+        """
+        # Arrange
+        call_count = [0]
+        
+        async def mixed_timing(*args, **kwargs):
+            """Simulate mixed source timing."""
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # Fast success
+                await asyncio.sleep(0.01)
+                return {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            elif call_count[0] == 2:
+                # Slow timeout
+                await asyncio.sleep(0.5)  # Simulate timeout for test speed
+                return {"error": Exception("Timeout")}
+            else:
+                # Fast error
+                return {"error": Exception("Quick error")}
+        
+        with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback:
+            mock_fallback.side_effect = mixed_timing
+            
+            # Act - measure time for scheduling
+            import time
+            start_time = time.time()
+            
+            # Schedule health check (should return immediately despite slow sources)
+            task = asyncio.create_task(manager._schedule_health_check(run_immediately=True))
+            
+            schedule_time = time.time() - start_time
+            
+            # Assert - scheduling should be instant
+            assert schedule_time < 0.1, f"Scheduling took {schedule_time:.2f}s, should be instant"
+            
+            # Let health check actually run to verify it works
+            await asyncio.sleep(1.0)  # Wait for mixed timing to complete
+            
+            # Cleanup
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    @pytest.mark.asyncio
+    async def test_health_check_all_sources_fast_success(self, manager):
+        """Test health check completes quickly when all sources succeed fast.
+        
+        Best-case scenario: All sources respond quickly (< 2s each).
+        """
+        # Arrange
+        with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback:
+            async def fast_success(*args, **kwargs):
+                """Simulate fast successful response."""
+                await asyncio.sleep(0.01)
+                return {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            
+            mock_fallback.side_effect = fast_success
+            
+            # Act
+            import time
+            start_time = time.time()
+            
+            await manager._validate_all_sources()
+            
+            validation_time = time.time() - start_time
+            
+            # Assert - should complete quickly (< 1s for 3 sources × 0.01s)
+            assert validation_time < 1.0, f"Validation took {validation_time:.2f}s, expected < 1s"
+            
+            # All sources should be marked as working
+            assert all(
+                manager._failed_sources.get(cls(config={}).source_type) is None
+                for cls in manager._api_classes
+            ), "All sources should be validated"

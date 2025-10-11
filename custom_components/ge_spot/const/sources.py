@@ -54,19 +54,6 @@ class Source:
         AMBER: "Amber Electric"
     }
 
-    # Source URLs
-    URLS = {
-        NORDPOOL: "https://www.nordpoolgroup.com/",
-        ENTSOE: "https://transparency.entsoe.eu/",
-        ENERGI_DATA_SERVICE: "https://www.energidataservice.dk/",
-        AEMO: "https://aemo.com.au/",
-        ENERGY_CHARTS: "https://energy-charts.info",
-        OMIE: "https://www.omie.es/",
-        STROMLIGNING: "https://www.stromligning.no/",
-        COMED: "https://hourlypricing.comed.com/",
-        AMBER: "https://amber.com.au/"
-    }
-
     @staticmethod
     def get_display_name(source: str) -> str:
         """Get display name for a source.
@@ -78,18 +65,6 @@ class Source:
             Display name
         """
         return Source.DISPLAY_NAMES.get(source, source)
-
-    @staticmethod
-    def get_url(source: str) -> str:
-        """Get URL for a source.
-
-        Args:
-            source: Source identifier
-
-        Returns:
-            URL
-        """
-        return Source.URLS.get(source, "")
 
     @staticmethod
     def is_valid(source: str) -> bool:
