@@ -86,11 +86,12 @@ class AemoParser(BasePriceParser):
                     tz = ZoneInfo(source_timezone)
                     timestamp = timestamp.replace(tzinfo=tz)
 
-                # Use ISO format as key
-                interval_key = timestamp.isoformat()
+                # Convert to UTC and use ISO format as key
+                timestamp_utc = timestamp.astimezone(ZoneInfo("UTC"))
+                interval_key = timestamp_utc.isoformat()
                 interval_raw[interval_key] = record["price"]
 
-            _LOGGER.debug(f"[AemoParser] Created {len(interval_raw)} 30-minute interval_raw entries")
+            _LOGGER.debug(f"[AemoParser] Created {len(interval_raw)} 30-minute interval_raw entries (UTC keys)")
 
             # Expand 30-minute trading intervals to 15-minute intervals
             _LOGGER.debug(f"[AemoParser] Expanding {len(interval_raw)} 30-min prices to 15-min intervals")

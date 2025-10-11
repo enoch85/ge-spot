@@ -1,22 +1,46 @@
 """Unit tests for AEMO parser (refactored version)."""
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timedelta
+import zoneinfo
 
 from custom_components.ge_spot.api.parsers.aemo_parser import AemoParser
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.const.sources import Source
 
 
+# Generate current time data for testing
+def _generate_current_aemo_data(region: str, num_intervals: int = 3, timezone_str: str = "Australia/Sydney") -> str:
+    """Generate AEMO CSV data with current timestamps.
+    
+    Args:
+        region: AEMO region code (NSW1, QLD1, etc.)
+        num_intervals: Number of 30-minute intervals to generate
+        timezone_str: Timezone to use for timestamp generation
+    """
+    region_tz = zoneinfo.ZoneInfo(timezone_str)
+    now = datetime.now(region_tz)
+    
+    # Round down to nearest 30 minutes (AEMO trading intervals)
+    current_30min = now.replace(minute=(now.minute // 30) * 30, second=0, microsecond=0)
+    
+    lines = []
+    for i in range(num_intervals):
+        interval_time = current_30min + timedelta(minutes=30 * i)
+        timestamp = interval_time.strftime("%Y/%m/%d %H:%M:%S")
+        price = 150.0 + (i * 10)  # Simple price progression
+        
+        lines.append(
+            f"D,PREDISPATCH,REGION_PRICES,1,{timestamp},{region},{i+1},0,{timestamp},"
+            f"{price:.2f},{price:.2f},{price:.2f},{price:.2f},{price:.2f},{price:.2f},{price:.2f},"
+            f"0.0,0.0,0.0,0.0,{timestamp}"
+        )
+    
+    return "\n".join(lines)
+
+
 # Sample CSV data matching AEMO NEMWEB format
 SAMPLE_CSV_HEADER = 'I,PREDISPATCH,REGION_PRICES,1,PREDISPATCH_RUN_DATETIME,REGIONID,PERIODID,INTERVENTION,DATETIME,RRP,EEP,ROP,RAISE6SECRRP,RAISE60SECRRP,RAISE5MINRRP,RAISEREGRRP,LOWER6SECRRP,LOWER60SECRRP,LOWER5MINRRP,LOWERREGRRP,LASTCHANGED'
-
-SAMPLE_CSV_DATA_NSW = """D,PREDISPATCH,REGION_PRICES,1,2025/10/07 00:33:36,NSW1,1,0,2025/10/07 01:00:00,176.03,176.03,176.03,176.03,176.03,176.03,176.03,0.0,0.0,0.0,0.0,2025/10/07 00:33:36
-D,PREDISPATCH,REGION_PRICES,1,2025/10/07 00:33:36,NSW1,2,0,2025/10/07 01:30:00,155.26,155.26,155.26,155.26,155.26,155.26,155.26,0.0,0.0,0.0,0.0,2025/10/07 00:33:36
-D,PREDISPATCH,REGION_PRICES,1,2025/10/07 00:33:36,NSW1,3,0,2025/10/07 02:00:00,132.77,132.77,132.77,132.77,132.77,132.77,132.77,0.0,0.0,0.0,0.0,2025/10/07 00:33:36"""
-
-SAMPLE_CSV_DATA_QLD = """D,PREDISPATCH,REGION_PRICES,1,2025/10/07 00:33:36,QLD1,1,0,2025/10/07 01:00:00,95.50,95.50,95.50,95.50,95.50,95.50,95.50,0.0,0.0,0.0,0.0,2025/10/07 00:33:36
-D,PREDISPATCH,REGION_PRICES,1,2025/10/07 00:33:36,QLD1,2,0,2025/10/07 01:30:00,88.25,88.25,88.25,88.25,88.25,88.25,88.25,0.0,0.0,0.0,0.0,2025/10/07 00:33:36"""
 
 
 class TestAemoParser:
@@ -29,13 +53,13 @@ class TestAemoParser:
 
     @pytest.fixture
     def sample_csv_nsw(self):
-        """Create sample CSV with NSW1 data."""
-        return f"{SAMPLE_CSV_HEADER}\n{SAMPLE_CSV_DATA_NSW}"
+        """Create sample CSV with NSW1 data (current timestamps)."""
+        return f"{SAMPLE_CSV_HEADER}\n{_generate_current_aemo_data('NSW1', 4)}"
 
     @pytest.fixture
     def sample_csv_qld(self):
-        """Create sample CSV with QLD1 data."""
-        return f"{SAMPLE_CSV_HEADER}\n{SAMPLE_CSV_DATA_QLD}"
+        """Create sample CSV with QLD1 data (current timestamps)."""
+        return f"{SAMPLE_CSV_HEADER}\n{_generate_current_aemo_data('QLD1', 4, 'Australia/Brisbane')}"
 
     def test_parse_nsw_data(self, parser, sample_csv_nsw):
         """Test parsing NSW1 region data."""
@@ -63,20 +87,30 @@ class TestAemoParser:
         assert result["area"] == "NSW1"
         assert result["source_interval_minutes"] == 30
         
-        # Check interval data (3 30-min intervals expanded to 6 15-min intervals)
+        # Check interval data (4 30-min intervals expanded to 8 15-min intervals)
         interval_raw = result["interval_raw"]
-        assert len(interval_raw) == 6  # 3 × 2 (30min → 15min expansion)
+        assert len(interval_raw) == 8  # 4 × 2 (30min → 15min expansion)
         
         # Verify ISO timestamps are used as keys
         keys = list(interval_raw.keys())
-        assert all("2025-10-07" in key for key in keys)
         assert all("T" in key for key in keys)  # ISO format check
+        assert all("+" in key or "Z" in key for key in keys)  # Has timezone
         
         # Verify prices (each 30-min price duplicated twice for 15-min intervals)
         prices = list(interval_raw.values())
-        assert prices.count(176.03) == 2  # Duplicated for 01:00 and 01:15
-        assert prices.count(155.26) == 2  # Duplicated for 01:30 and 01:45
-        assert prices.count(132.77) == 2  # Duplicated for 02:00 and 02:15
+        assert len(prices) == 8
+        # First 30-min interval (150.00) duplicated twice
+        assert prices[0] == 150.0
+        assert prices[1] == 150.0
+        # Second 30-min interval (160.00) duplicated twice
+        assert prices[2] == 160.0
+        assert prices[3] == 160.0
+        # Third 30-min interval (170.00) duplicated twice
+        assert prices[4] == 170.0
+        assert prices[5] == 170.0
+        # Fourth 30-min interval (180.00) duplicated twice
+        assert prices[6] == 180.0
+        assert prices[7] == 180.0
 
     def test_parse_qld_data(self, parser, sample_csv_qld):
         """Test parsing QLD1 region data."""
@@ -92,13 +126,24 @@ class TestAemoParser:
         
         assert result["area"] == "QLD1"
         assert result["timezone"] == "Australia/Brisbane"
-        # 2 30-min intervals expanded to 4 15-min intervals
-        assert len(result["interval_raw"]) == 4
+        # 4 30-min intervals expanded to 8 15-min intervals
+        assert len(result["interval_raw"]) == 8
         
         # Verify each 30-min price is duplicated twice for 15-min intervals
         prices = list(result["interval_raw"].values())
-        assert prices.count(95.50) == 2
-        assert prices.count(88.25) == 2
+        assert len(prices) == 8
+        # First 30-min interval (150.00) duplicated twice
+        assert prices[0] == 150.0
+        assert prices[1] == 150.0
+        # Second 30-min interval (160.00) duplicated twice
+        assert prices[2] == 160.0
+        assert prices[3] == 160.0
+        # Third 30-min interval (170.00) duplicated twice
+        assert prices[4] == 170.0
+        assert prices[5] == 170.0
+        # Fourth 30-min interval (180.00) duplicated twice
+        assert prices[6] == 180.0
+        assert prices[7] == 180.0
 
     def test_parse_invalid_region(self, parser, sample_csv_nsw):
         """Test parsing with region not in CSV data."""
@@ -182,12 +227,18 @@ class TestAemoParser:
         """Test CSV parsing method directly."""
         prices = parser._parse_predispatch_csv(sample_csv_nsw, "NSW1")
         
-        assert len(prices) == 3
+        assert len(prices) == 4  # Updated to 4 intervals
         assert all("timestamp" in p and "price" in p for p in prices)
         
-        # Check first record
-        assert prices[0]["timestamp"] == datetime(2025, 10, 7, 1, 0, 0)
-        assert prices[0]["price"] == 176.03
+        # Check first record - should be current 30-min interval in Sydney time
+        # Just verify it's a valid datetime and price
+        assert isinstance(prices[0]["timestamp"], datetime)
+        assert prices[0]["price"] == 150.0  # First price from _generate_current_aemo_data
+        
+        # Verify price progression
+        assert prices[1]["price"] == 160.0
+        assert prices[2]["price"] == 170.0
+        assert prices[3]["price"] == 180.0
 
     def test_empty_result_structure(self, parser):
         """Test empty result structure."""

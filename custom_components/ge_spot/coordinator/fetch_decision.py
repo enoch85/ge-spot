@@ -35,7 +35,8 @@ class FetchDecisionMaker:
         now: datetime,
         last_fetch: Optional[datetime],
         data_validity: DataValidity,
-        fetch_interval_minutes: int = 15
+        fetch_interval_minutes: int = 15,
+        in_grace_period: bool = False
     ) -> Tuple[bool, str]:
         """Determine if we need to fetch from API based on data validity.
 
@@ -48,6 +49,10 @@ class FetchDecisionMaker:
 
         Args:
             now: Current datetime
+            last_fetch: Last API fetch time (used for rate limiting)
+            data_validity: DataValidity object describing our current data coverage
+            fetch_interval_minutes: Minimum minutes between fetches (rate limit)
+            in_grace_period: True if within grace period after startup/reload
             last_fetch: Last API fetch time (used for rate limiting)
             data_validity: DataValidity object describing our current data coverage
             fetch_interval_minutes: Minimum minutes between fetches (rate limit)
@@ -67,7 +72,8 @@ class FetchDecisionMaker:
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
                     last_fetched=last_fetch,
                     current_time=now,
-                    min_interval=fetch_interval_minutes
+                    min_interval=fetch_interval_minutes,
+                    in_grace_period=in_grace_period
                 )
 
                 if should_skip:
@@ -105,7 +111,8 @@ class FetchDecisionMaker:
             should_skip, skip_reason = RateLimiter.should_skip_fetch(
                 last_fetched=last_fetch,
                 current_time=now,
-                min_interval=fetch_interval_minutes
+                min_interval=fetch_interval_minutes,
+                in_grace_period=in_grace_period
             )
 
             if should_skip:
@@ -138,7 +145,8 @@ class FetchDecisionMaker:
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
                     last_fetched=last_fetch,
                     current_time=now,
-                    min_interval=fetch_interval_minutes
+                    min_interval=fetch_interval_minutes,
+                    in_grace_period=in_grace_period
                 )
 
                 if should_skip:
@@ -174,7 +182,8 @@ class FetchDecisionMaker:
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
                     last_fetched=last_fetch,
                     current_time=now,
-                    min_interval=fetch_interval_minutes
+                    min_interval=fetch_interval_minutes,
+                    in_grace_period=in_grace_period
                 )
 
                 if should_skip:
