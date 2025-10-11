@@ -764,7 +764,13 @@ class UnifiedPriceManager:
                 processed_cached_data["using_cached_data"] = True # Ensure flag is set
                 return processed_cached_data
             else:
-                _LOGGER.error("All sources/processing failed for %s and no usable cache available for today (%s).", self.area, today_date)
+                # Format the list of attempted sources for user-friendly error message
+                attempted_sources_str = ", ".join(self._attempted_sources) if self._attempted_sources else "unknown"
+                _LOGGER.error(
+                    "Attempted sources failed for %s and no usable cache available for today (%s). "
+                    "Attempted sources: %s",
+                    self.area, today_date, attempted_sources_str
+                )
                 self._using_cached_data = True # Indicate we intended to use cache but failed
                 # Generate empty result if fetch and cache fail
                 return await self._generate_empty_result(error=f"Fetch/Processing failed: {error_info}")
