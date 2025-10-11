@@ -183,7 +183,7 @@ class DataProcessor:
                     # Validate parsed data (checks for current interval price)
                     if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
                         # Validation failed - cached data is incomplete, treat as invalid
-                        _LOGGER.warning(f"[{self.area}] Cached data validation failed for source '{source_name}' - treating as invalid cache")
+                        _LOGGER.debug(f"[{self.area}] Cached data validation failed for source '{source_name}' - treating as invalid cache")
                         return self._generate_empty_processed_result(data, error=f"Cached data validation failed: missing current interval")
 
                     input_interval_raw = parsed_data.get("interval_raw")
@@ -212,7 +212,7 @@ class DataProcessor:
                 # Validate parsed data (checks for current interval price)
                 if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
                     # Validation failed - data is incomplete, trigger fallback to next source
-                    _LOGGER.warning(f"[{self.area}] Parsed data validation failed for source '{source_name}' - triggering fallback to next source")
+                    _LOGGER.debug(f"[{self.area}] Parsed data validation failed for source '{source_name}' - triggering fallback to next source")
                     return self._generate_empty_processed_result(data, error=f"Validation failed: source '{source_name}' missing current interval data")
 
                 input_interval_raw = parsed_data.get("interval_raw")

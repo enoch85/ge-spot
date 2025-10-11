@@ -352,7 +352,8 @@ class BasePriceParser(ABC):
                 _LOGGER.debug(f"Skipping invalid key format in interval_raw: {key}")
                 continue
 
-        _LOGGER.warning(f"{self.source}: Could not find current interval price for {iso_key}")
+        # Changed to DEBUG - validation method will log the WARNING
+        _LOGGER.debug(f"{self.source}: Could not find current interval price for {iso_key}")
         return None
 
     def _get_next_interval_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
@@ -383,7 +384,8 @@ class BasePriceParser(ABC):
                 _LOGGER.debug(f"Skipping invalid key format in interval_raw: {key}")
                 continue
 
-        _LOGGER.warning(f"{self.source}: Could not find next interval price for {iso_key}")
+        # Changed to DEBUG - validation method will log WARNING if needed
+        _LOGGER.debug(f"{self.source}: Could not find next interval price for {iso_key}")
         return None
 
     def _calculate_day_average(self, interval_raw: Dict[str, float], day: str = "today") -> Optional[float]:

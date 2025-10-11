@@ -559,7 +559,9 @@ class UnifiedPriceManager:
             last_fetch_for_rate_limit = _LAST_FETCH_TIME.get(area_key)
             min_interval = timedelta(minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES)
 
-            if not force and last_fetch_for_rate_limit:
+            # Also respect grace period in the second rate limit check
+            # Grace period allows immediate fallback attempts after HA restart
+            if not force and not self.is_in_grace_period() and last_fetch_for_rate_limit:
                 time_since_last_fetch = now - last_fetch_for_rate_limit
                 if time_since_last_fetch < min_interval:
                     next_fetch_allowed_in_seconds = (min_interval - time_since_last_fetch).total_seconds()
@@ -710,7 +712,8 @@ class UnifiedPriceManager:
                 else:
                     # Processing failed to produce interval_raw or marked as no data
                     error_info = processed_data.get("error", "Processing failed to produce valid data") if processed_data else "Processing returned None or empty"
-                    _LOGGER.error(f"[{self.area}] Failed to process fetched data. Error: {error_info}")
+                    # Changed to DEBUG - validation already logged the specific failure
+                    _LOGGER.debug(f"[{self.area}] Failed to process fetched data. Error: {error_info}")
                     # Fall through to failure handling (try cache)
 
             # Handle fetch failure (result is None or the error dict from FallbackManager) OR processing failure
@@ -721,7 +724,8 @@ class UnifiedPriceManager:
                  error_info = "No result from FallbackManager"
             # If processing failed, error_info might have been set in the 'else' block above
 
-            _LOGGER.error(f"Failed to get valid processed data for area {self.area}. Error: {error_info}")
+            # Changed to DEBUG - specific errors already logged by parser/processor
+            _LOGGER.debug(f"Failed to get valid processed data for area {self.area}. Error: {error_info}")
             self._consecutive_failures += 1
             self._attempted_sources = result.get("attempted_sources", []) if result else []
             self._active_source = "None"
