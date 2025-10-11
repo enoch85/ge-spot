@@ -467,7 +467,7 @@ class DataProcessor:
         """Get the appropriate parser instance based on the source name."""
         # Import parsers here to avoid circular dependencies
         from ..api.parsers.entsoe_parser import EntsoeParser
-        from ..api.parsers.nordpool_parser import NordpoolPriceParser
+        from ..api.parsers.nordpool_parser import NordpoolParser
         from ..api.parsers.stromligning_parser import StromligningParser
         from ..api.parsers.energi_data_parser import EnergiDataParser
         from ..api.parsers.omie_parser import OmieParser
@@ -480,7 +480,7 @@ class DataProcessor:
 
         parser_map = {
             # Use lowercase source names from Source constants
-            Source.NORDPOOL: NordpoolPriceParser,
+            Source.NORDPOOL: NordpoolParser,
             Source.ENTSOE: EntsoeParser,
             Source.STROMLIGNING: StromligningParser,
             Source.ENERGI_DATA_SERVICE: EnergiDataParser,

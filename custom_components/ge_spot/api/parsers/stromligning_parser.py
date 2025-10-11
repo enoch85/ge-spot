@@ -16,10 +16,14 @@ _LOGGER = logging.getLogger(__name__)
 class StromligningParser(BasePriceParser):
     """Parser for Stromligning API responses."""
 
-    def __init__(self, timezone_service=None):
-        """Initialize the parser."""
-        super().__init__(Source.STROMLIGNING, timezone_service)
-        self._price_components = {}
+    def __init__(self, source: str = Source.STROMLIGNING, timezone_service=None):
+        """Initialize the parser.
+        
+        Args:
+            source: Source identifier (defaults to Source.STROMLIGNING)
+            timezone_service: Optional timezone service
+        """
+        super().__init__(source, timezone_service)
 
     def parse(self, raw_data: Any) -> Dict[str, Any]:
         """Parse Stromligning API response.

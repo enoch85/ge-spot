@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from custom_components.ge_spot.coordinator.fallback_manager import FallbackManager
 from custom_components.ge_spot.coordinator.data_processor import DataProcessor
 from custom_components.ge_spot.api.parsers.entsoe_parser import EntsoeParser
-from custom_components.ge_spot.api.parsers.nordpool_parser import NordpoolPriceParser
+from custom_components.ge_spot.api.parsers.nordpool_parser import NordpoolParser
 from custom_components.ge_spot.timezone.service import TimezoneService
 from tests.lib.mocks.hass import MockHass
 

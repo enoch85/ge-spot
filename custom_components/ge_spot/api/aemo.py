@@ -244,4 +244,4 @@ class AemoAPI(BasePriceAPI):
             AemoParser instance
         """
         from .parsers.aemo_parser import AemoParser
-        return AemoParser(self.timezone_service)
+        return AemoParser(timezone_service=self.timezone_service)

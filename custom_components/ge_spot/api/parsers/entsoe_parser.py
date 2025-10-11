@@ -14,10 +14,14 @@ _LOGGER = logging.getLogger(__name__)
 class EntsoeParser(BasePriceParser):
     """Parser for ENTSO-E API responses."""
 
-    def __init__(self, timezone_service=None):
-        """Initialize the parser."""
-        super().__init__(timezone_service) # Pass timezone_service to base
-        # Add any ENTSO-E specific initialization here
+    def __init__(self, source: str = Source.ENTSOE, timezone_service=None):
+        """Initialize the parser.
+        
+        Args:
+            source: Source identifier (defaults to Source.ENTSOE)
+            timezone_service: Optional timezone service
+        """
+        super().__init__(source, timezone_service)
 
     def parse(self, data: Any) -> Dict[str, Any]:
         _LOGGER.debug(f"ENTSOE Parser: Received data of type: {type(data)}")

@@ -1,5 +1,5 @@
 """Price parsers for different API sources."""
-from .nordpool_parser import NordpoolPriceParser
+from .nordpool_parser import NordpoolParser
 from .entsoe_parser import EntsoeParser
 from .aemo_parser import AemoParser
 from .energi_data_parser import EnergiDataParser
@@ -21,7 +21,7 @@ def get_parser_for_source(source_type: str, timezone_service=None):
         Parser instance for the source
     """
     parsers = {
-        Source.NORDPOOL: NordpoolPriceParser,
+        Source.NORDPOOL: NordpoolParser,
         Source.ENTSOE: EntsoeParser,
         Source.AEMO: AemoParser,
         Source.ENERGI_DATA_SERVICE: EnergiDataParser,
@@ -33,14 +33,14 @@ def get_parser_for_source(source_type: str, timezone_service=None):
 
     if source_type in parsers:
         parser_class = parsers[source_type]
-        return parser_class(timezone_service)
+        return parser_class(timezone_service=timezone_service)
 
     # Fallback to a generic parser
     from ..base.price_parser import BasePriceParser
     return BasePriceParser(source_type, timezone_service)
 
 __all__ = [
-    "NordpoolPriceParser",
+    "NordpoolParser",
     "EntsoeParser",
     "AemoParser",
     "EnergiDataParser",

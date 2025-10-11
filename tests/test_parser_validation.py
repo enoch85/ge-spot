@@ -109,9 +109,9 @@ def test_parsers():
     print("TEST 4: NordPool Parser Structure")
     print("-" * 80)
     try:
-        from custom_components.ge_spot.api.parsers.nordpool_parser import NordpoolPriceParser
+        from custom_components.ge_spot.api.parsers.nordpool_parser import NordpoolParser
 
-        parser = NordpoolPriceParser()
+        parser = NordpoolParser()
 
         # Test with empty data
         result = parser.parse({})
