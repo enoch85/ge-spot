@@ -1,6 +1,7 @@
 """Validation functions for config flow."""
 import logging
 import datetime
+from typing import Dict, List
 
 from ..const.areas import AreaMapping
 from ..const.sources import Source
@@ -61,3 +62,69 @@ def get_entso_e_api_key_description(area):
     )
 
     return description
+
+
+def validate_area_sources(area: str, available_sources: List[str]) -> Dict[str, str]:
+    """Validate that area has at least one working source.
+    
+    Args:
+        area: Area code
+        available_sources: List of available sources for this area
+    
+    Returns:
+        Dictionary of errors (empty if valid)
+    """
+    errors = {}
+    
+    if not available_sources:
+        errors["area"] = "no_sources_available"
+        _LOGGER.error(f"Area {area} has no available sources")
+        return errors
+    
+    # Check for areas with only ENTSOE that don't have EIC codes
+    if len(available_sources) == 1 and Source.ENTSOE in available_sources:
+        if area not in AreaMapping.ENTSOE_MAPPING:
+            errors["area"] = "entsoe_no_eic_code"
+            _LOGGER.error(
+                f"Area {area} only has ENTSOE available but no EIC code mapping. "
+                f"This area cannot be configured."
+            )
+    
+    return errors
+
+
+def validate_source_availability(area: str, source: str) -> bool:
+    """Check if a source is actually available for an area.
+    
+    Args:
+        area: Area code
+        source: Source identifier
+    
+    Returns:
+        True if source can work for this area
+    """
+    if source == Source.ENTSOE:
+        return area in AreaMapping.ENTSOE_MAPPING
+    
+    if source == Source.NORDPOOL:
+        return area in AreaMapping.NORDPOOL_AREAS
+    
+    if source == Source.ENERGY_CHARTS:
+        return area in AreaMapping.ENERGY_CHARTS_BZN
+    
+    if source == Source.ENERGI_DATA_SERVICE:
+        return area in AreaMapping.ENERGI_DATA_AREAS
+    
+    if source == Source.OMIE:
+        return area in AreaMapping.OMIE_AREAS
+    
+    if source == Source.AEMO:
+        return area in AreaMapping.AEMO_AREAS
+    
+    if source == Source.STROMLIGNING:
+        return area in AreaMapping.STROMLIGNING_AREAS
+    
+    if source == Source.COMED:
+        return area in AreaMapping.COMED_AREAS
+    
+    return False

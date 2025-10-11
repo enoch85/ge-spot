@@ -20,6 +20,9 @@ from ..utils.exchange_service import get_exchange_service
 from .utils import (
     get_deduplicated_regions,
 )
+from .validators import (
+    validate_area_sources,
+)
 from .schemas import (
     get_source_priority_schema,
     get_api_keys_schema,
@@ -66,6 +69,12 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                     _LOGGER.error(f"Error getting sources for {area}: {e}")
                     self._errors[Config.AREA] = "error_sources_for_region"
                     self._supported_sources = []
+
+                # Validate area has working sources
+                validation_errors = validate_area_sources(area, self._supported_sources)
+                if validation_errors:
+                    self._errors.update(validation_errors)
+                    return await self._show_user_form()
 
                 if not self._supported_sources and not self._errors:
                     self._errors[Config.AREA] = "no_sources_for_region"
@@ -127,11 +136,10 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 selected_sources = self._data.get(Config.SOURCE_PRIORITY, [])
 
-                # Check if ENTSOE requires an API key for this area
-                self._requires_api_key = (
-                    Source.ENTSOE in selected_sources and
-                    self._data.get(Config.AREA) in AreaMapping.ENTSOE_MAPPING
-                )
+                # Check if ENTSOE requires an API key
+                # Always ask for API key if ENTSOE is selected, regardless of area mapping
+                # The ENTSOE API will validate the key against the area's EIC code
+                self._requires_api_key = Source.ENTSOE in selected_sources
 
                 # Check if Stromligning requires config
                 self._requires_stromligning_config = Source.STROMLIGNING in selected_sources
