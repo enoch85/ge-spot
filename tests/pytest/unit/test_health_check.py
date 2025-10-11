@@ -1,10 +1,11 @@
 """
-Unit tests for implicit validation functionality.
+Unit tests for health check functionality.
 
 Tests the production implementation of:
 - Failed sources tracking with timestamps
 - Implicit validation during fetch_data()
-- Daily retry scheduling
+- Daily health check scheduling
+- Health check validation of all sources
 - Exponential timeout configuration
 - Source filtering based on failure timestamps
 """
@@ -53,15 +54,15 @@ class TestFailedSourcesTracking:
         assert hasattr(price_manager, '_failed_sources')
         assert isinstance(price_manager._failed_sources, dict)
     
-    def test_retry_scheduled_attribute_exists(self, price_manager):
-        """Verify _retry_scheduled attribute exists and is a set."""
-        assert hasattr(price_manager, '_retry_scheduled')
-        assert isinstance(price_manager._retry_scheduled, set)
+    def test_health_check_scheduled_flag_exists(self, price_manager):
+        """Verify _health_check_scheduled flag exists and is a bool."""
+        assert hasattr(price_manager, '_health_check_scheduled')
+        assert isinstance(price_manager._health_check_scheduled, bool)
     
     def test_initial_state_empty(self, price_manager):
-        """Verify initial state has no failed sources or scheduled retries."""
+        """Verify initial state has no failed sources and health check not scheduled."""
         assert len(price_manager._failed_sources) == 0
-        assert len(price_manager._retry_scheduled) == 0
+        assert price_manager._health_check_scheduled is False
     
     def test_can_add_failed_source_with_timestamp(self, price_manager):
         """Verify sources can be added to failed dict with timestamp."""
@@ -162,10 +163,15 @@ class TestSourceConstants:
 class TestImplicitValidationMethods:
     """Test methods for implicit validation approach."""
     
-    def test_schedule_daily_retry_exists(self, price_manager):
-        """Verify _schedule_daily_retry method exists."""
-        assert hasattr(price_manager, '_schedule_daily_retry')
-        assert callable(price_manager._schedule_daily_retry)
+    def test_schedule_health_check_exists(self, price_manager):
+        """Verify _schedule_health_check method exists."""
+        assert hasattr(price_manager, '_schedule_health_check')
+        assert callable(price_manager._schedule_health_check)
+    
+    def test_validate_all_sources_exists(self, price_manager):
+        """Verify _validate_all_sources method exists."""
+        assert hasattr(price_manager, '_validate_all_sources')
+        assert callable(price_manager._validate_all_sources)
     
     def test_fetch_data_exists(self, price_manager):
         """Verify fetch_data method exists."""
@@ -179,12 +185,14 @@ class TestImplicitValidationMethods:
         assert not hasattr(price_manager, '_validate_slow_sources_background')
         assert not hasattr(price_manager, '_validate_failed_sources_background')
         assert not hasattr(price_manager, '_schedule_daily_source_retry')
+        assert not hasattr(price_manager, '_schedule_daily_retry')
     
     def test_old_state_tracking_removed(self, price_manager):
         """Verify old state tracking attributes are removed."""
         # These should NOT exist anymore
         assert not hasattr(price_manager, '_disabled_sources')
         assert not hasattr(price_manager, '_validated_sources')
+        assert not hasattr(price_manager, '_retry_scheduled')
 
 
 @pytest.mark.asyncio
@@ -272,28 +280,30 @@ class TestImplicitValidationBehavior:
         assert Source.NORDPOOL in price_manager._failed_sources
         assert price_manager._failed_sources[Source.NORDPOOL] == now
     
-    async def test_failed_fetch_schedules_retry(self, price_manager):
-        """Test that failed fetch schedules daily retry."""
-        # Start with no retry scheduled
-        assert Source.NORDPOOL not in price_manager._retry_scheduled
+    async def test_failed_fetch_schedules_health_check(self, price_manager):
+        """Test that failed fetch schedules health check."""
+        # Start with health check not scheduled
+        assert price_manager._health_check_scheduled is False
         
-        # Simulate scheduling retry (what fetch_data does)
-        price_manager._retry_scheduled.add(Source.NORDPOOL)
+        # Simulate scheduling health check (what fetch_data does)
+        price_manager._health_check_scheduled = True
         
-        # Verify retry was scheduled
-        assert Source.NORDPOOL in price_manager._retry_scheduled
+        # Verify health check was scheduled
+        assert price_manager._health_check_scheduled is True
     
-    async def test_successful_retry_clears_schedule(self, price_manager):
-        """Test that successful retry clears retry schedule."""
-        # Start with retry scheduled
-        price_manager._retry_scheduled.add(Source.NORDPOOL)
-        assert Source.NORDPOOL in price_manager._retry_scheduled
+    async def test_health_check_only_scheduled_once(self, price_manager):
+        """Test that health check is only scheduled once."""
+        # Simulate first failure schedules health check
+        price_manager._health_check_scheduled = True
+        assert price_manager._health_check_scheduled is True
         
-        # Simulate successful retry (what _schedule_daily_retry does)
-        price_manager._retry_scheduled.discard(Source.NORDPOOL)
+        # Second failure doesn't reschedule (flag already True)
+        # This is what the code does - checks if already scheduled
+        if not price_manager._health_check_scheduled:
+            price_manager._health_check_scheduled = True
         
-        # Verify retry was cleared
-        assert Source.NORDPOOL not in price_manager._retry_scheduled
+        # Verify flag is still True (not changed)
+        assert price_manager._health_check_scheduled is True
 
 
 class TestIntegrationScenarios:
@@ -303,7 +313,7 @@ class TestIntegrationScenarios:
         """Test scenario: First boot, no failures yet."""
         # Initial state
         assert len(price_manager._failed_sources) == 0
-        assert len(price_manager._retry_scheduled) == 0
+        assert price_manager._health_check_scheduled is False
         
         # All sources should be available
         all_area_sources = [cls(config={}).source_type for cls in price_manager._api_classes]
@@ -319,12 +329,12 @@ class TestIntegrationScenarios:
         
         # Mark Energy Charts as failed 1 hour ago
         price_manager._failed_sources[Source.ENERGY_CHARTS] = one_hour_ago
-        price_manager._retry_scheduled.add(Source.ENERGY_CHARTS)
+        price_manager._health_check_scheduled = True
         
         # Verify state
         assert Source.ENERGY_CHARTS in price_manager._failed_sources
         assert price_manager._failed_sources[Source.ENERGY_CHARTS] == one_hour_ago
-        assert Source.ENERGY_CHARTS in price_manager._retry_scheduled
+        assert price_manager._health_check_scheduled is True
         
         # Source should be filtered (failed <24h ago)
         time_since_failure = (now - one_hour_ago).total_seconds()
@@ -334,26 +344,26 @@ class TestIntegrationScenarios:
         """Test complete failure and recovery cycle."""
         now = dt_util.now()
         
-        # Step 1: Source fails
+        # Step 1: Source fails, health check scheduled
         price_manager._failed_sources[Source.NORDPOOL] = now
-        price_manager._retry_scheduled.add(Source.NORDPOOL)
+        price_manager._health_check_scheduled = True
         
         assert Source.NORDPOOL in price_manager._failed_sources
-        assert Source.NORDPOOL in price_manager._retry_scheduled
+        assert price_manager._health_check_scheduled is True
         
-        # Step 2: Daily retry succeeds
+        # Step 2: Health check validates source successfully
         price_manager._failed_sources[Source.NORDPOOL] = None
-        price_manager._retry_scheduled.discard(Source.NORDPOOL)
         
         assert price_manager._failed_sources[Source.NORDPOOL] is None
-        assert Source.NORDPOOL not in price_manager._retry_scheduled
+        # Health check remains scheduled (runs daily)
+        assert price_manager._health_check_scheduled is True
         
         # Step 3: Source fails again
         price_manager._failed_sources[Source.NORDPOOL] = now
-        price_manager._retry_scheduled.add(Source.NORDPOOL)
         
         assert price_manager._failed_sources[Source.NORDPOOL] == now
-        assert Source.NORDPOOL in price_manager._retry_scheduled
+        # Health check already scheduled
+        assert price_manager._health_check_scheduled is True
     
     def test_scenario_all_sources_failed(self, price_manager):
         """Test scenario: All sources failed."""
@@ -363,11 +373,13 @@ class TestIntegrationScenarios:
         # Mark all sources as failed
         for source in all_area_sources:
             price_manager._failed_sources[source] = now
-            price_manager._retry_scheduled.add(source)
+        
+        # Health check scheduled once for all failures
+        price_manager._health_check_scheduled = True
         
         # Verify all marked
         assert len(price_manager._failed_sources) == len(all_area_sources)
-        assert len(price_manager._retry_scheduled) == len(all_area_sources)
+        assert price_manager._health_check_scheduled is True
         
         # All sources would be filtered (failed <24h ago)
         for source in all_area_sources:

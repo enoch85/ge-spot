@@ -14,15 +14,15 @@ from ..const.attributes import Attributes
 from ..const.config import Config
 from ..const.currencies import Currency, CurrencyInfo
 from ..const.defaults import Defaults
-from ..const.display import DisplayUnit # Ensure DisplayUnit is imported
-from ..const.network import Network # Import Network
+from ..const.display import DisplayUnit
+from ..const.network import Network
 
 _LOGGER = logging.getLogger(__name__)
 
 class BaseElectricityPriceSensor(SensorEntity):
     """Base sensor for electricity prices."""
 
-    _attr_state_class = SensorStateClass.TOTAL
+    _attr_state_class = None  # Prices are instantaneous, not totals. History still recorded.
     _attr_device_class = SensorDeviceClass.MONETARY
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):
@@ -105,6 +105,11 @@ class BaseElectricityPriceSensor(SensorEntity):
         validated_sources = self.coordinator.data.get("validated_sources")
         if validated_sources:
             source_info["validated_sources"] = validated_sources
+
+        # Show failed sources with details
+        failed_sources = self.coordinator.data.get("failed_sources")
+        if failed_sources:
+            source_info["failed_sources"] = failed_sources
 
         # Show active source (what's currently used)
         active_source = self.coordinator.data.get("data_source")
