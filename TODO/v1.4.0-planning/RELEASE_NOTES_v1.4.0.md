@@ -1,7 +1,7 @@
 # Release Notes: GE-Spot v1.4.0
 
 **Release Date:** October 12, 2025  
-**Type:** Performance & Reliability Release  
+**Type:** Reliability & User Experience Release  
 **Breaking Changes:** Yes (State Class Removal - see below)
 
 ---
@@ -48,53 +48,47 @@ sensor.gespot_tomorrow_average_price_se3 from your database?
 
 ---
 
-## ⚡ Performance Improvements
+## ⚡ Reliability Improvements
 
-### CRITICAL: Cache Processed Results (97.6% Faster!)
+### NEW: Grace Period After Restart (Immediate Data Recovery)
 
-**The Problem We Fixed:**
+**The Problem We Solved:**
 
-GE-Spot was reprocessing cached data on **every sensor update** (~10 seconds), even though the data hadn't changed. This meant:
-
-- **396+ unnecessary reprocessing operations** in just 11 minutes
-- Full timezone normalization (96-192 timestamps)
-- Complete currency conversion (96-192 prices)
-- Statistics recalculation (min/max/avg)
-- **~207 minutes of CPU time wasted per day** 🔥
+After Home Assistant restart or integration reload, sensors would show "unavailable" for up to 15 minutes due to rate limiting, even though this is a normal operation.
 
 **The Solution:**
 
-Cache now stores **fully processed** data instead of raw data:
+Implemented a **5-minute grace period** after coordinator creation that allows immediate data fetching:
 
 ```
-BEFORE (every ~10 seconds):
-Retrieve cache → Normalize 192 timestamps → Convert 192 prices → 
-Calculate statistics → Find current/next → Return
-⏱️ ~4ms per operation
+BEFORE (without grace period):
+00:00 - HA restarts
+00:01 - First update: Rate limited (last fetch was 2 min ago) ❌
+        Sensors show "unavailable" for 15 minutes
 
-AFTER (every ~10 seconds):
-Retrieve cache → Update current/next interval only → Return
-⏱️ ~0.1ms per operation (40x faster!)
+AFTER (with grace period):
+00:00 - HA restarts
+00:01 - First update: Grace period active, bypasses rate limit ✅
+        Sensors show fresh data immediately
 ```
 
 **Impact:**
-- ✅ **97.6% reduction** in cache processing time
-- ✅ **~202 minutes of CPU time saved per day**
-- ✅ Significantly reduced CPU usage, especially for multi-area setups
-- ✅ Faster sensor updates
-- ✅ Lower energy consumption
+- ✅ **Sensors show data within seconds** after HA restart
+- ✅ **Better user experience** during common operations (restart/reload)
+- ✅ **No error messages** during expected post-restart behavior
+- ✅ **Automations see valid data** immediately, not "unavailable"
+- ✅ **Configuration changes reflected instantly** (VAT, currency, etc.)
 
 **Technical Details:**
-- Processed data includes normalized prices, calculated statistics, converted currencies
-- Fast-path update only recalculates current/next interval (changes every 15 minutes)
-- Configuration changes (VAT, currency, display unit) still trigger full reprocessing
-- Automatic migration from old cache format (no manual action required)
+- Grace period: 5 minutes after coordinator creation
+- Only bypasses rate limiting, still respects data validity checks
+- Documented in: `improvements/GRACE_PERIOD_MECHANISM.md`
 
 ---
 
 ## 🐛 Bug Fixes
 
-### MODERATE: Health Check Now Runs in Both Special Windows
+### CRITICAL: Health Check Now Runs in Both Special Windows
 
 **The Problem We Fixed:**
 
@@ -113,20 +107,22 @@ The health check system had a critical flaw: it only ran **once per day**, even 
 Health check now tracks **per-window** instead of **per-day**:
 
 ```
-BEFORE:
+BEFORE (buggy behavior):
 00:05 - Health check runs ✓
       - _last_check_date = today
 13:00 - Health check skips ✗ (already ran today)
       - Failed sources NOT validated
       - Tomorrow's data unavailable
       
-AFTER:
+AFTER (fixed behavior):
 00:05 - Health check runs ✓ (window 0)
-      - _checked_windows_today = {0}
+      - _last_check_window = 0
 13:10 - Health check runs ✓ (window 13)
-      - _checked_windows_today = {0, 13}
+      - _last_check_window = 13
       - Failed sources validated!
       - Tomorrow's data available
+00:00 - Next day (window 0)
+      - Compares: 13 != 0 → runs again ✓
 ```
 
 **Impact:**
@@ -136,10 +132,11 @@ AFTER:
 - ✅ Better source redundancy and reliability
 
 **Technical Details:**
-- Tracks which window start hours have been checked today (`{0, 13}`)
-- Clears tracking set at midnight for new day
-- Reduced sleep interval to 15 minutes (was 1 hour) for faster window detection
+- Tracks last checked window start hour: `_last_check_window` (stores 0 or 13)
+- Window comparison: `current_window_start != _last_check_window` allows both windows same day
+- Reduced sleep interval to **15 minutes** (900s, was 3600s) for faster window detection
 - Log messages now show which window is running
+- Automatically resets for new day (window 0 != 13 comparison)
 
 ### MINOR: Removed Redundant Cache Lookup Logging
 
@@ -166,61 +163,84 @@ Only log when actual fallback occurs (source was specified but not found).
 ### Modified Files
 
 **Core Changes:**
-- `custom_components/ge_spot/coordinator/cache_manager.py`
-  - Store processed data instead of raw data
-  - Reduce redundant logging
-
-- `custom_components/ge_spot/coordinator/data_processor.py`
-  - Add `_is_already_processed()` - Detect processed vs raw cache data
-  - Add `_update_current_next_only()` - Fast-path for cache updates (40x faster)
-  - Smart detection of old vs new cache format
-
 - `custom_components/ge_spot/coordinator/unified_price_manager.py`
-  - Per-window health check tracking (`_checked_windows_today`)
-  - Cache processed data instead of raw data
-  - Faster window detection (15-minute sleep instead of 1 hour)
+  - Added grace period mechanism (`is_in_grace_period()`)
+  - Per-window health check tracking (`_last_check_window`)
+  - 15-minute sleep interval for health check loop
+  - Improved logging for post-restart scenarios
+  - Fixed consecutive failures counter bug
+
+- `custom_components/ge_spot/coordinator/fetch_decision.py`
+  - Grace period parameter passed to rate limiter
+  - Improved decision logging
+
+- `custom_components/ge_spot/utils/rate_limiter.py`
+  - Grace period bypass in rate limiting checks
+
+- `custom_components/ge_spot/const/network.py`
+  - Added `GRACE_PERIOD_MINUTES = 5` constant
+  - Special hour windows: `[(0, 1), (13, 15)]`
+
+- `custom_components/ge_spot/const/errors.py`
+  - Added specific error codes and `ErrorDetails` helper class
+
+- `custom_components/ge_spot/sensor/base.py`
+  - Error codes exposed in sensor attributes
 
 ### New Features
 
-**Smart Cache Detection:**
-- Automatically detects old (raw) vs new (processed) cache format
-- Migrates seamlessly without manual intervention
-- Backward compatible with v1.3.x cache
+**Grace Period Mechanism:**
+- Tracks coordinator creation time (`_coordinator_created_at`)
+- 5-minute window after restart/reload where rate limiting is bypassed
+- Allows immediate data fetching after HA restart or config changes
+- Only bypasses rate limiting, still respects data validity checks
+- See: `improvements/GRACE_PERIOD_MECHANISM.md` for complete documentation
 
 **Per-Window Health Checks:**
-- Tracks checked windows as set of start hours: `{0, 13}`
-- Clears at midnight for new day
+- Tracks last checked window start hour: `_last_check_window` (0 or 13)
+- Window comparison logic allows both windows to run same day
+- 15-minute sleep interval ensures windows aren't missed
 - Better logging with window information
+
+**Specific Error Types:**
+- `NO_SOURCES_CONFIGURED` - Permanent configuration issue
+- `ALL_SOURCES_DISABLED` - Temporary (all sources failed recently)
+- `INVALID_AREA_CODE` - Invalid area configuration
+- `VALIDATION_FAILED` - Data validation errors
+- `INCOMPLETE_DATA` - Partial data received
 
 ### Backward Compatibility
 
-✅ **Automatic Migration:**
-- Old cache format (raw data) processed normally on first run
-- New cache format (processed data) saved automatically
-- No manual cache clearing required
-- No configuration changes needed
+✅ **No Breaking Changes (except state class from PR #18):**
+- Grace period activates automatically on first coordinator creation
+- Per-window health checks work with existing configuration
+- No manual intervention required
+- All existing automations continue to work
 
 ✅ **Configuration Changes:**
-- VAT rate changes → Cache invalidated → Full reprocessing
-- Currency changes → Cache invalidated → Full reprocessing  
-- Display unit changes → Cache invalidated → Full reprocessing
+- VAT rate changes → Triggers new fetch during grace period
+- Currency changes → Triggers new fetch during grace period
+- Display unit changes → Triggers new fetch during grace period
+- Area changes → Creates new coordinator with new grace period
 
 ---
 
 ## 🧪 Testing
 
 All existing tests pass:
-- ✅ **174 unit tests** (24 coordinator tests, 14 health check integration tests)
-- ✅ Cache migration tested (raw → processed format conversion)
-- ✅ Per-window health check behavior verified
-- ✅ Fast-path performance validated (40x improvement confirmed)
-- ✅ Config change invalidation tested
+- ✅ **191 unit tests** (all passing after consecutive failures counter fix)
+- ✅ Grace period mechanism tested (bypass rate limiting during 5-minute window)
+- ✅ Per-window health check behavior verified (runs in both 0 and 13 windows)
+- ✅ Error type system validated (specific error codes in sensor attributes)
+- ✅ Config change behavior tested (new coordinator creation triggers grace period)
 
 **Manual Testing:**
-- ✅ CPU usage reduced significantly (monitored over 30 minutes)
-- ✅ Health check runs in both windows (00:00-01:00 and 13:00-15:00)
+- ✅ Grace period activates immediately after HA restart
+- ✅ Sensors show data within seconds of restart (not 15 minutes)
+- ✅ Health check runs in both windows same day (00:00-01:00 and 13:00-15:00)
 - ✅ Failed source recovery in second window verified
-- ✅ Cache fast-path logged correctly
+- ✅ Error codes properly exposed in sensor attributes
+- ✅ Consecutive failures counter increments correctly
 
 ---
 
@@ -252,7 +272,17 @@ git checkout v1.4.0
 # Restart Home Assistant to load new version
 ```
 
-**Step 4: Handle State Class Warnings**
+**Step 4: Observe Grace Period in Action**
+
+After restart, check your logs - you should see:
+```
+INFO: [SE1] Data will update within 15 minutes (rate limit protection 
+      active after configuration reload)
+```
+
+Sensors will show fresh data within seconds, not minutes!
+
+**Step 5: Handle State Class Warnings**
 
 You'll see warnings like this for each price sensor:
 
@@ -262,61 +292,84 @@ The entity sensor.gespot_tomorrow_average_price_se3 no longer has a state class
 
 **Click "Delete"** on each notification. This is expected and safe.
 
-**Step 5: Verify**
+**Step 6: Verify**
 
 Check logs for:
 ```
-Successfully processed data for area X. ... Cached: True
-Fast-path cache update: current=X, next=Y
-Daily health check starting in Xs (window: 00:00-01:00 OR 13:00-15:00)
+INFO: [SE1] Data will update within 15 minutes (rate limit protection 
+      active after configuration reload)
+INFO: [SE1] Daily health check starting in Xs (window: 00:00-01:00 OR 13:00-15:00)
+DEBUG: Rate limiting [SE1]: ALLOWING fetch - Within grace period after 
+       startup - bypassing rate limiting
 ```
 
-**That's it!** The upgrade is automatic. After the first sensor update cycle, you'll see performance improvements.
+You should see:
+- ✅ Sensors showing data within seconds of restart
+- ✅ Grace period logs during first 5 minutes after restart
+- ✅ Health checks running in both daily windows
+- ✅ Error codes in sensor attributes (Developer Tools → States)
+
+**That's it!** The upgrade is automatic and all improvements activate immediately.
 
 ---
 
-## 🎯 Performance Comparison
+## 🎯 What Changed - User Experience
 
 ### Before v1.4.0
 ```
-Cache Retrieval: 4ms (full reprocessing)
-Operations/Day: ~8,640 reprocessing operations
-CPU Time Wasted: ~207 minutes/day
-Health Checks: Once per day (missed 13:00 window if ran at 00:00)
-Failed Source Recovery: 11+ hours
+After HA Restart:
+- Sensors: "unavailable" for up to 15 minutes ❌
+- Reason: Rate limiting blocks immediate fetch
+- User sees: Error messages, stale data
+
+Health Checks:
+- Frequency: Once per day
+- Problem: Misses 13:00-15:00 window if ran at 00:00
+- Failed Source Recovery: 11+ hours ❌
+
+Error Messages:
+- Generic: "Failed to fetch data" (not helpful)
+- No error codes in attributes
 ```
 
 ### After v1.4.0
 ```
-Cache Retrieval: 0.1ms (fast-path update)
-Operations/Day: 0 reprocessing (except config changes)
-CPU Time Saved: ~202 minutes/day (97.6% reduction)
-Health Checks: Twice per day (00:00-01:00 AND 13:00-15:00)
-Failed Source Recovery: Maximum 2 hours
-```
+After HA Restart:
+- Sensors: Fresh data within seconds ✅
+- Reason: Grace period bypasses rate limiting for 5 minutes
+- User sees: Immediate data recovery, INFO logs (not errors)
 
-**Impact per Area:**
-- 1 area: ~34 minutes CPU time saved/day
-- 3 areas: ~101 minutes CPU time saved/day
-- 6 areas: ~202 minutes CPU time saved/day
+Health Checks:
+- Frequency: Twice per day (00:00-01:00 AND 13:00-15:00)
+- Tracks: Last window checked (0 or 13), not date
+- Failed Source Recovery: Maximum 2 hours ✅
+
+Error Messages:
+- Specific: "All 2 API source(s) temporarily disabled..."
+- Error codes: Exposed in sensor attributes for automation
+- Distinguishes: Permanent vs temporary issues
+```
 
 ---
 
 ## 📚 Related Documentation
 
+- [Grace Period Mechanism](improvements/GRACE_PERIOD_MECHANISM.md) - Complete technical documentation
 - [Daily Health Check Feature](improvements/DAILY_HEALTH_CHECK_FEATURE.md)
-- [Implementation Plan](IMPLEMENTATION_PLAN_v1.4.0.md)
+- [Implementation Plan](IMPLEMENTATION_PLAN_v1.4.0.md) - Original v1.4.0 planning
 - [Home Assistant Sensor Documentation](https://developers.home-assistant.io/docs/core/entity/sensor/)
 - [PR #18 - Daily Health Check](https://github.com/enoch85/ge-spot/pull/18)
+- [PR #19 - Bug Fixes Issue 5-4-2](https://github.com/enoch85/ge-spot/pull/19)
 
 ---
 
 ## 🙏 Acknowledgments
 
 Special thanks to:
-- **@enoch85** for identifying the performance issues through detailed log analysis
+- **@enoch85** for identifying the grace period need and health check issues through detailed testing
 - All users who reported the state class warnings
 - Home Assistant community for sensor device class documentation
+- GitHub Copilot for assistance with code analysis and documentation
 
 ---
 
@@ -326,6 +379,10 @@ None currently identified.
 
 If you encounter any issues, please report them at:
 https://github.com/enoch85/ge-spot/issues
+
+---
+
+**Full Changelog:** https://github.com/enoch85/ge-spot/compare/v1.3.4...v1.4.0
 
 ---
 

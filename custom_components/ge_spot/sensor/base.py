@@ -167,6 +167,13 @@ class BaseElectricityPriceSensor(SensorEntity):
 
                 attrs["data_validity"] = data_validity_info
 
+        # Add error information if present (for diagnostics)
+        if "error" in self.coordinator.data and self.coordinator.data["error"]:
+            error_info = {"message": self.coordinator.data["error"]}
+            if "error_code" in self.coordinator.data and self.coordinator.data["error_code"]:
+                error_info["code"] = self.coordinator.data["error_code"]
+            attrs["error"] = error_info
+
         # Add interval prices if available, rounding float values
         if "interval_prices" in self.coordinator.data:
             interval_prices = self.coordinator.data["interval_prices"]

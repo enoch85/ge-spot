@@ -19,6 +19,7 @@ from ..const.display import DisplayUnit
 from ..const.network import Network
 from ..const.currencies import Currency
 from ..const.time import ValidationRetry
+from ..const.errors import Errors, ErrorDetails
 from ..api import get_sources_for_region
 from ..api.base.base_price_api import BasePriceAPI
 from ..api.base.data_structure import StandardizedPriceData, create_standardized_price_data
@@ -549,7 +550,10 @@ class UnifiedPriceManager:
                         f"Fetch skipped for {self.area} but no cached data available. "
                         f"Reason: {fetch_reason}"
                     )
-                return await self._generate_empty_result(error=f"No cache and no fetch: {fetch_reason}")
+                return await self._generate_empty_result(
+                    error=f"No cache and no fetch: {fetch_reason}",
+                    error_code=Errors.NO_DATA
+                )
 
 
         # --- Rate Limiting Lock (moved after initial fetch decision) ---
@@ -590,7 +594,10 @@ class UnifiedPriceManager:
                             f"Rate limited for {self.area} (after decision check), no cached data available for today ({today_date}). "
                             f"Next fetch in {next_fetch_allowed_in_seconds:.1f}s"
                         )
-                        return await self._generate_empty_result(error="Rate limited (after decision), no cache available")
+                        return await self._generate_empty_result(
+                            error="Rate limited (after decision), no cache available",
+                            error_code=Errors.RATE_LIMITED
+                        )
 
             # If not rate limited or forced, proceed to fetch. Update fetch timestamp.
             _LOGGER.info(f"Proceeding with API fetch for area {self.area} (Reason: {fetch_reason}, Force: {force})")
@@ -640,20 +647,62 @@ class UnifiedPriceManager:
             ]
 
             if not api_instances:
-                _LOGGER.error(f"No API sources available/configured for area {self.area}")
-                self._consecutive_failures += 1
-                # Try cache before giving up - specify today's date
-                cached_data = self._cache_manager.get_data(
-                    area=self.area,
-                    target_date=today_date # Specify today
-                )
-                if cached_data:
-                    _LOGGER.warning("No APIs available for %s, using cached data.", self.area)
-                    cached_data["using_cached_data"] = True
-                    processed_cached_data = await self._process_result(cached_data, is_cached=True)
-                    processed_cached_data["using_cached_data"] = True # Ensure flag is set
-                    return processed_cached_data
-                return await self._generate_empty_result(error="No API sources configured")
+                # Distinguish between "no sources configured" vs "all temporarily disabled"
+                if not self._api_classes:
+                    # No API classes at all - permanent configuration issue
+                    _LOGGER.error(f"No API sources configured for area {self.area}")
+                    self._consecutive_failures += 1
+                    error_msg = ErrorDetails.get_message(
+                        Errors.NO_SOURCES_CONFIGURED,
+                        area=self.area
+                    )
+                    # Try cache before giving up
+                    cached_data = self._cache_manager.get_data(
+                        area=self.area,
+                        target_date=today_date
+                    )
+                    if cached_data:
+                        _LOGGER.warning("No APIs configured for %s, using cached data.", self.area)
+                        cached_data["using_cached_data"] = True
+                        processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                        processed_cached_data["using_cached_data"] = True
+                        return processed_cached_data
+                    return await self._generate_empty_result(
+                        error=error_msg,
+                        error_code=Errors.NO_SOURCES_CONFIGURED
+                    )
+                else:
+                    # Has API classes but all are temporarily disabled due to failures
+                    next_check = self._calculate_next_health_check(now)
+                    next_check_str = next_check.strftime('%H:%M') if next_check else 'soon'
+                    _LOGGER.warning(
+                        f"All {len(self._api_classes)} API source(s) temporarily disabled due to recent failures. "
+                        f"Next health check: {next_check_str}"
+                    )
+                    self._consecutive_failures += 1
+                    error_msg = ErrorDetails.get_message(
+                        Errors.ALL_SOURCES_DISABLED,
+                        count=len(self._api_classes),
+                        next_check=next_check_str
+                    )
+                    # Try cache - this is a temporary situation
+                    cached_data = self._cache_manager.get_data(
+                        area=self.area,
+                        target_date=today_date
+                    )
+                    if cached_data:
+                        _LOGGER.info("All sources disabled, using cached data for %s.", self.area)
+                        cached_data["using_cached_data"] = True
+                        processed_cached_data = await self._process_result(cached_data, is_cached=True)
+                        processed_cached_data["using_cached_data"] = True
+                        # Add error info to indicate temporary situation
+                        processed_cached_data["error"] = error_msg
+                        processed_cached_data["error_code"] = Errors.ALL_SOURCES_DISABLED
+                        return processed_cached_data
+                    return await self._generate_empty_result(
+                        error=error_msg,
+                        error_code=Errors.ALL_SOURCES_DISABLED
+                    )
 
             # Fetch with fallback using the new manager
             result = await self._fallback_manager.fetch_with_fallback(
@@ -773,7 +822,10 @@ class UnifiedPriceManager:
                 )
                 self._using_cached_data = True # Indicate we intended to use cache but failed
                 # Generate empty result if fetch and cache fail
-                return await self._generate_empty_result(error=f"Fetch/Processing failed: {error_info}")
+                return await self._generate_empty_result(
+                    error=f"Fetch/Processing failed: {error_info}",
+                    error_code=Errors.API_ERROR
+                )
 
         except Exception as e:
             _LOGGER.error(f"Unexpected error during fetch_data for area {self.area}: {e}", exc_info=True)
@@ -796,7 +848,10 @@ class UnifiedPriceManager:
                  return processed_cached_data
             else:
                  # Generate empty result if no cache
-                 return await self._generate_empty_result(error=f"Unexpected error: {str(e)}")
+                 return await self._generate_empty_result(
+                     error=f"Unexpected error: {str(e)}",
+                     error_code=Errors.API_ERROR
+                 )
 
 
     async def _process_result(self, result: Dict[str, Any], is_cached: bool = False) -> Dict[str, Any]:
@@ -815,7 +870,10 @@ class UnifiedPriceManager:
         # Basic validation
         if not result or not isinstance(result, dict):
             _LOGGER.error(f"Invalid result provided for processing area {self.area}")
-            return await self._generate_empty_result(error="Invalid data structure for processing")
+            return await self._generate_empty_result(
+                error="Invalid data structure for processing",
+                error_code=Errors.INVALID_DATA
+            )
 
         # Add/update metadata before processing
         result["area"] = self.area
@@ -859,14 +917,18 @@ class UnifiedPriceManager:
             return processed_data
         except Exception as proc_err:
             _LOGGER.error(f"Error processing data for area {self.area}: {proc_err}", exc_info=True)
-            return await self._generate_empty_result(error=f"Processing error: {proc_err}")
+            return await self._generate_empty_result(
+                error=f"Processing error: {proc_err}",
+                error_code=Errors.API_ERROR
+            )
 
 
-    async def _generate_empty_result(self, error: Optional[str] = None) -> Dict[str, Any]:
+    async def _generate_empty_result(self, error: Optional[str] = None, error_code: Optional[str] = None) -> Dict[str, Any]:
         """Generate an empty result when data is unavailable.
 
         Args:
-            error: Optional error message to include.
+            error: Human-readable error message
+            error_code: Machine-readable error code for programmatic handling
 
         Returns:
             Empty result dictionary with standard structure.
@@ -891,6 +953,7 @@ class UnifiedPriceManager:
             "consecutive_failures": self._consecutive_failures,
             "last_fetch_attempt": _LAST_FETCH_TIME.get(self.area, now).isoformat() if _LAST_FETCH_TIME.get(self.area) else now.isoformat(),
             "error": error or f"Failed to fetch data after {self._consecutive_failures} attempts",
+            "error_code": error_code,  # Add error code for programmatic handling
             "has_data": False,
             "last_update": now.isoformat(),
             "vat_rate": self.vat_rate * 100,
@@ -1053,7 +1116,10 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                 # If no previous data, return an empty structure consistent with manager's output
                 # Use try-except in case manager itself fails during error generation
                 try:
-                    return await self.price_manager._generate_empty_result(error=f"Coordinator update error: {e}")
+                    return await self.price_manager._generate_empty_result(
+                        error=f"Coordinator update error: {e}",
+                        error_code=Errors.API_ERROR
+                    )
                 except Exception as gen_err:
                     _LOGGER.error("Failed to generate empty result during coordinator error handling: %s", gen_err)
                     # Return a minimal dict if empty result generation fails
