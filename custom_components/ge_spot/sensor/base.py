@@ -90,10 +90,6 @@ class BaseElectricityPriceSensor(SensorEntity):
         }
 
         # Add timestamps if available
-        # Corrected: Use 'last_update' key
-        if "last_update" in self.coordinator.data:
-            attrs["last_updated"] = self.coordinator.data["last_update"]
-
         # Corrected: Use 'last_fetch_attempt' key
         if "last_fetch_attempt" in self.coordinator.data:
             attrs["last_api_fetch"] = self.coordinator.data["last_fetch_attempt"]
