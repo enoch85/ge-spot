@@ -25,21 +25,42 @@ class RateLimiter:
         min_interval: int = None,
         last_successful_fetch: Optional[datetime.datetime] = None,
         source: str = None,
-        area: str = None
+        area: str = None,
+        in_grace_period: bool = False
     ) -> Tuple[bool, str]:
         """Determine if we should skip fetching based on rate limiting rules.
 
         Priority order (highest to lowest):
+        0. Grace period → bypass rate limiting for fallback attempts
         1. Never fetched → always fetch
         2. Failure backoff → prevent hammering during issues
         3. AEMO market hours → allow frequent updates
         4. Special time windows → allow fetch during price release times
         5. Minimum interval → enforce basic rate limiting
         6. Interval boundary → force updates at interval transitions
+        
+        Args:
+            last_fetched: When last fetch occurred
+            current_time: Current time
+            consecutive_failures: Number of consecutive failures
+            last_failure_time: When last failure occurred
+            min_interval: Minimum interval between fetches in minutes
+            last_successful_fetch: When last successful fetch occurred
+            source: Source identifier
+            area: Area identifier
+            in_grace_period: True if within grace period after startup/reload
         """
         # If never fetched, always fetch
         if last_fetched is None:
             reason = "No previous fetch"
+            log_rate_limiting(area or "unknown", False, reason, source)
+            return False, reason
+
+        # PRIORITY 0: During grace period, bypass rate limiting to allow fallback attempts
+        # This ensures that after HA restart, we can immediately try all fallback sources
+        # to find one with complete data, without waiting for rate limit intervals
+        if in_grace_period:
+            reason = "Within grace period after startup - bypassing rate limiting for fallback attempts"
             log_rate_limiting(area or "unknown", False, reason, source)
             return False, reason
 

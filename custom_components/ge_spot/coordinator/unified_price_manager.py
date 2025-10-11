@@ -513,7 +513,8 @@ class UnifiedPriceManager:
             now=now,
             last_fetch=last_fetch_for_decision,
             data_validity=data_validity,
-            fetch_interval_minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+            fetch_interval_minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES,
+            in_grace_period=self.is_in_grace_period()
         )
 
         if not force and not should_fetch_from_api:
