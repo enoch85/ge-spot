@@ -144,11 +144,11 @@ class UnifiedPriceManager:
 
     def is_in_grace_period(self) -> bool:
         """Check if we're within the grace period after coordinator creation.
-        
+
         During the grace period (first 5 minutes after reload/startup), we're more
         lenient with validation failures and rate limiting to avoid clearing sensors
         unnecessarily.
-        
+
         Returns:
             True if within grace period, False otherwise
         """
@@ -342,7 +342,7 @@ class UnifiedPriceManager:
                     if start == current_window_start:
                         window_end = end
                         break
-                
+
                 _LOGGER.info(
                     f"[{self.area}] Daily health check starting in {delay_seconds}s "
                     f"(window: {current_window_start:02d}:00-{window_end:02d}:00, "
@@ -356,7 +356,7 @@ class UnifiedPriceManager:
                 # Mark this window as checked
                 self._last_check_window = current_window_start
                 self._last_health_check = now
-                
+
                 _LOGGER.debug(
                     f"[{self.area}] Health check complete for window {current_window_start:02d}:00"
                 )
