@@ -67,14 +67,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # fetch_data() will validate sources implicitly and use fallback if needed
     try:
         await coordinator.async_config_entry_first_refresh()
-        
+
         # Schedule health check task in background (fully non-blocking)
         # The task itself will run immediate validation, then continue daily schedule
         if not coordinator.price_manager._health_check_scheduled:
             _LOGGER.info(f"Scheduling health check task for {area}")
             asyncio.create_task(coordinator.price_manager._schedule_health_check(run_immediately=True))
             coordinator.price_manager._health_check_scheduled = True
-        
+
     except Exception as e:
         _LOGGER.error(
             f"First refresh failed for {area}: {e}. "

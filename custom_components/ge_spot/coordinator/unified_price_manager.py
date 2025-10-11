@@ -275,7 +275,7 @@ class UnifiedPriceManager:
 
         Validates all configured sources once per day during special hour windows.
         Uses FallbackManager's exponential backoff for each source independently.
-        
+
         Args:
             run_immediately: If True, runs validation immediately on first call (for boot-time validation)
         """
@@ -890,7 +890,7 @@ class UnifiedPriceManager:
             # Force a new fetch - this will return fresh data
             fresh_data = await self.fetch_data(force=True)
             _LOGGER.debug(f"Fresh data fetched after cache clear: has_data={fresh_data.get('has_data')}")
-            
+
             # Schedule health check to validate all sources after manual cache clear
             # Cancel existing health check task if running
             if self._health_check_task and not self._health_check_task.done():
@@ -900,10 +900,10 @@ class UnifiedPriceManager:
                     await self._health_check_task
                 except asyncio.CancelledError:
                     pass
-            
+
             self._health_check_task = asyncio.create_task(self._schedule_health_check(run_immediately=True))
             _LOGGER.info(f"[{self.area}] Scheduled health check after cache clear")
-            
+
             return fresh_data
         return None
 
@@ -917,7 +917,7 @@ class UnifiedPriceManager:
                 await self._health_check_task
             except asyncio.CancelledError:
                 pass
-        
+
         # Close the exchange service session if it was initialized
         if self._exchange_service:
             await self._exchange_service.close()
