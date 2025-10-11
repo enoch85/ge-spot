@@ -38,7 +38,7 @@ class RateLimiter:
         4. Special time windows → allow fetch during price release times
         5. Minimum interval → enforce basic rate limiting
         6. Interval boundary → force updates at interval transitions
-        
+
         Args:
             last_fetched: When last fetch occurred
             current_time: Current time
