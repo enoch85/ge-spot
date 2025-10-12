@@ -8,12 +8,6 @@ Tests all timezone operations to ensure 100% correctness:
 - Error handling for invalid configurations
 """
 
-import sys
-from pathlib import Path
-
-# Add custom_components to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "custom_components"))
-
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 import pytest

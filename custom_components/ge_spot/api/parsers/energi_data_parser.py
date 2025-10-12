@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from ...const.sources import Source
 from ...const.currencies import Currency
+from ...const.time import TimezoneName
 from ...utils.validation import validate_data
 from ...timezone.timezone_utils import normalize_hour_value
 from ..base.price_parser import BasePriceParser
@@ -87,9 +88,6 @@ class EnergiDataParser(BasePriceParser):
         # No expansion needed - data is already in correct interval format
         interval_prices_iso = {}
 
-        # Get Copenhagen timezone for localizing naive timestamps (cached at module import)
-        copenhagen_tz = ZoneInfo('Europe/Copenhagen')
-
         for record in records:
             try:
                 # DayAheadPrices format: TimeDK and DayAheadPriceDKK
@@ -100,6 +98,7 @@ class EnergiDataParser(BasePriceParser):
 
                     # If datetime is naive (no timezone), localize it to Copenhagen time
                     if dt.tzinfo is None:
+                        copenhagen_tz = ZoneInfo(TimezoneName.EUROPE_COPENHAGEN)
                         dt = dt.replace(tzinfo=copenhagen_tz)
 
                     # Convert to UTC for consistent storage

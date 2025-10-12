@@ -528,6 +528,12 @@ class UnifiedPriceManager:
             is_health_check=self._health_check_in_progress
         )
 
+        # Log if health check is causing a rate limit bypass
+        if should_fetch_from_api and self._health_check_in_progress:
+            _LOGGER.info(
+                f"[{self.area}] Health check bypassing rate limit (reason: {fetch_reason})"
+            )
+
         if not force and not should_fetch_from_api:
             _LOGGER.info(f"Skipping API fetch for area {self.area}: {fetch_reason}")
             if cached_data_for_decision:
