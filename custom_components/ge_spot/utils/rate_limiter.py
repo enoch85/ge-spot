@@ -35,8 +35,8 @@ class RateLimiter:
         1. Never fetched → always fetch
         2. Failure backoff → prevent hammering during issues
         3. AEMO market hours → allow frequent updates
-        4. Special time windows → allow fetch during price release times
-        5. Minimum interval → enforce basic rate limiting
+        4. Special time windows → reduced rate limiting (1 min vs 15 min)
+        5. Minimum interval → enforce basic rate limiting (15 min)
         6. Interval boundary → force updates at interval transitions
 
         Args:
@@ -77,7 +77,7 @@ class RateLimiter:
                     min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
 
             backoff_minutes = min(60, 2 ** (consecutive_failures - 1) * min_interval)
-            if last_failure_time and (current_time - last_failure_time).total_seconds() / 60 < backoff_minutes:
+            if last_failure_time and (current_time - last_failure_time).total_seconds() / Network.Defaults.SECONDS_PER_MINUTE < backoff_minutes:
                 next_retry = last_failure_time + datetime.timedelta(minutes=backoff_minutes)
                 reason = f"Backing off after {consecutive_failures} failures. Next retry: {next_retry.strftime('%H:%M:%S')}"
                 log_rate_limiting(area or "unknown", True, reason, source)
@@ -90,15 +90,39 @@ class RateLimiter:
             return False, reason
 
         # PRIORITY 3: Check for special time windows (e.g., when new prices are released)
+        # Use reduced rate limiting (1 min) during these windows for faster data acquisition
         hour = current_time.hour
+        in_special_window = False
+        special_window_range = None
+        
         for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
             if start_hour <= hour < end_hour:
-                reason = f"In special hour window {start_hour}-{end_hour}, allowing fetch"
-                log_rate_limiting(area or "unknown", False, reason, source)
-                return False, reason
+                in_special_window = True
+                special_window_range = (start_hour, end_hour)
+                break
+        
+        if in_special_window:
+            # Calculate time since last fetch
+            time_diff = (current_time - last_fetched).total_seconds() / Network.Defaults.SECONDS_PER_MINUTE
+            special_min_interval = Network.Defaults.SPECIAL_WINDOW_MIN_INTERVAL_MINUTES
+            
+            if time_diff < special_min_interval:
+                reason = (
+                    f"In special window {special_window_range[0]:02d}:00-{special_window_range[1]:02d}:00 "
+                    f"but last fetch was {time_diff:.1f} min ago (minimum: {special_min_interval} min during windows)"
+                )
+                log_rate_limiting(area or "unknown", True, reason, source)
+                return True, reason
+            
+            reason = (
+                f"In special window {special_window_range[0]:02d}:00-{special_window_range[1]:02d}:00, "
+                f"allowing fetch ({time_diff:.1f} min >= {special_min_interval} min)"
+            )
+            log_rate_limiting(area or "unknown", False, reason, source)
+            return False, reason
 
         # Calculate time since last fetch in minutes for remaining checks
-        time_diff = (current_time - last_fetched).total_seconds() / 60
+        time_diff = (current_time - last_fetched).total_seconds() / Network.Defaults.SECONDS_PER_MINUTE
 
         # Use specified min_interval or fall back to default
         if min_interval is None:

@@ -19,12 +19,17 @@ class Network:
         USER_AGENT = "HomeAssistantGESpot/1.0"
 
         # Rate limiting constants
-        MIN_UPDATE_INTERVAL_MINUTES = 15  # Minimum time between fetches
+        MIN_UPDATE_INTERVAL_MINUTES = 15  # Minimum time between fetches (normal hours)
+        SPECIAL_WINDOW_MIN_INTERVAL_MINUTES = 1  # Minimum time between fetches during special windows (more responsive)
         STANDARD_UPDATE_INTERVAL_MINUTES = 30  # Standard interval
         MISSING_HOURS_RETRY_INTERVAL_MINUTES = 5  # Minimum time between attempts to fill missing hours
         GRACE_PERIOD_MINUTES = 5  # Grace period after reload/startup for lenient validation
+        
+        # Time conversion constants
+        SECONDS_PER_MINUTE = 60  # Seconds in a minute (for time calculations)
 
         # Special time windows for updates
+        # During these windows, rate limiting is more lenient (1 min vs 15 min) to catch new data quickly
         SPECIAL_HOUR_WINDOWS = [
             (0, 1),   # 00:00-01:00 - For today's new prices
             (13, 15), # 13:00-15:00 - For tomorrow's data (most EU markets publish around 13:00-14:00 CET)
