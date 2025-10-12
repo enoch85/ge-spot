@@ -2,7 +2,6 @@
 import logging
 from typing import Optional
 from datetime import tzinfo
-import pytz
 
 from .timezone_utils import get_source_timezone, get_source_format, get_timezone_object
 

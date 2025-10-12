@@ -5,7 +5,6 @@ import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Union
 from datetime import tzinfo
-import pytz
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util

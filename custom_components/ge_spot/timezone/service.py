@@ -1,8 +1,8 @@
 """Main timezone service coordinating all timezone operations."""
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-import pytz
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # Home Assistant imports
 from homeassistant.core import HomeAssistant
@@ -188,7 +188,7 @@ class TimezoneService:
 
                 normalized_prices[aligned_dt] = price
 
-            except (ValueError, TypeError, pytz.exceptions.UnknownTimeZoneError) as e:
+            except (ValueError, TypeError, ZoneInfoNotFoundError) as e:
                 _LOGGER.error("Error normalizing timestamp '%s': %s", timestamp_str, e)
 
         _LOGGER.debug("Successfully normalized %d timestamps.", len(normalized_prices))
@@ -196,28 +196,50 @@ class TimezoneService:
 
     # Example helper method (adapt based on actual parsing needs)
     def _parse_timestamp(self, timestamp_str: str, source_hint: Optional[str] = None) -> Optional[datetime]:
-        """Parses a timestamp string into a timezone-aware datetime object, using hint if naive."""
+        """Parses a timestamp string into a timezone-aware datetime object, using hint if naive.
+        
+        Args:
+            timestamp_str: ISO format timestamp string
+            source_hint: Optional timezone name (e.g., 'Europe/Copenhagen')
+            
+        Returns:
+            Timezone-aware datetime in UTC, or None if parsing fails
+            
+        Raises:
+            ValueError: If timezone hint is invalid and timestamp is naive (data quality issue)
+        """
         try:
             dt = datetime.fromisoformat(timestamp_str)
             if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None: # Check if naive
                 source_tz = None
                 if source_hint:
                     try:
-                        source_tz = pytz.timezone(source_hint)
-                    except pytz.exceptions.UnknownTimeZoneError:
-                        _LOGGER.warning("Invalid source timezone hint '%s', ignoring.", source_hint)
+                        source_tz = ZoneInfo(source_hint)
+                    except ZoneInfoNotFoundError:
+                        # Invalid timezone hint with naive timestamp is a critical error
+                        # This indicates a configuration or data quality problem
+                        _LOGGER.error(
+                            "Invalid source timezone hint '%s' for naive timestamp '%s'. "
+                            "This indicates a configuration error. Cannot safely determine timezone.",
+                            source_hint, timestamp_str
+                        )
+                        return None  # Fail explicitly rather than silently assume UTC
 
                 if source_tz:
                      # Localize naive timestamp with hint
-                    dt = source_tz.localize(dt)
+                    dt = dt.replace(tzinfo=source_tz)
                     _LOGGER.debug("Localized naive timestamp '%s' using hint '%s'", timestamp_str, source_hint)
                 else:
-                    # Fallback: Assume UTC if no hint and naive
-                    _LOGGER.debug("Timestamp '%s' is naive and no valid source hint provided, assuming UTC.", timestamp_str)
-                    dt = pytz.utc.localize(dt)
+                    # No hint provided for naive timestamp - assume UTC as last resort
+                    _LOGGER.warning(
+                        "Timestamp '%s' is naive and no source hint provided, assuming UTC. "
+                        "This may indicate missing timezone configuration.",
+                        timestamp_str
+                    )
+                    dt = dt.replace(tzinfo=timezone.utc)
 
             # Ensure the result is timezone-aware and in UTC for consistency before target conversion
-            return dt.astimezone(pytz.utc)
+            return dt.astimezone(timezone.utc)
 
         except ValueError:
             _LOGGER.error("Could not parse ISO format timestamp: %s", timestamp_str)
@@ -230,8 +252,7 @@ class TimezoneService:
     def get_current_interval_key(self):
         """Get the current interval key in the appropriate timezone based on the timezone reference setting."""
         # Get current time in different timezones for debugging
-        # Use pytz.utc instead of undefined timezone.utc
-        now_utc = datetime.now(pytz.utc)
+        now_utc = datetime.now(timezone.utc)
         now_ha = datetime.now(self.ha_timezone)
         now_area = datetime.now(self.area_timezone) if self.area_timezone else None
 

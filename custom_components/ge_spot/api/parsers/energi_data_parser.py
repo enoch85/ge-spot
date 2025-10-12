@@ -3,6 +3,7 @@ import logging
 import json
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
+from zoneinfo import ZoneInfo
 
 from ...const.sources import Source
 from ...const.currencies import Currency
@@ -85,14 +86,27 @@ class EnergiDataParser(BasePriceParser):
         # DayAheadPrices dataset provides native 15-minute intervals (since Sept 30, 2025)
         # No expansion needed - data is already in correct interval format
         interval_prices_iso = {}
+        
+        # Get Copenhagen timezone for localizing naive timestamps (cached at module import)
+        copenhagen_tz = ZoneInfo('Europe/Copenhagen')
 
         for record in records:
             try:
                 # DayAheadPrices format: TimeDK and DayAheadPriceDKK
                 if "TimeDK" in record and "DayAheadPriceDKK" in record:
                     timestamp_str = record["TimeDK"]
+                    # Parse timestamp and ensure it's timezone-aware
                     dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                    interval_key = dt.isoformat()
+                    
+                    # If datetime is naive (no timezone), localize it to Copenhagen time
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=copenhagen_tz)
+                    
+                    # Convert to UTC for consistent storage
+                    dt_utc = dt.astimezone(timezone.utc)
+                    
+                    # Create ISO format key with timezone (matches validation expectations)
+                    interval_key = dt_utc.isoformat()
                     price = float(record["DayAheadPriceDKK"])
                     interval_prices_iso[interval_key] = price
                     _LOGGER.debug(f"Parsed interval price for {interval_key}: {price} DKK/MWh")
@@ -106,7 +120,7 @@ class EnergiDataParser(BasePriceParser):
             result["interval_raw"] = interval_prices_iso
             _LOGGER.debug(f"Final interval_raw has {len(result['interval_raw'])} interval prices")
         else:
-            _LOGGER.warning("No interval prices parsed from records")
+            _LOGGER.warning("[energi_data_service] interval_raw is EMPTY after parsing!")
 
         return result
 
