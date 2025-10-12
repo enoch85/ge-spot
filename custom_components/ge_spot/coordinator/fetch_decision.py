@@ -81,7 +81,7 @@ class FetchDecisionMaker:
                     # The system will fall back to any available cached data
                     _LOGGER.info(reason)
                     return False, reason
-            
+
             # If is_health_check=True, we skip the rate limit check entirely
             if is_health_check:
                 reason += " (health check - bypassing rate limit)"

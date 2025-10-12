@@ -65,7 +65,7 @@ class StromligningAPI(BasePriceAPI):
         else:
             # Convert to UTC if it's not already (coordinator may pass local timezone)
             reference_time = reference_time.astimezone(timezone.utc)
-            
+
         client = ApiClient(session=session or self.session)
         try:
             # Fetch the raw JSON response from the API

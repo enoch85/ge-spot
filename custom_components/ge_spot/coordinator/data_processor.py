@@ -148,11 +148,11 @@ class DataProcessor:
 
         if is_cached_data:
             _LOGGER.debug(f"[{self.area}] Processing cached data from source '{source_name}'.")
-            
+
             # Check if we have already-processed price data
             cached_today = data.get("today_interval_prices", {})
             cached_tomorrow = data.get("tomorrow_interval_prices", {})
-            
+
             # Validate the processed data has current interval
             has_current_interval = False
             if cached_today or cached_tomorrow:
@@ -160,40 +160,40 @@ class DataProcessor:
                 now = dt_util.now()
                 current_interval_key = now.strftime("%H:%M")
                 has_current_interval = current_interval_key in cached_today
-            
+
             if (cached_today or cached_tomorrow) and has_current_interval:
                 # Use already-split data from cache - validated and safe
                 _LOGGER.debug(f"[{self.area}] Using already-processed prices from cache (today={len(cached_today)}, tomorrow={len(cached_tomorrow)}, current interval present: {has_current_interval})")
-                
+
                 # Extract metadata from cache
                 input_source_timezone = data.get("source_timezone")
                 input_source_currency = data.get("source_currency")
                 # Preserve the original raw prices from cache for storage
                 input_interval_raw = data.get("raw_interval_prices_original", {})
-                
+
                 # IMPORTANT: Cached data is already currency-converted and VAT-applied
                 # Use as final prices directly - do NOT re-normalize or re-convert
                 final_today_prices = cached_today
                 final_tomorrow_prices = cached_tomorrow
-                
+
                 # Preserve exchange rate info from cache
                 ecb_rate = data.get("ecb_rate")
                 ecb_updated = data.get("ecb_updated")
-                
+
                 # Set flag to skip normalization AND currency conversion steps
                 skip_normalization = True
                 skip_currency_conversion = True
-                
+
             else:
                 # Fallback to raw processing if:
                 # - No processed prices in cache
                 # - Current interval missing (incomplete data)
                 reason = "no processed prices" if not (cached_today or cached_tomorrow) else "missing current interval"
                 _LOGGER.warning(f"[{self.area}] Cached processed data invalid ({reason}), falling back to raw reprocessing")
-                
+
                 skip_normalization = False
                 skip_currency_conversion = False
-                
+
                 # For cached data, we expect 'raw_interval_prices_original', 'source_timezone', and 'source_currency'
                 # These represent the state *before* previous normalization and conversion.
                 if (

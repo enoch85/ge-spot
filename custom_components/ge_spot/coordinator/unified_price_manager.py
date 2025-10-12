@@ -381,10 +381,10 @@ class UnifiedPriceManager:
         }
 
         _LOGGER.info(f"[{self.area}] Starting health check for {len(self._api_classes)} sources")
-        
+
         # Set flag to bypass rate limiting during health check
         self._health_check_in_progress = True
-        
+
         try:
             session = async_get_clientsession(self.hass)
 
@@ -448,7 +448,7 @@ class UnifiedPriceManager:
                 f"Validated: {', '.join(results['validated']) or 'none'}. "
                 f"Failed: {', '.join(results['failed']) or 'none'}"
             )
-        
+
         finally:
             # Always clear flag when done
             self._health_check_in_progress = False

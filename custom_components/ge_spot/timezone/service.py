@@ -197,14 +197,14 @@ class TimezoneService:
     # Example helper method (adapt based on actual parsing needs)
     def _parse_timestamp(self, timestamp_str: str, source_hint: Optional[str] = None) -> Optional[datetime]:
         """Parses a timestamp string into a timezone-aware datetime object, using hint if naive.
-        
+
         Args:
             timestamp_str: ISO format timestamp string
             source_hint: Optional timezone name (e.g., 'Europe/Copenhagen')
-            
+
         Returns:
             Timezone-aware datetime in UTC, or None if parsing fails
-            
+
         Raises:
             ValueError: If timezone hint is invalid and timestamp is naive (data quality issue)
         """

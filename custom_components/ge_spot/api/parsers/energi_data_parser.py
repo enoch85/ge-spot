@@ -86,7 +86,7 @@ class EnergiDataParser(BasePriceParser):
         # DayAheadPrices dataset provides native 15-minute intervals (since Sept 30, 2025)
         # No expansion needed - data is already in correct interval format
         interval_prices_iso = {}
-        
+
         # Get Copenhagen timezone for localizing naive timestamps (cached at module import)
         copenhagen_tz = ZoneInfo('Europe/Copenhagen')
 
@@ -97,14 +97,14 @@ class EnergiDataParser(BasePriceParser):
                     timestamp_str = record["TimeDK"]
                     # Parse timestamp and ensure it's timezone-aware
                     dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                    
+
                     # If datetime is naive (no timezone), localize it to Copenhagen time
                     if dt.tzinfo is None:
                         dt = dt.replace(tzinfo=copenhagen_tz)
-                    
+
                     # Convert to UTC for consistent storage
                     dt_utc = dt.astimezone(timezone.utc)
-                    
+
                     # Create ISO format key with timezone (matches validation expectations)
                     interval_key = dt_utc.isoformat()
                     price = float(record["DayAheadPriceDKK"])
