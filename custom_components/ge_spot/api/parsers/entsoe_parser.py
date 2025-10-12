@@ -14,10 +14,14 @@ _LOGGER = logging.getLogger(__name__)
 class EntsoeParser(BasePriceParser):
     """Parser for ENTSO-E API responses."""
 
-    def __init__(self, timezone_service=None):
-        """Initialize the parser."""
-        super().__init__(timezone_service) # Pass timezone_service to base
-        # Add any ENTSO-E specific initialization here
+    def __init__(self, source: str = Source.ENTSOE, timezone_service=None):
+        """Initialize the parser.
+
+        Args:
+            source: Source identifier (defaults to Source.ENTSOE)
+            timezone_service: Optional timezone service
+        """
+        super().__init__(source, timezone_service)
 
     def parse(self, data: Any) -> Dict[str, Any]:
         _LOGGER.debug(f"ENTSOE Parser: Received data of type: {type(data)}")
@@ -74,11 +78,11 @@ class EntsoeParser(BasePriceParser):
             for i, xml_doc_str in enumerate(xml_to_parse):
                 try:
                     # _parse_xml is expected to return:
-                    # {"interval_prices": {"YYYY-MM-DDTHH:MM:SS+ZZ:ZZ": price, ...}, "currency": "EUR", "timezone": "Etc/UTC"}
+                    # {"today_interval_prices": {"YYYY-MM-DDTHH:MM:SS+ZZ:ZZ": price, ...}, "currency": "EUR", "timezone": "Etc/UTC"}
                     parsed_single_xml = self._parse_xml(xml_doc_str)
-                    if parsed_single_xml.get("interval_prices"):
-                        all_interval_prices.update(parsed_single_xml["interval_prices"])
-                        _LOGGER.debug(f"ENTSOE Parser: XML #{i+1} parsed, {len(parsed_single_xml['interval_prices'])} price points added.")
+                    if parsed_single_xml.get("today_interval_prices"):
+                        all_interval_prices.update(parsed_single_xml["today_interval_prices"])
+                        _LOGGER.debug(f"ENTSOE Parser: XML #{i+1} parsed, {len(parsed_single_xml['today_interval_prices'])} price points added.")
                         if parsed_single_xml.get("currency") and not aggregated_currency:
                             aggregated_currency = parsed_single_xml["currency"]
                         if parsed_single_xml.get("timezone") and not aggregated_timezone:
@@ -230,7 +234,7 @@ class EntsoeParser(BasePriceParser):
         """
         _LOGGER.debug("_parse_xml: Starting XML parsing")
         result = {
-            "interval_prices": {},
+            "today_interval_prices": {},
             "currency": "EUR",
             "source": self.source
         }
@@ -310,7 +314,7 @@ class EntsoeParser(BasePriceParser):
 
                             # Accept all interval times (15-min, 30-min, hourly)
                             interval_key = point_time.isoformat()
-                            result["interval_prices"][interval_key] = price_val
+                            result["today_interval_prices"][interval_key] = price_val
                             points_added += 1
                             if points_added <= 3:
                                 _LOGGER.debug(f"_parse_xml: Added point {pos}: key={interval_key}, price={price_val}")
@@ -330,7 +334,7 @@ class EntsoeParser(BasePriceParser):
         except Exception as e:
             _LOGGER.error(f"_parse_xml: Unexpected error during XML parsing: {e}", exc_info=True)
 
-        _LOGGER.debug(f"_parse_xml: Finished parsing. Returning {len(result['interval_prices'])} prices.")
+        _LOGGER.debug(f"_parse_xml: Finished parsing. Returning {len(result['today_interval_prices'])} prices.")
         return result
 
     def parse_interval_prices(self, data: Any, area: str) -> Dict[str, Any]:

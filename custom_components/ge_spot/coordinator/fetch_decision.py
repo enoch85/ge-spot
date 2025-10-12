@@ -36,7 +36,8 @@ class FetchDecisionMaker:
         last_fetch: Optional[datetime],
         data_validity: DataValidity,
         fetch_interval_minutes: int = 15,
-        in_grace_period: bool = False
+        in_grace_period: bool = False,
+        is_health_check: bool = False
     ) -> Tuple[bool, str]:
         """Determine if we need to fetch from API based on data validity.
 
@@ -53,9 +54,7 @@ class FetchDecisionMaker:
             data_validity: DataValidity object describing our current data coverage
             fetch_interval_minutes: Minimum minutes between fetches (rate limit)
             in_grace_period: True if within grace period after startup/reload
-            last_fetch: Last API fetch time (used for rate limiting)
-            data_validity: DataValidity object describing our current data coverage
-            fetch_interval_minutes: Minimum minutes between fetches (rate limit)
+            is_health_check: True if this is a health check validation (bypasses rate limiting)
 
         Returns:
             Tuple of (need_api_fetch, reason)
@@ -66,8 +65,8 @@ class FetchDecisionMaker:
             reason = f"No data for current interval ({current_interval_key}) - fetching data immediately"
             _LOGGER.info(reason)  # INFO level: expected on reload, not an error
 
-            # Respect rate limiting to avoid hammering the API
-            if last_fetch:
+            # Respect rate limiting UNLESS this is a health check
+            if last_fetch and not is_health_check:
                 from ..utils.rate_limiter import RateLimiter
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
                     last_fetched=last_fetch,
@@ -82,6 +81,10 @@ class FetchDecisionMaker:
                     # The system will fall back to any available cached data
                     _LOGGER.info(reason)
                     return False, reason
+
+            # If is_health_check=True, we skip the rate limit check entirely
+            if is_health_check:
+                reason += " (health check - bypassing rate limit)"
 
             return True, reason
 

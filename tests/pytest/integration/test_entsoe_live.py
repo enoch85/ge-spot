@@ -20,7 +20,7 @@ SAMPLE_ENTSOE_RESPONSES = {
         "area": "DE-LU",
         "currency": Currency.EUR,
         "api_timezone": "Europe/Brussels",
-        "interval_prices": {
+        "today_interval_prices": {
             "2025-04-26T22:00:00Z": 45.61,
             "2025-04-26T23:00:00Z": 42.82,
             "2025-04-27T00:00:00Z": 41.15,
@@ -52,7 +52,7 @@ SAMPLE_ENTSOE_RESPONSES = {
         "area": "FR",
         "currency": Currency.EUR,
         "api_timezone": "Europe/Brussels",
-        "interval_prices": {
+        "today_interval_prices": {
             "2025-04-26T22:00:00Z": 42.61,
             "2025-04-26T23:00:00Z": 40.82,
             "2025-04-27T00:00:00Z": 39.15,
@@ -84,7 +84,7 @@ SAMPLE_ENTSOE_RESPONSES = {
         "area": "ES",
         "currency": Currency.EUR,
         "api_timezone": "Europe/Brussels",
-        "interval_prices": {
+        "today_interval_prices": {
             "2025-04-26T22:00:00Z": 35.61,
             "2025-04-26T23:00:00Z": 33.82,
             "2025-04-27T00:00:00Z": 32.15,
@@ -116,7 +116,7 @@ SAMPLE_ENTSOE_RESPONSES = {
         "area": "FI",
         "currency": Currency.EUR,
         "api_timezone": "Europe/Brussels",
-        "interval_prices": {
+        "today_interval_prices": {
             "2025-04-26T22:00:00Z": 30.61,
             "2025-04-26T23:00:00Z": 28.82,
             "2025-04-27T00:00:00Z": 27.15,
@@ -176,14 +176,14 @@ async def test_entsoe_live_fetch_parse(entsoe_api, area):
         assert parsed_data.get("area") == area, f"Area should be {area}, got {parsed_data.get('area')}"
 
         # Stricter validation of required fields
-        required_fields = ["currency", "api_timezone", "interval_prices"]
+        required_fields = ["currency", "api_timezone", "today_interval_prices"]
         for field in required_fields:
             assert field in parsed_data, f"Required field '{field}' missing from parsed data for {area}"
 
-        assert isinstance(parsed_data["interval_prices"], dict), f"interval_prices should be a dictionary, got {type(parsed_data['interval_prices'])}"
+        assert isinstance(parsed_data["today_interval_prices"], dict), f"today_interval_prices should be a dictionary, got {type(parsed_data['today_interval_prices'])}"
 
         # Validate interval prices content
-        interval_prices = parsed_data["interval_prices"]
+        interval_prices = parsed_data["today_interval_prices"]
 
         # Check for expected data presence
         assert interval_prices, f"No interval prices found for {area} - this is a real issue that should be investigated"

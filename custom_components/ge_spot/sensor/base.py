@@ -175,15 +175,15 @@ class BaseElectricityPriceSensor(SensorEntity):
             attrs["error"] = error_info
 
         # Add interval prices if available, rounding float values
-        if "interval_prices" in self.coordinator.data:
-            interval_prices = self.coordinator.data["interval_prices"]
+        if "today_interval_prices" in self.coordinator.data:
+            interval_prices = self.coordinator.data["today_interval_prices"]
             if isinstance(interval_prices, dict):
-                attrs["interval_prices"] = {
+                attrs["today_interval_prices"] = {
                     k: round(v, 4) if isinstance(v, float) else v
                     for k, v in interval_prices.items()
                 }
             else:
-                attrs["interval_prices"] = interval_prices # Keep original if not a dict
+                attrs["today_interval_prices"] = interval_prices # Keep original if not a dict
 
         # Add tomorrow interval prices if available, rounding float values
         if "tomorrow_interval_prices" in self.coordinator.data:

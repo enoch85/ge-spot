@@ -45,7 +45,7 @@ class ApiValidator:
         # Additional checks specific to this validator
 
         # Check number of intervals available
-        interval_count = len(data.get("interval_prices", {}))
+        interval_count = len(data.get("today_interval_prices", {}))
 
         # Special handling for sources with different data availability patterns
         if source_name.lower() == Source.AEMO.lower():
@@ -70,11 +70,11 @@ class ApiValidator:
                 tz_service = TimezoneService()
                 current_interval_key = tz_service.get_current_interval_key()
 
-                if current_interval_key not in data.get("interval_prices", {}):
+                if current_interval_key not in data.get("today_interval_prices", {}):
                     _LOGGER.warning(f"Current interval {current_interval_key} missing from {source_name}")
                     return False
 
-                current_price = data["interval_prices"][current_interval_key]
+                current_price = data["today_interval_prices"][current_interval_key]
                 if current_price is None or not isinstance(current_price, (int, float)):
                     _LOGGER.warning(f"Invalid current interval price from {source_name}: {current_price}")
                     return False

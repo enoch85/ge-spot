@@ -66,7 +66,7 @@ MOCK_SUCCESS_RESULT = {
     "data_source": Source.NORDPOOL,
     "area": "SE1",
     "currency": "SEK", # Original currency from source
-    "interval_prices": {
+    "today_interval_prices": {
         "2025-04-26T10:00:00+00:00": 1.0,
         "2025-04-26T10:15:00+00:00": 1.1,
         "2025-04-26T10:30:00+00:00": 1.2,
@@ -82,7 +82,7 @@ MOCK_PROCESSED_RESULT = {
     "source": Source.NORDPOOL, # Renamed from data_source
     "area": "SE1",
     "target_currency": "SEK", # Added target currency
-    "interval_prices": {
+    "today_interval_prices": {
         "2025-04-26T10:00:00+02:00": 1.1,
         "2025-04-26T10:15:00+02:00": 1.2,
         "2025-04-26T10:30:00+02:00": 1.3,
@@ -108,7 +108,7 @@ MOCK_FAILURE_RESULT = {
     "data_source": "None",
     "area": "SE1",
     "currency": "SEK",
-    "interval_prices": {},
+    "today_interval_prices": {},
     "attempted_sources": [Source.NORDPOOL, Source.ENTSOE],
     "error": "Failed to fetch from all sources",
 }
@@ -118,7 +118,7 @@ MOCK_EMPTY_PROCESSED_RESULT = {
     "source": "None",
     "area": "SE1",
     "target_currency": "SEK",
-    "interval_prices": {},
+    "today_interval_prices": {},
     "attempted_sources": [Source.NORDPOOL, Source.ENTSOE],
     "fallback_sources": [Source.NORDPOOL, Source.ENTSOE],
     "using_cached_data": False,
@@ -319,14 +319,14 @@ class TestUnifiedPriceManager:
             mock_processor.assert_awaited_once()
             # Verify processor was called with cached data (check key fields)
             process_call_args = mock_processor.call_args[0][0]
-            assert process_call_args.get("interval_prices") == MOCK_PROCESSED_RESULT.get("interval_prices"), \
+            assert process_call_args.get("today_interval_prices") == MOCK_PROCESSED_RESULT.get("today_interval_prices"), \
                 "Processor should be called with cached interval_prices"
             assert process_call_args.get("using_cached_data") is True, \
                 "Processor input should have using_cached_data=True"
 
             # Result should indicate cached data was used
             assert result.get("using_cached_data") is True, "Result should indicate cached data was used"
-            assert result.get("interval_prices") == MOCK_PROCESSED_RESULT.get("interval_prices"), "Result prices should match cached data"
+            assert result.get("today_interval_prices") == MOCK_PROCESSED_RESULT.get("today_interval_prices"), "Result prices should match cached data"
 
             # Stop the time freezer
             freezer.stop()
@@ -486,7 +486,7 @@ class TestUnifiedPriceManager:
         expected_result = {**MOCK_CACHED_RESULT, "using_cached_data": True} # Ensure flag is True
         # Compare key fields
         assert result.get("using_cached_data") is True, "using_cached_data flag should be True"
-        assert result.get("interval_prices") == MOCK_CACHED_RESULT.get("interval_prices"), "Prices should match cached data"
+        assert result.get("today_interval_prices") == MOCK_CACHED_RESULT.get("today_interval_prices"), "Prices should match cached data"
         # attempted_sources comes from the actual cache data, not from MOCK_FAILURE_RESULT
         # The cache contains data from a previous successful fetch, so check it has SOME attempted_sources
         assert len(result.get("attempted_sources", [])) > 0, "Result should have attempted_sources from cached data"
@@ -547,7 +547,7 @@ class TestUnifiedPriceManager:
             mock_processor.assert_awaited_once()
             # Verify processor was called with cached data (check key fields)
             process_call_args = mock_processor.call_args[0][0]
-            assert process_call_args.get("interval_prices") == MOCK_CACHED_RESULT.get("interval_prices"), \
+            assert process_call_args.get("today_interval_prices") == MOCK_CACHED_RESULT.get("today_interval_prices"), \
                 "Processor should be called with cached interval_prices"
             assert process_call_args.get("using_cached_data") is True, \
                 "Processor input should have using_cached_data=True"
@@ -556,7 +556,7 @@ class TestUnifiedPriceManager:
             expected_result = {**MOCK_CACHED_RESULT, "using_cached_data": True} # Ensure flag is True
             # Compare key fields
             assert result.get("using_cached_data") is True, "using_cached_data flag should be True"
-            assert result.get("interval_prices") == MOCK_CACHED_RESULT.get("interval_prices"), "Prices should match cached data"
+            assert result.get("today_interval_prices") == MOCK_CACHED_RESULT.get("today_interval_prices"), "Prices should match cached data"
 
 
 
@@ -614,7 +614,7 @@ class TestUnifiedPriceManager:
             assert "rate limit" in error_msg, f"Error should mention rate limiting, got: {result.get('error', '')}"
             # using_cached_data is False because no cache was found (not True because cache was attempted)
             assert result.get("using_cached_data") is False, "using_cached_data flag should be False (no cache found)"
-            assert not result.get("interval_prices"), "interval_prices should be empty"
+            assert not result.get("today_interval_prices"), "interval_prices should be empty"
             assert result.get("has_data") is False, "has_data should be False"
 
 
@@ -668,7 +668,7 @@ class TestUnifiedPriceManager:
         # The actual error from production: "Fetch/Processing failed: Unknown fetch/processing error"
         assert "failed" in result.get("error", "").lower() or "error" in result.get("error", "").lower(), \
             f"Error should indicate fetch failure, got {result.get('error')}"
-        assert not result.get("interval_prices", {}), "interval_prices should be empty"
+        assert not result.get("today_interval_prices", {}), "interval_prices should be empty"
         assert result.get("has_data", True) is False, "has_data should be False on malformed data"
         assert result.get("attempted_sources") == [Source.NORDPOOL], "Attempted sources should be recorded"
 
@@ -684,7 +684,7 @@ class TestUnifiedPriceManager:
             "data_source": Source.NORDPOOL,
             "area": "SE1",
             "currency": "SEK",
-            "interval_prices": {
+            "today_interval_prices": {
                 "2025-04-26T10:00:00+00:00": 9999.99,  # Extreme high price
                 "2025-04-26T10:15:00+00:00": -500.0,   # Extreme negative price
                 "2025-04-26T10:30:00+00:00": 2.5,      # Normal price
@@ -697,7 +697,7 @@ class TestUnifiedPriceManager:
         # In real implementation, processor should validate but not clip these values
         extreme_processed_result = {
             **MOCK_PROCESSED_RESULT,
-            "interval_prices": {
+            "today_interval_prices": {
                 "2025-04-26T10:00:00+02:00": 9999.99,
                 "2025-04-26T10:15:00+02:00": -500.0,
                 "2025-04-26T10:30:00+02:00": 2.5,
@@ -709,14 +709,14 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
 
         # Assert - Extreme prices should be preserved, not clipped
-        assert result["interval_prices"]["2025-04-26T10:00:00+02:00"] == 9999.99, \
-            f"Extreme high price should not be clipped, got {result['interval_prices']['2025-04-26T10:00:00+02:00']}"
-        assert result["interval_prices"]["2025-04-26T10:15:00+02:00"] == -500.0, \
-            f"Negative price should not be clipped, got {result['interval_prices']['2025-04-26T10:15:00+02:00']}"
+        assert result["today_interval_prices"]["2025-04-26T10:00:00+02:00"] == 9999.99, \
+            f"Extreme high price should not be clipped, got {result['today_interval_prices']['2025-04-26T10:00:00+02:00']}"
+        assert result["today_interval_prices"]["2025-04-26T10:15:00+02:00"] == -500.0, \
+            f"Negative price should not be clipped, got {result['today_interval_prices']['2025-04-26T10:15:00+02:00']}"
 
         # Both normal and extreme prices should be present
-        assert len(result["interval_prices"]) == 3, \
-            f"All price points should be preserved, got {len(result['interval_prices'])}"
+        assert len(result["today_interval_prices"]) == 3, \
+            f"All price points should be preserved, got {len(result['today_interval_prices'])}"
 
         # Result should indicate successful fetch despite extreme prices
         assert result["has_data"] is True, "has_data should be True despite extreme prices"
@@ -735,7 +735,7 @@ class TestUnifiedPriceManager:
             "data_source": Source.ENTSOE,
             "area": "SE1",
             "currency": Currency.EUR,  # Source currency is EUR
-            "interval_prices": {
+            "today_interval_prices": {
                 "2025-04-26T10:00:00+00:00": 0.1,  # EUR prices at 15-min intervals
                 "2025-04-26T10:15:00+00:00": 0.2,
             },
@@ -752,7 +752,7 @@ class TestUnifiedPriceManager:
             "source": Source.ENTSOE,
             "source_currency": Currency.EUR,
             "target_currency": Currency.SEK,
-            "interval_prices": {
+            "today_interval_prices": {
                 "2025-04-26T10:00:00+02:00": 1.05,  # 0.1 EUR * 10.5 = 1.05 SEK
                 "2025-04-26T10:15:00+02:00": 2.1,   # 0.2 EUR * 10.5 = 2.1 SEK
             },
@@ -772,10 +772,10 @@ class TestUnifiedPriceManager:
         assert result["exchange_rate"] == 10.5, f"Exchange rate should be 10.5, got {result.get('exchange_rate')}"
 
         # Check converted prices
-        assert result["interval_prices"]["2025-04-26T10:00:00+02:00"] == 1.05, \
-            f"First interval price should be converted to 1.05 SEK, got {result['interval_prices']['2025-04-26T10:00:00+02:00']}"
-        assert result["interval_prices"]["2025-04-26T10:15:00+02:00"] == 2.1, \
-            f"Second interval price should be converted to 2.1 SEK, got {result['interval_prices']['2025-04-26T10:15:00+02:00']}"
+        assert result["today_interval_prices"]["2025-04-26T10:00:00+02:00"] == 1.05, \
+            f"First interval price should be converted to 1.05 SEK, got {result['today_interval_prices']['2025-04-26T10:00:00+02:00']}"
+        assert result["today_interval_prices"]["2025-04-26T10:15:00+02:00"] == 2.1, \
+            f"Second interval price should be converted to 2.1 SEK, got {result['today_interval_prices']['2025-04-26T10:15:00+02:00']}"
 
     @pytest.mark.asyncio
     async def test_fetch_data_with_timezone_conversion(self, manager, auto_mock_core_dependencies):
@@ -791,7 +791,7 @@ class TestUnifiedPriceManager:
             "area": "SE1",
             "currency": "SEK",
             "api_timezone": "UTC",
-            "interval_prices": {
+            "today_interval_prices": {
                 "2025-04-26T10:00:00+00:00": 1.0,  # UTC timestamps at 15-min intervals
                 "2025-04-26T10:15:00+00:00": 2.0,
             },
@@ -807,7 +807,7 @@ class TestUnifiedPriceManager:
             **MOCK_PROCESSED_RESULT,
             "source_timezone": "UTC",
             "target_timezone": "Europe/Stockholm",
-            "interval_prices": {
+            "today_interval_prices": {
                 "2025-04-26T12:00:00+02:00": 1.0,  # UTC+2 for Stockholm at :00
                 "2025-04-26T12:15:00+02:00": 2.0,  # UTC+2 for Stockholm at :15
             }
@@ -825,10 +825,10 @@ class TestUnifiedPriceManager:
             f"Target timezone should be Europe/Stockholm, got {result.get('target_timezone')}"
 
         # Check converted timestamps (15-minute intervals)
-        assert "2025-04-26T12:00:00+02:00" in result["interval_prices"], \
-            f"First interval should be converted to local time, got keys: {list(result['interval_prices'].keys())}"
-        assert "2025-04-26T12:15:00+02:00" in result["interval_prices"], \
-            f"Second interval should be converted to local time, got keys: {list(result['interval_prices'].keys())}"
+        assert "2025-04-26T12:00:00+02:00" in result["today_interval_prices"], \
+            f"First interval should be converted to local time, got keys: {list(result['today_interval_prices'].keys())}"
+        assert "2025-04-26T12:15:00+02:00" in result["today_interval_prices"], \
+            f"Second interval should be converted to local time, got keys: {list(result['today_interval_prices'].keys())}"
 
     @pytest.mark.asyncio
     async def test_consecutive_failures_backoff(self, manager, auto_mock_core_dependencies):

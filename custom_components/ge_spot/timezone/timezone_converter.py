@@ -1,7 +1,6 @@
 import logging
 from typing import Any, Dict, Optional
 from datetime import datetime, timezone, date, timedelta
-import pytz
 
 # Importing timezone_utils directly instead of from ..timezone to avoid circular import
 from .timezone_utils import get_timezone_object
@@ -38,11 +37,8 @@ class TimezoneConverter:
             if dt.tzinfo is None and source_timezone_str:
                 source_tz = get_timezone_object(source_timezone_str)
                 if source_tz:
-                    try:
-                        dt = source_tz.localize(dt)  # type: ignore[attr-defined]  # pytz has localize, zoneinfo doesn't
-                    except AttributeError:
-                        # If timezone object doesn't have localize method (e.g., zoneinfo)
-                        dt = dt.replace(tzinfo=source_tz)
+                    # Use replace() for timezone-aware datetime creation
+                    dt = dt.replace(tzinfo=source_tz)
                 else:
                     _LOGGER.error(f"Invalid source timezone: {source_timezone_str}")
                     return None
@@ -222,7 +218,7 @@ class TimezoneConverter:
 # Example usage (would be in DataProcessor):
 # tz_converter = TimezoneConverter(self._tz_service)
 # final_today, final_tomorrow = tz_converter.normalize_today_and_tomorrow_prices(
-#     raw_data.get("interval_prices"), # Assuming raw data structure
+#     raw_data.get("today_interval_prices"), # Assuming raw data structure
 #     raw_data.get("tomorrow_interval_prices_raw"), # Assuming raw data structure
 #     raw_data.get("api_timezone")
 # )

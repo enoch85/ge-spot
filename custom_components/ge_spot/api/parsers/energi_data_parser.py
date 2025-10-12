@@ -3,9 +3,11 @@ import logging
 import json
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
+from zoneinfo import ZoneInfo
 
 from ...const.sources import Source
 from ...const.currencies import Currency
+from ...const.time import TimezoneName
 from ...utils.validation import validate_data
 from ...timezone.timezone_utils import normalize_hour_value
 from ..base.price_parser import BasePriceParser
@@ -16,9 +18,14 @@ _LOGGER = logging.getLogger(__name__)
 class EnergiDataParser(BasePriceParser):
     """Parser for Energi Data Service API responses."""
 
-    def __init__(self, timezone_service=None):
-        """Initialize the parser."""
-        super().__init__(Source.ENERGI_DATA_SERVICE, timezone_service)
+    def __init__(self, source: str = Source.ENERGI_DATA_SERVICE, timezone_service=None):
+        """Initialize the parser.
+
+        Args:
+            source: Source identifier (defaults to Source.ENERGI_DATA_SERVICE)
+            timezone_service: Optional timezone service
+        """
+        super().__init__(source, timezone_service)
 
     def parse(self, raw_data: Any) -> Dict[str, Any]:
         """Parse Energi Data Service API response.
@@ -86,8 +93,19 @@ class EnergiDataParser(BasePriceParser):
                 # DayAheadPrices format: TimeDK and DayAheadPriceDKK
                 if "TimeDK" in record and "DayAheadPriceDKK" in record:
                     timestamp_str = record["TimeDK"]
+                    # Parse timestamp and ensure it's timezone-aware
                     dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                    interval_key = dt.isoformat()
+
+                    # If datetime is naive (no timezone), localize it to Copenhagen time
+                    if dt.tzinfo is None:
+                        copenhagen_tz = ZoneInfo(TimezoneName.EUROPE_COPENHAGEN)
+                        dt = dt.replace(tzinfo=copenhagen_tz)
+
+                    # Convert to UTC for consistent storage
+                    dt_utc = dt.astimezone(timezone.utc)
+
+                    # Create ISO format key with timezone (matches validation expectations)
+                    interval_key = dt_utc.isoformat()
                     price = float(record["DayAheadPriceDKK"])
                     interval_prices_iso[interval_key] = price
                     _LOGGER.debug(f"Parsed interval price for {interval_key}: {price} DKK/MWh")
@@ -101,7 +119,7 @@ class EnergiDataParser(BasePriceParser):
             result["interval_raw"] = interval_prices_iso
             _LOGGER.debug(f"Final interval_raw has {len(result['interval_raw'])} interval prices")
         else:
-            _LOGGER.warning("No interval prices parsed from records")
+            _LOGGER.warning("[energi_data_service] interval_raw is EMPTY after parsing!")
 
         return result
 

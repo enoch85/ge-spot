@@ -8,7 +8,6 @@ from ...timezone.service import TimezoneService
 from ...const.sources import Source
 from ...const.time import TimeInterval
 from ...timezone.timezone_utils import get_timezone_object # Import helper
-import pytz # Import pytz for robust timezone handling
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -73,12 +72,13 @@ class BasePriceParser(ABC):
             return False
 
         # Check if there are any prices
-        if not data["interval_raw"]:
+        interval_raw = data["interval_raw"]
+        if not interval_raw:
             _LOGGER.warning(f"{self.source}: No interval prices found in interval_raw")
             return False
 
         # Check if current interval price is available when expected
-        current_price = self._get_current_price(data["interval_raw"])
+        current_price = self._get_current_price(interval_raw)
         if current_price is None:
             _LOGGER.warning(f"{self.source}: Current interval price not found in interval_raw - failing validation to try next source")
             return False  # Fail validation to trigger fallback

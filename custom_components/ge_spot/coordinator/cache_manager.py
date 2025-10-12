@@ -5,7 +5,6 @@ import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Union
 from datetime import tzinfo
-import pytz
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -194,7 +193,7 @@ class CacheManager:
                             data_copy = dict(entry_data)
 
                             # Move tomorrow's prices to today's prices
-                            data_copy["interval_prices"] = data_copy["tomorrow_interval_prices"]
+                            data_copy["today_interval_prices"] = data_copy["tomorrow_interval_prices"]
                             data_copy["tomorrow_interval_prices"] = {}
 
                             # Mark as migrated for debugging purposes

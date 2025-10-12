@@ -36,7 +36,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # NOTE: All API modules should return raw, unprocessed data in this standardized format:
 # {
-#     "interval_prices": {"HH:MM" or ISO: price, ...},
+#     "today_interval_prices": {"HH:MM" or ISO: price, ...},
 #     "currency": str,
 #     "timezone": str,
 #     "area": str,
@@ -148,55 +148,102 @@ class DataProcessor:
 
         if is_cached_data:
             _LOGGER.debug(f"[{self.area}] Processing cached data from source '{source_name}'.")
-            # For cached data, we expect 'raw_interval_prices_original', 'source_timezone', and 'source_currency'
-            # These represent the state *before* previous normalization and conversion.
-            if (
-                "raw_interval_prices_original" in data
-                and "source_timezone" in data
-                and "source_currency" in data
-            ):
-                input_interval_raw = data.get("raw_interval_prices_original")
+
+            # Check if we have already-processed price data
+            cached_today = data.get("today_interval_prices", {})
+            cached_tomorrow = data.get("tomorrow_interval_prices", {})
+
+            # Validate the processed data has current interval
+            has_current_interval = False
+            if cached_today or cached_tomorrow:
+                # Use interval calculator to get properly rounded interval key (e.g., "15:30" not "15:33")
+                current_interval_key = self._tz_service.get_current_interval_key()
+                has_current_interval = current_interval_key in cached_today
+
+            if (cached_today or cached_tomorrow) and has_current_interval:
+                # Use already-split data from cache - validated and safe
+                _LOGGER.debug(f"[{self.area}] Using already-processed prices from cache (today={len(cached_today)}, tomorrow={len(cached_tomorrow)}, current interval present: {has_current_interval})")
+
+                # Extract metadata from cache
                 input_source_timezone = data.get("source_timezone")
                 input_source_currency = data.get("source_currency")
-                _LOGGER.debug(f"[{self.area}] Using 'raw_interval_prices_original' from cache for reprocessing.")
+                # Preserve the original raw prices from cache for storage
+                input_interval_raw = data.get("raw_interval_prices_original", {})
 
-                # Ensure raw_api_data_for_result is also populated from cache if it exists there
-                # The initial raw_api_data_for_result might be from the top-level cache dict,
-                # but the more specific one might be nested if the cache stores the full processed dict.
-                if data.get("raw_data"):
-                    raw_api_data_for_result = data.get("raw_data")
+                # IMPORTANT: Cached data is already currency-converted and VAT-applied
+                # Use as final prices directly - do NOT re-normalize or re-convert
+                final_today_prices = cached_today
+                final_tomorrow_prices = cached_tomorrow
+
+                # Preserve exchange rate info from cache
+                ecb_rate = data.get("ecb_rate")
+                ecb_updated = data.get("ecb_updated")
+
+                # Set flag to skip normalization AND currency conversion steps
+                skip_normalization = True
+                skip_currency_conversion = True
 
             else:
-                _LOGGER.warning(f"[{self.area}] Cached data for '{source_name}' is missing expected fields: 'raw_interval_prices_original', 'source_timezone', or 'source_currency'. Attempting to re-parse, but this may lead to errors if data is already processed.")
-                # Fallback to trying to parse the main 'interval_prices' if the original raw is missing (old cache format)
-                # This is risky and might be what was causing issues.
-                # The EntsoeParser change should make it safer as it will look for XML.
-                parser = self._get_parser(source_name)
-                if not parser:
-                    _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area} during cached data processing.")
-                    return self._generate_empty_processed_result(data, error=f"No parser for source {source_name} (cache path)")
-                try:
-                    # Pass the entire cached dictionary to the parser.
-                    # The modified EntsoeParser will look for XML within this dict.
-                    parsed_data = parser.parse(data)
+                # Fallback to raw processing if:
+                # - No processed prices in cache
+                # - Current interval missing (incomplete data)
+                reason = "no processed prices" if not (cached_today or cached_tomorrow) else "missing current interval"
+                _LOGGER.warning(f"[{self.area}] Cached processed data invalid ({reason}), falling back to raw reprocessing")
 
-                    # Validate parsed data (checks for current interval price)
-                    if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
-                        # Validation failed - cached data is incomplete, treat as invalid
-                        _LOGGER.debug(f"[{self.area}] Cached data validation failed for source '{source_name}' - treating as invalid cache")
-                        return self._generate_empty_processed_result(data, error=f"Cached data validation failed: missing current interval")
+                skip_normalization = False
+                skip_currency_conversion = False
 
-                    input_interval_raw = parsed_data.get("interval_raw")
-                    input_source_timezone = parsed_data.get("timezone")
-                    input_source_currency = parsed_data.get("currency")
-                    # If parser extracted metadata (like raw_data from within), use it
-                    if parsed_data.get("raw_data"):
-                         raw_api_data_for_result = parsed_data.get("raw_data")
-                    _LOGGER.debug(f"[{self.area}] Reparsed cached data with {parser.__class__.__name__}. Got {len(input_interval_raw if input_interval_raw else {})} raw prices.")
-                except Exception as parse_err:
-                    _LOGGER.error(f"[{self.area}] Error re-parsing cached data from source '{source_name}': {parse_err}", exc_info=True)
-                    return self._generate_empty_processed_result(data, error=f"Cache re-parsing error: {parse_err}")
+                # For cached data, we expect 'raw_interval_prices_original', 'source_timezone', and 'source_currency'
+                # These represent the state *before* previous normalization and conversion.
+                if (
+                    "raw_interval_prices_original" in data
+                    and "source_timezone" in data
+                    and "source_currency" in data
+                ):
+                    input_interval_raw = data.get("raw_interval_prices_original")
+                    input_source_timezone = data.get("source_timezone")
+                    input_source_currency = data.get("source_currency")
+                    _LOGGER.debug(f"[{self.area}] Using 'raw_interval_prices_original' from cache for reprocessing.")
+
+                    # Ensure raw_api_data_for_result is also populated from cache if it exists there
+                    # The initial raw_api_data_for_result might be from the top-level cache dict,
+                    # but the more specific one might be nested if the cache stores the full processed dict.
+                    if data.get("raw_data"):
+                        raw_api_data_for_result = data.get("raw_data")
+
+                else:
+                    _LOGGER.warning(f"[{self.area}] Cached data for '{source_name}' is missing expected fields: 'raw_interval_prices_original', 'source_timezone', or 'source_currency'. Attempting to re-parse, but this may lead to errors if data is already processed.")
+                    # Fallback to trying to parse the main 'interval_prices' if the original raw is missing (old cache format)
+                    # This is risky and might be what was causing issues.
+                    # The EntsoeParser change should make it safer as it will look for XML.
+                    parser = self._get_parser(source_name)
+                    if not parser:
+                        _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area} during cached data processing.")
+                        return self._generate_empty_processed_result(data, error=f"No parser for source {source_name} (cache path)")
+                    try:
+                        # Pass the entire cached dictionary to the parser.
+                        # The modified EntsoeParser will look for XML within this dict.
+                        parsed_data = parser.parse(data)
+
+                        # Validate parsed data (checks for current interval price)
+                        if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
+                            # Validation failed - cached data is incomplete, treat as invalid
+                            _LOGGER.debug(f"[{self.area}] Cached data validation failed for source '{source_name}' - treating as invalid cache")
+                            return self._generate_empty_processed_result(data, error=f"Cached data validation failed: missing current interval")
+
+                        input_interval_raw = parsed_data.get("interval_raw")
+                        input_source_timezone = parsed_data.get("timezone")
+                        input_source_currency = parsed_data.get("currency")
+                        # If parser extracted metadata (like raw_data from within), use it
+                        if parsed_data.get("raw_data"):
+                             raw_api_data_for_result = parsed_data.get("raw_data")
+                        _LOGGER.debug(f"[{self.area}] Reparsed cached data with {parser.__class__.__name__}. Got {len(input_interval_raw if input_interval_raw else {})} raw prices.")
+                    except Exception as parse_err:
+                        _LOGGER.error(f"[{self.area}] Error re-parsing cached data from source '{source_name}': {parse_err}", exc_info=True)
+                        return self._generate_empty_processed_result(data, error=f"Cache re-parsing error: {parse_err}")
         else:
+            skip_normalization = False
+            skip_currency_conversion = False
             # --- Fresh Data: Step 1: Parse Raw Data ---
             _LOGGER.debug(f"[{self.area}] Processing fresh (non-cached) data from source '{source_name}'.")
             parser = self._get_parser(source_name)
@@ -229,69 +276,78 @@ class DataProcessor:
                 _LOGGER.error(f"[{self.area}] Error parsing fresh data from source '{source_name}': {parse_err}", exc_info=True)
                 return self._generate_empty_processed_result(data, error=f"Parsing error: {parse_err}")
 
-        # --- Validate inputs for normalization ---
-        if not input_interval_raw or not isinstance(input_interval_raw, dict):
-            _LOGGER.warning(f"[{self.area}] No valid 'interval_raw' data available for source '{source_name}' after parsing/cache handling. Cached: {is_cached_data}")
-            return self._generate_empty_processed_result(data, error=f"No interval_raw data from {source_name}")
+        # --- Validate inputs for normalization (skip if using processed cache) ---
+        if not skip_normalization:
+            if not input_interval_raw or not isinstance(input_interval_raw, dict):
+                _LOGGER.warning(f"[{self.area}] No valid 'interval_raw' data available for source '{source_name}' after parsing/cache handling. Cached: {is_cached_data}")
+                return self._generate_empty_processed_result(data, error=f"No interval_raw data from {source_name}")
 
-        if not input_source_timezone:
-            _LOGGER.error(f"Missing 'timezone' for source {source_name} after parsing/cache handling. Cannot process. Cached: {is_cached_data}")
-            return self._generate_empty_processed_result(data, error="Missing timezone after parsing/cache handling")
-        if not input_source_currency:
-            _LOGGER.error(f"Missing currency for source {source_name} after parsing/cache handling. Cannot process. Cached: {is_cached_data}")
-            return self._generate_empty_processed_result(data, error="Missing currency after parsing/cache handling")
+            if not input_source_timezone:
+                _LOGGER.error(f"Missing 'timezone' for source {source_name} after parsing/cache handling. Cannot process. Cached: {is_cached_data}")
+                return self._generate_empty_processed_result(data, error="Missing timezone after parsing/cache handling")
+            if not input_source_currency:
+                _LOGGER.error(f"Missing currency for source {source_name} after parsing/cache handling. Cannot process. Cached: {is_cached_data}")
+                return self._generate_empty_processed_result(data, error="Missing currency after parsing/cache handling")
 
-        # --- Step 2: Normalize Timezones ---
-        try:
-            # This will convert ISO timestamp keys to 'YYYY-MM-DD HH:MM' format in target timezone
-            normalized_prices = self._tz_converter.normalize_interval_prices(
-                input_interval_raw, # Use the determined input_interval_raw
-                input_source_timezone, # Use the determined input_source_timezone
-                preserve_date=True  # Keep date part for today/tomorrow split
-            )
+        # --- Step 2: Normalize Timezones (skip if using processed cache) ---
+        if not skip_normalization:
+            try:
+                # This will convert ISO timestamp keys to 'YYYY-MM-DD HH:MM' format in target timezone
+                normalized_prices = self._tz_converter.normalize_interval_prices(
+                    input_interval_raw, # Use the determined input_interval_raw
+                    input_source_timezone, # Use the determined input_source_timezone
+                    preserve_date=True  # Keep date part for today/tomorrow split
+                )
 
-            # Split into today/tomorrow using the normalized keys with dates
-            normalized_today, normalized_tomorrow = self._tz_converter.split_into_today_tomorrow(normalized_prices)
+                # Split into today/tomorrow using the normalized keys with dates
+                normalized_today, normalized_tomorrow = self._tz_converter.split_into_today_tomorrow(normalized_prices)
 
-            # Log the results of normalization and splitting
-            _LOGGER.debug(f"Normalized {len(input_interval_raw)} timestamps from {input_source_timezone} into target TZ. Today: {len(normalized_today)}, Tomorrow: {len(normalized_tomorrow)} prices.")
-        except Exception as e:
-            _LOGGER.error(f"Error during timestamp normalization for {self.area} (source_tz: {input_source_timezone}): {e}", exc_info=True)
-            _LOGGER.debug(f"Data passed to normalize_interval_prices that failed: {input_interval_raw}") # Log problematic data
-            return self._generate_empty_processed_result(data, error=f"Timestamp normalization error: {e}")
+                # Log the results of normalization and splitting
+                _LOGGER.debug(f"Normalized {len(input_interval_raw)} timestamps from {input_source_timezone} into target TZ. Today: {len(normalized_today)}, Tomorrow: {len(normalized_tomorrow)} prices.")
+            except Exception as e:
+                _LOGGER.error(f"Error during timestamp normalization for {self.area} (source_tz: {input_source_timezone}): {e}", exc_info=True)
+                _LOGGER.debug(f"Data passed to normalize_interval_prices that failed: {input_interval_raw}") # Log problematic data
+                return self._generate_empty_processed_result(data, error=f"Timestamp normalization error: {e}")
+        else:
+            # Using already-processed cache - normalized_today and normalized_tomorrow already set
+            _LOGGER.debug(f"[{self.area}] Skipping normalization - using already-processed cache data")
 
-        # --- Step 3: Currency/Unit Conversion ---
-        ecb_rate = None
-        ecb_updated = None
-        final_today_prices = {}
-        # Get source unit from the input data, default to MWh if not present
-        # For cached data, this might be inside the 'data' dict, or from the original fetch context
-        source_unit = data.get("source_unit", EnergyUnit.MWH)
-        _LOGGER.debug(f"[{self.area}] Using source unit '{source_unit}' for currency conversion.")
+        # --- Step 3: Currency/Unit Conversion (skip if using processed cache) ---
+        if not skip_currency_conversion:
+            ecb_rate = None
+            ecb_updated = None
+            final_today_prices = {}
+            # Get source unit from the input data, default to MWh if not present
+            # For cached data, this might be inside the 'data' dict, or from the original fetch context
+            source_unit = data.get("source_unit", EnergyUnit.MWH)
+            _LOGGER.debug(f"[{self.area}] Using source unit '{source_unit}' for currency conversion.")
 
-        if normalized_today:
-            converted_today, rate, rate_ts = await self._currency_converter.convert_interval_prices(
-                interval_prices=normalized_today,
-                source_currency=input_source_currency, # Use determined input_source_currency
-                # Pass the determined source_unit
-                source_unit=source_unit
-            )
-            final_today_prices = converted_today
-            if rate is not None:
-                ecb_rate = rate
-                ecb_updated = rate_ts
-        final_tomorrow_prices = {}
-        if normalized_tomorrow:
-            converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_interval_prices(
-                interval_prices=normalized_tomorrow,
-                source_currency=input_source_currency, # Use determined input_source_currency
-                # Pass the determined source_unit
-                source_unit=source_unit
-            )
-            final_tomorrow_prices = converted_tomorrow
-            if ecb_rate is None and rate is not None:
-                ecb_rate = rate
-                ecb_updated = rate_ts
+            if normalized_today:
+                converted_today, rate, rate_ts = await self._currency_converter.convert_interval_prices(
+                    interval_prices=normalized_today,
+                    source_currency=input_source_currency, # Use determined input_source_currency
+                    # Pass the determined source_unit
+                    source_unit=source_unit
+                )
+                final_today_prices = converted_today
+                if rate is not None:
+                    ecb_rate = rate
+                    ecb_updated = rate_ts
+            final_tomorrow_prices = {}
+            if normalized_tomorrow:
+                converted_tomorrow, rate, rate_ts = await self._currency_converter.convert_interval_prices(
+                    interval_prices=normalized_tomorrow,
+                    source_currency=input_source_currency, # Use determined input_source_currency
+                    # Pass the determined source_unit
+                    source_unit=source_unit
+                )
+                final_tomorrow_prices = converted_tomorrow
+                if ecb_rate is None and rate is not None:
+                    ecb_rate = rate
+                    ecb_updated = rate_ts
+        else:
+            # Using already-processed cache - final prices and ECB rate already set
+            _LOGGER.debug(f"[{self.area}] Skipping currency conversion - using already-converted cache data")
 
         # --- Step 4: Build Result ---
         processed_result = {
@@ -301,7 +357,7 @@ class DataProcessor:
             "target_currency": self.target_currency,
             "source_timezone": input_source_timezone, # Store the actual source timezone used
             "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None,
-            "interval_prices": final_today_prices,
+            "today_interval_prices": final_today_prices,
             "tomorrow_interval_prices": final_tomorrow_prices,
             "raw_interval_prices_original": input_interval_raw, # Store the raw prices that went INTO normalization
             "current_price": None,
@@ -444,7 +500,7 @@ class DataProcessor:
             target_timezone = str(self._tz_service.target_timezone)
 
             validity = calculate_data_validity(
-                interval_prices=processed_result["interval_prices"],
+                interval_prices=processed_result["today_interval_prices"],
                 tomorrow_interval_prices=processed_result["tomorrow_interval_prices"],
                 now=now,
                 current_interval_key=current_interval_key,
@@ -460,14 +516,14 @@ class DataProcessor:
             from .data_validity import DataValidity
             processed_result["data_validity"] = DataValidity().to_dict()
 
-        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}")
+        _LOGGER.info(f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['today_interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}")
         return processed_result
 
     def _get_parser(self, source_name: str) -> Optional[BasePriceParser]:
         """Get the appropriate parser instance based on the source name."""
         # Import parsers here to avoid circular dependencies
         from ..api.parsers.entsoe_parser import EntsoeParser
-        from ..api.parsers.nordpool_parser import NordpoolPriceParser
+        from ..api.parsers.nordpool_parser import NordpoolParser
         from ..api.parsers.stromligning_parser import StromligningParser
         from ..api.parsers.energi_data_parser import EnergiDataParser
         from ..api.parsers.omie_parser import OmieParser
@@ -480,7 +536,7 @@ class DataProcessor:
 
         parser_map = {
             # Use lowercase source names from Source constants
-            Source.NORDPOOL: NordpoolPriceParser,
+            Source.NORDPOOL: NordpoolParser,
             Source.ENTSOE: EntsoeParser,
             Source.STROMLIGNING: StromligningParser,
             Source.ENERGI_DATA_SERVICE: EnergiDataParser,
@@ -593,9 +649,9 @@ class DataProcessor:
             "target_currency": self.target_currency,
             "source_timezone": data.get("source_timezone"),
             "target_timezone": str(self._tz_service.area_timezone) if self._tz_service else None, # Use area_timezone as suggested by error
-            "interval_prices": {},
+            "today_interval_prices": {},
             "tomorrow_interval_prices": {},
-            "raw_interval_prices_original": data.get("interval_prices"), # Store original if available
+            "raw_interval_prices_original": data.get("today_interval_prices"), # Store original if available
             "current_price": None,
             "next_interval_price": None,
             "current_interval_key": None,

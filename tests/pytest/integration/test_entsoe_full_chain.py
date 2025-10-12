@@ -101,7 +101,7 @@ SAMPLE_ENTSOE_PARSED_DATA = {
         "area": "SE4",
         "api_timezone": "Europe/Brussels",
         "currency": Currency.EUR,
-        "interval_prices": {
+        "today_interval_prices": {
             "2025-04-26T22:00:00Z": 38.56,
             "2025-04-26T23:00:00Z": 35.24,
             "2025-04-27T00:00:00Z": 33.88,
@@ -205,7 +205,7 @@ async def test_entsoe_full_chain(monkeypatch):
     assert isinstance(parsed_data, dict), f"Parsed data should be a dictionary, got {type(parsed_data)}"
 
     # Required fields validation
-    assert "interval_prices" in parsed_data, "Parsed data should contain 'interval_prices' key"
+    assert "today_interval_prices" in parsed_data, "Parsed data should contain 'interval_prices' key"
     assert "source" in parsed_data, "Parsed data should contain 'source' key"
     assert parsed_data["source"] == Source.ENTSOE, f"Source should be {Source.ENTSOE}, got {parsed_data.get('source')}"
     assert parsed_data["area"] == area, f"Area should be {area}, got {parsed_data.get('area')}"
@@ -213,7 +213,7 @@ async def test_entsoe_full_chain(monkeypatch):
     assert parsed_data["currency"] == Currency.EUR, f"ENTSOE currency should be EUR, got {parsed_data.get('currency')}"
 
     # Validate interval prices
-    interval_prices = parsed_data.get("interval_prices", {})
+    interval_prices = parsed_data.get("today_interval_prices", {})
     assert isinstance(interval_prices, dict), f"interval_prices should be a dictionary, got {type(interval_prices)}"
 
     # Validation: ENTSOE should return data

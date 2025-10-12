@@ -10,7 +10,7 @@ from ..const.areas import AreaMapping
 from ..const.time import TimeFormat
 from ..const.network import Network
 from ..const.config import Config
-from .parsers.nordpool_parser import NordpoolPriceParser
+from .parsers.nordpool_parser import NordpoolParser
 from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
 from .base.error_handler import ErrorHandler
@@ -33,7 +33,7 @@ class NordpoolAPI(BasePriceAPI):
         """
         super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
-        self.parser = NordpoolPriceParser()
+        self.parser = NordpoolParser()
 
     def _get_source_type(self) -> str:
         """Get the source type identifier.
@@ -92,6 +92,9 @@ class NordpoolAPI(BasePriceAPI):
         """
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
+        else:
+            # Convert to UTC if it's not already (coordinator may pass local timezone)
+            reference_time = reference_time.astimezone(timezone.utc)
 
         # Map from area code to delivery area
         delivery_area = AreaMapping.NORDPOOL_DELIVERY.get(area, area)

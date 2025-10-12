@@ -124,14 +124,14 @@ try:
         area="test_area",
         currency="EUR",
         fetched_at=datetime.now(timezone.utc).isoformat(),
-        interval_prices={"00:00": 45.0, "00:15": 50.0, "00:30": 48.0, "00:45": 52.0},
+        today_interval_prices={"00:00": 45.0, "00:15": 50.0, "00:30": 48.0, "00:45": 52.0},
         current_price=50.0,
         next_interval_price=52.0
     )
-    assert len(price_data.interval_prices) == 4, "Should have 4 interval prices"
-    assert "interval_prices" in price_data.__dict__, "Should have interval_prices field"
-    print(f"✅ StandardizedPriceData uses interval_prices field")
-    print(f"✅ Sample data: {list(price_data.interval_prices.keys())[:4]}")
+    assert len(price_data.today_interval_prices) == 4, "Should have 4 interval prices"
+    assert "today_interval_prices" in price_data.__dict__, "Should have today_interval_prices field"
+    print(f"✅ StandardizedPriceData uses today_interval_prices field")
+    print(f"✅ Sample data: {list(price_data.today_interval_prices.keys())[:4]}")
 
     print("✅ TEST 3 PASSED: Data structures use correct naming")
 except AssertionError as e:
@@ -327,7 +327,7 @@ try:
     sig = inspect.signature(StandardizedPriceData)
     params = list(sig.parameters.keys())
 
-    assert "interval_prices" in params, "StandardizedPriceData should have 'interval_prices' parameter"
+    assert "today_interval_prices" in params, "StandardizedPriceData should have 'interval_prices' parameter"
     assert "hourly_prices" not in params, "StandardizedPriceData should NOT have 'hourly_prices' parameter"
     print(f"✅ StandardizedPriceData parameters: {params}")
 

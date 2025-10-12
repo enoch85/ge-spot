@@ -11,12 +11,17 @@ from ...const.energy import EnergyUnit  # Added import
 
 _LOGGER = logging.getLogger(__name__)
 
-class NordpoolPriceParser(BasePriceParser):
+class NordpoolParser(BasePriceParser):
     """Parser for Nordpool API responses."""
 
-    def __init__(self, timezone_service=None):
-        """Initialize the parser."""
-        super().__init__(Source.NORDPOOL, timezone_service)
+    def __init__(self, source: str = Source.NORDPOOL, timezone_service=None):
+        """Initialize the parser.
+
+        Args:
+            source: Source identifier (defaults to Source.NORDPOOL)
+            timezone_service: Optional timezone service
+        """
+        super().__init__(source, timezone_service)
 
     def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse the raw data dictionary from NordpoolAPI.
@@ -25,19 +30,19 @@ class NordpoolPriceParser(BasePriceParser):
         which includes keys like 'interval_raw', 'timezone', 'currency', 'raw_data', etc.
         The actual Nordpool JSON response is expected under the 'raw_data' key.
         """
-        _LOGGER.debug(f"[NordpoolPriceParser] Starting parse. Input data keys: {list(data.keys())}")
+        _LOGGER.debug(f"[NordpoolParser] Starting parse. Input data keys: {list(data.keys())}")
 
         # The actual Nordpool JSON response is nested under 'raw_data'
         raw_api_response = data.get("raw_data")
         if not raw_api_response or not isinstance(raw_api_response, dict):
-            _LOGGER.warning("[NordpoolPriceParser] 'raw_data' key missing or not a dictionary in input.")
+            _LOGGER.warning("[NordpoolParser] 'raw_data' key missing or not a dictionary in input.")
             return self._create_empty_result(data)
 
         # Extract metadata provided by the API adapter
         source_timezone = data.get("timezone", "UTC")
         source_currency = data.get("currency", Currency.EUR)
         area = data.get("area")
-        _LOGGER.debug(f"[NordpoolPriceParser] Metadata - Area: {area}, Timezone: {source_timezone}, Currency: {source_currency}")
+        _LOGGER.debug(f"[NordpoolParser] Metadata - Area: {area}, Timezone: {source_timezone}, Currency: {source_currency}")
 
         interval_raw = {}
 
@@ -53,10 +58,10 @@ class NordpoolPriceParser(BasePriceParser):
             days_to_process.append(raw_api_response)
 
         if not days_to_process:
-            _LOGGER.warning("[NordpoolPriceParser] Could not find 'today'/'tomorrow' dicts or 'multiAreaEntries' list in raw_api_response.")
+            _LOGGER.warning("[NordpoolParser] Could not find 'today'/'tomorrow' dicts or 'multiAreaEntries' list in raw_api_response.")
             return self._create_empty_result(data, source_timezone, source_currency)
 
-        _LOGGER.debug(f"[NordpoolPriceParser] Processing {len(days_to_process)} day(s) of data")
+        _LOGGER.debug(f"[NordpoolParser] Processing {len(days_to_process)} day(s) of data")
 
         for i, day_data in enumerate(days_to_process):
             multi_area_entries = day_data.get("multiAreaEntries")
@@ -88,11 +93,11 @@ class NordpoolPriceParser(BasePriceParser):
 
                     interval_raw[interval_key_iso] = price
                 except (ValueError, TypeError) as e:
-                    _LOGGER.warning(f"[NordpoolPriceParser] Failed to parse timestamp '{ts_str}' or price '{price_str}': {e}")
+                    _LOGGER.warning(f"[NordpoolParser] Failed to parse timestamp '{ts_str}' or price '{price_str}': {e}")
                     continue
 
         # Summary log instead of verbose per-entry logging
-        _LOGGER.debug(f"[NordpoolPriceParser] Parsed {len(interval_raw)} prices. Sample keys: {list(interval_raw.keys())[:3]}")
+        _LOGGER.debug(f"[NordpoolParser] Parsed {len(interval_raw)} prices. Sample keys: {list(interval_raw.keys())[:3]}")
 
         # Construct the final result dictionary expected by DataProcessor
         result = {
@@ -106,7 +111,7 @@ class NordpoolPriceParser(BasePriceParser):
 
         # Validate the result before returning
         if not self.validate(result):
-            _LOGGER.warning(f"[NordpoolPriceParser] Validation failed for parsed data. Result: {result}")
+            _LOGGER.warning(f"[NordpoolParser] Validation failed for parsed data. Result: {result}")
             return self._create_empty_result(data, source_timezone, source_currency)
 
         return result
@@ -123,13 +128,13 @@ class NordpoolPriceParser(BasePriceParser):
 
     def parse_interval_prices(self, data: Dict[str, Any], area: str) -> Dict[str, Any]:
         """Parse interval prices from Nordpool data."""
-        _LOGGER.warning("[NordpoolPriceParser] parse_interval_prices might be outdated.")
+        _LOGGER.warning("[NordpoolParser] parse_interval_prices might be outdated.")
         parsed_data = self.parse({"raw_data": data, "area": area})  # Simulate input
         return parsed_data.get("interval_raw", {})
 
     def parse_tomorrow_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
         """Parse tomorrow's interval prices from Nordpool data."""
-        _LOGGER.warning("[NordpoolPriceParser] parse_tomorrow_prices might be outdated.")
+        _LOGGER.warning("[NordpoolParser] parse_tomorrow_prices might be outdated.")
         parsed_data = self.parse({"raw_data": data, "area": area})  # Simulate input
         return parsed_data.get("interval_raw", {})
 

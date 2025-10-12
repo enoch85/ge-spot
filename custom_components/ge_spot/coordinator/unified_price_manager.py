@@ -98,6 +98,7 @@ class UnifiedPriceManager:
         self._health_check_task: Optional[asyncio.Task] = None  # Reference to health check task for lifecycle management
         self._last_health_check = None  # datetime of last health check
         self._last_check_window = None  # Track last window hour checked (e.g., 0 or 13)
+        self._health_check_in_progress = False  # Track when health check is actively running
 
         # Services and utilities
         self._tz_service = TimezoneService(hass=hass, area=area, config=config) # Initialize with all parameters
@@ -381,68 +382,76 @@ class UnifiedPriceManager:
 
         _LOGGER.info(f"[{self.area}] Starting health check for {len(self._api_classes)} sources")
 
-        session = async_get_clientsession(self.hass)
+        # Set flag to bypass rate limiting during health check
+        self._health_check_in_progress = True
 
-        for api_class in self._api_classes:
-            source_name = api_class(config={}).source_type
+        try:
+            session = async_get_clientsession(self.hass)
 
-            try:
-                # Create API instance with correct parameters (same as normal fetch)
-                api_instance = api_class(
-                    config=self.config,
-                    session=session,
-                    timezone_service=self._tz_service,
-                )
+            for api_class in self._api_classes:
+                source_name = api_class(config={}).source_type
 
-                # Try fetching with FallbackManager's exponential backoff
-                # Pass single source to FallbackManager
-                result = await self._fallback_manager.fetch_with_fallback(
-                    api_instances=[api_instance],
-                    area=self.area,
-                    reference_time=now,
-                    session=session
-                )
+                try:
+                    # Create API instance with correct parameters (same as normal fetch)
+                    api_instance = api_class(
+                        config=self.config,
+                        session=session,
+                        timezone_service=self._tz_service,
+                    )
 
-                # Check if source returned valid data
-                if result and result.get("raw_data"):
-                    # Success - clear failure timestamp
-                    self._failed_sources[source_name] = None
-                    results["validated"].append(source_name)
-                    _LOGGER.info(f"[{self.area}] Health check: '{source_name}' ✓ validated")
-                else:
-                    # No data - mark as failed
+                    # Try fetching with FallbackManager's exponential backoff
+                    # Pass single source to FallbackManager
+                    result = await self._fallback_manager.fetch_with_fallback(
+                        api_instances=[api_instance],
+                        area=self.area,
+                        reference_time=now,
+                        session=session
+                    )
+
+                    # Check if source returned valid data
+                    if result and result.get("raw_data"):
+                        # Success - clear failure timestamp
+                        self._failed_sources[source_name] = None
+                        results["validated"].append(source_name)
+                        _LOGGER.info(f"[{self.area}] Health check: '{source_name}' ✓ validated")
+                    else:
+                        # No data - mark as failed
+                        self._failed_sources[source_name] = now
+                        results["failed"].append(source_name)
+
+                        # Count validated sources for user context
+                        validated_count = len([s for s in self._failed_sources.values() if s is None])
+                        _LOGGER.warning(
+                            f"[{self.area}] Health check: '{source_name}' ✗ no data returned. "
+                            f"Will retry during next daily health check. "
+                            f"({validated_count} other source(s) available)"
+                        )
+
+                except Exception as e:
+                    # Error - mark as failed
                     self._failed_sources[source_name] = now
                     results["failed"].append(source_name)
 
                     # Count validated sources for user context
                     validated_count = len([s for s in self._failed_sources.values() if s is None])
                     _LOGGER.warning(
-                        f"[{self.area}] Health check: '{source_name}' ✗ no data returned. "
+                        f"[{self.area}] Health check: '{source_name}' ✗ failed: {e}. "
                         f"Will retry during next daily health check. "
-                        f"({validated_count} other source(s) available)"
+                        f"({validated_count} other source(s) available)",
+                        exc_info=True
                     )
 
-            except Exception as e:
-                # Error - mark as failed
-                self._failed_sources[source_name] = now
-                results["failed"].append(source_name)
+            # Log summary
+            _LOGGER.info(
+                f"[{self.area}] Health check complete: "
+                f"{len(results['validated'])} validated, {len(results['failed'])} failed. "
+                f"Validated: {', '.join(results['validated']) or 'none'}. "
+                f"Failed: {', '.join(results['failed']) or 'none'}"
+            )
 
-                # Count validated sources for user context
-                validated_count = len([s for s in self._failed_sources.values() if s is None])
-                _LOGGER.warning(
-                    f"[{self.area}] Health check: '{source_name}' ✗ failed: {e}. "
-                    f"Will retry during next daily health check. "
-                    f"({validated_count} other source(s) available)",
-                    exc_info=True
-                )
-
-        # Log summary
-        _LOGGER.info(
-            f"[{self.area}] Health check complete: "
-            f"{len(results['validated'])} validated, {len(results['failed'])} failed. "
-            f"Validated: {', '.join(results['validated']) or 'none'}. "
-            f"Failed: {', '.join(results['failed']) or 'none'}"
-        )
+        finally:
+            # Always clear flag when done
+            self._health_check_in_progress = False
 
     async def fetch_data(self, force: bool = False) -> Dict[str, Any]:
         """Fetch price data with implicit source validation.
@@ -491,7 +500,7 @@ class UnifiedPriceManager:
                     # Cached interval keys are in target_timezone
                     target_timezone = str(self._tz_service.target_timezone)
                     data_validity = calculate_data_validity(
-                        interval_prices=cached_data_for_decision.get("interval_prices", {}),
+                        interval_prices=cached_data_for_decision.get("today_interval_prices", {}),
                         tomorrow_interval_prices=cached_data_for_decision.get("tomorrow_interval_prices", {}),
                         now=now,
                         current_interval_key=current_interval_key,
@@ -515,8 +524,15 @@ class UnifiedPriceManager:
             last_fetch=last_fetch_for_decision,
             data_validity=data_validity,
             fetch_interval_minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES,
-            in_grace_period=self.is_in_grace_period()
+            in_grace_period=self.is_in_grace_period(),
+            is_health_check=self._health_check_in_progress
         )
+
+        # Log if health check is causing a rate limit bypass
+        if should_fetch_from_api and self._health_check_in_progress:
+            _LOGGER.info(
+                f"[{self.area}] Health check bypassing rate limit (reason: {fetch_reason})"
+            )
 
         if not force and not should_fetch_from_api:
             _LOGGER.info(f"Skipping API fetch for area {self.area}: {fetch_reason}")
@@ -556,52 +572,13 @@ class UnifiedPriceManager:
                 )
 
 
-        # --- Rate Limiting Lock (moved after initial fetch decision) ---
-        # If we decided to fetch (or force is true), then acquire the lock.
-        async with _FETCH_LOCK: # Use asyncio Lock for atomicity
-            # Re-check last_fetch inside the lock to ensure atomicity for rate limiting
-            last_fetch_for_rate_limit = _LAST_FETCH_TIME.get(area_key)
-            min_interval = timedelta(minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES)
-
-            # Also respect grace period in the second rate limit check
-            # Grace period allows immediate fallback attempts after HA restart
-            if not force and not self.is_in_grace_period() and last_fetch_for_rate_limit:
-                time_since_last_fetch = now - last_fetch_for_rate_limit
-                if time_since_last_fetch < min_interval:
-                    next_fetch_allowed_in_seconds = (min_interval - time_since_last_fetch).total_seconds()
-                    _LOGGER.info(
-                        f"Rate limiting in effect for area {self.area} (checked after fetch decision). "
-                        f"Next fetch allowed in {next_fetch_allowed_in_seconds:.1f} seconds. "
-                        f"Using cached data if available."
-                    )
-                    # Use cached data if rate limited - specify today's date
-                    # This is the same logic as before, but now it's after the FetchDecisionMaker check
-                    # and inside the rate limiting lock.
-                    cached_data_rate_limited = self._cache_manager.get_data(
-                        area=self.area,
-                        target_date=today_date
-                    )
-                    if cached_data_rate_limited:
-                        _LOGGER.debug("Returning rate-limited cached data for %s (after decision check)", self.area)
-                        # Work on a shallow copy to prevent cache corruption
-                        # (We only modify top-level keys, so shallow copy is sufficient and much faster)
-                        data_copy = dict(cached_data_rate_limited)
-                        data_copy["using_cached_data"] = True
-                        data_copy["next_fetch_allowed_in_seconds"] = round(next_fetch_allowed_in_seconds, 1)
-                        return await self._process_result(data_copy, is_cached=True)
-                    else:
-                        _LOGGER.error(
-                            f"Rate limited for {self.area} (after decision check), no cached data available for today ({today_date}). "
-                            f"Next fetch in {next_fetch_allowed_in_seconds:.1f}s"
-                        )
-                        return await self._generate_empty_result(
-                            error="Rate limited (after decision), no cache available",
-                            error_code=Errors.RATE_LIMITED
-                        )
-
-            # If not rate limited or forced, proceed to fetch. Update fetch timestamp.
+        # --- Fetch Lock and Timestamp Update ---
+        # Trust the fetch decision - it already considered rate limiting.
+        # Acquire lock to ensure atomicity when updating fetch timestamp.
+        async with _FETCH_LOCK:
+            # Update fetch timestamp now that we are committed to fetching
             _LOGGER.info(f"Proceeding with API fetch for area {self.area} (Reason: {fetch_reason}, Force: {force})")
-            _LAST_FETCH_TIME[area_key] = now # Update fetch time now that we are committed to fetching
+            _LAST_FETCH_TIME[area_key] = now
 
         # --- Actual Fetching Logic (outside the rate limiting lock, but after decision and timestamp update) ---
 
@@ -730,7 +707,7 @@ class UnifiedPriceManager:
                 processed_data = await self._process_result(result)
 
                 # Check if processing yielded valid data (either today OR tomorrow prices)
-                has_today = processed_data and processed_data.get("interval_prices")
+                has_today = processed_data and processed_data.get("today_interval_prices")
                 has_tomorrow = processed_data and processed_data.get("tomorrow_interval_prices")
                 has_valid_data = has_today or has_tomorrow
 
@@ -888,7 +865,7 @@ class UnifiedPriceManager:
         try:
             processed_data = await self._data_processor.process(result)
             # Set has_data flag if we have either today OR tomorrow prices
-            has_today = bool(processed_data.get("interval_prices"))
+            has_today = bool(processed_data.get("today_interval_prices"))
             has_tomorrow = bool(processed_data.get("tomorrow_interval_prices"))
             processed_data["has_data"] = has_today or has_tomorrow
             processed_data["last_update"] = dt_util.now().isoformat() # Timestamp the processing time
@@ -944,7 +921,7 @@ class UnifiedPriceManager:
             "area": self.area,
             "currency": self.currency,
             "target_currency": self.currency,
-            "interval_prices": {},
+            "today_interval_prices": {},
             "raw_data": None,
             "source_timezone": None,
             "attempted_sources": self._attempted_sources,

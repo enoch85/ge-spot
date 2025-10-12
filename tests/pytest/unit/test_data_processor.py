@@ -330,7 +330,7 @@ class TestDataProcessor:
 
             # Assert processing succeeded
             assert result is not None, "Process should return a result"
-            assert "interval_prices" in result, "Result should contain interval_prices"
+            assert "today_interval_prices" in result, "Result should contain interval_prices"
             # Verify converter was called even though currency is the same (for unit conversion)
             assert mock_converter.convert_interval_prices.called
 
@@ -396,7 +396,7 @@ class TestDataProcessor:
                     # Assert
                     assert result is not None, "Process should return a result"
                     assert "error" not in result, f"Result should not contain an error, got: {result.get('error')}"
-                    assert result.get("interval_prices") == {"10:00": 1.5, "11:00": 2.0}, f"Result should have correctly processed interval_prices, got: {result.get('interval_prices')}"
+                    assert result.get("today_interval_prices") == {"10:00": 1.5, "11:00": 2.0}, f"Result should have correctly processed interval_prices, got: {result.get('interval_prices')}"
                     assert result.get("current_price") == 1.5, f"Current price should be correctly set, got: {result.get('current_price')}"
                     assert result.get("next_interval_price") == 2.0, f"Next interval price should be correctly set, got: {result.get('next_interval_price')}"
                     assert result.get("source_currency") == "SEK", f"Source currency should be set, got: {result.get('source_currency')}"

@@ -18,9 +18,14 @@ _LOGGER = logging.getLogger(__name__)
 class ComedParser(BasePriceParser):
     """Parser for ComEd API responses."""
 
-    def __init__(self, timezone_service=None):
-        """Initialize the parser."""
-        super().__init__(Source.COMED, timezone_service)
+    def __init__(self, source: str = Source.COMED, timezone_service=None):
+        """Initialize the parser.
+
+        Args:
+            source: Source identifier (defaults to Source.COMED)
+            timezone_service: Optional timezone service
+        """
+        super().__init__(source, timezone_service)
 
     def parse(self, raw_data: Any) -> Dict[str, Any]:
         """Parse ComEd API response.

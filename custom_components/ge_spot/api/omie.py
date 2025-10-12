@@ -105,6 +105,9 @@ class OmieAPI(BasePriceAPI):
         """Internal method to fetch data, called by ErrorHandler."""
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
+        else:
+            # Convert to UTC if it's not already (coordinator may pass local timezone)
+            reference_time = reference_time.astimezone(timezone.utc)
 
         today_date = reference_time.date()
         tomorrow_date = today_date + timedelta(days=1)

@@ -116,6 +116,9 @@ class EntsoeAPI(BasePriceAPI):
         # Use the provided reference time or current UTC time
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
+        else:
+            # Convert to UTC if it's not already (coordinator may pass local timezone)
+            reference_time = reference_time.astimezone(timezone.utc)
 
         # Get the mapped ENTSO-E area code
         entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area, area)

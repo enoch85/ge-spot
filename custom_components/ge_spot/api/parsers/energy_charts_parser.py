@@ -23,13 +23,14 @@ class EnergyChartsParser(BasePriceParser):
     the interval_raw dictionary required by the data processor.
     """
 
-    def __init__(self, timezone_service=None):
+    def __init__(self, source: str = Source.ENERGY_CHARTS, timezone_service=None):
         """Initialize the parser.
 
         Args:
+            source: Source identifier (defaults to Source.ENERGY_CHARTS)
             timezone_service: Optional timezone service
         """
-        super().__init__(Source.ENERGY_CHARTS, timezone_service)
+        super().__init__(source, timezone_service)
 
     def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse the raw data dictionary from EnergyChartsAPI.
