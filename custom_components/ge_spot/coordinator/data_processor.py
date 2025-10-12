@@ -156,9 +156,8 @@ class DataProcessor:
             # Validate the processed data has current interval
             has_current_interval = False
             if cached_today or cached_tomorrow:
-                from homeassistant.util import dt as dt_util
-                now = dt_util.now()
-                current_interval_key = now.strftime("%H:%M")
+                # Use interval calculator to get properly rounded interval key (e.g., "15:30" not "15:33")
+                current_interval_key = self._tz_service.get_current_interval_key()
                 has_current_interval = current_interval_key in cached_today
 
             if (cached_today or cached_tomorrow) and has_current_interval:
