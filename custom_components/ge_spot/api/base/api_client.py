@@ -50,6 +50,11 @@ class ApiClient:
                 if self.session:
                     async with self.session.get(url, params=params, headers=merged_headers,
                                               timeout=timeout_obj) as response:
+                        # HTTP 204 = No Content - data not published yet (not an error)
+                        if response.status == 204:
+                            _LOGGER.info(f"API returned 204 (No Content) - data not yet published: {url}")
+                            return {"status": 204, "message": "Data not yet published"}
+                        
                         if response.status != 200:
                             _LOGGER.error(f"API request failed with status {response.status}: {url}")
                             return {}
@@ -71,6 +76,11 @@ class ApiClient:
                     async with aiohttp.ClientSession() as session:
                         async with session.get(url, params=params, headers=merged_headers,
                                              timeout=timeout_obj) as response:
+                            # HTTP 204 = No Content - data not published yet (not an error)
+                            if response.status == 204:
+                                _LOGGER.info(f"API returned 204 (No Content) - data not yet published: {url}")
+                                return {"status": 204, "message": "Data not yet published"}
+                            
                             if response.status != 200:
                                 _LOGGER.error(f"API request failed with status {response.status}: {url}")
                                 return {}

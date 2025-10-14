@@ -159,12 +159,22 @@ class NordpoolAPI(BasePriceAPI):
             # --- Fallback Trigger Logic ---
             # If it's past the failure check time and tomorrow's data is still not available,
             # treat this fetch attempt as a failure to trigger fallback.
+            # However, if we got HTTP 204, this is "data not ready" not "API failed"
             if now_cet.hour >= failure_check_hour_cet and not is_data_available(tomorrow_data):
-                _LOGGER.warning(
-                    f"Nordpool fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
-                    f"but was not available or invalid. Triggering fallback."
-                )
-                return None # Signal failure to FallbackManager
+                # Check if it's a "not ready yet" (204) vs actual failure
+                if tomorrow_data and isinstance(tomorrow_data, dict) and tomorrow_data.get("status") == 204:
+                    _LOGGER.info(
+                        f"Nordpool tomorrow data not yet published for area {area} (HTTP 204 after {failure_check_hour_cet}:00 CET). "
+                        f"Will continue with today's data only."
+                    )
+                    # Don't trigger fallback - this is expected, just proceed with today's data
+                    tomorrow_data = None
+                else:
+                    _LOGGER.warning(
+                        f"Nordpool fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
+                        f"but was not available or invalid. Triggering fallback."
+                    )
+                    return None # Signal failure to FallbackManager
 
         # Construct the dictionary to be returned to FallbackManager/DataProcessor
         # This dictionary should contain everything the parser needs.
