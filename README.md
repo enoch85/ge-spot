@@ -107,6 +107,7 @@ For complete area mappings, see [`const/areas.py`](custom_components/ge_spot/con
 - **Currency conversion** - Live ECB exchange rates
 - **Timezone handling** - Consistent display regardless of API source
 - **Tomorrow's prices** - Available after daily publication (typically 13:00 CET)
+- **EV Smart Charging integration** - Native support for [EV Smart Charging](https://github.com/jonasbkarlsson/ev_smart_charging) via `prices_today` and `prices_tomorrow` attributes
 
 ### Sensors Created (per region)
 

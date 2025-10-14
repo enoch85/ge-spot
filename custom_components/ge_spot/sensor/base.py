@@ -16,6 +16,7 @@ from ..const.currencies import Currency, CurrencyInfo
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..const.network import Network
+from ..utils.ev_smart_charging import convert_to_ev_smart_format
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,12 +25,22 @@ class BaseElectricityPriceSensor(SensorEntity):
 
     _attr_state_class = None  # Prices are instantaneous, not totals. History still recorded.
     _attr_device_class = SensorDeviceClass.MONETARY
+    
+    # Prevent these attributes from being recorded to database
+    _unrecorded_attributes = frozenset({
+        "prices_today",
+        "prices_tomorrow"
+    })
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):
         """Initialize the base sensor."""
         self.coordinator = coordinator
         if not isinstance(config_data, dict):
             raise TypeError("config_data must be a dictionary")
+        
+        # Store timezone service for EV Smart Charging attribute conversion
+        self._tz_service = getattr(coordinator, '_tz_service', None)
+        
         self._area = config_data.get(Attributes.AREA)
         self._vat = config_data.get(Attributes.VAT, 0)
         self._precision = config_data.get("precision", 3)
@@ -195,6 +206,42 @@ class BaseElectricityPriceSensor(SensorEntity):
                 }
             else:
                 attrs["tomorrow_interval_prices"] = tomorrow_interval_prices # Keep original if not a dict
+
+        # --- EV Smart Charging Compatibility ---
+        # Add special attributes for EV Smart Charging integration
+        # Format: [{"time": datetime, "value": float}, ...]
+        # These are NOT recorded to database (see _unrecorded_attributes)
+        
+        # Get target timezone
+        target_tz = None
+        if self._tz_service:
+            target_tz = self._tz_service.target_timezone
+        else:
+            # Fallback to HA default timezone
+            target_tz = dt_util.get_default_time_zone()
+        
+        # Convert today's prices
+        if "today_interval_prices" in self.coordinator.data:
+            today_prices = self.coordinator.data["today_interval_prices"]
+            attrs["prices_today"] = convert_to_ev_smart_format(
+                today_prices,
+                target_tz,
+                date_offset=0
+            )
+        else:
+            attrs["prices_today"] = []
+
+        # Convert tomorrow's prices
+        if "tomorrow_interval_prices" in self.coordinator.data:
+            tomorrow_prices = self.coordinator.data["tomorrow_interval_prices"]
+            attrs["prices_tomorrow"] = convert_to_ev_smart_format(
+                tomorrow_prices,
+                target_tz,
+                date_offset=1
+            )
+        else:
+            attrs["prices_tomorrow"] = []
+        # --- End EV Smart Charging Compatibility ---
 
         # Add error message if available
         if "error" in self.coordinator.data and self.coordinator.data["error"]:
