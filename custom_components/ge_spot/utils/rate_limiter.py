@@ -94,18 +94,18 @@ class RateLimiter:
         hour = current_time.hour
         in_special_window = False
         special_window_range = None
-        
+
         for start_hour, end_hour in Network.Defaults.SPECIAL_HOUR_WINDOWS:
             if start_hour <= hour < end_hour:
                 in_special_window = True
                 special_window_range = (start_hour, end_hour)
                 break
-        
+
         if in_special_window:
             # Calculate time since last fetch
             time_diff = (current_time - last_fetched).total_seconds() / Network.Defaults.SECONDS_PER_MINUTE
             special_min_interval = Network.Defaults.SPECIAL_WINDOW_MIN_INTERVAL_MINUTES
-            
+
             if time_diff < special_min_interval:
                 reason = (
                     f"In special window {special_window_range[0]:02d}:00-{special_window_range[1]:02d}:00 "
@@ -113,7 +113,7 @@ class RateLimiter:
                 )
                 log_rate_limiting(area or "unknown", True, reason, source)
                 return True, reason
-            
+
             reason = (
                 f"In special window {special_window_range[0]:02d}:00-{special_window_range[1]:02d}:00, "
                 f"allowing fetch ({time_diff:.1f} min >= {special_min_interval} min)"
