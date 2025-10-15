@@ -535,7 +535,7 @@ class UnifiedPriceManager:
             )
 
         if not force and not should_fetch_from_api:
-            _LOGGER.info(f"Skipping API fetch for area {self.area}: {fetch_reason}")
+            _LOGGER.debug(f"Skipping API fetch for area {self.area}: {fetch_reason}")
             if cached_data_for_decision:
                 _LOGGER.debug("Returning cached data for %s", self.area)
                 # Work on a shallow copy to prevent cache corruption
