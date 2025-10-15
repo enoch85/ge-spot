@@ -1,5 +1,6 @@
 """Base sensor for electricity prices."""
 import logging
+from datetime import datetime, timedelta
 from typing import Dict, Any
 
 from homeassistant.components.sensor import (
@@ -16,7 +17,6 @@ from ..const.currencies import Currency, CurrencyInfo
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..const.network import Network
-from ..utils.ev_smart_charging import convert_to_ev_smart_format
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,10 +26,12 @@ class BaseElectricityPriceSensor(SensorEntity):
     _attr_state_class = None  # Prices are instantaneous, not totals. History still recorded.
     _attr_device_class = SensorDeviceClass.MONETARY
     
-    # Prevent these attributes from being recorded to database
+    # Exclude large interval price arrays from database to prevent bloat
+    # These are operational data for automations, not historical data
+    # The main sensor value (current_price) provides historical tracking
     _unrecorded_attributes = frozenset({
-        "prices_today",
-        "prices_tomorrow"
+        "today_interval_prices",
+        "tomorrow_interval_prices",
     })
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):
@@ -183,34 +185,11 @@ class BaseElectricityPriceSensor(SensorEntity):
             error_info = {"message": self.coordinator.data["error"]}
             if "error_code" in self.coordinator.data and self.coordinator.data["error_code"]:
                 error_info["code"] = self.coordinator.data["error_code"]
-            attrs["error"] = error_info
+                attrs["error"] = error_info
 
-        # Add interval prices if available, rounding float values
-        if "today_interval_prices" in self.coordinator.data:
-            interval_prices = self.coordinator.data["today_interval_prices"]
-            if isinstance(interval_prices, dict):
-                attrs["today_interval_prices"] = {
-                    k: round(v, 4) if isinstance(v, float) else v
-                    for k, v in interval_prices.items()
-                }
-            else:
-                attrs["today_interval_prices"] = interval_prices # Keep original if not a dict
-
-        # Add tomorrow interval prices if available, rounding float values
-        if "tomorrow_interval_prices" in self.coordinator.data:
-            tomorrow_interval_prices = self.coordinator.data["tomorrow_interval_prices"]
-            if isinstance(tomorrow_interval_prices, dict):
-                attrs["tomorrow_interval_prices"] = {
-                    k: round(v, 4) if isinstance(v, float) else v
-                    for k, v in tomorrow_interval_prices.items()
-                }
-            else:
-                attrs["tomorrow_interval_prices"] = tomorrow_interval_prices # Keep original if not a dict
-
-        # --- EV Smart Charging Compatibility ---
-        # Add special attributes for EV Smart Charging integration
-        # Format: [{"time": datetime, "value": float}, ...]
-        # These are NOT recorded to database (see _unrecorded_attributes)
+        # Add interval prices in list format with datetime objects (v1.5.0)
+        # Format: [{"time": datetime object, "value": float}, ...]
+        # External integrations (EV Smart Charging) expect this format
         
         # Get target timezone
         target_tz = None
@@ -219,29 +198,70 @@ class BaseElectricityPriceSensor(SensorEntity):
         else:
             # Fallback to HA default timezone
             target_tz = dt_util.get_default_time_zone()
-        
-        # Convert today's prices
+
+        # Convert today's prices from HH:MM dict to list of datetime objects
         if "today_interval_prices" in self.coordinator.data:
             today_prices = self.coordinator.data["today_interval_prices"]
-            attrs["prices_today"] = convert_to_ev_smart_format(
-                today_prices,
-                target_tz,
-                date_offset=0
-            )
+            
+            if isinstance(today_prices, dict) and today_prices:
+                now = dt_util.now().astimezone(target_tz)
+                today_date = now.date()
+                
+                today_list = []
+                for hhmm_key in sorted(today_prices.keys()):
+                    try:
+                        hour, minute = map(int, hhmm_key.split(':'))
+                        dt = datetime(
+                            today_date.year, today_date.month, today_date.day,
+                            hour, minute, 0,
+                            tzinfo=target_tz
+                        )
+                        price = today_prices[hhmm_key]
+                        today_list.append({
+                            "time": dt,  # datetime object (not ISO string!)
+                            "value": round(float(price), 4)
+                        })
+                    except (ValueError, AttributeError) as e:
+                        _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
+                        continue
+                
+                attrs["today_interval_prices"] = today_list
+            else:
+                attrs["today_interval_prices"] = []
         else:
-            attrs["prices_today"] = []
+            attrs["today_interval_prices"] = []
 
-        # Convert tomorrow's prices
+        # Convert tomorrow's prices from HH:MM dict to list of datetime objects
         if "tomorrow_interval_prices" in self.coordinator.data:
             tomorrow_prices = self.coordinator.data["tomorrow_interval_prices"]
-            attrs["prices_tomorrow"] = convert_to_ev_smart_format(
-                tomorrow_prices,
-                target_tz,
-                date_offset=1
-            )
+            
+            if isinstance(tomorrow_prices, dict) and tomorrow_prices:
+                now = dt_util.now().astimezone(target_tz)
+                tomorrow_date = (now + timedelta(days=1)).date()
+                
+                tomorrow_list = []
+                for hhmm_key in sorted(tomorrow_prices.keys()):
+                    try:
+                        hour, minute = map(int, hhmm_key.split(':'))
+                        dt = datetime(
+                            tomorrow_date.year, tomorrow_date.month, tomorrow_date.day,
+                            hour, minute, 0,
+                            tzinfo=target_tz
+                        )
+                        price = tomorrow_prices[hhmm_key]
+                        tomorrow_list.append({
+                            "time": dt,  # datetime object (not ISO string!)
+                            "value": round(float(price), 4)
+                        })
+                    except (ValueError, AttributeError) as e:
+                        _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
+                        continue
+                
+                attrs["tomorrow_interval_prices"] = tomorrow_list
+            else:
+                attrs["tomorrow_interval_prices"] = []
         else:
-            attrs["prices_tomorrow"] = []
-        # --- End EV Smart Charging Compatibility ---
+            attrs["tomorrow_interval_prices"] = []
 
         # Add error message if available
         if "error" in self.coordinator.data and self.coordinator.data["error"]:
