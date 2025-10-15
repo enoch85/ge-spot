@@ -36,7 +36,7 @@ async def fetch_with_retry(fetch_func, is_data_available, retry_interval=1800, e
 
     while True:
         result = await fetch_func(*args, **kwargs)
-        
+
         # Check if result indicates "data not ready yet" (HTTP 204)
         if result and isinstance(result, dict) and result.get("status") == 204:
             if attempts == 0:
@@ -49,7 +49,7 @@ async def fetch_with_retry(fetch_func, is_data_available, retry_interval=1800, e
             if attempts == 0:
                 _LOGGER.info(f"Data not available yet (first attempt). Will retry every {retry_interval//60} minutes until {end_time}.")
             attempts += 1
-        
+
         # Check if we should stop
         if end_time and local_tz:
             now_utc = datetime.datetime.now(datetime.timezone.utc)

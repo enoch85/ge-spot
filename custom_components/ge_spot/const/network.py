@@ -24,7 +24,7 @@ class Network:
         STANDARD_UPDATE_INTERVAL_MINUTES = 30  # Standard interval
         MISSING_HOURS_RETRY_INTERVAL_MINUTES = 5  # Minimum time between attempts to fill missing hours
         GRACE_PERIOD_MINUTES = 5  # Grace period after reload/startup for lenient validation
-        
+
         # Time conversion constants
         SECONDS_PER_MINUTE = 60  # Seconds in a minute (for time calculations)
 

@@ -25,7 +25,7 @@ class BaseElectricityPriceSensor(SensorEntity):
 
     _attr_state_class = None  # Prices are instantaneous, not totals. History still recorded.
     _attr_device_class = SensorDeviceClass.MONETARY
-    
+
     # Exclude large interval price arrays from database to prevent bloat
     # These are operational data for automations, not historical data
     # The main sensor value (current_price) provides historical tracking
@@ -39,10 +39,10 @@ class BaseElectricityPriceSensor(SensorEntity):
         self.coordinator = coordinator
         if not isinstance(config_data, dict):
             raise TypeError("config_data must be a dictionary")
-        
+
         # Store timezone service for EV Smart Charging attribute conversion
         self._tz_service = getattr(coordinator, '_tz_service', None)
-        
+
         self._area = config_data.get(Attributes.AREA)
         self._vat = config_data.get(Attributes.VAT, 0)
         self._precision = config_data.get("precision", 3)
@@ -190,7 +190,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Add interval prices in list format with datetime objects (v1.5.0)
         # Format: [{"time": datetime object, "value": float}, ...]
         # External integrations (EV Smart Charging) expect this format
-        
+
         # Get target timezone
         target_tz = None
         if self._tz_service:
@@ -202,11 +202,11 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Convert today's prices from HH:MM dict to list of datetime objects
         if "today_interval_prices" in self.coordinator.data:
             today_prices = self.coordinator.data["today_interval_prices"]
-            
+
             if isinstance(today_prices, dict) and today_prices:
                 now = dt_util.now().astimezone(target_tz)
                 today_date = now.date()
-                
+
                 today_list = []
                 for hhmm_key in sorted(today_prices.keys()):
                     try:
@@ -224,7 +224,7 @@ class BaseElectricityPriceSensor(SensorEntity):
                     except (ValueError, AttributeError) as e:
                         _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
                         continue
-                
+
                 attrs["today_interval_prices"] = today_list
             else:
                 attrs["today_interval_prices"] = []
@@ -234,11 +234,11 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Convert tomorrow's prices from HH:MM dict to list of datetime objects
         if "tomorrow_interval_prices" in self.coordinator.data:
             tomorrow_prices = self.coordinator.data["tomorrow_interval_prices"]
-            
+
             if isinstance(tomorrow_prices, dict) and tomorrow_prices:
                 now = dt_util.now().astimezone(target_tz)
                 tomorrow_date = (now + timedelta(days=1)).date()
-                
+
                 tomorrow_list = []
                 for hhmm_key in sorted(tomorrow_prices.keys()):
                     try:
@@ -256,7 +256,7 @@ class BaseElectricityPriceSensor(SensorEntity):
                     except (ValueError, AttributeError) as e:
                         _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
                         continue
-                
+
                 attrs["tomorrow_interval_prices"] = tomorrow_list
             else:
                 attrs["tomorrow_interval_prices"] = []
