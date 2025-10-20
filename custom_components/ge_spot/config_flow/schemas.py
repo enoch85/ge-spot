@@ -117,6 +117,18 @@ def get_options_schema(defaults, supported_sources, area):
             vol.Coerce(float),
             vol.Range(min=0.0, max=100.0),
         ),
+        vol.Optional(
+            Config.ADDITIONAL_TARIFF,
+            default=defaults.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF),
+            description="Additional transfer/grid fees from your provider. Use same unit as Price Display Format (e.g., 0.05 if decimal, or 5 if cents)"
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0.0,
+                max=1000.0,
+                step=0.01,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
         vol.Optional(Config.DISPLAY_UNIT, default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
@@ -185,6 +197,12 @@ def get_default_values(options, data):
         # VAT - convert from decimal to percentage
         vat_decimal = options.get(Config.VAT, data.get(Config.VAT, Defaults.VAT))
         defaults[Config.VAT] = vat_decimal
+
+        # Additional tariff
+        defaults[Config.ADDITIONAL_TARIFF] = options.get(
+            Config.ADDITIONAL_TARIFF,
+            data.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF)
+        )
 
         # Display unit
         defaults[Config.DISPLAY_UNIT] = options.get(
