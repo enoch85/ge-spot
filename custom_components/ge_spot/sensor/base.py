@@ -95,7 +95,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         attrs = {
             "currency": self._currency,
             "area": self._area,
-            "vat": f"{self._vat * 100:.0f}%",
+            "vat": f"{self._vat * 100:.1f}%",
             "display_unit": self._display_unit,
             "use_subunit": self._use_subunit,
             # Corrected: Use 'data_source' from coordinator data
