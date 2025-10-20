@@ -48,14 +48,9 @@ def get_source_priority_schema(supported_sources):
                     multiple=True,
                 )
             ),
-            vol.Optional(Config.VAT, default=0): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=0,
-                    max=100,
-                    step=0.1,
-                    mode=selector.NumberSelectorMode.BOX,
-                    unit_of_measurement="%"
-                )
+            vol.Optional(Config.VAT, default=0): vol.All(
+                vol.Coerce(float),
+                vol.Range(min=0.0, max=100.0),
             ),
             # Make DISPLAY_UNIT required
             vol.Required(Config.DISPLAY_UNIT, default=DisplayUnit.DECIMAL): selector.SelectSelector(
@@ -118,14 +113,9 @@ def get_stromligning_config_schema(existing_supplier=None):
 def get_options_schema(defaults, supported_sources, area):
     """Return schema for options."""
     schema = {
-        vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0) * 100): selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=100,
-                step=0.1,
-                mode=selector.NumberSelectorMode.BOX,
-                unit_of_measurement="%"
-            )
+        vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0) * 100): vol.All(
+            vol.Coerce(float),
+            vol.Range(min=0.0, max=100.0),
         ),
         vol.Optional(Config.DISPLAY_UNIT, default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)): selector.SelectSelector(
             selector.SelectSelectorConfig(
