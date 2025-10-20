@@ -8,6 +8,7 @@ class Defaults:
     VAT = 0.0
     VAT_RATE = 0  # Default VAT rate in percentage
     INCLUDE_VAT = False  # Whether to include VAT by default
+    ADDITIONAL_TARIFF = 0.0  # Default additional tariff (transfer fees, etc.) per kWh
     UPDATE_INTERVAL = 15  # Update every 15 minutes to match interval granularity
     # Display & Formatting
     DISPLAY_UNIT = DisplayUnit.DECIMAL

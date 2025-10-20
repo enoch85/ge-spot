@@ -25,7 +25,9 @@ def convert_energy_price(
     source_unit: str,
     target_unit: str = EnergyUnit.TARGET, # Default target is kWh
     vat_rate: float = 0.0, # VAT rate (e.g., 0.25 for 25%), defaults to 0
-    display_unit_multiplier: int = 1 # Multiplier for subunits (e.g., 100 for cents)
+    display_unit_multiplier: int = 1, # Multiplier for subunits (e.g., 100 for cents)
+    additional_tariff: float = 0.0, # Additional tariff/fees per kWh, defaults to 0
+    tariff_in_subunit: bool = False # Whether tariff is entered in subunit (cents/øre)
 ) -> Optional[float]:
     """Convert energy price between units, apply VAT, and adjust for display units.
 
@@ -35,6 +37,8 @@ def convert_energy_price(
         target_unit: The target energy unit (e.g., EnergyUnit.KWH).
         vat_rate: The VAT rate to apply (0 to 1). Defaults to 0.
         display_unit_multiplier: Multiplier for display subunits (e.g., 100). Defaults to 1.
+        additional_tariff: Additional tariff/fees from provider (per kWh). Defaults to 0.
+        tariff_in_subunit: If True, tariff is in subunit (cents/øre), else main unit. Defaults to False.
 
     Returns:
         The converted price, or None if conversion is not possible.
@@ -78,7 +82,14 @@ def convert_energy_price(
         # 2. Apply VAT
         price *= (1 + vat_rate)
 
-        # 3. Apply display unit multiplier (e.g., for cents)
+        # 3. Add additional tariff (transfer fees, etc.)
+        # If tariff is entered in subunit (cents/øre), convert to main unit first
+        tariff_to_add = additional_tariff
+        if tariff_in_subunit and display_unit_multiplier > 1:
+            tariff_to_add = additional_tariff / display_unit_multiplier
+        price += tariff_to_add
+
+        # 4. Apply display unit multiplier (e.g., for cents)
         price *= display_unit_multiplier
 
         return price
