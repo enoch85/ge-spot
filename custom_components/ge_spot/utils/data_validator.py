@@ -1,4 +1,5 @@
 """Data validation utilities for API responses."""
+
 import logging
 from typing import Dict, Any, Optional, List
 import statistics
@@ -13,92 +14,109 @@ _LOGGER = logging.getLogger(__name__)
 
 # Define schemas for different API sources
 _SCHEMAS = {
-    Source.NORDPOOL: Schema({
-        "type": "object",
-        "properties": {
-            "data": {"type": "object", "optional": True},
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    Source.NORDPOOL: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "data": {"type": "object", "optional": True},
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.ENTSOE: Schema({
-        "type": "object",
-        "properties": {
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.ENTSOE: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.ENERGI_DATA_SERVICE: Schema({
-        "type": "object",
-        "properties": {
-            "records": {"type": "array", "optional": True},
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.ENERGI_DATA_SERVICE: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "records": {"type": "array", "optional": True},
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.AEMO: Schema({
-        "type": "object",
-        "properties": {
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.AEMO: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.ENERGY_CHARTS: Schema({
-        "type": "object",
-        "properties": {
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.ENERGY_CHARTS: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.OMIE: Schema({
-        "type": "object",
-        "properties": {
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.OMIE: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.STROMLIGNING: Schema({
-        "type": "object",
-        "properties": {
-            "prices": {"type": "array", "optional": True},
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.STROMLIGNING: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "prices": {"type": "array", "optional": True},
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    })
+    ),
 }
 
 # Default schema for unknown sources
-_DEFAULT_SCHEMA = Schema({
-    "type": "object",
-    "properties": {
-        "currency": {"type": "string", "optional": True},
-        "today_interval_prices": {"type": "object", "optional": True},
-        "current_price": {"type": "number", "optional": True},
-        "next_interval_price": {"type": "number", "optional": True},
-        "raw_data": {"type": "string", "optional": True}
+_DEFAULT_SCHEMA = Schema(
+    {
+        "type": "object",
+        "properties": {
+            "currency": {"type": "string", "optional": True},
+            "today_interval_prices": {"type": "object", "optional": True},
+            "current_price": {"type": "number", "optional": True},
+            "next_interval_price": {"type": "number", "optional": True},
+            "raw_data": {"type": "string", "optional": True},
+        },
     }
-})
+)
+
 
 def validate_data(data: Dict[str, Any], source: str) -> Dict[str, Any]:
     """Validate API response data.
@@ -131,6 +149,7 @@ def validate_data(data: Dict[str, Any], source: str) -> Dict[str, Any]:
         # This allows parsers to handle partial or invalid data
         return data
 
+
 class DataValidator:
     """Utility class for validating API data."""
 
@@ -139,7 +158,9 @@ class DataValidator:
         self._validation_history = {}
         self._anomaly_threshold = 3.0  # Z-score threshold for anomalies
 
-    def validate_price_data(self, data: Dict[str, Any], source_name: str = "unknown") -> Dict[str, Any]:
+    def validate_price_data(
+        self, data: Dict[str, Any], source_name: str = "unknown"
+    ) -> Dict[str, Any]:
         """Validate price data from an API.
 
         Args:
@@ -155,7 +176,7 @@ class DataValidator:
             "timestamp": datetime.now().isoformat(),
             "errors": [],
             "warnings": [],
-            "anomalies": []
+            "anomalies": [],
         }
 
         # Basic validation
@@ -187,11 +208,9 @@ class DataValidator:
                     for interval, price in interval_prices.items():
                         z_score = abs((price - mean) / stdev)
                         if z_score > self._anomaly_threshold:
-                            result["anomalies"].append({
-                                "interval": interval,
-                                "price": price,
-                                "z_score": z_score
-                            })
+                            result["anomalies"].append(
+                                {"interval": interval, "price": price, "z_score": z_score}
+                            )
         except Exception as e:
             result["warnings"].append(f"Error checking for anomalies: {e}")
 
@@ -215,7 +234,7 @@ class DataValidator:
                 "invalid": 0,
                 "anomalies": 0,
                 "last_result": None,
-                "last_timestamp": None
+                "last_timestamp": None,
             }
 
         history = self._validation_history[source_name]
@@ -246,7 +265,7 @@ class DataValidator:
                 "reliability": 0.0,
                 "total_requests": 0,
                 "valid_responses": 0,
-                "anomaly_rate": 0.0
+                "anomaly_rate": 0.0,
             }
 
         history = self._validation_history[source_name]
@@ -260,5 +279,5 @@ class DataValidator:
             "valid_responses": history["valid"],
             "anomaly_rate": anomaly_rate,
             "last_result": history["last_result"],
-            "last_timestamp": history["last_timestamp"]
+            "last_timestamp": history["last_timestamp"],
         }

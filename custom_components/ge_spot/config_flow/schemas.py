@@ -1,4 +1,5 @@
 """Form schemas for config flow."""
+
 import logging
 from typing import Dict, Any
 import voluptuous as vol
@@ -17,6 +18,7 @@ from ..api import get_sources_for_region
 
 _LOGGER = logging.getLogger(__name__)
 
+
 def get_user_schema(available_regions):
     """Return schema for the user step."""
     return vol.Schema(
@@ -33,12 +35,16 @@ def get_user_schema(available_regions):
         }
     )
 
+
 def get_source_priority_schema(supported_sources):
     """Return schema for source priority step."""
     return vol.Schema(
         {
-            vol.Required(Config.SOURCE_PRIORITY, default=supported_sources,
-                         description="Priority is determined by order: first selected = highest priority"): selector.SelectSelector(
+            vol.Required(
+                Config.SOURCE_PRIORITY,
+                default=supported_sources,
+                description="Priority is determined by order: first selected = highest priority",
+            ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": source, "label": Source.get_display_name(source)}
@@ -56,14 +62,14 @@ def get_source_priority_schema(supported_sources):
             vol.Required(Config.DISPLAY_UNIT, default=DisplayUnit.DECIMAL): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
-                        {"value": key, "label": value}
-                        for key, value in DisplayUnit.OPTIONS.items()
+                        {"value": key, "label": value} for key, value in DisplayUnit.OPTIONS.items()
                     ],
                     mode=selector.SelectSelectorMode.LIST,
                 )
             ),
         }
     )
+
 
 def get_api_keys_schema(area, existing_api_key=None):
     """Return schema for API keys step."""
@@ -83,18 +89,18 @@ def get_api_keys_schema(area, existing_api_key=None):
     # Create field - required for new setups, optional if we have an existing key
     if has_existing:
         # If we have an existing key, make it optional
-        field = vol.Optional(f"{Source.ENTSOE}_api_key",
-                            description=description,
-                            default=existing_api_key)
+        field = vol.Optional(
+            f"{Source.ENTSOE}_api_key", description=description, default=existing_api_key
+        )
     else:
         # For new setups, make it required
-        field = vol.Required(f"{Source.ENTSOE}_api_key",
-                            description=description)
+        field = vol.Required(f"{Source.ENTSOE}_api_key", description=description)
 
     # Use the FormHelper to create the API key selector
     schema_dict[field] = FormHelper.create_api_key_selector()
 
     return vol.Schema(schema_dict)
+
 
 # Add schema for Stromligning config step
 def get_stromligning_config_schema(existing_supplier=None):
@@ -103,15 +109,20 @@ def get_stromligning_config_schema(existing_supplier=None):
     description = "Required for Strømligning data source. Complete list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
 
     # Create field - required for new setups
-    field = vol.Required(Config.CONF_STROMLIGNING_SUPPLIER,
-                        description=description)
+    field = vol.Required(Config.CONF_STROMLIGNING_SUPPLIER, description=description)
 
-    schema_dict[field] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
+    schema_dict[field] = selector.TextSelector(
+        selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
+    )
 
     return vol.Schema(schema_dict)
 
+
 def get_options_schema(defaults, supported_sources, area):
     """Return schema for options."""
+    # Price calculation follows EU tax standards:
+    # Final Price = (Spot Price + Additional Tariff + Energy Tax) × (1 + VAT%)
+    # VAT is applied to the total of all costs, as per standard EU practice.
     schema = {
         vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0) * 100): vol.All(
             vol.Coerce(float),
@@ -120,25 +131,41 @@ def get_options_schema(defaults, supported_sources, area):
         vol.Optional(
             Config.ADDITIONAL_TARIFF,
             default=defaults.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF),
-            description="Additional transfer/grid fees from your provider. Use same unit as Price Display Format (e.g., 0.05 if decimal, or 5 if cents)"
+            description="Additional transfer/grid fees from your provider.\nEnter in same unit as Price Display Format.\nApplied before VAT.",
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.0,
                 max=1000.0,
-                step=0.01,
+                step=0.001,
                 mode=selector.NumberSelectorMode.BOX,
             )
         ),
-        vol.Optional(Config.DISPLAY_UNIT, default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)): selector.SelectSelector(
+        vol.Optional(
+            Config.ENERGY_TAX,
+            default=defaults.get(Config.ENERGY_TAX, Defaults.ENERGY_TAX),
+            description="Fixed energy tax per kWh (e.g. government levy).\nEnter in same unit as Price Display Format.\nApplied before VAT.",
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0.0,
+                max=1000.0,
+                step=0.001,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+        vol.Optional(
+            Config.DISPLAY_UNIT, default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
+        ): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
-                    {"value": key, "label": value}
-                    for key, value in DisplayUnit.OPTIONS.items()
+                    {"value": key, "label": value} for key, value in DisplayUnit.OPTIONS.items()
                 ],
                 mode=selector.SelectSelectorMode.LIST,
             )
         ),
-        vol.Optional(Config.TIMEZONE_REFERENCE, default=defaults.get(Config.TIMEZONE_REFERENCE, TimezoneReference.DEFAULT)): selector.SelectSelector(
+        vol.Optional(
+            Config.TIMEZONE_REFERENCE,
+            default=defaults.get(Config.TIMEZONE_REFERENCE, TimezoneReference.DEFAULT),
+        ): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
                     {"value": key, "label": value}
@@ -151,11 +178,13 @@ def get_options_schema(defaults, supported_sources, area):
 
     # Add source priority selection with header
     current_priority = defaults.get(Config.SOURCE_PRIORITY, supported_sources)
-    schema[vol.Optional(
-        Config.SOURCE_PRIORITY,
-        default=current_priority,
-        description="Priority is determined by order: first selected = highest priority"
-    )] = selector.SelectSelector(
+    schema[
+        vol.Optional(
+            Config.SOURCE_PRIORITY,
+            default=current_priority,
+            description="Priority is determined by order: first selected = highest priority",
+        )
+    ] = selector.SelectSelector(
         selector.SelectSelectorConfig(
             options=[
                 {"value": source, "label": Source.get_display_name(source)}
@@ -169,19 +198,23 @@ def get_options_schema(defaults, supported_sources, area):
     # Add API key fields for sources that require it
     if Source.ENTSOE in supported_sources:
         current_api_key = defaults.get(Config.API_KEY, "")
-        schema[vol.Optional(
-            f"{Source.ENTSOE}_api_key",
-            default=current_api_key,
-            description=f"{'API key configured' if current_api_key else 'Enter API key for ENTSO-E'}"
-        )] = FormHelper.create_api_key_selector()
+        schema[
+            vol.Optional(
+                f"{Source.ENTSOE}_api_key",
+                default=current_api_key,
+                description=f"{'API key configured' if current_api_key else 'Enter API key for ENTSO-E'}",
+            )
+        ] = FormHelper.create_api_key_selector()
 
     # Add Stromligning Supplier Field Conditionally, after ENTSO-E API key
     selected_sources = defaults.get(Config.SOURCE_PRIORITY, [])
     if Source.STROMLIGNING in selected_sources:
-        schema[vol.Optional(
-            Config.CONF_STROMLIGNING_SUPPLIER,
-            default=defaults.get(Config.CONF_STROMLIGNING_SUPPLIER, "")
-        )] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
+        schema[
+            vol.Optional(
+                Config.CONF_STROMLIGNING_SUPPLIER,
+                default=defaults.get(Config.CONF_STROMLIGNING_SUPPLIER, ""),
+            )
+        ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
 
     # Add Clear Cache button
     schema[vol.Optional("clear_cache", default=False)] = selector.BooleanSelector(
@@ -189,6 +222,7 @@ def get_options_schema(defaults, supported_sources, area):
     )
 
     return vol.Schema(schema)
+
 
 def get_default_values(options, data):
     """Get default values from options and data."""
@@ -200,20 +234,23 @@ def get_default_values(options, data):
 
         # Additional tariff
         defaults[Config.ADDITIONAL_TARIFF] = options.get(
-            Config.ADDITIONAL_TARIFF,
-            data.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF)
+            Config.ADDITIONAL_TARIFF, data.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF)
+        )
+
+        # Energy tax
+        defaults[Config.ENERGY_TAX] = options.get(
+            Config.ENERGY_TAX, data.get(Config.ENERGY_TAX, Defaults.ENERGY_TAX)
         )
 
         # Display unit
         defaults[Config.DISPLAY_UNIT] = options.get(
-            Config.DISPLAY_UNIT,
-            data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
+            Config.DISPLAY_UNIT, data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         )
 
         # Timezone reference
         defaults[Config.TIMEZONE_REFERENCE] = options.get(
             Config.TIMEZONE_REFERENCE,
-            data.get(Config.TIMEZONE_REFERENCE, TimezoneReference.DEFAULT)
+            data.get(Config.TIMEZONE_REFERENCE, TimezoneReference.DEFAULT),
         )
 
         # Source priority
@@ -228,7 +265,9 @@ def get_default_values(options, data):
 
         # Stromligning Supplier (from data, not options)
         if Config.CONF_STROMLIGNING_SUPPLIER in data:
-            defaults[Config.CONF_STROMLIGNING_SUPPLIER] = data.get(Config.CONF_STROMLIGNING_SUPPLIER, "")
+            defaults[Config.CONF_STROMLIGNING_SUPPLIER] = data.get(
+                Config.CONF_STROMLIGNING_SUPPLIER, ""
+            )
 
         return defaults
     except Exception as e:

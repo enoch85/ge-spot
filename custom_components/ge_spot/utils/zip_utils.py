@@ -14,7 +14,7 @@ def unzip_single_file(zip_bytes: bytes, expected_extension: Optional[str] = None
 
     Args:
         zip_bytes: ZIP file content as bytes
-        expected_extension: Optional file extension to validate (e.g., '.csv')
+        expected_extension: Optional file extension to validate (e.g. '.csv')
 
     Returns:
         File content as string (UTF-8 decoded)
@@ -40,12 +40,9 @@ def unzip_single_file(zip_bytes: bytes, expected_extension: Optional[str] = None
             csv_file = files[0]
 
             # Validate extension if specified
-            if expected_extension and not csv_file.lower().endswith(
-                expected_extension.lower()
-            ):
+            if expected_extension and not csv_file.lower().endswith(expected_extension.lower()):
                 raise ValueError(
-                    f"Expected file with extension '{expected_extension}', "
-                    f"got '{csv_file}'"
+                    f"Expected file with extension '{expected_extension}', " f"got '{csv_file}'"
                 )
 
             _LOGGER.debug(f"Extracting file: {csv_file} ({zf.getinfo(csv_file).file_size} bytes)")

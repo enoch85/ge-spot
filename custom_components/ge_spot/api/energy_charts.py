@@ -1,4 +1,5 @@
 """API handler for Energy-Charts."""
+
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
@@ -13,6 +14,7 @@ from .base.error_handler import ErrorHandler
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class EnergyChartsAPI(BasePriceAPI):
     """Energy-Charts API implementation.
 
@@ -22,7 +24,9 @@ class EnergyChartsAPI(BasePriceAPI):
     Resolution: 15-minute intervals (96 data points per day)
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None):
+    def __init__(
+        self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None
+    ):
         """Initialize the API.
 
         Args:
@@ -67,17 +71,14 @@ class EnergyChartsAPI(BasePriceAPI):
                 self._fetch_data,
                 client=client,
                 area=area,
-                reference_time=kwargs.get('reference_time')
+                reference_time=kwargs.get("reference_time"),
             )
         finally:
             if session is None:
                 await client.close()
 
     async def _fetch_data(
-        self,
-        client: ApiClient,
-        area: str,
-        reference_time: Optional[datetime] = None
+        self, client: ApiClient, area: str, reference_time: Optional[datetime] = None
     ) -> Dict[str, Any]:
         """Fetch data from Energy-Charts API.
 
@@ -108,23 +109,23 @@ class EnergyChartsAPI(BasePriceAPI):
         start_date = reference_time.strftime("%Y-%m-%d")
         end_date = (reference_time + timedelta(days=1)).strftime("%Y-%m-%d")
 
-        params = {
-            "bzn": bzn,
-            "start": start_date,
-            "end": end_date
-        }
+        params = {"bzn": bzn, "start": start_date, "end": end_date}
 
         try:
-            response = await client.fetch(
-                f"{self.base_url}/price",
-                params=params
-            )
+            response = await client.fetch(f"{self.base_url}/price", params=params)
 
+            # Check for error response from API client first
+            if isinstance(response, dict) and response.get("error"):
+                error_msg = response.get("message", "Unknown error")
+                _LOGGER.error(f"Energy-Charts API request failed for {area}: {error_msg}")
+                return None
+
+            # Check for valid response structure
             if not response or not isinstance(response, dict):
                 _LOGGER.error(f"Energy-Charts API returned invalid response for {area}")
                 return None
 
-            # Check for required fields
+            # Check for required fields (only if we have a valid dict without error)
             if "unix_seconds" not in response or "price" not in response:
                 _LOGGER.error(f"Energy-Charts response missing required fields for {area}")
                 return None
@@ -147,7 +148,7 @@ class EnergyChartsAPI(BasePriceAPI):
                 "bzn": bzn,
                 "source": self.source_type,
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
-                "license_info": response.get("license_info", "")
+                "license_info": response.get("license_info", ""),
             }
 
         except Exception as e:
@@ -158,7 +159,7 @@ class EnergyChartsAPI(BasePriceAPI):
         """Map area code to Energy-Charts bidding zone.
 
         Args:
-            area: Area code (e.g., "DE-LU", "FR", "SE1")
+            area: Area code (e.g. "DE-LU", "FR", "SE1")
 
         Returns:
             Bidding zone code for Energy-Charts API
@@ -168,19 +169,44 @@ class EnergyChartsAPI(BasePriceAPI):
 
         bzn_mapping = {
             # Nordic regions
-            "SE1": "SE1", "SE2": "SE2", "SE3": "SE3", "SE4": "SE4",
-            "NO1": "NO1", "NO2": "NO2", "NO3": "NO3", "NO4": "NO4", "NO5": "NO5",
+            "SE1": "SE1",
+            "SE2": "SE2",
+            "SE3": "SE3",
+            "SE4": "SE4",
+            "NO1": "NO1",
+            "NO2": "NO2",
+            "NO3": "NO3",
+            "NO4": "NO4",
+            "NO5": "NO5",
             "NO2NSL": "NO2NSL",
-            "DK1": "DK1", "DK2": "DK2",
+            "DK1": "DK1",
+            "DK2": "DK2",
             "FI": "FI",
             # Baltic states
-            "EE": "EE", "LT": "LT", "LV": "LV",
+            "EE": "EE",
+            "LT": "LT",
+            "LV": "LV",
             # Western Europe
-            "DE": "DE-LU", "DE-LU": "DE-LU", "LU": "DE-LU",
-            "FR": "FR", "NL": "NL", "BE": "BE", "AT": "AT", "CH": "CH",
+            "DE": "DE-LU",
+            "DE-LU": "DE-LU",
+            "LU": "DE-LU",
+            "FR": "FR",
+            "NL": "NL",
+            "BE": "BE",
+            "AT": "AT",
+            "CH": "CH",
             # Central & Eastern Europe
-            "PL": "PL", "CZ": "CZ", "SK": "SK", "HU": "HU",
-            "RO": "RO", "BG": "BG", "SI": "SI", "HR": "HR", "RS": "RS", "ME": "ME", "GR": "GR",
+            "PL": "PL",
+            "CZ": "CZ",
+            "SK": "SK",
+            "HU": "HU",
+            "RO": "RO",
+            "BG": "BG",
+            "SI": "SI",
+            "HR": "HR",
+            "RS": "RS",
+            "ME": "ME",
+            "GR": "GR",
             # Italy zones
             "IT-North": "IT-North",
             "IT-South": "IT-South",
@@ -189,7 +215,8 @@ class EnergyChartsAPI(BasePriceAPI):
             "IT-Sardinia": "IT-Sardinia",
             "IT-Sicily": "IT-Sicily",
             # Iberia
-            "ES": "ES", "PT": "PT",
+            "ES": "ES",
+            "PT": "PT",
         }
 
         return bzn_mapping.get(area, area)

@@ -89,7 +89,7 @@ Despite extensive testing with various EIC code combinations, there are still 10
 These regions may require:
 - Different API parameters or configurations
 - Special handling for certain regions
-- Alternative data sources (e.g., Nordpool for Nordic regions)
+- Alternative data sources (e.g. Nordpool for Nordic regions)
 
 ## Recommendations for Future Work
 

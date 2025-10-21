@@ -12,7 +12,7 @@ This script performs an end-to-end test of the Amber API integration:
 Usage:
     python amber_full_chain.py [area] [api_key] [--date YYYY-MM-DD] [--debug]
 
-    area: Optional area code (e.g., NSW, VIC, QLD, SA, TAS)
+    area: Optional area code (e.g. NSW, VIC, QLD, SA, TAS)
           Defaults to NSW if not provided
     api_key: Optional Amber API key
              Can also be provided via AMBER_API_KEY environment variable
@@ -55,7 +55,7 @@ async def main():
     parser = argparse.ArgumentParser(description='Test Amber API integration')
     parser.add_argument('area', nargs='?', default='NSW',
                         choices=AMBER_AREA_TIMEZONES.keys(),
-                        help='Area code (e.g., NSW, VIC)')
+                        help='Area code (e.g. NSW, VIC)')
     parser.add_argument('api_key', nargs='?', default=None,
                         help='Amber API key (optional if environment variable is set)')
     parser.add_argument('--date', default=None,
@@ -244,7 +244,7 @@ async def main():
         logger.error(f"Error during test: {e}", exc_info=args.debug)
         return 1
     finally:
-        # Clean up resources if needed (e.g., close aiohttp session if used directly)
+        # Clean up resources if needed (e.g. close aiohttp session if used directly)
         pass
 
 if __name__ == "__main__":

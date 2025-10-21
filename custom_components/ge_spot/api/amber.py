@@ -1,4 +1,5 @@
 """API implementation for Amber Energy."""
+
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
@@ -17,10 +18,16 @@ from ..const.config import Config
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class AmberAPI(BasePriceAPI):
     """API client for Amber Energy."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, session: Optional[ClientSession] = None, timezone_service=None):
+    def __init__(
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        session: Optional[ClientSession] = None,
+        timezone_service=None,
+    ):
         """Initialize the Amber API client.
 
         Args:
@@ -105,10 +112,7 @@ class AmberAPI(BasePriceAPI):
                     "data": data,
                     "timestamp": now_utc.isoformat(),
                     "area": area,
-                    "date_range": {
-                        "start": start_date,
-                        "end": end_date
-                    }
+                    "date_range": {"start": start_date, "end": end_date},
                 },
             }
         except Exception as e:

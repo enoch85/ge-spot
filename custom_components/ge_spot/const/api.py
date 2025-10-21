@@ -7,18 +7,21 @@ from ..const.time import TimezoneName
 
 class EntsoE:
     """Constants for ENTSO-E API."""
-    DOC_TYPE_A44 = "A44" # Day-ahead prices
-    DOC_TYPE_A65 = "A65" # Generation forecast
+
+    DOC_TYPE_A44 = "A44"  # Day-ahead prices
+    DOC_TYPE_A65 = "A65"  # Generation forecast
 
 
 class Nordpool:
     """Nordpool API constants."""
+
     DEFAULT_AREA = Area.NO1
     MARKET_DAYAHEAD = "DayAhead"
 
 
 class Omie:
     """OMIE API constants."""
+
     DEFAULT_AREA = Area.ES
     PRICE_FIELD_ES = "Precio marginal en el sistema español (EUR/MWh)"
     PRICE_FIELD_PT = "Precio marginal en el sistema portugués (EUR/MWh)"
@@ -26,11 +29,13 @@ class Omie:
 
 class Stromligning:
     """Stromligning API constants."""
+
     DEFAULT_AREA = Area.DK1
     DEFAULT_CURRENCY = "DKK"
 
     class PriceComponents:
         """Price component keys."""
+
         ELECTRICITY = "electricity"
         GRID = "grid"
         TAX = "tax"
@@ -38,6 +43,7 @@ class Stromligning:
 
 class Aemo:
     """AEMO API constants."""
+
     # AEMO regions
     REGIONS = ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
 
@@ -65,11 +71,14 @@ class Aemo:
 
 class ECB:
     """European Central Bank API constants."""
+
     XML_NAMESPACE_GESMES = "http://www.gesmes.org/xml/2002-08-01"
     XML_NAMESPACE_ECB = "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"
 
+
 class ComEd:
     """ComEd API constants."""
+
     # API endpoints
     FIVE_MINUTE_FEED = "5minutefeed"
     CURRENT_HOUR_AVERAGE = "currenthouraverage"
@@ -78,10 +87,7 @@ class ComEd:
     AREAS = ["5minutefeed", "currenthouraverage"]
 
     # Endpoint mapping
-    ENDPOINTS = {
-        "5minutefeed": "5minutefeed",
-        "currenthouraverage": "currenthouraverage"
-    }
+    ENDPOINTS = {"5minutefeed": "5minutefeed", "currenthouraverage": "currenthouraverage"}
 
     # Base URL
     BASE_URL = "https://hourlypricing.comed.com/api"
@@ -99,7 +105,7 @@ class SourceTimezone:
         Source.OMIE: TimezoneName.EUROPE_MADRID,  # Spanish market uses local time
         Source.AEMO: TimezoneName.AUSTRALIA_SYDNEY,  # Australian east coast market timezone
         Source.STROMLIGNING: TimezoneName.EUROPE_COPENHAGEN,  # Danish service, uses consistent local time
-        Source.COMED: TimezoneName.AMERICA_CHICAGO  # ComEd uses Chicago time
+        Source.COMED: TimezoneName.AMERICA_CHICAGO,  # ComEd uses Chicago time
     }
 
     # Define API-specific datetime formats for parsing if needed
@@ -111,12 +117,13 @@ class SourceTimezone:
         Source.OMIE: "%d/%m/%Y %H:%M:%S",  # European date format
         Source.AEMO: "%Y-%m-%dT%H:%M:%S",  # ISO format without timezone
         Source.STROMLIGNING: "%Y-%m-%dT%H:%M:%S.%fZ",  # ISO format with milliseconds
-        Source.COMED: "%Y-%m-%dT%H:%M:%S"  # ISO format without timezone
+        Source.COMED: "%Y-%m-%dT%H:%M:%S",  # ISO format without timezone
     }
 
 
 class Amber:
     """Amber Energy API constants."""
+
     # Base URL for Amber API
     BASE_URL = "https://api.amber.com.au/v1"
 

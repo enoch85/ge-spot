@@ -1,4 +1,5 @@
 """Parser for OMIE API responses."""
+
 import logging
 import csv
 from io import StringIO
@@ -14,6 +15,7 @@ from ..base.price_parser import BasePriceParser
 from ..interval_expander import convert_to_target_intervals
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class OmieParser(BasePriceParser):
     """Parser for OMIE API responses."""
@@ -33,10 +35,10 @@ class OmieParser(BasePriceParser):
         Args:
             data: Dictionary from OmieAPI._fetch_data containing:
                   'raw_data': Dict like {"today": str|None, "tomorrow": str|None}
-                  'timezone': The timezone name string (e.g., 'Europe/Madrid').
+                  'timezone': The timezone name string (e.g. 'Europe/Madrid').
                   'area': The area code ('ES' or 'PT').
-                  'currency': Currency code (e.g., 'EUR').
-                  'source': The source identifier (e.g., 'omie').
+                  'currency': Currency code (e.g. 'EUR').
+                  'source': The source identifier (e.g. 'omie').
                   'fetched_at': ISO timestamp of fetch.
 
         Returns:
@@ -50,13 +52,10 @@ class OmieParser(BasePriceParser):
 
         result = {
             "interval_raw": {},
-            "currency": data.get("currency", Currency.EUR), # Use provided currency or default
+            "currency": data.get("currency", Currency.EUR),  # Use provided currency or default
             "source": data.get("source", Source.OMIE),
             "timezone": source_timezone,
-            "metadata": {
-                "fetched_at": data.get("fetched_at"),
-                "area": area
-            }
+            "metadata": {"fetched_at": data.get("fetched_at"), "area": area},
         }
 
         if not raw_data_payload or not isinstance(raw_data_payload, dict):
@@ -73,7 +72,7 @@ class OmieParser(BasePriceParser):
                 _LOGGER.debug(f"[OmieParser] Parsing data for '{day_key}'.")
                 try:
                     # Pass the raw text and let the sub-parser handle it
-                    if raw_text.strip().startswith('{') and raw_text.strip().endswith('}'):
+                    if raw_text.strip().startswith("{") and raw_text.strip().endswith("}"):
                         _LOGGER.debug(f"[OmieParser] Attempting to parse '{day_key}' data as JSON.")
                         self._parse_json(raw_text, result, source_timezone)
                     else:
@@ -81,22 +80,35 @@ class OmieParser(BasePriceParser):
                         self._parse_csv(raw_text, result, source_timezone)
 
                 except Exception as e:
-                    _LOGGER.error(f"[OmieParser] Failed during parsing of '{day_key}' data: {e}", exc_info=True)
+                    _LOGGER.error(
+                        f"[OmieParser] Failed during parsing of '{day_key}' data: {e}",
+                        exc_info=True,
+                    )
             elif raw_text is not None:
-                 _LOGGER.warning(f"[OmieParser] Expected string data for '{day_key}', but got {type(raw_text)}. Skipping.")
+                _LOGGER.warning(
+                    f"[OmieParser] Expected string data for '{day_key}', but got {type(raw_text)}. Skipping."
+                )
 
-        _LOGGER.debug(f"[OmieParser] Found {len(result['interval_raw'])} total interval prices after parsing available days.")
+        _LOGGER.debug(
+            f"[OmieParser] Found {len(result['interval_raw'])} total interval prices after parsing available days."
+        )
         if not result["interval_raw"]:
-            _LOGGER.warning("[OmieParser] Parsing completed, but no interval prices were extracted from any provided data.")
+            _LOGGER.warning(
+                "[OmieParser] Parsing completed, but no interval prices were extracted from any provided data."
+            )
         else:
             # OMIE provides hourly data (60-minute intervals)
             # Expand to target interval (typically 15 minutes) by replicating hourly values
-            _LOGGER.debug(f"[OmieParser] Expanding {len(result['interval_raw'])} hourly prices to 15-minute intervals")
+            _LOGGER.debug(
+                f"[OmieParser] Expanding {len(result['interval_raw'])} hourly prices to 15-minute intervals"
+            )
             result["interval_raw"] = convert_to_target_intervals(
                 source_prices=result["interval_raw"],
-                source_interval_minutes=60  # OMIE provides hourly data
+                source_interval_minutes=60,  # OMIE provides hourly data
             )
-            _LOGGER.debug(f"[OmieParser] After expansion: {len(result['interval_raw'])} interval prices")
+            _LOGGER.debug(
+                f"[OmieParser] After expansion: {len(result['interval_raw'])} interval prices"
+            )
 
         return result
 
@@ -106,7 +118,9 @@ class OmieParser(BasePriceParser):
         try:
             local_tz = ZoneInfo(timezone_name)
         except ZoneInfoNotFoundError:
-            _LOGGER.error(f"[OmieParser/_parse_json] Timezone '{timezone_name}' not found. Falling back to UTC.")
+            _LOGGER.error(
+                f"[OmieParser/_parse_json] Timezone '{timezone_name}' not found. Falling back to UTC."
+            )
             local_tz = timezone.utc
 
         try:
@@ -141,13 +155,19 @@ class OmieParser(BasePriceParser):
                         timestamp = dt_utc.isoformat()
                         interval_prices[timestamp] = price
                     except (ValueError, KeyError, IndexError, TypeError) as e:
-                        _LOGGER.warning(f"[OmieParser/_parse_json] Error parsing PVPC entry: {entry}. Error: {e}")
-                        continue # Correct indentation for continue
+                        _LOGGER.warning(
+                            f"[OmieParser/_parse_json] Error parsing PVPC entry: {entry}. Error: {e}"
+                        )
+                        continue  # Correct indentation for continue
             else:
-                _LOGGER.warning("[OmieParser/_parse_json] JSON data found, but not in expected PVPC format.")
+                _LOGGER.warning(
+                    "[OmieParser/_parse_json] JSON data found, but not in expected PVPC format."
+                )
 
             result["interval_raw"].update(interval_prices)
-            _LOGGER.debug(f"[OmieParser/_parse_json] Parsed {len(interval_prices)} prices from JSON.")
+            _LOGGER.debug(
+                f"[OmieParser/_parse_json] Parsed {len(interval_prices)} prices from JSON."
+            )
 
         except json.JSONDecodeError as e:
             _LOGGER.error(f"[OmieParser/_parse_json] Invalid JSON: {e}")
@@ -164,7 +184,9 @@ class OmieParser(BasePriceParser):
         try:
             local_tz = ZoneInfo(timezone_name)
         except ZoneInfoNotFoundError:
-            _LOGGER.error(f"[OmieParser/_parse_csv] Timezone '{timezone_name}' not found. Falling back to UTC.")
+            _LOGGER.error(
+                f"[OmieParser/_parse_csv] Timezone '{timezone_name}' not found. Falling back to UTC."
+            )
             local_tz = timezone.utc
 
         try:
@@ -172,19 +194,23 @@ class OmieParser(BasePriceParser):
             lines = csv_file.readlines()
 
             # 1. Find the date from the first few lines
-            for i, line in enumerate(lines[:5]): # Check first 5 lines for date
-                parts = line.strip().split(';')
-                if len(parts) > 3 and parts[3].count('/') == 2: # Look for DD/MM/YYYY in 4th column
+            for i, line in enumerate(lines[:5]):  # Check first 5 lines for date
+                parts = line.strip().split(";")
+                if len(parts) > 3 and parts[3].count("/") == 2:  # Look for DD/MM/YYYY in 4th column
                     try:
                         # Validate it looks like a date
-                        datetime.strptime(parts[3], '%d/%m/%Y')
+                        datetime.strptime(parts[3], "%d/%m/%Y")
                         target_date_str = parts[3]
-                        _LOGGER.debug(f"[OmieParser/_parse_csv] Found target date: {target_date_str} in line {i+1}")
+                        _LOGGER.debug(
+                            f"[OmieParser/_parse_csv] Found target date: {target_date_str} in line {i+1}"
+                        )
                         break
                     except ValueError:
-                        continue # Not a valid date in this format
+                        continue  # Not a valid date in this format
             if not target_date_str:
-                _LOGGER.error("[OmieParser/_parse_csv] Could not find target date (DD/MM/YYYY) in header lines.")
+                _LOGGER.error(
+                    "[OmieParser/_parse_csv] Could not find target date (DD/MM/YYYY) in header lines."
+                )
                 return
 
             # 2. Find the relevant price line based on area
@@ -197,70 +223,102 @@ class OmieParser(BasePriceParser):
                 stripped_line = line.strip()
                 if stripped_line.startswith(target_prefix):
                     price_line = stripped_line
-                    _LOGGER.debug(f"[OmieParser/_parse_csv] Found target price line for {area}: '{price_line[:100]}...'")
+                    _LOGGER.debug(
+                        f"[OmieParser/_parse_csv] Found target price line for {area}: '{price_line[:100]}...'"
+                    )
                     break
 
-            # Fallback if primary area line not found (e.g., PT requested but only ES exists)
+            # Fallback if primary area line not found (e.g. PT requested but only ES exists)
             if not price_line:
-                 _LOGGER.warning(f"[OmieParser/_parse_csv] Target price line for {area} not found, trying fallback.")
-                 for i, line in enumerate(lines):
-                     stripped_line = line.strip()
-                     if stripped_line.startswith(fallback_prefix):
-                         price_line = stripped_line
-                         _LOGGER.debug(f"[OmieParser/_parse_csv] Found fallback price line: '{price_line[:100]}...'")
-                         break
+                _LOGGER.warning(
+                    f"[OmieParser/_parse_csv] Target price line for {area} not found, trying fallback."
+                )
+                for i, line in enumerate(lines):
+                    stripped_line = line.strip()
+                    if stripped_line.startswith(fallback_prefix):
+                        price_line = stripped_line
+                        _LOGGER.debug(
+                            f"[OmieParser/_parse_csv] Found fallback price line: '{price_line[:100]}...'"
+                        )
+                        break
 
             if not price_line:
-                _LOGGER.error(f"[OmieParser/_parse_csv] Could not find any price line starting with '{target_prefix}' or '{fallback_prefix}'.")
+                _LOGGER.error(
+                    f"[OmieParser/_parse_csv] Could not find any price line starting with '{target_prefix}' or '{fallback_prefix}'."
+                )
                 return
 
             # 3. Parse the date
             try:
-                day, month, year = map(int, target_date_str.split('/'))
+                day, month, year = map(int, target_date_str.split("/"))
                 target_date = datetime(year, month, day).date()
             except ValueError:
-                 _LOGGER.error(f"[OmieParser/_parse_csv] Failed to parse found date string: {target_date_str}")
-                 return
-
-            # 4. Extract prices from the found line
-            price_parts = price_line.split(';')
-            if len(price_parts) < 25: # Need prefix + 24 prices
-                _LOGGER.error(f"[OmieParser/_parse_csv] Price line does not contain enough columns (expected >= 25): {price_line}")
+                _LOGGER.error(
+                    f"[OmieParser/_parse_csv] Failed to parse found date string: {target_date_str}"
+                )
                 return
 
-            raw_prices = [p.strip() for p in price_parts[1:25]] # Prices are in columns 1 to 24 (0-indexed)
-            _LOGGER.debug(f"[OmieParser/_parse_csv] Extracted {len(raw_prices)} raw price strings: {raw_prices}")
+            # 4. Extract prices from the found line
+            price_parts = price_line.split(";")
+            if len(price_parts) < 25:  # Need prefix + 24 prices
+                _LOGGER.error(
+                    f"[OmieParser/_parse_csv] Price line does not contain enough columns (expected >= 25): {price_line}"
+                )
+                return
+
+            raw_prices = [
+                p.strip() for p in price_parts[1:25]
+            ]  # Prices are in columns 1 to 24 (0-indexed)
+            _LOGGER.debug(
+                f"[OmieParser/_parse_csv] Extracted {len(raw_prices)} raw price strings: {raw_prices}"
+            )
 
             # 5. Combine date, hour (1-24), and prices
             for hour_1_24, price_str in enumerate(raw_prices, 1):
                 try:
                     if not price_str:
-                        _LOGGER.warning(f"[OmieParser/_parse_csv] Missing price for hour {hour_1_24}. Skipping.")
+                        _LOGGER.warning(
+                            f"[OmieParser/_parse_csv] Missing price for hour {hour_1_24}. Skipping."
+                        )
                         continue
 
                     # Clean and parse price (allow comma, digits, minus)
-                    cleaned_price_str = ''.join(c for c in price_str if c.isdigit() or c == ',' or c == '-')
-                    if not cleaned_price_str or cleaned_price_str == '-':
-                         _LOGGER.warning(f"[OmieParser/_parse_csv] Invalid price string for hour {hour_1_24}: '{price_str}' -> '{cleaned_price_str}'. Skipping.")
-                         continue
-                    price = float(cleaned_price_str.replace(',', '.'))
+                    cleaned_price_str = "".join(
+                        c for c in price_str if c.isdigit() or c == "," or c == "-"
+                    )
+                    if not cleaned_price_str or cleaned_price_str == "-":
+                        _LOGGER.warning(
+                            f"[OmieParser/_parse_csv] Invalid price string for hour {hour_1_24}: '{price_str}' -> '{cleaned_price_str}'. Skipping."
+                        )
+                        continue
+                    price = float(cleaned_price_str.replace(",", "."))
 
                     # Create timestamp
                     hour_0_23 = hour_1_24 - 1
-                    dt_naive = datetime.combine(target_date, datetime.min.time().replace(hour=hour_0_23))
+                    dt_naive = datetime.combine(
+                        target_date, datetime.min.time().replace(hour=hour_0_23)
+                    )
                     dt_local = dt_naive.replace(tzinfo=local_tz)
                     dt_utc = dt_local.astimezone(timezone.utc)
                     timestamp = dt_utc.isoformat()
 
                     interval_prices[timestamp] = price
-                    _LOGGER.debug(f"[OmieParser/_parse_csv] Hour {hour_1_24}: Price={price}, Timestamp={timestamp}")
+                    _LOGGER.debug(
+                        f"[OmieParser/_parse_csv] Hour {hour_1_24}: Price={price}, Timestamp={timestamp}"
+                    )
 
                 except (ValueError, IndexError) as e:
-                    _LOGGER.warning(f"[OmieParser/_parse_csv] Error processing hour {hour_1_24} with price '{price_str}'. Error: {e}")
+                    _LOGGER.warning(
+                        f"[OmieParser/_parse_csv] Error processing hour {hour_1_24} with price '{price_str}'. Error: {e}"
+                    )
                     continue
 
             result["interval_raw"].update(interval_prices)
-            _LOGGER.debug(f"[OmieParser/_parse_csv] Successfully parsed {len(interval_prices)} prices from OMIE file.")
+            _LOGGER.debug(
+                f"[OmieParser/_parse_csv] Successfully parsed {len(interval_prices)} prices from OMIE file."
+            )
 
         except Exception as e:
-            _LOGGER.error(f"[OmieParser/_parse_csv] Error during CSV processing: {e}", exc_info=True)
+            _LOGGER.error(
+                f"[OmieParser/_parse_csv] Error during CSV processing: {e}", exc_info=True
+            )

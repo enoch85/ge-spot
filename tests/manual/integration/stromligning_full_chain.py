@@ -13,7 +13,7 @@ Usage:
 
     area: Optional area code (DK1, DK2)
           Defaults to DK1 if not provided
-    supplier: Required supplier name (e.g., EWII, AndelEnergi)
+    supplier: Required supplier name (e.g. EWII, AndelEnergi)
 """
 
 import sys
@@ -48,7 +48,7 @@ async def main():
                         help='Area code (DK1, DK2)')
     # Add supplier argument
     parser.add_argument('--supplier', required=True,
-                        help='Supplier name (e.g., EWII, AndelEnergi)')
+                        help='Supplier name (e.g. EWII, AndelEnergi)')
     args = parser.parse_args()
 
     area = args.area

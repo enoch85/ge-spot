@@ -1,7 +1,9 @@
 """Error message constants for GE-Spot integration."""
 
+
 class ErrorMessages:
     """Error message constants."""
+
     INVALID_API_KEY = "invalid_api_key"
     API_KEY_REQUIRED = "api_key_required"
     API_CREATION_FAILED = "api_creation_failed"
@@ -51,8 +53,10 @@ class ErrorDetails:
             # Missing format parameter, return with available params
             return f"{error_code}: {kwargs}"
 
+
 class Errors:
     """Error code constants."""
+
     API_ERROR = "api_error"
     NO_DATA = "no_data"
     INVALID_DATA = "invalid_data"
@@ -63,14 +67,16 @@ class Errors:
 
     # Source availability errors (v1.4.0+)
     NO_SOURCES_CONFIGURED = "no_sources_configured"  # Permanent: area not supported
-    ALL_SOURCES_DISABLED = "all_sources_disabled"     # Temporary: all failed, waiting health check
-    INVALID_AREA_CODE = "invalid_area_code"           # Permanent: invalid area in config
+    ALL_SOURCES_DISABLED = "all_sources_disabled"  # Temporary: all failed, waiting health check
+    INVALID_AREA_CODE = "invalid_area_code"  # Permanent: invalid area in config
 
     # Validation errors (v1.4.0+)
-    VALIDATION_FAILED = "validation_failed"           # Data validation failed
-    INCOMPLETE_DATA = "incomplete_data"               # Parser returned incomplete data
+    VALIDATION_FAILED = "validation_failed"  # Data validation failed
+    INCOMPLETE_DATA = "incomplete_data"  # Parser returned incomplete data
+
 
 # Custom Exception Classes
 class PriceFetchError(Exception):
     """Custom exception for errors during price fetching."""
+
     pass

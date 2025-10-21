@@ -1,4 +1,5 @@
 """API client utilities for GE-Spot integration."""
+
 import logging
 import asyncio
 from typing import Dict, Any, Optional, List, Callable, Awaitable
@@ -7,6 +8,7 @@ import aiohttp
 from ...const.attributes import Attributes
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class ApiClient:
     """Generic API client with improved error handling."""
@@ -22,14 +24,16 @@ class ApiClient:
         self.pool_size = pool_size
         self._semaphore = asyncio.Semaphore(pool_size)
         self._timeout = aiohttp.ClientTimeout(total=30)
-        self._headers = {
-            "User-Agent": "GE-Spot/1.0",
-            "Accept": "application/json"
-        }
+        self._headers = {"User-Agent": "GE-Spot/1.0", "Accept": "application/json"}
 
-    async def get(self, url: str, params: Optional[Dict[str, Any]] = None,
-                 headers: Optional[Dict[str, str]] = None, timeout: Optional[int] = None,
-                 encoding: Optional[str] = None) -> Any:
+    async def get(
+        self,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        timeout: Optional[int] = None,
+        encoding: Optional[str] = None,
+    ) -> Any:
         """Perform a GET request with error handling.
 
         Args:
@@ -37,7 +41,7 @@ class ApiClient:
             params: Optional query parameters
             headers: Optional request headers
             timeout: Optional timeout in seconds
-            encoding: Optional encoding for text responses (e.g., 'utf-8', 'iso-8859-1')
+            encoding: Optional encoding for text responses (e.g. 'utf-8', 'iso-8859-1')
 
         Returns:
             The response data as a dictionary or string depending on content type
@@ -48,23 +52,28 @@ class ApiClient:
         async with self._semaphore:
             try:
                 if self.session:
-                    async with self.session.get(url, params=params, headers=merged_headers,
-                                              timeout=timeout_obj) as response:
+                    async with self.session.get(
+                        url, params=params, headers=merged_headers, timeout=timeout_obj
+                    ) as response:
                         # HTTP 204 = No Content - data not published yet (not an error)
                         if response.status == 204:
-                            _LOGGER.info(f"API returned 204 (No Content) - data not yet published: {url}")
+                            _LOGGER.info(
+                                f"API returned 204 (No Content) - data not yet published: {url}"
+                            )
                             return {"status": 204, "message": "Data not yet published"}
 
                         if response.status != 200:
-                            _LOGGER.error(f"API request failed with status {response.status}: {url}")
+                            _LOGGER.error(
+                                f"API request failed with status {response.status}: {url}"
+                            )
                             return {}
 
                         # Check content type to determine how to parse the response
-                        content_type = response.headers.get('Content-Type', '').lower()
+                        content_type = response.headers.get("Content-Type", "").lower()
 
-                        if 'application/json' in content_type:
+                        if "application/json" in content_type:
                             return await response.json()
-                        elif 'text/xml' in content_type or 'application/xml' in content_type:
+                        elif "text/xml" in content_type or "application/xml" in content_type:
                             return await response.text(encoding=encoding)
                         else:
                             # Try JSON first, fall back to text if that fails
@@ -74,23 +83,28 @@ class ApiClient:
                                 return await response.text(encoding=encoding)
                 else:
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(url, params=params, headers=merged_headers,
-                                             timeout=timeout_obj) as response:
+                        async with session.get(
+                            url, params=params, headers=merged_headers, timeout=timeout_obj
+                        ) as response:
                             # HTTP 204 = No Content - data not published yet (not an error)
                             if response.status == 204:
-                                _LOGGER.info(f"API returned 204 (No Content) - data not yet published: {url}")
+                                _LOGGER.info(
+                                    f"API returned 204 (No Content) - data not yet published: {url}"
+                                )
                                 return {"status": 204, "message": "Data not yet published"}
 
                             if response.status != 200:
-                                _LOGGER.error(f"API request failed with status {response.status}: {url}")
+                                _LOGGER.error(
+                                    f"API request failed with status {response.status}: {url}"
+                                )
                                 return {}
 
                             # Check content type to determine how to parse the response
-                            content_type = response.headers.get('Content-Type', '').lower()
+                            content_type = response.headers.get("Content-Type", "").lower()
 
-                            if 'application/json' in content_type:
+                            if "application/json" in content_type:
                                 return await response.json()
-                            elif 'text/xml' in content_type or 'application/xml' in content_type:
+                            elif "text/xml" in content_type or "application/xml" in content_type:
                                 return await response.text(encoding=encoding)
                             else:
                                 # Try JSON first, fall back to text if that fails
@@ -108,9 +122,15 @@ class ApiClient:
                 _LOGGER.error(f"Unexpected error in API request: {url} - {e}")
                 return {}
 
-    async def fetch(self, url: str, params: Optional[Dict[str, Any]] = None,
-                  headers: Optional[Dict[str, str]] = None, timeout: Optional[int] = None,
-                  encoding: Optional[str] = None, response_format: Optional[str] = None) -> Any:
+    async def fetch(
+        self,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, str]] = None,
+        timeout: Optional[int] = None,
+        encoding: Optional[str] = None,
+        response_format: Optional[str] = None,
+    ) -> Any:
         """Fetch data with improved error handling.
 
         Args:
@@ -129,21 +149,24 @@ class ApiClient:
 
         # Adjust Accept header based on response_format
         if response_format:
-            if response_format.lower() == 'json':
-                merged_headers['Accept'] = 'application/json'
-            elif response_format.lower() == 'xml':
-                merged_headers['Accept'] = 'application/xml, text/xml'
-            elif response_format.lower() == 'text' or response_format.lower() == 'csv':
-                merged_headers['Accept'] = 'text/plain, text/csv, */*'
+            if response_format.lower() == "json":
+                merged_headers["Accept"] = "application/json"
+            elif response_format.lower() == "xml":
+                merged_headers["Accept"] = "application/xml, text/xml"
+            elif response_format.lower() == "text" or response_format.lower() == "csv":
+                merged_headers["Accept"] = "text/plain, text/csv, */*"
 
         async with self._semaphore:
             try:
                 if self.session:
-                    async with self.session.get(url, params=params, headers=merged_headers,
-                                              timeout=timeout_obj) as response:
+                    async with self.session.get(
+                        url, params=params, headers=merged_headers, timeout=timeout_obj
+                    ) as response:
                         # Check for HTTP errors
                         if response.status != 200:
-                            _LOGGER.error(f"API request failed with status {response.status}: {url}")
+                            _LOGGER.error(
+                                f"API request failed with status {response.status}: {url}"
+                            )
 
                             # Try to get more detailed error information
                             try:
@@ -152,8 +175,10 @@ class ApiClient:
                                 return {
                                     "error": True,
                                     "status_code": response.status,
-                                    "message": error_text[:500] if len(error_text) > 500 else error_text,
-                                    "url": url
+                                    "message": (
+                                        error_text[:500] if len(error_text) > 500 else error_text
+                                    ),
+                                    "url": url,
                                 }
                             except Exception as e:
                                 _LOGGER.debug(f"Could not extract error text: {e}")
@@ -162,26 +187,26 @@ class ApiClient:
                                     "error": True,
                                     "status_code": response.status,
                                     "message": f"HTTP {response.status}",
-                                    "url": url
+                                    "url": url,
                                 }
 
                         # Process successful response based on format parameter or content type
                         if response_format:
-                            if response_format.lower() in ['text', 'csv']:
+                            if response_format.lower() in ["text", "csv"]:
                                 return await response.text(encoding=encoding)
-                            elif response_format.lower() == 'json':
+                            elif response_format.lower() == "json":
                                 return await response.json()
-                            elif response_format.lower() == 'xml':
+                            elif response_format.lower() == "xml":
                                 return await response.text(encoding=encoding)
 
                         # If no specific format requested, check content type
-                        content_type = response.headers.get('Content-Type', '').lower()
+                        content_type = response.headers.get("Content-Type", "").lower()
 
-                        if 'application/json' in content_type:
+                        if "application/json" in content_type:
                             return await response.json()
-                        elif 'text/xml' in content_type or 'application/xml' in content_type:
+                        elif "text/xml" in content_type or "application/xml" in content_type:
                             return await response.text(encoding=encoding)
-                        elif 'text/csv' in content_type or 'text/plain' in content_type:
+                        elif "text/csv" in content_type or "text/plain" in content_type:
                             return await response.text(encoding=encoding)
                         else:
                             # Try JSON first, fall back to text if that fails
@@ -192,18 +217,25 @@ class ApiClient:
                 else:
                     # Create temporary session if none exists
                     async with aiohttp.ClientSession() as session:
-                        async with session.get(url, params=params, headers=merged_headers,
-                                             timeout=timeout_obj) as response:
+                        async with session.get(
+                            url, params=params, headers=merged_headers, timeout=timeout_obj
+                        ) as response:
                             if response.status != 200:
-                                _LOGGER.error(f"API request failed with status {response.status}: {url}")
+                                _LOGGER.error(
+                                    f"API request failed with status {response.status}: {url}"
+                                )
 
                                 try:
                                     error_text = await response.text(encoding=encoding)
                                     return {
                                         "error": True,
                                         "status_code": response.status,
-                                        "message": error_text[:500] if len(error_text) > 500 else error_text,
-                                        "url": url
+                                        "message": (
+                                            error_text[:500]
+                                            if len(error_text) > 500
+                                            else error_text
+                                        ),
+                                        "url": url,
                                     }
                                 except Exception as e:
                                     _LOGGER.debug(f"Could not extract error text: {e}")
@@ -211,26 +243,26 @@ class ApiClient:
                                         "error": True,
                                         "status_code": response.status,
                                         "message": f"HTTP {response.status}",
-                                        "url": url
+                                        "url": url,
                                     }
 
                             # Process successful response based on format parameter or content type
                             if response_format:
-                                if response_format.lower() in ['text', 'csv']:
+                                if response_format.lower() in ["text", "csv"]:
                                     return await response.text(encoding=encoding)
-                                elif response_format.lower() == 'json':
+                                elif response_format.lower() == "json":
                                     return await response.json()
-                                elif response_format.lower() == 'xml':
+                                elif response_format.lower() == "xml":
                                     return await response.text(encoding=encoding)
 
                             # If no specific format requested, check content type
-                            content_type = response.headers.get('Content-Type', '').lower()
+                            content_type = response.headers.get("Content-Type", "").lower()
 
-                            if 'application/json' in content_type:
+                            if "application/json" in content_type:
                                 return await response.json()
-                            elif 'text/xml' in content_type or 'application/xml' in content_type:
+                            elif "text/xml" in content_type or "application/xml" in content_type:
                                 return await response.text(encoding=encoding)
-                            elif 'text/csv' in content_type or 'text/plain' in content_type:
+                            elif "text/csv" in content_type or "text/plain" in content_type:
                                 return await response.text(encoding=encoding)
                             else:
                                 try:
@@ -249,8 +281,9 @@ class ApiClient:
 
     async def close(self) -> None:
         """Close the session if it was created by this instance."""
-        if self.session and not hasattr(self.session, '_is_external'):
+        if self.session and not hasattr(self.session, "_is_external"):
             await self.session.close()
+
 
 class ApiFallbackManager:
     """Manage API fallbacks with priority-based retries."""
@@ -315,5 +348,7 @@ class ApiFallbackManager:
             except Exception as e:
                 _LOGGER.error(f"Error fetching data from {api_name}: {e}")
 
-        _LOGGER.error(f"Failed to fetch data from any source. Attempted: {', '.join(self.attempted_sources)}")
+        _LOGGER.error(
+            f"Failed to fetch data from any source. Attempted: {', '.join(self.attempted_sources)}"
+        )
         return None

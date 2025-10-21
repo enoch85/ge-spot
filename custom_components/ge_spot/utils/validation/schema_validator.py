@@ -1,4 +1,5 @@
 """Schema validator for data validation."""
+
 import logging
 import re
 from typing import Any
@@ -7,6 +8,7 @@ from .schema import Schema
 from .validation_error import ValidationError
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class SchemaValidator:
     """Schema validator for data validation."""

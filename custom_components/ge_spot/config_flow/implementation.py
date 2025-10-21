@@ -1,4 +1,5 @@
 """Config flow implementation for GE-Spot integration."""
+
 import logging
 import voluptuous as vol
 import hashlib
@@ -32,6 +33,7 @@ from .schemas import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for GE-Spot integration."""
@@ -85,7 +87,9 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._abort_if_unique_id_configured()
 
                 # Set default currency based on area
-                self._data[Config.CURRENCY] = CurrencyInfo.REGION_TO_CURRENCY.get(area, Currency.EUR)
+                self._data[Config.CURRENCY] = CurrencyInfo.REGION_TO_CURRENCY.get(
+                    area, Currency.EUR
+                )
 
                 # Proceed to source priority step
                 return await self.async_step_source_priority()
@@ -105,7 +109,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 step_id="user",
                 data_schema=get_user_schema(available_regions),
                 errors=self._errors,
-                description_placeholders={"data_description": "data_description"}
+                description_placeholders={"data_description": "data_description"},
             )
         except Exception as e:
             _LOGGER.error(f"Failed to create user form: {e}")
@@ -113,7 +117,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 step_id="user",
                 data_schema=vol.Schema({vol.Required(Config.AREA): str}),
                 errors=self._errors,
-                description_placeholders={"data_description": "data_description"}
+                description_placeholders={"data_description": "data_description"},
             )
 
     async def async_step_source_priority(self, user_input=None) -> FlowResult:
@@ -160,7 +164,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="source_priority",
             data_schema=get_source_priority_schema(self._supported_sources),
             errors=self._errors,
-            description_placeholders={"data_description": "data_description"}
+            description_placeholders={"data_description": "data_description"},
         )
 
     async def async_step_api_keys(self, user_input=None) -> FlowResult:
@@ -173,8 +177,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 entsoe_key = user_input.get(f"{Source.ENTSOE}_api_key")
                 if entsoe_key:
                     valid_key = await entsoe.validate_api_key(
-                        entsoe_key,
-                        self._data.get(Config.AREA)
+                        entsoe_key, self._data.get(Config.AREA)
                     )
 
                     if valid_key:
@@ -205,7 +208,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="api_keys",
             data_schema=get_api_keys_schema(self._data.get(Config.AREA)),
             errors=self._errors,
-            description_placeholders={"data_description": "data_description"}
+            description_placeholders={"data_description": "data_description"},
         )
 
     async def async_step_stromligning_config(self, user_input=None) -> FlowResult:
@@ -235,7 +238,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="stromligning_config",
             data_schema=get_stromligning_config_schema(),
             errors=self._errors,
-            description_placeholders={"data_description": "data_description"}
+            description_placeholders={"data_description": "data_description"},
         )
 
     def _create_entry(self) -> FlowResult:
@@ -247,8 +250,6 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         # Set defaults if not provided
         if Config.VAT not in self._data:
             self._data[Config.VAT] = Defaults.VAT
-        if Config.UPDATE_INTERVAL not in self._data:
-            self._data[Config.UPDATE_INTERVAL] = Defaults.UPDATE_INTERVAL
         # Display unit is now required in schema
         if Config.TIMEZONE_REFERENCE not in self._data:
             self._data[Config.TIMEZONE_REFERENCE] = Defaults.TIMEZONE_REFERENCE
@@ -256,7 +257,9 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         # Ensure that any supplier_id settings are properly saved
         # This is crucial for Stromligning operation
         if self._requires_stromligning_config and Config.CONF_STROMLIGNING_SUPPLIER in self._data:
-            _LOGGER.debug(f"Saving Stromligning supplier ID: {self._data[Config.CONF_STROMLIGNING_SUPPLIER]}")
+            _LOGGER.debug(
+                f"Saving Stromligning supplier ID: {self._data[Config.CONF_STROMLIGNING_SUPPLIER]}"
+            )
         else:
             _LOGGER.debug(f"No Stromligning supplier needed or provided")
 
@@ -280,4 +283,5 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         """Get the options flow for this handler."""
         from .options import GSpotOptionsFlow
+
         return GSpotOptionsFlow(config_entry)

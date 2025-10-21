@@ -1,4 +1,5 @@
 """Base sensor for electricity prices."""
+
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any
@@ -20,6 +21,7 @@ from ..const.network import Network
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class BaseElectricityPriceSensor(SensorEntity):
     """Base sensor for electricity prices."""
 
@@ -29,10 +31,12 @@ class BaseElectricityPriceSensor(SensorEntity):
     # Exclude large interval price arrays from database to prevent bloat
     # These are operational data for automations, not historical data
     # The main sensor value (current_price) provides historical tracking
-    _unrecorded_attributes = frozenset({
-        "today_interval_prices",
-        "tomorrow_interval_prices",
-    })
+    _unrecorded_attributes = frozenset(
+        {
+            "today_interval_prices",
+            "tomorrow_interval_prices",
+        }
+    )
 
     def __init__(self, coordinator, config_data, sensor_type, name_suffix):
         """Initialize the base sensor."""
@@ -41,7 +45,7 @@ class BaseElectricityPriceSensor(SensorEntity):
             raise TypeError("config_data must be a dictionary")
 
         # Store timezone service for EV Smart Charging attribute conversion
-        self._tz_service = getattr(coordinator, '_tz_service', None)
+        self._tz_service = getattr(coordinator, "_tz_service", None)
 
         self._area = config_data.get(Attributes.AREA)
         self._vat = config_data.get(Attributes.VAT, 0)
@@ -49,10 +53,16 @@ class BaseElectricityPriceSensor(SensorEntity):
         self._sensor_type = sensor_type
 
         # Display settings
-        self._display_unit = config_data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT) # Get from config_data
+        self._display_unit = config_data.get(
+            Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT
+        )  # Get from config_data
         # Determine if subunit should be used based on the display_unit setting
-        self._use_subunit = self._display_unit == DisplayUnit.CENTS # Correctly determine based on _display_unit
-        self._currency = config_data.get(Attributes.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(self._area))
+        self._use_subunit = (
+            self._display_unit == DisplayUnit.CENTS
+        )  # Correctly determine based on _display_unit
+        self._currency = config_data.get(
+            Attributes.CURRENCY, CurrencyInfo.REGION_TO_CURRENCY.get(self._area)
+        )
 
         # Create entity ID and name
         if self._area:
@@ -69,7 +79,6 @@ class BaseElectricityPriceSensor(SensorEntity):
             # self._attr_unique_id = f"gespot_{sensor_type}_invalid_area"
             # Option 2: Raise an error to clearly signal failed setup (might be better)
             raise ValueError("Area configuration is missing, cannot initialize sensor.")
-
 
         # Set unit based on display_unit configuration
         if self._use_subunit:
@@ -131,7 +140,9 @@ class BaseElectricityPriceSensor(SensorEntity):
 
         # Add rate limit info (dynamic only)
         if "next_fetch_allowed_in_seconds" in self.coordinator.data:
-            source_info["next_fetch_allowed_in_seconds"] = self.coordinator.data["next_fetch_allowed_in_seconds"]
+            source_info["next_fetch_allowed_in_seconds"] = self.coordinator.data[
+                "next_fetch_allowed_in_seconds"
+            ]
 
         # Only add source_info if it contains data
         if source_info:
@@ -161,12 +172,15 @@ class BaseElectricityPriceSensor(SensorEntity):
 
                 data_validity_info["interval_count"] = validity_dict.get("interval_count", 0)
                 data_validity_info["today_intervals"] = validity_dict.get("today_interval_count", 0)
-                data_validity_info["tomorrow_intervals"] = validity_dict.get("tomorrow_interval_count", 0)
-                data_validity_info["has_current_interval"] = validity_dict.get("has_current_interval", False)
+                data_validity_info["tomorrow_intervals"] = validity_dict.get(
+                    "tomorrow_interval_count", 0
+                )
+                data_validity_info["has_current_interval"] = validity_dict.get(
+                    "has_current_interval", False
+                )
 
                 # Calculate intervals remaining (if we have validity data)
                 if validity_dict.get("data_valid_until"):
-                    from homeassistant.util import dt as dt_util
                     from ..coordinator.data_validity import DataValidity
 
                     try:
@@ -210,17 +224,23 @@ class BaseElectricityPriceSensor(SensorEntity):
                 today_list = []
                 for hhmm_key in sorted(today_prices.keys()):
                     try:
-                        hour, minute = map(int, hhmm_key.split(':'))
+                        hour, minute = map(int, hhmm_key.split(":"))
                         dt = datetime(
-                            today_date.year, today_date.month, today_date.day,
-                            hour, minute, 0,
-                            tzinfo=target_tz
+                            today_date.year,
+                            today_date.month,
+                            today_date.day,
+                            hour,
+                            minute,
+                            0,
+                            tzinfo=target_tz,
                         )
                         price = today_prices[hhmm_key]
-                        today_list.append({
-                            "time": dt,  # datetime object (not ISO string!)
-                            "value": round(float(price), 4)
-                        })
+                        today_list.append(
+                            {
+                                "time": dt,  # datetime object (not ISO string!)
+                                "value": round(float(price), 4),
+                            }
+                        )
                     except (ValueError, AttributeError) as e:
                         _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
                         continue
@@ -242,17 +262,23 @@ class BaseElectricityPriceSensor(SensorEntity):
                 tomorrow_list = []
                 for hhmm_key in sorted(tomorrow_prices.keys()):
                     try:
-                        hour, minute = map(int, hhmm_key.split(':'))
+                        hour, minute = map(int, hhmm_key.split(":"))
                         dt = datetime(
-                            tomorrow_date.year, tomorrow_date.month, tomorrow_date.day,
-                            hour, minute, 0,
-                            tzinfo=target_tz
+                            tomorrow_date.year,
+                            tomorrow_date.month,
+                            tomorrow_date.day,
+                            hour,
+                            minute,
+                            0,
+                            tzinfo=target_tz,
                         )
                         price = tomorrow_prices[hhmm_key]
-                        tomorrow_list.append({
-                            "time": dt,  # datetime object (not ISO string!)
-                            "value": round(float(price), 4)
-                        })
+                        tomorrow_list.append(
+                            {
+                                "time": dt,  # datetime object (not ISO string!)
+                                "value": round(float(price), 4),
+                            }
+                        )
                     except (ValueError, AttributeError) as e:
                         _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
                         continue
@@ -271,9 +297,7 @@ class BaseElectricityPriceSensor(SensorEntity):
 
     async def async_added_to_hass(self):
         """When entity is added to hass."""
-        self.async_on_remove(
-            self.coordinator.async_add_listener(self.async_write_ha_state)
-        )
+        self.async_on_remove(self.coordinator.async_add_listener(self.async_write_ha_state))
 
     async def async_update(self):
         """Update the entity."""

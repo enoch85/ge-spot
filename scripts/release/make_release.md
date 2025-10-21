@@ -11,9 +11,9 @@ A release PR is created to update the version in manifest.json and goes through 
 
 This phase involves preparing the codebase for release:
 
-1. **Version Update**: The version in `custom_components/ovms/manifest.json` is updated to match the new release version (e.g., "v0.3.24").
+1. **Version Update**: The version in `custom_components/ovms/manifest.json` is updated to match the new release version (e.g. "v0.3.24").
 
-2. **Release Branch Creation**: A branch named `release/vX.Y.Z` (e.g., `release/v0.3.24`) is created with this change.
+2. **Release Branch Creation**: A branch named `release/vX.Y.Z` (e.g. `release/v0.3.24`) is created with this change.
 
 3. **PR Creation**: A pull request is opened using this branch, targeting the main branch.
 
@@ -43,7 +43,7 @@ After the PR is merged, a tag is pushed to create the actual release.
 
 This phase creates the actual GitHub release:
 
-1. **Tag Creation**: After the PR is merged to main, a Git tag matching the version (e.g., `v0.3.24`) is created and pushed to GitHub.
+1. **Tag Creation**: After the PR is merged to main, a Git tag matching the version (e.g. `v0.3.24`) is created and pushed to GitHub.
 
 2. **Release Workflow Trigger**: When a tag starting with "v" is pushed, the `release.yml` workflow is automatically triggered.
 

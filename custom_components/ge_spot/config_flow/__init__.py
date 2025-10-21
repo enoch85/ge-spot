@@ -1,4 +1,5 @@
 """Config flow for GE-Spot integration."""
+
 import logging
 
 from homeassistant.config_entries import ConfigFlow, OptionsFlow
@@ -10,6 +11,7 @@ from .implementation import GSpotConfigFlow
 from .options import GSpotOptionsFlow
 
 _LOGGER = logging.getLogger(__name__)
+
 
 # This ensures the implementation of ConfigFlow is imported and used
 async def async_get_options_flow(config_entry):

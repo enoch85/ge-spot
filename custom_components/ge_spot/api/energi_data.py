@@ -1,4 +1,5 @@
 """API handler for Energi Data Service."""
+
 import logging
 import datetime
 from datetime import timezone, timedelta, time
@@ -23,6 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 # Since September 30, 2025: DayAheadPrices provides native 15-minute intervals
 # Before: Elspotprices provided hourly data
 BASE_URL = "https://api.energidataservice.dk/dataset/DayAheadPrices"
+
 
 class EnergiDataAPI(BasePriceAPI):
     """API client for Energi Data Service."""
@@ -49,7 +51,7 @@ class EnergiDataAPI(BasePriceAPI):
         Args:
             area: Area code
             session: Optional aiohttp session
-            **kwargs: Additional keyword arguments (e.g., reference_time)
+            **kwargs: Additional keyword arguments (e.g. reference_time)
 
         Returns:
             Dictionary containing raw data and metadata for the parser.
@@ -57,7 +59,7 @@ class EnergiDataAPI(BasePriceAPI):
         client = ApiClient(session=session or self.session)
         try:
             # Use UTC for all reference times
-            reference_time = kwargs.get('reference_time')
+            reference_time = kwargs.get("reference_time")
             if reference_time is None:
                 reference_time = datetime.datetime.now(timezone.utc)
             else:
@@ -74,19 +76,22 @@ class EnergiDataAPI(BasePriceAPI):
             # Fetch tomorrow's data after 13:00 CET, with retry logic
             now_utc = datetime.datetime.now(timezone.utc)
             # Use the imported function directly
-            cet_tz = get_timezone_object("Europe/Copenhagen") # Use Copenhagen time for EnergiDataService
+            cet_tz = get_timezone_object(
+                "Europe/Copenhagen"
+            )  # Use Copenhagen time for EnergiDataService
             now_cet = now_utc.astimezone(cet_tz)
             raw_tomorrow = None
 
-            # Define expected release hour (e.g., 13:00 CET)
+            # Define expected release hour (e.g. 13:00 CET)
             release_hour_cet = 13
-            # Define a buffer hour to consider it a failure (e.g., 16:00 CET)
+            # Define a buffer hour to consider it a failure (e.g. 16:00 CET)
             failure_check_hour_cet = 16
 
             should_fetch_tomorrow = now_cet.hour >= release_hour_cet
 
             if should_fetch_tomorrow:
-                async def fetch_tomorrow_task(): # Renamed to avoid conflict
+
+                async def fetch_tomorrow_task():  # Renamed to avoid conflict
                     return await self._fetch_data(client, area, tomorrow)
 
                 # Basic check for tomorrow's data presence
@@ -95,25 +100,29 @@ class EnergiDataAPI(BasePriceAPI):
 
                 raw_tomorrow = await fetch_with_retry(
                     fetch_tomorrow_task,
-                    is_tomorrow_data_present, # Basic check on raw data presence
+                    is_tomorrow_data_present,  # Basic check on raw data presence
                     retry_interval=1800,
                     end_time=time(23, 50),
-                    local_tz_name=TimezoneName.EUROPE_COPENHAGEN
+                    local_tz_name=TimezoneName.EUROPE_COPENHAGEN,
                 )
 
                 # --- Fallback Trigger Logic ---
-                if now_cet.hour >= failure_check_hour_cet and not is_tomorrow_data_present(raw_tomorrow):
+                if now_cet.hour >= failure_check_hour_cet and not is_tomorrow_data_present(
+                    raw_tomorrow
+                ):
                     _LOGGER.warning(
                         f"EnergiDataService fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
                         f"but was not available or invalid. Triggering fallback."
                     )
-                    return None # Signal failure to FallbackManager
+                    return None  # Signal failure to FallbackManager
 
             # --- Final Check for Today's Data ---
             # Check if today's data is valid before proceeding
             if not raw_today or not isinstance(raw_today, dict) or not raw_today.get("records"):
-                 _LOGGER.error(f"EnergiDataService fetch failed for area {area}: Today's data is missing or invalid.")
-                 return None # Signal failure if today's data is bad
+                _LOGGER.error(
+                    f"EnergiDataService fetch failed for area {area}: Today's data is missing or invalid."
+                )
+                return None  # Signal failure if today's data is bad
 
             # --- No Parsing Here ---
             # The parser will be called later by DataProcessor
@@ -127,8 +136,8 @@ class EnergiDataAPI(BasePriceAPI):
 
             return {
                 "raw_data": final_raw_data,
-                "timezone": "Europe/Copenhagen", # EnergiDataService API timezone context
-                "currency": Currency.DKK, # Use constant
+                "timezone": "Europe/Copenhagen",  # EnergiDataService API timezone context
+                "currency": Currency.DKK,  # Use constant
                 "area": area,
                 "source": self.source_type,
                 "fetched_at": datetime.datetime.now(timezone.utc).isoformat(),
@@ -199,12 +208,23 @@ class EnergiDataAPI(BasePriceAPI):
             response = await client.fetch(BASE_URL, params=params)
 
             # Check if we got a valid response with records
-            if response and isinstance(response, dict) and "records" in response and response["records"]:
-                _LOGGER.info(f"Successfully fetched Energi Data Service data for {start_str} to {end_str}")
+            if (
+                response
+                and isinstance(response, dict)
+                and "records" in response
+                and response["records"]
+            ):
+                _LOGGER.info(
+                    f"Successfully fetched Energi Data Service data for {start_str} to {end_str}"
+                )
                 return response
             else:
-                _LOGGER.debug(f"No valid data from Energi Data Service for {start_str} to {end_str}, trying next range")
+                _LOGGER.debug(
+                    f"No valid data from Energi Data Service for {start_str} to {end_str}, trying next range"
+                )
 
         # If we've tried all date ranges and still have no data, log a warning
-        _LOGGER.warning("No valid data found from Energi Data Service after trying multiple date ranges")
+        _LOGGER.warning(
+            "No valid data found from Energi Data Service after trying multiple date ranges"
+        )
         return None

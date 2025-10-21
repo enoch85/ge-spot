@@ -1,7 +1,9 @@
 """Energy-related constants for GE-Spot integration."""
 
+
 class EnergyUnit:
     """Energy unit constants."""
+
     MWH = "MWh"
     KWH = "kWh"
     WH = "Wh"

@@ -1,7 +1,9 @@
 """Currency constants for GE-Spot integration."""
 
+
 class Currency:
     """Currency code constants."""
+
     EUR = "EUR"  # Euro
     SEK = "SEK"  # Swedish krona
     NOK = "NOK"  # Norwegian krone
@@ -110,8 +112,8 @@ class CurrencyInfo:
         Currency.GEL: 100,  # Georgian lari to tetri
         Currency.AZN: 100,  # Azerbaijani manat to qəpik
         Currency.USD: 100,  # US dollar to cents
-        Currency.JPY: 1,    # Japanese Yen is already in the smallest unit
-        Currency.CENTS: 1,   # cents are already in the smallest unit
+        Currency.JPY: 1,  # Japanese Yen is already in the smallest unit
+        Currency.CENTS: 1,  # cents are already in the smallest unit
     }
 
     # Currency subunit names

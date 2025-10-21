@@ -1,4 +1,5 @@
 """Options flow for GE-Spot integration."""
+
 import logging
 import voluptuous as vol
 
@@ -13,12 +14,10 @@ from ..const.areas import AreaMapping
 from ..const.time import TimezoneReference
 from ..api import get_sources_for_region, create_api
 from ..api import entsoe
-from .schemas import (
-    get_options_schema,
-    get_default_values
-)
+from .schemas import get_options_schema, get_default_values
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class GSpotOptionsFlow(OptionsFlow):
     """Handle GE-Spot options."""
@@ -65,7 +64,9 @@ class GSpotOptionsFlow(OptionsFlow):
                                 # Update self._data so subsequent updates see it
                                 self._data[Config.API_KEY] = api_key
                             else:
-                                self._errors[f"{Source.ENTSOE}_api_key"] = "invalid_api_key_in_options"
+                                self._errors[f"{Source.ENTSOE}_api_key"] = (
+                                    "invalid_api_key_in_options"
+                                )
                                 return await self._show_form()
                         else:
                             # Key unchanged, but ensure it's in entry.data
@@ -74,7 +75,7 @@ class GSpotOptionsFlow(OptionsFlow):
                                 updated_data[Config.API_KEY] = api_key
                                 self.hass.config_entries.async_update_entry(
                                     self.hass.config_entries.async_get_entry(self.entry_id),
-                                    data=updated_data
+                                    data=updated_data,
                                 )
 
                     # Remove the API key field from options to avoid duplication
@@ -84,7 +85,30 @@ class GSpotOptionsFlow(OptionsFlow):
                 if Config.VAT in user_input:
                     user_input[Config.VAT] = user_input[Config.VAT] / 100
 
-                # Handle source priority, timezone reference, and Stromligning supplier updates if present
+                # Check if price-affecting settings have changed
+                # These settings require cache invalidation because cached prices were calculated with old values
+                price_affecting_settings = [
+                    Config.VAT,
+                    Config.ADDITIONAL_TARIFF,
+                    Config.ENERGY_TAX,
+                    Config.DISPLAY_UNIT,
+                ]
+                settings_changed = False
+                for setting in price_affecting_settings:
+                    if setting in user_input:
+                        old_value = self._options.get(
+                            setting, Defaults.__dict__.get(setting.upper(), None)
+                        )
+                        new_value = user_input[setting]
+                        if old_value != new_value:
+                            _LOGGER.info(
+                                f"Price-affecting setting '{setting}' changed from {old_value} to {new_value}. "
+                                f"Cache will be cleared."
+                            )
+                            settings_changed = True
+                            break
+
+                # Handle source priority, timezone reference, and Stromlinging supplier updates if present
                 # ALWAYS update entry.data to ensure API key and other data fields are persisted
                 updated_data = dict(self._data)
                 data_changed = False
@@ -95,7 +119,9 @@ class GSpotOptionsFlow(OptionsFlow):
                     data_changed = True
 
                 if Config.TIMEZONE_REFERENCE in user_input:
-                    _LOGGER.debug(f"Saving timezone reference setting: {user_input[Config.TIMEZONE_REFERENCE]}")
+                    _LOGGER.debug(
+                        f"Saving timezone reference setting: {user_input[Config.TIMEZONE_REFERENCE]}"
+                    )
                     updated_data[Config.TIMEZONE_REFERENCE] = user_input[Config.TIMEZONE_REFERENCE]
                     # Keep in options as well
                     data_changed = True
@@ -112,16 +138,37 @@ class GSpotOptionsFlow(OptionsFlow):
                 # Update the config entry data (this includes the API key from self._data)
                 entry = self.hass.config_entries.async_get_entry(self.entry_id)
                 self.hass.config_entries.async_update_entry(entry, data=updated_data)
-                _LOGGER.debug(f"Updated entry.data with keys: {list(updated_data.keys())}, api_key present: {Config.API_KEY in updated_data}")
+                _LOGGER.debug(
+                    f"Updated entry.data with keys: {list(updated_data.keys())}, api_key present: {Config.API_KEY in updated_data}"
+                )
+
+                # Clear cache if price-affecting settings changed
+                if settings_changed:
+                    coordinator = self.hass.data[DOMAIN].get(self.entry_id)
+                    if coordinator and hasattr(coordinator, "clear_cache"):
+                        try:
+                            import inspect
+
+                            if inspect.iscoroutinefunction(coordinator.clear_cache):
+                                await coordinator.clear_cache()
+                            else:
+                                coordinator.clear_cache()
+                            _LOGGER.info(
+                                f"Cache cleared automatically due to price-affecting settings change for {self._area}"
+                            )
+                        except Exception as e:
+                            _LOGGER.warning(f"Failed to clear cache automatically: {e}")
 
                 # Handle clear cache action if present
                 if "clear_cache" in user_input and user_input["clear_cache"]:
+
                     # Get the coordinator from hass data
                     coordinator = self.hass.data[DOMAIN].get(self.entry_id)
                     if coordinator and hasattr(coordinator, "clear_cache"):
                         try:
                             # Check if the clear_cache method is a coroutine function
                             import inspect
+
                             if inspect.iscoroutinefunction(coordinator.clear_cache):
                                 await coordinator.clear_cache()
                             else:
@@ -157,34 +204,47 @@ class GSpotOptionsFlow(OptionsFlow):
         try:
             # Get default values from existing data
             defaults = get_default_values(self._options, self._data)
+            _LOGGER.debug(f"Defaults for options form: {defaults}")
 
             # Build schema for options form, passing the area
             schema = get_options_schema(defaults, self._supported_sources, self._area)
+            _LOGGER.debug("Successfully created options schema")
 
             # Show options form
             return self.async_show_form(
                 step_id="init",
                 data_schema=schema,
                 errors=self._errors,
-                description_placeholders={"data_description": "data_description"}
+                description_placeholders={"data_description": "data_description"},
             )
         except Exception as e:
-            _LOGGER.error(f"Failed to create options form: {e}")
+            _LOGGER.error(f"Failed to create options form: {e}", exc_info=True)
             self._errors["base"] = "unknown"
 
             # Provide a fallback schema if needed
             return self.async_show_form(
                 step_id="init",
-                data_schema=vol.Schema({
-                    vol.Optional(Config.VAT, default=0): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-                    vol.Optional(Config.UPDATE_INTERVAL, default=60): vol.Coerce(int),
-                    vol.Optional(Config.TIMEZONE_REFERENCE, default=Defaults.TIMEZONE_REFERENCE): vol.In({
-                        TimezoneReference.HOME_ASSISTANT: TimezoneReference.OPTIONS[TimezoneReference.HOME_ASSISTANT],
-                        TimezoneReference.LOCAL_AREA: TimezoneReference.OPTIONS[TimezoneReference.LOCAL_AREA]
-                    }),
-                }),
+                data_schema=vol.Schema(
+                    {
+                        vol.Optional(Config.VAT, default=0): vol.All(
+                            vol.Coerce(float), vol.Range(min=0, max=100)
+                        ),
+                        vol.Optional(
+                            Config.TIMEZONE_REFERENCE, default=Defaults.TIMEZONE_REFERENCE
+                        ): vol.In(
+                            {
+                                TimezoneReference.HOME_ASSISTANT: TimezoneReference.OPTIONS[
+                                    TimezoneReference.HOME_ASSISTANT
+                                ],
+                                TimezoneReference.LOCAL_AREA: TimezoneReference.OPTIONS[
+                                    TimezoneReference.LOCAL_AREA
+                                ],
+                            }
+                        ),
+                    }
+                ),
                 errors=self._errors,
-                description_placeholders={"data_description": "data_description"}
+                description_placeholders={"data_description": "data_description"},
             )
 
     async def _find_existing_api_key(self, source_type):
@@ -195,6 +255,7 @@ class GSpotOptionsFlow(OptionsFlow):
 
         # Then check other entries
         from ..const import DOMAIN
+
         existing_entries = self.hass.config_entries.async_entries(DOMAIN)
         for entry in existing_entries:
             if entry.entry_id == self.entry_id:

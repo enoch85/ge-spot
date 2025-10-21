@@ -48,16 +48,15 @@ class FallbackManager:
             return None
 
         for api_instance in api_instances:
-            source_name = getattr(api_instance, 'source_type', type(api_instance).__name__)
+            source_name = getattr(api_instance, "source_type", type(api_instance).__name__)
             attempted_sources.append(source_name)
 
             # Try each source with exponential backoff
             for attempt in range(Network.Defaults.RETRY_COUNT):
                 # Calculate timeout: base × (multiplier ^ attempt)
                 # No cap - let it grow naturally (2s, 6s, 18s)
-                timeout = (
-                    Network.Defaults.RETRY_BASE_TIMEOUT *
-                    (Network.Defaults.RETRY_TIMEOUT_MULTIPLIER ** attempt)
+                timeout = Network.Defaults.RETRY_BASE_TIMEOUT * (
+                    Network.Defaults.RETRY_TIMEOUT_MULTIPLIER**attempt
                 )
 
                 try:
@@ -69,11 +68,9 @@ class FallbackManager:
                     # Wrap the API call with timeout
                     data = await asyncio.wait_for(
                         api_instance.fetch_raw_data(
-                            area=area,
-                            session=session,
-                            reference_time=reference_time
+                            area=area, session=session, reference_time=reference_time
                         ),
-                        timeout=timeout
+                        timeout=timeout,
                     )
 
                     # Check if we got valid data
@@ -122,7 +119,7 @@ class FallbackManager:
                 except Exception as e:
                     _LOGGER.warning(
                         f"[{area}] '{source_name}' error on attempt {attempt + 1}: {e}",
-                        exc_info=True
+                        exc_info=True,
                     )
                     last_exception = e
                     # On unexpected error, don't retry this source, move to next
@@ -136,8 +133,4 @@ class FallbackManager:
             f"Attempted: {', '.join(attempted_sources)}. "
             f"Last error: {last_exception}"
         )
-        return {
-            "attempted_sources": attempted_sources,
-            "error": last_exception,
-            "has_data": False
-        }
+        return {"attempted_sources": attempted_sources, "error": last_exception, "has_data": False}

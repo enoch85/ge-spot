@@ -1,4 +1,5 @@
 """Timezone utility functions to avoid circular imports."""
+
 import logging
 from datetime import datetime, tzinfo, timedelta, timezone
 from typing import Dict, Any, Optional, Union
@@ -11,6 +12,7 @@ from ..const.api import SourceTimezone
 from ..const.areas import Timezone
 
 _LOGGER = logging.getLogger(__name__)
+
 
 def get_timezone_by_name(timezone_name: str) -> str:
     """Get timezone identifier for a given name or area.
@@ -38,6 +40,7 @@ def get_timezone_by_name(timezone_name: str) -> str:
     _LOGGER.warning("Could not resolve timezone for name: %s, using default", timezone_name)
     return TimezoneConstants.DEFAULT_FALLBACK
 
+
 def get_source_timezone(source: str, area: Optional[str] = None) -> str:
     """Get timezone for a specific API source.
 
@@ -54,12 +57,13 @@ def get_source_timezone(source: str, area: Optional[str] = None) -> str:
         return tz
 
     # If source is not a recognized Source constant, it might be a direct timezone string
-    if "/" in source:  # Looks like a timezone string (e.g., "Europe/Berlin")
+    if "/" in source:  # Looks like a timezone string (e.g. "Europe/Berlin")
         return source
 
     # Log clear error but return fallback
     _LOGGER.error(f"No timezone definition found for source: {source}")
     return TimezoneConstants.DEFAULT_FALLBACK
+
 
 def get_source_format(source: str) -> Optional[str]:
     """Get datetime format for a specific API source.
@@ -76,6 +80,7 @@ def get_source_format(source: str) -> Optional[str]:
         _LOGGER.debug(f"No specific datetime format defined for source: {source}")
 
     return format_str
+
 
 def get_timezone_object(timezone_id: str) -> tzinfo:
     """Get timezone object for a timezone ID.
@@ -94,7 +99,7 @@ def get_timezone_object(timezone_id: str) -> tzinfo:
         return timezone_id
 
     # Special case for UTC
-    if timezone_id in ('UTC', 'Z', 'GMT', 'GMT0', 'GMT+0', 'GMT-0'):
+    if timezone_id in ("UTC", "Z", "GMT", "GMT0", "GMT+0", "GMT-0"):
         return timezone.utc
 
     # Convert common timezone names to IANA names
@@ -104,10 +109,15 @@ def get_timezone_object(timezone_id: str) -> tzinfo:
         return zoneinfo.ZoneInfo(iana_timezone_id)
     except Exception as e:
         error_msg = f"Invalid source timezone identifier: {timezone_id}"
-        _LOGGER.error(f"Failed to get timezone object for {timezone_id} (as {iana_timezone_id}): {e}")
+        _LOGGER.error(
+            f"Failed to get timezone object for {timezone_id} (as {iana_timezone_id}): {e}"
+        )
         raise ValueError(error_msg)
 
-def convert_datetime(dt: datetime, target_tz: Union[str, tzinfo], source_tz: Optional[Union[str, tzinfo]] = None) -> datetime:
+
+def convert_datetime(
+    dt: datetime, target_tz: Union[str, tzinfo], source_tz: Optional[Union[str, tzinfo]] = None
+) -> datetime:
     """Convert datetime between timezones.
 
     Args:
@@ -152,6 +162,7 @@ def convert_datetime(dt: datetime, target_tz: Union[str, tzinfo], source_tz: Opt
 
     # Convert to target timezone
     return dt.astimezone(target_tz)
+
 
 def localize_datetime(dt: datetime, timezone_id: str) -> datetime:
     """Localize a naive datetime to a timezone.

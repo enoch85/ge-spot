@@ -1,4 +1,5 @@
 """Timestamp parsing with proper timezone handling."""
+
 import logging
 import re
 from datetime import datetime
@@ -12,6 +13,7 @@ from ..const.sources import Source
 from ..const.api import SourceTimezone
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class TimestampParser:
     """Parser for timestamps with timezone handling."""
@@ -32,7 +34,9 @@ class TimestampParser:
             source_tz = get_timezone_object(source_tz_str)
 
             if not source_tz:
-                error_msg = f"Invalid source timezone: {source_timezone}, cannot find timezone object"
+                error_msg = (
+                    f"Invalid source timezone: {source_timezone}, cannot find timezone object"
+                )
                 _LOGGER.error(error_msg)
                 raise ValueError(error_msg)
 
@@ -61,7 +65,7 @@ class TimestampParser:
             # Handle ENTSO-E specific format (typically UTC/Z timestamps or numeric format)
             if source_timezone == Source.ENTSOE:
                 # Handle ENTSOE numeric format like "202504121000"
-                if re.match(r'^\d{12}$', timestamp_str):
+                if re.match(r"^\d{12}$", timestamp_str):
                     format_str = SourceTimezone.API_FORMATS.get(Source.ENTSOE)
                     if format_str:
                         dt = datetime.strptime(timestamp_str, format_str)
@@ -69,10 +73,10 @@ class TimestampParser:
                         return dt
 
                 # Handle ISO with Z suffix (UTC)
-                if "T" in timestamp_str and timestamp_str.endswith('Z'):
-                    dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                if "T" in timestamp_str and timestamp_str.endswith("Z"):
+                    dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                     # If source timezone is not UTC, convert to it
-                    if str(source_tz) != 'UTC':
+                    if str(source_tz) != "UTC":
                         dt = dt.astimezone(source_tz)
                     return dt
 
@@ -88,7 +92,11 @@ class TimestampParser:
                 if "T" in timestamp_str:
                     # Try as ISO format first
                     try:
-                        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00') if timestamp_str.endswith('Z') else timestamp_str)
+                        dt = datetime.fromisoformat(
+                            timestamp_str.replace("Z", "+00:00")
+                            if timestamp_str.endswith("Z")
+                            else timestamp_str
+                        )
                         if dt.tzinfo is None:
                             dt = dt.replace(tzinfo=source_tz)
                         return dt
@@ -98,20 +106,20 @@ class TimestampParser:
 
             # Handle Stromligning specific format (typically Danish time with ISO format)
             if source_timezone == Source.STROMLIGNING:
-                if timestamp_str.endswith('Z'):
-                    dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                if timestamp_str.endswith("Z"):
+                    dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                     # Convert to source timezone if it's not UTC
-                    if str(source_tz) != 'UTC':
+                    if str(source_tz) != "UTC":
                         dt = dt.astimezone(source_tz)
                     return dt
 
             # Handle Nordpool format (typically ISO with explicit timezone or Z)
             if source_timezone == Source.NORDPOOL:
                 if "T" in timestamp_str:
-                    if timestamp_str.endswith('Z'):
-                        dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    if timestamp_str.endswith("Z"):
+                        dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                         # Convert to source timezone if it's not UTC
-                        if str(source_tz) != 'UTC':
+                        if str(source_tz) != "UTC":
                             dt = dt.astimezone(source_tz)
                         return dt
 
@@ -127,15 +135,15 @@ class TimestampParser:
                     pass
 
             # General ISO format handling
-            if 'T' in timestamp_str:
-                if timestamp_str.endswith('Z'):
+            if "T" in timestamp_str:
+                if timestamp_str.endswith("Z"):
                     # UTC timestamp with Z suffix
-                    dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                    dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                     # Convert to source timezone if needed
-                    if str(source_tz) != 'UTC':
+                    if str(source_tz) != "UTC":
                         dt = dt.astimezone(source_tz)
                     return dt
-                elif '+' in timestamp_str or '-' in timestamp_str and 'T' in timestamp_str:
+                elif "+" in timestamp_str or "-" in timestamp_str and "T" in timestamp_str:
                     # ISO with timezone offset
                     dt = datetime.fromisoformat(timestamp_str)
                     # Convert to source timezone if needed
@@ -146,7 +154,9 @@ class TimestampParser:
                     # Naive ISO format, add source timezone
                     dt = datetime.fromisoformat(timestamp_str)
                     dt = dt.replace(tzinfo=source_tz)
-                    _LOGGER.debug(f"Attached source timezone {source_timezone} to ISO timestamp {dt}")
+                    _LOGGER.debug(
+                        f"Attached source timezone {source_timezone} to ISO timestamp {dt}"
+                    )
                     return dt
 
         except ValueError as e:
@@ -161,7 +171,9 @@ class TimestampParser:
             elif dt.tzinfo != source_tz:
                 # Convert to the expected source timezone
                 dt = dt.astimezone(source_tz)
-                _LOGGER.debug(f"Converted datetime from {dt.tzinfo} to source timezone {source_timezone}")
+                _LOGGER.debug(
+                    f"Converted datetime from {dt.tzinfo} to source timezone {source_timezone}"
+                )
             return dt
 
         # Last resort: try custom parsing patterns
@@ -173,12 +185,14 @@ class TimestampParser:
             "%Y-%m-%d",
             "%Y/%m/%d",
             "%d.%m.%Y",
-            "%H:%M:%S"
+            "%H:%M:%S",
         ]:
             try:
                 dt = datetime.strptime(timestamp_str, fmt)
                 dt = dt.replace(tzinfo=source_tz)
-                _LOGGER.debug(f"Parsed timestamp {timestamp_str} with format {fmt} and timezone {source_timezone}")
+                _LOGGER.debug(
+                    f"Parsed timestamp {timestamp_str} with format {fmt} and timezone {source_timezone}"
+                )
                 return dt
             except ValueError:
                 continue
@@ -187,7 +201,9 @@ class TimestampParser:
         _LOGGER.error(error_msg)
         raise ValueError(error_msg)
 
-    def parse_safely(self, timestamp_str: Union[str, datetime], source_timezone: str) -> Optional[datetime]:
+    def parse_safely(
+        self, timestamp_str: Union[str, datetime], source_timezone: str
+    ) -> Optional[datetime]:
         """Parse timestamp with error handling."""
         try:
             return self.parse(timestamp_str, source_timezone)

@@ -1,4 +1,5 @@
 """DST transition handling utilities."""
+
 import logging
 from datetime import datetime, timedelta
 from typing import Tuple, Optional
@@ -8,6 +9,7 @@ from homeassistant.util import dt as dt_util
 from ..const.time import DSTTransitionType, TimezoneConstants
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class DSTHandler:
     """Handler for DST transitions."""
@@ -55,7 +57,7 @@ class DSTHandler:
             return True, DSTTransitionType.FALL_BACK
 
     def get_dst_offset_info(self, dt: Optional[datetime] = None) -> str:
-        """Get DST offset info as a string (e.g., '+1 hour').
+        """Get DST offset info as a string (e.g. '+1 hour').
 
         Args:
             dt: The datetime to check (defaults to now)

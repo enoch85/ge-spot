@@ -3,6 +3,7 @@
 This module uses data validity tracking to determine when fetches are needed.
 Instead of asking "do we have complete data?", we ask "how long is our data valid for?"
 """
+
 import logging
 from datetime import datetime, time, timedelta
 from typing import Any, Optional, Tuple
@@ -37,7 +38,8 @@ class FetchDecisionMaker:
         data_validity: DataValidity,
         fetch_interval_minutes: int = 15,
         in_grace_period: bool = False,
-        is_health_check: bool = False
+        is_health_check: bool = False,
+        area: Optional[str] = None,
     ) -> Tuple[bool, str]:
         """Determine if we need to fetch from API based on data validity.
 
@@ -62,17 +64,20 @@ class FetchDecisionMaker:
         # CRITICAL CHECK: Do we have data for the current interval?
         if not data_validity.has_current_interval:
             current_interval_key = self._tz_service.get_current_interval_key()
-            reason = f"No data for current interval ({current_interval_key}) - fetching data immediately"
+            reason = (
+                f"No data for current interval ({current_interval_key}) - fetching data immediately"
+            )
             _LOGGER.info(reason)  # INFO level: expected on reload, not an error
 
             # Respect rate limiting UNLESS this is a health check
             if last_fetch and not is_health_check:
                 from ..utils.rate_limiter import RateLimiter
+
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
                     last_fetched=last_fetch,
                     current_time=now,
                     min_interval=fetch_interval_minutes,
-                    in_grace_period=in_grace_period
+                    in_grace_period=in_grace_period,
                 )
 
                 if should_skip:
@@ -94,6 +99,40 @@ class FetchDecisionMaker:
             _LOGGER.info(reason)
             return True, reason
 
+        # GRACE PERIOD CHECK: During grace period, if we have partial today data, try to get complete data
+        # This handles cases where old cache has only tomorrow's data (0 today, 96 tomorrow)
+        if in_grace_period:
+            from ..const.time import TimeInterval
+
+            required_today_intervals = TimeInterval.get_intervals_per_day()
+
+            if data_validity.today_interval_count < required_today_intervals:
+                reason = (
+                    f"Grace period: incomplete today data (have {data_validity.today_interval_count} intervals, "
+                    f"need {required_today_intervals}) - fetching to get complete data"
+                )
+                _LOGGER.info(reason)
+
+                # Check rate limiting (still respect it even in grace period, but with relaxed rules)
+                from ..utils.rate_limiter import RateLimiter
+
+                should_skip, skip_reason = RateLimiter.should_skip_fetch(
+                    last_fetched=last_fetch,
+                    current_time=now,
+                    min_interval=fetch_interval_minutes,
+                    in_grace_period=in_grace_period,
+                    area=area,
+                )
+
+                if should_skip:
+                    reason = (
+                        f"Grace period with incomplete today data, but rate limited ({skip_reason})"
+                    )
+                    _LOGGER.info(reason)
+                    return False, reason
+
+                return True, reason
+
         # Calculate how much data we have left
         intervals_remaining = data_validity.intervals_remaining(now)
 
@@ -111,11 +150,12 @@ class FetchDecisionMaker:
 
             # Check rate limiting
             from ..utils.rate_limiter import RateLimiter
+
             should_skip, skip_reason = RateLimiter.should_skip_fetch(
                 last_fetched=last_fetch,
                 current_time=now,
                 min_interval=fetch_interval_minutes,
-                in_grace_period=in_grace_period
+                in_grace_period=in_grace_period,
             )
 
             if should_skip:
@@ -145,11 +185,12 @@ class FetchDecisionMaker:
 
                 # Check rate limiting
                 from ..utils.rate_limiter import RateLimiter
+
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
                     last_fetched=last_fetch,
                     current_time=now,
                     min_interval=fetch_interval_minutes,
-                    in_grace_period=in_grace_period
+                    in_grace_period=in_grace_period,
                 )
 
                 if should_skip:
@@ -182,11 +223,12 @@ class FetchDecisionMaker:
 
                 # Check rate limiting - don't spam the API
                 from ..utils.rate_limiter import RateLimiter
+
                 should_skip, skip_reason = RateLimiter.should_skip_fetch(
                     last_fetched=last_fetch,
                     current_time=now,
                     min_interval=fetch_interval_minutes,
-                    in_grace_period=in_grace_period
+                    in_grace_period=in_grace_period,
                 )
 
                 if should_skip:

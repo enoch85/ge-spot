@@ -1,4 +1,5 @@
 """Price parsers for different API sources."""
+
 from .nordpool_parser import NordpoolParser
 from .entsoe_parser import EntsoeParser
 from .aemo_parser import AemoParser
@@ -9,6 +10,7 @@ from .comed_parser import ComedParser
 from .stromligning_parser import StromligningParser
 
 from ...const.sources import Source
+
 
 def get_parser_for_source(source_type: str, timezone_service=None):
     """Get the appropriate parser for the specified source.
@@ -28,7 +30,7 @@ def get_parser_for_source(source_type: str, timezone_service=None):
         Source.ENERGY_CHARTS: EnergyChartsParser,
         Source.OMIE: OmieParser,
         Source.COMED: ComedParser,
-        Source.STROMLIGNING: StromligningParser
+        Source.STROMLIGNING: StromligningParser,
     }
 
     if source_type in parsers:
@@ -37,7 +39,9 @@ def get_parser_for_source(source_type: str, timezone_service=None):
 
     # Fallback to a generic parser
     from ..base.price_parser import BasePriceParser
+
     return BasePriceParser(source_type, timezone_service)
+
 
 __all__ = [
     "NordpoolParser",
@@ -48,5 +52,5 @@ __all__ = [
     "OmieParser",
     "ComedParser",
     "StromligningParser",
-    "get_parser_for_source"
+    "get_parser_for_source",
 ]

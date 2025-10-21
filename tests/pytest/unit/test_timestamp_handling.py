@@ -183,7 +183,7 @@ class TestTimestampHandling:
         day_type = parser.classify_timestamp_day(late_today_utc, timezones["japanese"], test_dates["today"])
         assert day_type == "tomorrow", f"Expected 'tomorrow', got '{day_type}' for {late_today_utc} in Tokyo"
 
-        # Test early tomorrow UTC (01:00) which might be today in US timezones (e.g., US Eastern UTC-5/-4 -> 21:00/20:00 previous day)
+        # Test early tomorrow UTC (01:00) which might be today in US timezones (e.g. US Eastern UTC-5/-4 -> 21:00/20:00 previous day)
         early_tomorrow_utc = datetime.combine(test_dates["tomorrow"], datetime.min.time().replace(hour=1), tzinfo=timezone.utc)
 
         # Should be "tomorrow" in UTC
@@ -286,7 +286,7 @@ class TestTimestampHandling:
         """Test real-world edge cases that might occur in actual electricity markets."""
         # Test DST transition timestamps - critical for electricity markets during DST transitions
         # Use a known DST fallback date for CET/CEST: Last Sunday in October
-        # Find the last Sunday of October for a recent year (e.g., 2023)
+        # Find the last Sunday of October for a recent year (e.g. 2023)
         year = 2023
         dst_fallback_date = None
         for day in range(31, 24, -1): # Check from Oct 31 backwards

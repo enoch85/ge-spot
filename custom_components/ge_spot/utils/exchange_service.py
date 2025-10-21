@@ -1,4 +1,5 @@
 """Currency exchange rate service for GE-Spot."""
+
 import logging
 import aiohttp
 import aiofiles
@@ -16,6 +17,7 @@ from ..const.attributes import Attributes
 from ..api.base.error_handler import retry_with_backoff
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class ExchangeRateService:
     """Service to fetch and cache currency exchange rates."""
@@ -57,8 +59,9 @@ class ExchangeRateService:
         await self._ensure_session()
 
         try:
-            async with self.session.get(Network.URLs.ECB,
-                                      timeout=Network.Defaults.HTTP_TIMEOUT) as response:
+            async with self.session.get(
+                Network.URLs.ECB, timeout=Network.Defaults.HTTP_TIMEOUT
+            ) as response:
                 if response.status != 200:
                     _LOGGER.error("Failed to fetch exchange rates: HTTP %s", response.status)
                     return None
@@ -73,10 +76,7 @@ class ExchangeRateService:
         """Parse ECB exchange rate XML data."""
         try:
             root = ET.fromstring(xml_data)
-            ns = {
-                "gesmes": ECB.XML_NAMESPACE_GESMES,
-                "ecb": ECB.XML_NAMESPACE_ECB
-            }
+            ns = {"gesmes": ECB.XML_NAMESPACE_GESMES, "ecb": ECB.XML_NAMESPACE_ECB}
 
             # ECB always uses EUR as the base currency
             rates = {Currency.EUR: 1.0, Currency.CENTS: 100.0}  # Add cents with fixed rate to EUR
@@ -87,7 +87,7 @@ class ExchangeRateService:
                 rate = float(cube.attrib.get("rate"))
                 rates[currency] = rate
 
-            _LOGGER.info("Fetched %d exchange rates", len(rates)-1)
+            _LOGGER.info("Fetched %d exchange rates", len(rates) - 1)
             return rates
         except Exception as e:
             _LOGGER.error("Error parsing ECB XML: %s", e)
@@ -119,7 +119,8 @@ class ExchangeRateService:
             age = time.time() - self.last_update
             _LOGGER.info(
                 "Loaded exchange rates from cache (age: %.1fs, currencies: %d)",
-                age, len(self.rates)
+                age,
+                len(self.rates),
             )
             return True
         except Exception as e:
@@ -135,7 +136,7 @@ class ExchangeRateService:
             data = {
                 "rates": self.rates,
                 "timestamp": time.time(),
-                "date": datetime.datetime.now().isoformat()
+                "date": datetime.datetime.now().isoformat(),
             }
 
             async with aiofiles.open(self.cache_file, "w") as f:
@@ -151,20 +152,20 @@ class ExchangeRateService:
         """Get exchange rates (from cache or fresh fetch)."""
         now = time.time()
         cache_loaded = False
-        if not self.rates: # If no rates in memory
+        if not self.rates:  # If no rates in memory
             cache_loaded = await self._load_cache()
 
         # Decide if fetch is needed
-        needs_fetch = force_refresh or not self.rates # Fetch if forced or no rates in memory/cache
+        needs_fetch = force_refresh or not self.rates  # Fetch if forced or no rates in memory/cache
 
         if needs_fetch:
             fresh_rates = None
             fetch_exception = None
             try:
                 _LOGGER.debug("Attempting to fetch fresh exchange rates from ECB.")
-                fresh_rates = await self._fetch_ecb_rates() # Decorated with retry
+                fresh_rates = await self._fetch_ecb_rates()  # Decorated with retry
             except Exception as e:
-                fetch_exception = e # Store exception
+                fetch_exception = e  # Store exception
                 _LOGGER.warning("Fetching fresh ECB rates failed after retries: %s", e)
 
             if fresh_rates:
@@ -173,23 +174,25 @@ class ExchangeRateService:
                 self.last_update = now
                 await self._save_cache()
                 # Fall through to return self.rates
-            elif self.rates: # Fetch failed, but we have rates (from memory or loaded cache)
+            elif self.rates:  # Fetch failed, but we have rates (from memory or loaded cache)
                 _LOGGER.warning("Using existing rates as fresh fetch failed.")
                 # Fall through to return self.rates
-            else: # Fetch failed AND we still have no rates
+            else:  # Fetch failed AND we still have no rates
                 _LOGGER.error("Failed to fetch exchange rates and no cache available.")
                 # Raise the original exception if it exists, otherwise a generic one
                 if fetch_exception:
-                    raise fetch_exception # Raise the original error (e.g., ClientConnectorError)
+                    raise fetch_exception  # Raise the original error (e.g. ClientConnectorError)
                 else:
                     # Should not happen if fetch was attempted, but as a fallback
-                    raise ValueError("Could not retrieve exchange rates (fetch attempt failed silently)")
+                    raise ValueError(
+                        "Could not retrieve exchange rates (fetch attempt failed silently)"
+                    )
 
         # Return rates (either fresh, loaded from cache, or from memory)
         if not self.rates:
-             # This case should only be hit if fetch wasn't needed but rates are somehow empty.
-             _LOGGER.error("Exchange rates are unexpectedly empty after processing.")
-             raise ValueError("Exchange rates unavailable.")
+            # This case should only be hit if fetch wasn't needed but rates are somehow empty.
+            _LOGGER.error("Exchange rates are unexpectedly empty after processing.")
+            raise ValueError("Exchange rates unavailable.")
 
         return self.rates
 
@@ -206,7 +209,10 @@ class ExchangeRateService:
             result = amount / 100.0
             _LOGGER.debug(
                 "Currency conversion: %s %s → %s %s (cents to USD)",
-                amount, from_currency, result, to_currency
+                amount,
+                from_currency,
+                result,
+                to_currency,
             )
             return result
 
@@ -215,16 +221,16 @@ class ExchangeRateService:
             result = amount * 100.0
             _LOGGER.debug(
                 "Currency conversion: %s %s → %s %s (USD to cents)",
-                amount, from_currency, result, to_currency
+                amount,
+                from_currency,
+                result,
+                to_currency,
             )
             return result
 
         # Check if we have the rates
         if from_currency not in rates or to_currency not in rates:
-            _LOGGER.error(
-                "Missing exchange rates for %s → %s",
-                from_currency, to_currency
-            )
+            _LOGGER.error("Missing exchange rates for %s → %s", from_currency, to_currency)
             raise ValueError(f"Missing exchange rates for {from_currency} → {to_currency}")
 
         # EUR-based conversion: amount / from_rate * to_rate
@@ -234,7 +240,12 @@ class ExchangeRateService:
         result = amount / from_rate * to_rate
         _LOGGER.debug(
             "Currency conversion: %s %s → %s %s (rates: %s, %s)",
-            amount, from_currency, result, to_currency, from_rate, to_rate
+            amount,
+            from_currency,
+            result,
+            to_currency,
+            from_rate,
+            to_rate,
         )
 
         return result
@@ -252,22 +263,22 @@ class ExchangeRateService:
             Dict with timestamp, rate, and formatted rate information
         """
         # Format timestamp
-        last_updated_iso = datetime.datetime.fromtimestamp(
-            self.last_update, datetime.timezone.utc).isoformat() if self.last_update else None
+        last_updated_iso = (
+            datetime.datetime.fromtimestamp(self.last_update, datetime.timezone.utc).isoformat()
+            if self.last_update
+            else None
+        )
 
         # If no rates available or missing currencies
         if not self.rates or from_currency not in self.rates:
-            return {
-                Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso,
-                "rates": None
-            }
+            return {Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso, "rates": None}
 
         if to_currency and to_currency not in self.rates:
             _LOGGER.warning("Currency %s not found in exchange rates", to_currency)
             return {
                 Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso,
                 "rates": None,
-                "error": f"Currency {to_currency} not found"
+                "error": f"Currency {to_currency} not found",
             }
 
         # Calculate exchange rate
@@ -280,14 +291,14 @@ class ExchangeRateService:
             return {
                 "timestamp": last_updated_iso,
                 "rate": exchange_rate,
-                "formatted": f"1 {from_currency} = {exchange_rate:.4f} {to_currency}"
+                "formatted": f"1 {from_currency} = {exchange_rate:.4f} {to_currency}",
             }
         else:
             # Return all rates relative to from_currency
             result = {
                 Attributes.EXCHANGE_RATE_TIMESTAMP: last_updated_iso,
                 "base": from_currency,
-                "rates": {}
+                "rates": {},
             }
 
             for currency, rate in self.rates.items():
@@ -323,8 +334,8 @@ class ExchangeRateService:
         update_times = [
             {"hour": 0, "minute": 0},  # Midnight (00:00)
             {"hour": 6, "minute": 0},  # 06:00
-            {"hour": 12, "minute": 0}, # 12:00
-            {"hour": 18, "minute": 0}  # 18:00
+            {"hour": 12, "minute": 0},  # 12:00
+            {"hour": 18, "minute": 0},  # 18:00
         ]
 
         for update_time in update_times:
@@ -332,7 +343,7 @@ class ExchangeRateService:
                 self.hass,
                 self._handle_scheduled_update,
                 hour=update_time["hour"],
-                minute=update_time["minute"]
+                minute=update_time["minute"],
             )
             self._update_listeners.append(listener)
 
@@ -368,8 +379,10 @@ class ExchangeRateService:
         except Exception as e:
             _LOGGER.error(f"Error in scheduled exchange rate update: {e}")
 
+
 # Global instance for reuse
 _EXCHANGE_SERVICE = None
+
 
 async def get_exchange_service(session=None):
     """Get the exchange service singleton."""

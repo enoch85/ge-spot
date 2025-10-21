@@ -1,4 +1,5 @@
 """Formatting utilities for price data."""
+
 import logging
 from typing import Any, Dict, Optional, Union
 
@@ -7,13 +8,14 @@ from .currency_service import format_currency_for_display, get_currency_symbol
 
 _LOGGER = logging.getLogger(__name__)
 
+
 def format_price(price: float, currency: str, use_subunit: bool = False) -> str:
     """Format price with currency symbol.
 
     Args:
         price: Price value
         currency: Currency code
-        use_subunit: Whether to use subunit (e.g., cents)
+        use_subunit: Whether to use subunit (e.g. cents)
 
     Returns:
         Formatted price string
@@ -28,6 +30,7 @@ def format_price(price: float, currency: str, use_subunit: bool = False) -> str:
         currency = Currency.CENTS
 
     return format_currency_for_display(price, currency)
+
 
 def format_price_value(price: float, precision: int = 2) -> str:
     """Format price value without currency symbol.
@@ -44,15 +47,17 @@ def format_price_value(price: float, precision: int = 2) -> str:
 
     return f"{price:.{precision}f}"
 
-def format_relative_price(price: float, reference_price: float,
-                         currency: str = None, use_subunit: bool = False) -> str:
+
+def format_relative_price(
+    price: float, reference_price: float, currency: str = None, use_subunit: bool = False
+) -> str:
     """Format price relative to a reference price.
 
     Args:
         price: Price value
         reference_price: Reference price value
         currency: Optional currency code
-        use_subunit: Whether to use subunit (e.g., cents)
+        use_subunit: Whether to use subunit (e.g. cents)
 
     Returns:
         Formatted relative price string

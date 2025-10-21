@@ -15,14 +15,12 @@
           "source_priority": "Data Source Priority",
           "vat": "VAT Rate (%)",
           "additional_tariff": "Additional Tariff",
-          "update_interval": "Update Frequency",
           "display_unit": "Price Display Format"
         },
         "data_description": {
           "source_priority": "Select which sources to use in order of priority (first = highest priority)",
-          "vat": "Enter your local VAT percentage (e.g., 25 for 25%)",
-          "additional_tariff": "Additional fees from your energy provider (transfer/grid fees). Enter in same unit as Price Display Format (e.g., 0.05 for decimal or 5 for cents)",
-          "update_interval": "How often to check for new price data",
+          "vat": "Enter your local VAT percentage (e.g. 25 for 25%)",
+          "additional_tariff": "Additional fees from your energy provider (transfer/grid fees). Enter in same unit as Price Display Format (e.g. 0.05 for decimal or 5 for cents)",
           "display_unit": "Choose how prices should be displayed"
         }
       },
@@ -69,7 +67,7 @@
           "source_priority": "Data Source Priority",
           "vat": "VAT Rate (%)",
           "additional_tariff": "Additional Tariff",
-          "update_interval": "Update Frequency",
+          "energy_tax": "Energy Tax",
           "display_unit": "Price Display Format",
           "timezone_reference": "Time Reference",
           "entsoe_api_key": "ENTSO-E API Key",
@@ -78,9 +76,9 @@
         },
         "data_description": {
           "source_priority": "Select which sources to use in order of priority (first = highest priority)",
-          "vat": "Enter your local VAT percentage (e.g., 25 for 25%)",
-          "additional_tariff": "Additional fees from your energy provider (transfer/grid fees). Enter in same unit as Price Display Format (e.g., 0.05 for decimal or 5 for cents)",
-          "update_interval": "How often to check for new price data",
+          "vat": "Enter your local VAT percentage (e.g. 25 for 25%)",
+          "additional_tariff": "Additional transfer/grid fees from your provider.\nEnter in same unit as Price Display Format.\nApplied before VAT.",
+          "energy_tax": "Fixed energy tax per kWh (e.g. government levy).\nEnter in same unit as Price Display Format.\nApplied before VAT.",
           "display_unit": "Choose how prices should be displayed",
           "timezone_reference": "Choose which timezone to use for displaying prices",
           "entsoe_api_key": "Required for using ENTSO-E as a data source",
@@ -94,15 +92,6 @@
       "api_creation_failed": "Failed to create API connection. Please try again.",
       "cache_cleared": "Price cache cleared successfully!",
       "cache_clear_failed": "Failed to clear price cache. Please try again."
-    }
-  },
-  "selector": {
-    "update_interval": {
-      "options": {
-        "15": "15 minutes",
-        "30": "30 minutes",
-        "60": "1 hour"
-      }
     }
   },
   "entity": {

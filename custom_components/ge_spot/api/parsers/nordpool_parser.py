@@ -1,4 +1,5 @@
 """Parser for Nordpool API responses."""
+
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
@@ -10,6 +11,7 @@ from ...const.currencies import Currency
 from ...const.energy import EnergyUnit  # Added import
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class NordpoolParser(BasePriceParser):
     """Parser for Nordpool API responses."""
@@ -42,7 +44,9 @@ class NordpoolParser(BasePriceParser):
         source_timezone = data.get("timezone", "UTC")
         source_currency = data.get("currency", Currency.EUR)
         area = data.get("area")
-        _LOGGER.debug(f"[NordpoolParser] Metadata - Area: {area}, Timezone: {source_timezone}, Currency: {source_currency}")
+        _LOGGER.debug(
+            f"[NordpoolParser] Metadata - Area: {area}, Timezone: {source_timezone}, Currency: {source_currency}"
+        )
 
         interval_raw = {}
 
@@ -58,7 +62,9 @@ class NordpoolParser(BasePriceParser):
             days_to_process.append(raw_api_response)
 
         if not days_to_process:
-            _LOGGER.warning("[NordpoolParser] Could not find 'today'/'tomorrow' dicts or 'multiAreaEntries' list in raw_api_response.")
+            _LOGGER.warning(
+                "[NordpoolParser] Could not find 'today'/'tomorrow' dicts or 'multiAreaEntries' list in raw_api_response."
+            )
             return self._create_empty_result(data, source_timezone, source_currency)
 
         _LOGGER.debug(f"[NordpoolParser] Processing {len(days_to_process)} day(s) of data")
@@ -85,19 +91,23 @@ class NordpoolParser(BasePriceParser):
 
                 try:
                     # Parse timestamp (assuming UTC from Nordpool)
-                    dt_utc = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                    dt_utc = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
                     interval_key_iso = dt_utc.isoformat()
 
                     # Parse price
-                    price = float(str(price_str).replace(',', '.'))
+                    price = float(str(price_str).replace(",", "."))
 
                     interval_raw[interval_key_iso] = price
                 except (ValueError, TypeError) as e:
-                    _LOGGER.warning(f"[NordpoolParser] Failed to parse timestamp '{ts_str}' or price '{price_str}': {e}")
+                    _LOGGER.warning(
+                        f"[NordpoolParser] Failed to parse timestamp '{ts_str}' or price '{price_str}': {e}"
+                    )
                     continue
 
         # Summary log instead of verbose per-entry logging
-        _LOGGER.debug(f"[NordpoolParser] Parsed {len(interval_raw)} prices. Sample keys: {list(interval_raw.keys())[:3]}")
+        _LOGGER.debug(
+            f"[NordpoolParser] Parsed {len(interval_raw)} prices. Sample keys: {list(interval_raw.keys())[:3]}"
+        )
 
         # Construct the final result dictionary expected by DataProcessor
         result = {
@@ -106,7 +116,7 @@ class NordpoolParser(BasePriceParser):
             "area": area,
             "timezone": source_timezone,
             "source": Source.NORDPOOL,
-            "source_unit": EnergyUnit.MWH
+            "source_unit": EnergyUnit.MWH,
         }
 
         # Validate the result before returning
@@ -116,14 +126,16 @@ class NordpoolParser(BasePriceParser):
 
         return result
 
-    def _create_empty_result(self, original_data: Dict[str, Any], timezone: str = "UTC", currency: str = Currency.EUR) -> Dict[str, Any]:
+    def _create_empty_result(
+        self, original_data: Dict[str, Any], timezone: str = "UTC", currency: str = Currency.EUR
+    ) -> Dict[str, Any]:
         """Helper to create a standard empty result structure."""
         return {
             "interval_raw": {},
             "currency": original_data.get("currency", currency),
             "timezone": original_data.get("timezone", timezone),
             "source": Source.NORDPOOL,
-            "source_unit": EnergyUnit.MWH  # Added source unit
+            "source_unit": EnergyUnit.MWH,  # Added source unit
         }
 
     def parse_interval_prices(self, data: Dict[str, Any], area: str) -> Dict[str, Any]:
@@ -144,34 +156,50 @@ class NordpoolParser(BasePriceParser):
         _LOGGER.debug(f"[{self.__class__.__name__}] Starting validation for data: {data}")
 
         if not isinstance(data, dict):
-            _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Data is not a dictionary.")
+            _LOGGER.warning(
+                f"[{self.__class__.__name__}] Validation failed: Data is not a dictionary."
+            )
             return False
         if "interval_raw" not in data or not isinstance(data["interval_raw"], dict):
-            _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'interval_raw'")
+            _LOGGER.warning(
+                f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'interval_raw'"
+            )
             return False
         if "currency" not in data or not data["currency"]:
-            _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'currency'")
+            _LOGGER.warning(
+                f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'currency'"
+            )
             return False
         if "timezone" not in data or not data["timezone"]:
-            _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'timezone'")
+            _LOGGER.warning(
+                f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'timezone'"
+            )
             return False
-        if "source_unit" not in data or not data["source_unit"]: # Added validation for source_unit
-             _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'source_unit'")
-             return False
+        if "source_unit" not in data or not data["source_unit"]:  # Added validation for source_unit
+            _LOGGER.warning(
+                f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'source_unit'"
+            )
+            return False
         if not data["interval_raw"]:
-            _LOGGER.debug(f"[{self.__class__.__name__}] Validation warning: 'interval_raw' is empty.")
+            _LOGGER.debug(
+                f"[{self.__class__.__name__}] Validation warning: 'interval_raw' is empty."
+            )
             # Allow empty interval_raw to pass validation, but log it.
             # The check in the test script handles the "no prices found" case.
 
         for key, value in data["interval_raw"].items():
             try:
                 # Test timestamp parsing
-                datetime.fromisoformat(key.replace('Z', '+00:00'))
+                datetime.fromisoformat(key.replace("Z", "+00:00"))
             except ValueError:
-                _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Invalid ISO timestamp key '{key}' in 'interval_raw'")
+                _LOGGER.warning(
+                    f"[{self.__class__.__name__}] Validation failed: Invalid ISO timestamp key '{key}' in 'interval_raw'"
+                )
                 return False
             if not isinstance(value, (float, int)):
-                _LOGGER.warning(f"[{self.__class__.__name__}] Validation failed: Non-numeric price value '{value}' for key '{key}' in 'interval_raw'")
+                _LOGGER.warning(
+                    f"[{self.__class__.__name__}] Validation failed: Non-numeric price value '{value}' for key '{key}' in 'interval_raw'"
+                )
                 return False
-        _LOGGER.debug(f"[{self.__class__.__name__}] Validation successful.") # Add success log
+        _LOGGER.debug(f"[{self.__class__.__name__}] Validation successful.")  # Add success log
         return True

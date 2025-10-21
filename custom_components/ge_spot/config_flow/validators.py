@@ -1,4 +1,5 @@
 """Validation functions for config flow."""
+
 import logging
 import datetime
 from typing import Dict, List
@@ -9,14 +10,12 @@ from ..api import create_api
 
 _LOGGER = logging.getLogger(__name__)
 
+
 async def validate_entsoe_api_key(api_key, area, session=None):
     """Validate an ENTSO-E API key by making a test request."""
     try:
         # Create a temporary API instance
-        config = {
-            "area": area,
-            "api_key": api_key
-        }
+        config = {"area": area, "api_key": api_key}
         api = create_api(Source.ENTSOE, config)
 
         # Use provided session if available
@@ -29,7 +28,7 @@ async def validate_entsoe_api_key(api_key, area, session=None):
         result = await api._fetch_data()
 
         # Close session if we created one
-        if hasattr(api, '_owns_session') and api._owns_session and hasattr(api, 'close'):
+        if hasattr(api, "_owns_session") and api._owns_session and hasattr(api, "close"):
             await api.close()
 
         # Check if we got a valid response
@@ -51,14 +50,15 @@ async def validate_entsoe_api_key(api_key, area, session=None):
         _LOGGER.error(f"API key validation error: {e}")
         return False
 
+
 def get_entso_e_api_key_description(area):
     """Get description for ENTSO-E API key entry."""
     is_supported = area in AreaMapping.ENTSOE_MAPPING
     # Show different message based on whether area is directly supported
     description = (
         "Optional API key for ENTSO-E (recommended for better reliability)"
-        if is_supported else
-        "Required API key for ENTSO-E (needed for this region)"
+        if is_supported
+        else "Required API key for ENTSO-E (needed for this region)"
     )
 
     return description

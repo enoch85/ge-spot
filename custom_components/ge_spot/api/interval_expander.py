@@ -7,6 +7,7 @@ Supports:
 
 All conversions are automatic based on source interval detection.
 """
+
 import logging
 from datetime import datetime, timedelta
 from typing import Dict
@@ -17,8 +18,9 @@ from ..const.time import TimeInterval
 _LOGGER = logging.getLogger(__name__)
 
 
-def convert_to_target_intervals(source_prices: Dict[str, float],
-                                source_interval_minutes: int) -> Dict[str, float]:
+def convert_to_target_intervals(
+    source_prices: Dict[str, float], source_interval_minutes: int
+) -> Dict[str, float]:
     """
     Convert price data from any source interval to the configured target interval.
 
@@ -54,23 +56,25 @@ def convert_to_target_intervals(source_prices: Dict[str, float],
         _LOGGER.debug(f"No conversion needed: source = target = {target_interval_minutes}min")
         return source_prices
 
-    # Case 2: Source is coarser (e.g., 60min or 30min) - expand/duplicate
+    # Case 2: Source is coarser (e.g. 60min or 30min) - expand/duplicate
     if source_interval_minutes > target_interval_minutes:
         return _expand_intervals(source_prices, source_interval_minutes, target_interval_minutes)
 
-    # Case 3: Source is finer (e.g., 5min) - aggregate/average
+    # Case 3: Source is finer (e.g. 5min) - aggregate/average
     return _aggregate_intervals(source_prices, target_interval_minutes)
 
 
-def _expand_intervals(coarse_prices: Dict[str, float],
-                     source_minutes: int,
-                     target_minutes: int) -> Dict[str, float]:
+def _expand_intervals(
+    coarse_prices: Dict[str, float], source_minutes: int, target_minutes: int
+) -> Dict[str, float]:
     """Expand coarse intervals (60/30min) to finer intervals (15min) by duplication."""
     intervals_per_source = source_minutes // target_minutes
     expanded = {}
 
-    _LOGGER.debug(f"Expanding {len(coarse_prices)} {source_minutes}-min prices "
-                  f"to {target_minutes}-min intervals ({intervals_per_source} per source)")
+    _LOGGER.debug(
+        f"Expanding {len(coarse_prices)} {source_minutes}-min prices "
+        f"to {target_minutes}-min intervals ({intervals_per_source} per source)"
+    )
 
     for iso_timestamp, price in coarse_prices.items():
         try:
@@ -89,13 +93,13 @@ def _expand_intervals(coarse_prices: Dict[str, float],
     return expanded
 
 
-def _aggregate_intervals(fine_prices: Dict[str, float],
-                        target_minutes: int) -> Dict[str, float]:
+def _aggregate_intervals(fine_prices: Dict[str, float], target_minutes: int) -> Dict[str, float]:
     """Aggregate fine intervals (5min) to coarser intervals (15min) by averaging."""
     interval_groups = defaultdict(list)
 
-    _LOGGER.debug(f"Aggregating {len(fine_prices)} fine-grained prices "
-                  f"to {target_minutes}-min intervals")
+    _LOGGER.debug(
+        f"Aggregating {len(fine_prices)} fine-grained prices " f"to {target_minutes}-min intervals"
+    )
 
     for iso_timestamp, price in fine_prices.items():
         try:
@@ -118,4 +122,3 @@ def _aggregate_intervals(fine_prices: Dict[str, float],
 
     _LOGGER.debug(f"Aggregated: {len(fine_prices)} → {len(aggregated)} intervals")
     return aggregated
-

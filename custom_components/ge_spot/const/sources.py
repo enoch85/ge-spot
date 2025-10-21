@@ -1,5 +1,6 @@
 """Constants for API sources."""
 
+
 class Source:
     """Constants for API sources."""
 
@@ -23,7 +24,7 @@ class Source:
         OMIE,
         STROMLIGNING,
         COMED,
-        AMBER
+        AMBER,
     ]
 
     # Default source priority
@@ -38,7 +39,7 @@ class Source:
         AEMO,
         AMBER,
         COMED,
-        ENERGY_CHARTS
+        ENERGY_CHARTS,
     ]
 
     # Source display names
@@ -51,7 +52,7 @@ class Source:
         OMIE: "OMIE",
         STROMLIGNING: "Strømligning",
         COMED: "ComEd Hourly Pricing",
-        AMBER: "Amber Electric"
+        AMBER: "Amber Electric",
     }
 
     @staticmethod
@@ -85,46 +86,131 @@ class SourceInfo:
     # Map source to supported areas
     SOURCE_AREAS = {
         Source.NORDPOOL: [
-            "DK1", "DK2", "FI", "SE1", "SE2", "SE3", "SE4",
-            "NO1", "NO2", "NO3", "NO4", "NO5", "EE", "LV", "LT"
+            "DK1",
+            "DK2",
+            "FI",
+            "SE1",
+            "SE2",
+            "SE3",
+            "SE4",
+            "NO1",
+            "NO2",
+            "NO3",
+            "NO4",
+            "NO5",
+            "EE",
+            "LV",
+            "LT",
         ],
         Source.ENTSOE: [
-            "DK1", "DK2", "FI", "SE1", "SE2", "SE3", "SE4",
-            "NO1", "NO2", "NO3", "NO4", "NO5", "EE", "LV", "LT",
-            "AT", "BE", "DE-LU", "ES", "FR", "NL", "PT", "CH",
-            "IT", "SI", "HR", "GR", "PL", "CZ", "SK", "HU", "RO", "BG"
+            "DK1",
+            "DK2",
+            "FI",
+            "SE1",
+            "SE2",
+            "SE3",
+            "SE4",
+            "NO1",
+            "NO2",
+            "NO3",
+            "NO4",
+            "NO5",
+            "EE",
+            "LV",
+            "LT",
+            "AT",
+            "BE",
+            "DE-LU",
+            "ES",
+            "FR",
+            "NL",
+            "PT",
+            "CH",
+            "IT",
+            "SI",
+            "HR",
+            "GR",
+            "PL",
+            "CZ",
+            "SK",
+            "HU",
+            "RO",
+            "BG",
         ],
         Source.ENERGI_DATA_SERVICE: ["DK1", "DK2"],
         Source.ENERGY_CHARTS: [
             # Nordic regions (13 zones)
-            "SE1", "SE2", "SE3", "SE4",
-            "NO1", "NO2", "NO3", "NO4", "NO5", "NO2NSL",
-            "DK1", "DK2", "FI",
+            "SE1",
+            "SE2",
+            "SE3",
+            "SE4",
+            "NO1",
+            "NO2",
+            "NO3",
+            "NO4",
+            "NO5",
+            "NO2NSL",
+            "DK1",
+            "DK2",
+            "FI",
             # Baltic states (3 zones)
-            "EE", "LT", "LV",
+            "EE",
+            "LT",
+            "LV",
             # Western Europe (6 zones)
-            "DE-LU", "FR", "NL", "BE", "AT", "CH",
+            "DE-LU",
+            "FR",
+            "NL",
+            "BE",
+            "AT",
+            "CH",
             # Central and Eastern Europe (11 zones)
-            "PL", "CZ", "SK", "HU", "RO", "BG",
-            "SI", "HR", "RS", "ME", "GR",
+            "PL",
+            "CZ",
+            "SK",
+            "HU",
+            "RO",
+            "BG",
+            "SI",
+            "HR",
+            "RS",
+            "ME",
+            "GR",
             # Italy (6 zones)
-            "IT-North", "IT-South", "IT-Centre-North", "IT-Centre-South",
-            "IT-Sardinia", "IT-Sicily",
+            "IT-North",
+            "IT-South",
+            "IT-Centre-North",
+            "IT-Centre-South",
+            "IT-Sardinia",
+            "IT-Sicily",
             # Iberian Peninsula (2 zones)
-            "ES", "PT"
+            "ES",
+            "PT",
         ],
         Source.OMIE: ["ES", "PT"],
         Source.AEMO: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
         Source.STROMLIGNING: ["DK1", "DK2"],
         Source.COMED: ["COMED"],
-        Source.AMBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
+        Source.AMBER: ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"],
     }
 
     # Map areas to recommended sources
     AREA_RECOMMENDED_SOURCES = {
         # Nordic countries
-        "DK1": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.ENERGY_CHARTS],
-        "DK2": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGI_DATA_SERVICE, Source.STROMLIGNING, Source.ENERGY_CHARTS],
+        "DK1": [
+            Source.NORDPOOL,
+            Source.ENTSOE,
+            Source.ENERGI_DATA_SERVICE,
+            Source.STROMLIGNING,
+            Source.ENERGY_CHARTS,
+        ],
+        "DK2": [
+            Source.NORDPOOL,
+            Source.ENTSOE,
+            Source.ENERGI_DATA_SERVICE,
+            Source.STROMLIGNING,
+            Source.ENERGY_CHARTS,
+        ],
         "SE1": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
         "SE2": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
         "SE3": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
@@ -138,7 +224,6 @@ class SourceInfo:
         "EE": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
         "LT": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
         "LV": [Source.NORDPOOL, Source.ENTSOE, Source.ENERGY_CHARTS],
-
         # Central Europe
         "DE-LU": [Source.ENERGY_CHARTS, Source.ENTSOE],
         "AT": [Source.ENERGY_CHARTS, Source.ENTSOE],
@@ -149,7 +234,6 @@ class SourceInfo:
         "PL": [Source.ENERGY_CHARTS, Source.ENTSOE],
         "CZ": [Source.ENERGY_CHARTS, Source.ENTSOE],
         "HU": [Source.ENERGY_CHARTS, Source.ENTSOE],
-
         # Southern Europe
         "ES": [Source.ENERGY_CHARTS, Source.ENTSOE, Source.OMIE],
         "PT": [Source.ENERGY_CHARTS, Source.ENTSOE, Source.OMIE],
@@ -167,16 +251,14 @@ class SourceInfo:
         "IT-Centre-South": [Source.ENERGY_CHARTS, Source.ENTSOE],
         "IT-Sardinia": [Source.ENERGY_CHARTS, Source.ENTSOE],
         "IT-Sicily": [Source.ENERGY_CHARTS, Source.ENTSOE],
-
         # Australia
         "NSW1": [Source.AEMO, Source.AMBER],
         "QLD1": [Source.AEMO, Source.AMBER],
         "SA1": [Source.AEMO, Source.AMBER],
         "TAS1": [Source.AEMO, Source.AMBER],
         "VIC1": [Source.AEMO, Source.AMBER],
-
         # USA
-        "COMED": [Source.COMED]
+        "COMED": [Source.COMED],
     }
 
     @classmethod
