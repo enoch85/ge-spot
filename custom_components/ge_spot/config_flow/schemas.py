@@ -123,7 +123,7 @@ def get_options_schema(defaults, supported_sources, area):
         vol.Optional(
             Config.ADDITIONAL_TARIFF,
             default=defaults.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF),
-            description="Additional transfer/grid fees from your provider.\nEnter in same unit as Price Display Format (e.g. 0.05 if decimal, or 5 if cents).\nApplied before VAT."
+            description="Additional transfer/grid fees from your provider.\nEnter in same unit as Price Display Format.\nApplied before VAT."
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.0,
