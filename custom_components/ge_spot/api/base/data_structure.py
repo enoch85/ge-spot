@@ -1,7 +1,9 @@
 """Standardized data structure for price data."""
+
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, asdict, field
 from datetime import datetime
+
 
 @dataclass
 class IntervalPrice:
@@ -19,6 +21,7 @@ class IntervalPrice:
         """Convert to dictionary."""
         return asdict(self)
 
+
 @dataclass
 class PriceStatistics:
     """Price statistics.
@@ -26,6 +29,7 @@ class PriceStatistics:
     Note: Statistics should only be calculated when sufficient data is available.
     Use DataValidity to check data coverage instead of checking these statistics.
     """
+
     avg: Optional[float] = None
     min: Optional[float] = None
     max: Optional[float] = None
@@ -35,6 +39,7 @@ class PriceStatistics:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
+
 
 @dataclass
 class PeakHourStatistics(PriceStatistics):
@@ -46,6 +51,7 @@ class PeakHourStatistics(PriceStatistics):
         """Convert to dictionary."""
         return asdict(self)
 
+
 @dataclass
 class StandardizedPriceData:
     """Standardized price data format for all API implementations."""
@@ -55,7 +61,9 @@ class StandardizedPriceData:
     currency: str
     fetched_at: str  # ISO format datetime string
     reference_time: Optional[str] = None  # ISO format datetime string
-    today_interval_prices: Dict[str, float] = field(default_factory=dict)  # Key: HH:MM, Value: price
+    today_interval_prices: Dict[str, float] = field(
+        default_factory=dict
+    )  # Key: HH:MM, Value: price
     raw_prices: List[IntervalPrice] = field(default_factory=list)
     current_price: Optional[float] = None
     next_interval_price: Optional[float] = None
@@ -87,7 +95,7 @@ class StandardizedPriceData:
             "next_interval_price": self.next_interval_price,
             "vat_included": self.vat_included,
             "has_tomorrow_prices": self.has_tomorrow_prices,
-            "tomorrow_prices_expected": self.tomorrow_prices_expected
+            "tomorrow_prices_expected": self.tomorrow_prices_expected,
         }
 
         # Add optional fields if set
@@ -123,7 +131,7 @@ class StandardizedPriceData:
         return result
 
     @classmethod
-    def create_empty(cls, source: str, area: str, currency: str) -> 'StandardizedPriceData':
+    def create_empty(cls, source: str, area: str, currency: str) -> "StandardizedPriceData":
         """Create an empty price data object.
 
         Args:
@@ -135,11 +143,9 @@ class StandardizedPriceData:
             Empty StandardizedPriceData object
         """
         return cls(
-            source=source,
-            area=area,
-            currency=currency,
-            fetched_at=datetime.now().isoformat()
+            source=source, area=area, currency=currency, fetched_at=datetime.now().isoformat()
         )
+
 
 def create_standardized_price_data(
     source: str,
@@ -153,7 +159,7 @@ def create_standardized_price_data(
     raw_data: Any = None,
     validate_complete: bool = True,
     has_tomorrow_prices: bool = False,
-    tomorrow_prices_expected: bool = False
+    tomorrow_prices_expected: bool = False,
 ) -> StandardizedPriceData:
     """Create standardized price data from API response.
 
@@ -186,23 +192,25 @@ def create_standardized_price_data(
     for interval_key, price in today_interval_prices.items():
         try:
             # Attempt to parse ISO string key
-            dt_obj = datetime.fromisoformat(interval_key.replace('Z', '+00:00'))
+            dt_obj = datetime.fromisoformat(interval_key.replace("Z", "+00:00"))
             # Create simple HH:MM key for compatibility if needed, but prefer ISO
             simple_interval_key = dt_obj.strftime("%H:%M")
         except (ValueError, TypeError):
             # Fallback if key is not ISO (e.g. HH:MM) - less ideal
-            iso_dt = f"{today.isoformat()}T{interval_key}:00" # Placeholder
+            iso_dt = f"{today.isoformat()}T{interval_key}:00"  # Placeholder
             simple_interval_key = interval_key
 
-        raw_prices_list.append(IntervalPrice(
-            datetime=interval_key, # Store original key as datetime string
-            price=price,
-            interval_key=simple_interval_key, # Store HH:MM for potential compatibility
-            currency=currency,
-            timezone=api_timezone or "UTC",
-            source=source,
-            vat_included=vat_included
-        ))
+        raw_prices_list.append(
+            IntervalPrice(
+                datetime=interval_key,  # Store original key as datetime string
+                price=price,
+                interval_key=simple_interval_key,  # Store HH:MM for potential compatibility
+                currency=currency,
+                timezone=api_timezone or "UTC",
+                source=source,
+                vat_included=vat_included,
+            )
+        )
 
     # Return a simplified object with raw data
     return StandardizedPriceData(
@@ -211,7 +219,7 @@ def create_standardized_price_data(
         currency=currency,
         fetched_at=now.isoformat(),
         reference_time=reference_time.isoformat() if reference_time else None,
-        today_interval_prices=today_interval_prices, # Store the RAW interval prices dict from parser
+        today_interval_prices=today_interval_prices,  # Store the RAW interval prices dict from parser
         raw_prices=raw_prices_list,
         api_timezone=api_timezone,
         vat_rate=vat_rate,
@@ -226,5 +234,5 @@ def create_standardized_price_data(
         next_interval_key=None,
         statistics=None,
         peak_hours=None,
-        off_peak_hours=None
+        off_peak_hours=None,
     )

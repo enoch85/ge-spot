@@ -1,4 +1,5 @@
 """Utility functions for energy unit and display unit conversions."""
+
 import logging
 from typing import Optional
 
@@ -6,6 +7,7 @@ from ..const.energy import EnergyUnit
 from ..const.display import DisplayUnit
 
 _LOGGER = logging.getLogger(__name__)
+
 
 def get_display_unit_multiplier(display_unit: str) -> int:
     """Get the multiplier for converting to the display subunit (e.g. cents).
@@ -20,15 +22,16 @@ def get_display_unit_multiplier(display_unit: str) -> int:
         return 100
     return 1
 
+
 def convert_energy_price(
     price: float,
     source_unit: str,
-    target_unit: str = EnergyUnit.TARGET, # Default target is kWh
-    vat_rate: float = 0.0, # VAT rate (e.g. 0.25 for 25%), defaults to 0
-    display_unit_multiplier: int = 1, # Multiplier for subunits (e.g. 100 for cents)
-    additional_tariff: float = 0.0, # Additional tariff/fees per kWh, defaults to 0
-    energy_tax: float = 0.0, # Fixed energy tax per kWh (e.g. government levy), defaults to 0
-    tariff_in_subunit: bool = False # Whether tariff is entered in subunit (cents/øre)
+    target_unit: str = EnergyUnit.TARGET,  # Default target is kWh
+    vat_rate: float = 0.0,  # VAT rate (e.g. 0.25 for 25%), defaults to 0
+    display_unit_multiplier: int = 1,  # Multiplier for subunits (e.g. 100 for cents)
+    additional_tariff: float = 0.0,  # Additional tariff/fees per kWh, defaults to 0
+    energy_tax: float = 0.0,  # Fixed energy tax per kWh (e.g. government levy), defaults to 0
+    tariff_in_subunit: bool = False,  # Whether tariff is entered in subunit (cents/øre)
 ) -> Optional[float]:
     """Convert energy price between units, apply VAT, and adjust for display units.
 
@@ -68,15 +71,13 @@ def convert_energy_price(
             if source_factor is None or target_factor is None:
                 _LOGGER.error(
                     "Invalid energy unit specified: source='%s', target='%s'",
-                    source_unit, target_unit
+                    source_unit,
+                    target_unit,
                 )
                 return None
 
             if source_factor == 0:
-                _LOGGER.error(
-                    "Source unit '%s' has a zero conversion factor.",
-                    source_unit
-                )
+                _LOGGER.error("Source unit '%s' has a zero conversion factor.", source_unit)
                 return None
 
             # Energy price conversion:
@@ -104,7 +105,7 @@ def convert_energy_price(
 
         # 3. Apply VAT (on total: raw price + tariff + tax)
         # VAT is calculated on the sum of all components (spot price + fees + taxes)
-        price *= (1 + vat_rate)
+        price *= 1 + vat_rate
 
         # 4. Apply display unit multiplier (e.g. for cents)
         price *= display_unit_multiplier
@@ -114,6 +115,9 @@ def convert_energy_price(
     except (TypeError, ValueError) as e:
         _LOGGER.error(
             "Error during energy price conversion: %s. Price: %s, SourceUnit: %s, TargetUnit: %s",
-            e, price, source_unit, target_unit
+            e,
+            price,
+            source_unit,
+            target_unit,
         )
         return None

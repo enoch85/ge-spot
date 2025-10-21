@@ -1,5 +1,7 @@
 """Schema definition for data validation."""
+
 from typing import Dict, Any, List, Union, Optional
+
 
 class Schema:
     """Schema definition for data validation."""
@@ -130,7 +132,7 @@ class Schema:
 
         return False
 
-    def get_property_schema(self, property_name: str) -> Optional['Schema']:
+    def get_property_schema(self, property_name: str) -> Optional["Schema"]:
         """Get the schema for a property.
 
         Args:
@@ -145,7 +147,7 @@ class Schema:
 
         return None
 
-    def get_items_schema(self) -> Optional['Schema']:
+    def get_items_schema(self) -> Optional["Schema"]:
         """Get the schema for array items.
 
         Returns:

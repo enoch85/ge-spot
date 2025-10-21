@@ -69,7 +69,9 @@ class AemoParser(BasePriceParser):
         source_timezone = data.get("timezone", "Australia/Sydney")
         source_currency = data.get("currency", Currency.AUD)
 
-        _LOGGER.debug(f"[AemoParser] Parsing NEMWEB CSV for area: {area}, timezone: {source_timezone}")
+        _LOGGER.debug(
+            f"[AemoParser] Parsing NEMWEB CSV for area: {area}, timezone: {source_timezone}"
+        )
 
         # Parse the CSV content
         try:
@@ -96,13 +98,17 @@ class AemoParser(BasePriceParser):
                 interval_key = timestamp_utc.isoformat()
                 interval_raw[interval_key] = record["price"]
 
-            _LOGGER.debug(f"[AemoParser] Created {len(interval_raw)} 30-minute interval_raw entries (UTC keys)")
+            _LOGGER.debug(
+                f"[AemoParser] Created {len(interval_raw)} 30-minute interval_raw entries (UTC keys)"
+            )
 
             # Expand 30-minute trading intervals to 15-minute intervals
-            _LOGGER.debug(f"[AemoParser] Expanding {len(interval_raw)} 30-min prices to 15-min intervals")
+            _LOGGER.debug(
+                f"[AemoParser] Expanding {len(interval_raw)} 30-min prices to 15-min intervals"
+            )
             interval_raw = convert_to_target_intervals(
                 source_prices=interval_raw,
-                source_interval_minutes=30  # AEMO uses 30-min trading intervals
+                source_interval_minutes=30,  # AEMO uses 30-min trading intervals
             )
             _LOGGER.debug(f"[AemoParser] After expansion: {len(interval_raw)} 15-minute intervals")
 
@@ -114,7 +120,7 @@ class AemoParser(BasePriceParser):
                 "timezone": source_timezone,
                 "source": Source.AEMO,
                 "source_unit": EnergyUnit.MWH,
-                "source_interval_minutes": 30  # AEMO uses 30-min trading intervals
+                "source_interval_minutes": 30,  # AEMO uses 30-min trading intervals
             }
 
             # Validate before returning
@@ -161,22 +167,24 @@ class AemoParser(BasePriceParser):
                 continue
 
             # Look for data rows: D,PREDISPATCH,REGION_PRICES,1,{REGIONID},...
-            if (row[0] == 'D' and
-                len(row) >= 3 and
-                row[1] == 'PREDISPATCH' and
-                row[2] == 'REGION_PRICES'):
+            if (
+                row[0] == "D"
+                and len(row) >= 3
+                and row[1] == "PREDISPATCH"
+                and row[2] == "REGION_PRICES"
+            ):
 
                 try:
                     # Create dict from header and row
                     row_dict = dict(zip(header, row))
 
                     # Check if this row is for our target region
-                    if row_dict.get('REGIONID') != target_region:
+                    if row_dict.get("REGIONID") != target_region:
                         continue
 
                     # Extract timestamp and price
-                    datetime_str = row_dict.get('DATETIME')
-                    rrp_str = row_dict.get('RRP')  # Regional Reference Price
+                    datetime_str = row_dict.get("DATETIME")
+                    rrp_str = row_dict.get("RRP")  # Regional Reference Price
 
                     if not datetime_str or not rrp_str:
                         continue
@@ -187,10 +195,7 @@ class AemoParser(BasePriceParser):
                     # Parse price
                     price = float(rrp_str)
 
-                    prices.append({
-                        "timestamp": timestamp,
-                        "price": price
-                    })
+                    prices.append({"timestamp": timestamp, "price": price})
 
                 except (ValueError, KeyError) as e:
                     _LOGGER.debug(f"Skipping row due to parse error: {e}")
@@ -212,7 +217,12 @@ class AemoParser(BasePriceParser):
         reader = csv.reader(StringIO(csv_content))
 
         for row in reader:
-            if len(row) >= 3 and row[0] == 'I' and row[1] == 'PREDISPATCH' and row[2] == 'REGION_PRICES':
+            if (
+                len(row) >= 3
+                and row[0] == "I"
+                and row[1] == "PREDISPATCH"
+                and row[2] == "REGION_PRICES"
+            ):
                 # Return all columns from position 0 onwards (includes line type)
                 return row
 
@@ -239,7 +249,7 @@ class AemoParser(BasePriceParser):
         self,
         original_data: Dict[str, Any],
         timezone: str = "Australia/Sydney",
-        currency: str = Currency.AUD
+        currency: str = Currency.AUD,
     ) -> Dict[str, Any]:
         """Helper to create a standard empty result structure."""
         return {
@@ -249,5 +259,5 @@ class AemoParser(BasePriceParser):
             "area": original_data.get("area"),
             "source": Source.AEMO,
             "source_unit": EnergyUnit.MWH,
-            "source_interval_minutes": 30
+            "source_interval_minutes": 30,
         }

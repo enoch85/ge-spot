@@ -1,4 +1,5 @@
 """Utility functions for config flow."""
+
 import logging
 
 from ..const.sources import Source
@@ -21,15 +22,16 @@ SOURCE_AREA_MAPS = {
 
 # Define a list of API sources in priority order for UI display
 API_SOURCE_PRIORITIES = [
-    Source.NORDPOOL,      # Highest priority
+    Source.NORDPOOL,  # Highest priority
     Source.ENERGY_CHARTS,
     Source.ENTSOE,
     Source.ENERGI_DATA_SERVICE,
     Source.OMIE,
     Source.STROMLIGNING,
     Source.AEMO,
-    Source.COMED          # Lowest priority
+    Source.COMED,  # Lowest priority
 ]
+
 
 def get_deduplicated_regions():
     """Get a deduplicated list of regions by display name."""
@@ -38,16 +40,18 @@ def get_deduplicated_regions():
 
     # First, collect all regions from all sources
     for source, area_dict in SOURCE_AREA_MAPS.items():
-        source_priority = API_SOURCE_PRIORITIES.index(source) if source in API_SOURCE_PRIORITIES else 999
+        source_priority = (
+            API_SOURCE_PRIORITIES.index(source) if source in API_SOURCE_PRIORITIES else 999
+        )
         for region_code, display_name in area_dict.items():
             # Normalize display name to handle different capitalizations
             normalized_name = display_name.lower()
             if normalized_name not in display_name_map:
                 display_name_map[normalized_name] = []
             # Store tuple of (source_priority, region_code, display_name, source)
-            display_name_map[normalized_name].append((
-                source_priority, region_code, display_name, source
-            ))
+            display_name_map[normalized_name].append(
+                (source_priority, region_code, display_name, source)
+            )
 
     # Now create a deduplicated regions dictionary
     deduplicated_regions = {}

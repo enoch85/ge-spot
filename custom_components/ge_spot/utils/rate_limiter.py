@@ -1,4 +1,5 @@
 """Rate limiting utilities for GE-Spot integration."""
+
 import logging
 import datetime
 from typing import Optional, Tuple
@@ -8,6 +9,7 @@ from ..const.sources import Source
 from ..utils.debug_utils import log_rate_limiting
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class RateLimiter:
     """Rate limiter for API fetch operations.
@@ -26,7 +28,7 @@ class RateLimiter:
         last_successful_fetch: Optional[datetime.datetime] = None,
         source: str = None,
         area: str = None,
-        in_grace_period: bool = False
+        in_grace_period: bool = False,
     ) -> Tuple[bool, str]:
         """Determine if we should skip fetching based on rate limiting rules.
 
@@ -60,7 +62,9 @@ class RateLimiter:
         # This ensures that after HA restart, we can immediately try all fallback sources
         # to find one with complete data, without waiting for rate limit intervals
         if in_grace_period:
-            reason = "Within grace period after startup - bypassing rate limiting for fallback attempts"
+            reason = (
+                "Within grace period after startup - bypassing rate limiting for fallback attempts"
+            )
             log_rate_limiting(area or "unknown", False, reason, source)
             return False, reason
 
@@ -72,12 +76,18 @@ class RateLimiter:
             if min_interval is None:
                 if source:
                     from ..const.intervals import SourceIntervals
+
                     min_interval = SourceIntervals.get_interval(source)
                 else:
                     min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
 
             backoff_minutes = min(60, 2 ** (consecutive_failures - 1) * min_interval)
-            if last_failure_time and (current_time - last_failure_time).total_seconds() / Network.Defaults.SECONDS_PER_MINUTE < backoff_minutes:
+            if (
+                last_failure_time
+                and (current_time - last_failure_time).total_seconds()
+                / Network.Defaults.SECONDS_PER_MINUTE
+                < backoff_minutes
+            ):
                 next_retry = last_failure_time + datetime.timedelta(minutes=backoff_minutes)
                 reason = f"Backing off after {consecutive_failures} failures. Next retry: {next_retry.strftime('%H:%M:%S')}"
                 log_rate_limiting(area or "unknown", True, reason, source)
@@ -103,7 +113,9 @@ class RateLimiter:
 
         if in_special_window:
             # Calculate time since last fetch
-            time_diff = (current_time - last_fetched).total_seconds() / Network.Defaults.SECONDS_PER_MINUTE
+            time_diff = (
+                current_time - last_fetched
+            ).total_seconds() / Network.Defaults.SECONDS_PER_MINUTE
             special_min_interval = Network.Defaults.SPECIAL_WINDOW_MIN_INTERVAL_MINUTES
 
             if time_diff < special_min_interval:
@@ -122,12 +134,15 @@ class RateLimiter:
             return False, reason
 
         # Calculate time since last fetch in minutes for remaining checks
-        time_diff = (current_time - last_fetched).total_seconds() / Network.Defaults.SECONDS_PER_MINUTE
+        time_diff = (
+            current_time - last_fetched
+        ).total_seconds() / Network.Defaults.SECONDS_PER_MINUTE
 
         # Use specified min_interval or fall back to default
         if min_interval is None:
             if source:
                 from ..const.intervals import SourceIntervals
+
                 min_interval = SourceIntervals.get_interval(source)
             else:
                 min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
@@ -141,6 +156,7 @@ class RateLimiter:
         # PRIORITY 5: Force update at interval boundaries (configuration-driven)
         # This runs last so it respects all the above constraints
         from ..const.time import TimeInterval
+
         interval_minutes = TimeInterval.get_interval_minutes()
 
         # Calculate interval keys for both timestamps

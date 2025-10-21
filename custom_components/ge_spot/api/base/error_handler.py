@@ -1,4 +1,5 @@
 """Centralized error handling for API calls."""
+
 import logging
 import asyncio
 import time
@@ -9,6 +10,7 @@ from typing import Callable, Any, Dict, Optional, Union, List, Tuple
 from ...const.network import NetworkErrorType, RetryStrategy
 
 _LOGGER = logging.getLogger(__name__)
+
 
 def with_error_handling(func=None, *, source_type: str = "unknown"):
     """Decorator to handle errors in API calls.
@@ -32,10 +34,7 @@ def with_error_handling(func=None, *, source_type: str = "unknown"):
     """
     # Used as a decorator with arguments @with_error_handling(...)
     if func is None:
-        return functools.partial(
-            with_error_handling,
-            source_type=source_type
-        )
+        return functools.partial(with_error_handling, source_type=source_type)
 
     # For direct function calls or @with_error_handling without arguments
     @functools.wraps(func)
@@ -46,19 +45,19 @@ def with_error_handling(func=None, *, source_type: str = "unknown"):
         except Exception as error:
             error_type = handler.classify_error(error)
             _LOGGER.error(
-                f"Error in {source_type} API call: {error}. "
-                f"Classified as {error_type}."
+                f"Error in {source_type} API call: {error}. " f"Classified as {error_type}."
             )
             raise error
 
     return wrapper
+
 
 def retry_with_backoff(
     func=None,
     *,
     max_retries: int = 3,
     strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF,
-    source_type: str = "unknown"
+    source_type: str = "unknown",
 ):
     """Run a function with retry logic.
 
@@ -87,10 +86,7 @@ def retry_with_backoff(
     # Used as a decorator with arguments @retry_with_backoff(...)
     if func is None:
         return functools.partial(
-            retry_with_backoff,
-            max_retries=max_retries,
-            strategy=strategy,
-            source_type=source_type
+            retry_with_backoff, max_retries=max_retries, strategy=strategy, source_type=source_type
         )
 
     # For direct function calls or @retry_with_backoff without arguments
@@ -102,6 +98,7 @@ def retry_with_backoff(
         )
 
     return wrapper
+
 
 class ErrorHandler:
     """Centralized error handling for API calls."""
@@ -138,7 +135,10 @@ class ErrorHandler:
             return NetworkErrorType.RATE_LIMIT
 
         # Authentication or authorization issues
-        if any(x in error_str for x in ["auth", "token", "key", "credential", "permission", "access", "401", "403"]):
+        if any(
+            x in error_str
+            for x in ["auth", "token", "key", "credential", "permission", "access", "401", "403"]
+        ):
             return NetworkErrorType.AUTHENTICATION
 
         # Server-side errors
@@ -195,7 +195,9 @@ class ErrorHandler:
         # Default to retrying for other error types
         return True
 
-    def get_retry_delay(self, error_type: str, retry_count: int, strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF) -> float:
+    def get_retry_delay(
+        self, error_type: str, retry_count: int, strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF
+    ) -> float:
         """Calculate the delay before retrying.
 
         Args:
@@ -220,7 +222,7 @@ class ErrorHandler:
         # Apply the selected strategy
         if strategy == RetryStrategy.EXPONENTIAL_BACKOFF:
             # Exponential backoff with jitter: delay = base_delay * (2^retry_count) * (1±jitter)
-            delay = base_delay * (2 ** retry_count) * (1.0 + jitter)
+            delay = base_delay * (2**retry_count) * (1.0 + jitter)
         elif strategy == RetryStrategy.LINEAR_BACKOFF:
             # Linear backoff with jitter: delay = base_delay * (retry_count + 1) * (1±jitter)
             delay = base_delay * (retry_count + 1) * (1.0 + jitter)
@@ -238,7 +240,7 @@ class ErrorHandler:
             delay = base_delay * fib_n_minus_1 * (1.0 + jitter)
         else:
             # Default to exponential backoff
-            delay = base_delay * (2 ** retry_count) * (1.0 + jitter)
+            delay = base_delay * (2**retry_count) * (1.0 + jitter)
 
         # Cap the maximum delay
         max_delay = 60.0  # 60 seconds
@@ -250,7 +252,7 @@ class ErrorHandler:
         *args,
         max_retries: int = 3,
         strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF,
-        **kwargs
+        **kwargs,
     ) -> Any:
         """Run a function with retry logic.
 
@@ -281,7 +283,9 @@ class ErrorHandler:
                 self.last_error_time[error_type] = datetime.now()
 
                 # Determine if we should retry
-                if retry_count >= max_retries or not self.should_retry(error_type, retry_count, max_retries):
+                if retry_count >= max_retries or not self.should_retry(
+                    error_type, retry_count, max_retries
+                ):
                     # Don't log here - error already logged at source (API layer)
                     # Just re-raise to let coordinator handle it
                     raise error
@@ -305,7 +309,9 @@ class ErrorHandler:
             raise last_error
 
         # This should never happen
-        raise RuntimeError(f"Unexpected error in {self.source_type} API call: all retries failed but no error was captured.")
+        raise RuntimeError(
+            f"Unexpected error in {self.source_type} API call: all retries failed but no error was captured."
+        )
 
     def get_error_stats(self) -> Dict[str, Any]:
         """Get error statistics.
@@ -317,5 +323,5 @@ class ErrorHandler:
             "source_type": self.source_type,
             "error_counts": self.error_counts,
             "last_error_time": {k: v.isoformat() for k, v in self.last_error_time.items()},
-            "backoff_index": self.backoff_index
+            "backoff_index": self.backoff_index,
         }

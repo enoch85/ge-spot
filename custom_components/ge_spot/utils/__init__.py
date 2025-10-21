@@ -1,4 +1,5 @@
 """Utility functions for GE-Spot integration."""
+
 import logging
 from typing import Dict, Any, Optional, Tuple, List, Union, Callable
 from datetime import datetime, timedelta
@@ -11,28 +12,38 @@ _LOGGER = logging.getLogger(__name__)
 # API client and validation
 from ..api.base.api_client import ApiFallbackManager
 from ..api.base.api_validator import ApiValidator
+
 # Import DataValidator from the local file
 from .data_validator import DataValidator
 
 # Debug utilities
 from .debug_utils import log_conversion, log_raw_data, log_statistics
 
+
 # Define common exceptions for the integration
 class APIError(Exception):
     """Base class for API errors."""
+
     pass
+
 
 class RateLimitError(APIError):
     """Error raised when API rate limiting is detected."""
+
     pass
+
 
 class AuthenticationError(APIError):
     """Error raised when API authentication fails."""
+
     pass
+
 
 class DataParsingError(APIError):
     """Error raised when parsing API data fails."""
+
     pass
+
 
 # Exchange service
 from .exchange_service import ExchangeRateService, get_exchange_service
@@ -51,12 +62,10 @@ __all__ = [
     "ApiFallbackManager",
     "ApiValidator",
     "DataValidator",
-
     # Debug utilities
     "log_conversion",
     "log_raw_data",
     "log_statistics",
-
     # Error handling
     "retry_with_backoff",
     "APIError",
@@ -64,16 +73,13 @@ __all__ = [
     "AuthenticationError",
     "DataParsingError",
     "ErrorHandler",
-
     # Exchange service
     "ExchangeRateService",
     "get_exchange_service",
-
     # Form helper
     # "FormHelper", # Removed unused
-
     # Validation utilities
     "SchemaValidator",
     "Schema",
-    "ValidationError"
+    "ValidationError",
 ]

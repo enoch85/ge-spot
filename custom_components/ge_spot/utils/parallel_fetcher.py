@@ -1,4 +1,5 @@
 """Parallel fetching of data from multiple sources."""
+
 import logging
 import asyncio
 import time
@@ -12,10 +13,13 @@ from ..api.base.data_fetch import is_skipped_response
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class SourcePriorityFetcher:
     """Fetch data from multiple sources in priority order or parallel."""
 
-    def __init__(self, hass: Optional[HomeAssistant] = None, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, hass: Optional[HomeAssistant] = None, config: Optional[Dict[str, Any]] = None
+    ):
         """Initialize the fetcher.
 
         Args:
@@ -27,8 +31,12 @@ class SourcePriorityFetcher:
 
         # Configuration
         self.parallel_fetch = self.config.get(Config.PARALLEL_FETCH, Defaults.PARALLEL_FETCH)
-        self.timeout = self.config.get(Config.PARALLEL_FETCH_TIMEOUT, Defaults.PARALLEL_FETCH_TIMEOUT)
-        self.max_workers = self.config.get(Config.PARALLEL_FETCH_MAX_WORKERS, Defaults.PARALLEL_FETCH_MAX_WORKERS)
+        self.timeout = self.config.get(
+            Config.PARALLEL_FETCH_TIMEOUT, Defaults.PARALLEL_FETCH_TIMEOUT
+        )
+        self.max_workers = self.config.get(
+            Config.PARALLEL_FETCH_MAX_WORKERS, Defaults.PARALLEL_FETCH_MAX_WORKERS
+        )
 
         # Statistics
         self._stats = {
@@ -39,17 +47,19 @@ class SourcePriorityFetcher:
             "failed_fetches": 0,
             "total_time": 0.0,
             "sources_tried": {},
-            "sources_succeeded": {}
+            "sources_succeeded": {},
         }
 
-    async def fetch_with_priority(self,
-                                fetch_functions: Dict[str, Callable[..., Awaitable[Any]]],
-                                priority: List[str],
-                                common_kwargs: Optional[Dict[str, Any]] = None,
-                                source_specific_kwargs: Optional[Dict[str, Dict[str, Any]]] = None,
-                                parallel: Optional[bool] = None,
-                                timeout: Optional[float] = None,
-                                max_workers: Optional[int] = None) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    async def fetch_with_priority(
+        self,
+        fetch_functions: Dict[str, Callable[..., Awaitable[Any]]],
+        priority: List[str],
+        common_kwargs: Optional[Dict[str, Any]] = None,
+        source_specific_kwargs: Optional[Dict[str, Dict[str, Any]]] = None,
+        parallel: Optional[bool] = None,
+        timeout: Optional[float] = None,
+        max_workers: Optional[int] = None,
+    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         """Fetch data from multiple sources in priority order or parallel.
 
         Args:
@@ -104,29 +114,22 @@ class SourcePriorityFetcher:
 
             # Fetch in parallel
             return await self._fetch_parallel(
-                fetch_functions,
-                sources,
-                kwargs_by_source,
-                timeout,
-                max_workers
+                fetch_functions, sources, kwargs_by_source, timeout, max_workers
             )
         else:
             # Update stats
             self._stats["sequential_fetches"] += 1
 
             # Fetch sequentially in priority order
-            return await self._fetch_sequential(
-                fetch_functions,
-                sources,
-                kwargs_by_source,
-                timeout
-            )
+            return await self._fetch_sequential(fetch_functions, sources, kwargs_by_source, timeout)
 
-    async def _fetch_sequential(self,
-                              fetch_functions: Dict[str, Callable[..., Awaitable[Any]]],
-                              sources: List[str],
-                              kwargs_by_source: Dict[str, Dict[str, Any]],
-                              timeout: float) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    async def _fetch_sequential(
+        self,
+        fetch_functions: Dict[str, Callable[..., Awaitable[Any]]],
+        sources: List[str],
+        kwargs_by_source: Dict[str, Dict[str, Any]],
+        timeout: float,
+    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         """Fetch data sequentially in priority order.
 
         Args:
@@ -151,12 +154,14 @@ class SourcePriorityFetcher:
 
                 # Check if the API was skipped due to missing credentials
                 if is_skipped_response(data):
-                    _LOGGER.debug("Source %s skipped: %s", source, data.get('reason'))
+                    _LOGGER.debug("Source %s skipped: %s", source, data.get("reason"))
                     continue
 
                 # Update stats
                 self._stats["successful_fetches"] += 1
-                self._stats["sources_succeeded"][source] = self._stats["sources_succeeded"].get(source, 0) + 1
+                self._stats["sources_succeeded"][source] = (
+                    self._stats["sources_succeeded"].get(source, 0) + 1
+                )
 
                 return source, data
 
@@ -172,12 +177,14 @@ class SourcePriorityFetcher:
         self._stats["failed_fetches"] += 1
         return None, None
 
-    async def _fetch_parallel(self,
-                            fetch_functions: Dict[str, Callable[..., Awaitable[Any]]],
-                            sources: List[str],
-                            kwargs_by_source: Dict[str, Dict[str, Any]],
-                            timeout: float,
-                            max_workers: int) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    async def _fetch_parallel(
+        self,
+        fetch_functions: Dict[str, Callable[..., Awaitable[Any]]],
+        sources: List[str],
+        kwargs_by_source: Dict[str, Dict[str, Any]],
+        timeout: float,
+        max_workers: int,
+    ) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         """Fetch data in parallel from multiple sources.
 
         Args:
@@ -209,9 +216,7 @@ class SourcePriorityFetcher:
         try:
             # Wait for first task to complete or timeout
             done, pending = await asyncio.wait(
-                pending,
-                timeout=timeout,
-                return_when=asyncio.FIRST_COMPLETED
+                pending, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
             )
 
             # Cancel pending tasks
@@ -231,7 +236,9 @@ class SourcePriorityFetcher:
 
                     # Update stats
                     self._stats["successful_fetches"] += 1
-                    self._stats["sources_succeeded"][source] = self._stats["sources_succeeded"].get(source, 0) + 1
+                    self._stats["sources_succeeded"][source] = (
+                        self._stats["sources_succeeded"].get(source, 0) + 1
+                    )
 
                     return source, data
                 except Exception as e:

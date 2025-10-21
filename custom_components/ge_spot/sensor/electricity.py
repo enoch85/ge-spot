@@ -1,4 +1,5 @@
 """Electricity price data sensors for the GE-Spot integration."""
+
 import logging
 from datetime import datetime, timedelta
 import voluptuous as vol
@@ -20,7 +21,7 @@ from .price import (
     PriceDifferenceSensor,
     PricePercentSensor,
     TomorrowAveragePriceSensor,
-    TomorrowExtremaPriceSensor
+    TomorrowExtremaPriceSensor,
 )
 
 from ..const.attributes import Attributes
@@ -28,6 +29,7 @@ from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 
 _LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -37,31 +39,34 @@ async def async_setup_entry(
     """Set up the GE Spot electricity sensors."""
     coordinator: UnifiedPriceCoordinator = hass.data[DOMAIN][config_entry.entry_id]
     options = config_entry.options
-    data = config_entry.data # Get data as well
+    data = config_entry.data  # Get data as well
 
     # Prioritize options, fallback to data, then default for display_unit
     display_unit_setting = options.get(
-        Config.DISPLAY_UNIT,
-        data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
+        Config.DISPLAY_UNIT, data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
     )
 
     # Create a proper config_data dictionary including area and other relevant options
     config_data = {
-        Attributes.AREA: coordinator.area, # Get area from coordinator
+        Attributes.AREA: coordinator.area,  # Get area from coordinator
         # Prioritize options, fallback to data, then default for VAT
         Attributes.VAT: options.get(Config.VAT, data.get(Config.VAT, 0)),
         # Prioritize options, fallback to data, then default for PRECISION
-        Config.PRECISION: options.get(Config.PRECISION, data.get(Config.PRECISION, Defaults.PRECISION)),
+        Config.PRECISION: options.get(
+            Config.PRECISION, data.get(Config.PRECISION, Defaults.PRECISION)
+        ),
         # Use the resolved display_unit_setting
         Config.DISPLAY_UNIT: display_unit_setting,
         # Prioritize options, fallback to data, then default for CURRENCY
-        Attributes.CURRENCY: options.get(Config.CURRENCY, data.get(Config.CURRENCY, coordinator.currency)),
+        Attributes.CURRENCY: options.get(
+            Config.CURRENCY, data.get(Config.CURRENCY, coordinator.currency)
+        ),
         "entry_id": config_entry.entry_id,
     }
 
     # Define value extraction functions
-    get_current_price = lambda data: data.get('current_price')
-    get_next_interval_price = lambda data: data.get('next_interval_price')
+    get_current_price = lambda data: data.get("current_price")
+    get_next_interval_price = lambda data: data.get("next_interval_price")
     # Define a simple additional attributes function
     get_base_attrs = lambda data: {"tomorrow_valid": data.get("tomorrow_valid", False)}
 
@@ -70,7 +75,7 @@ async def async_setup_entry(
     # Get specific settings used by some sensors directly (already present)
     vat = options.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
     include_vat = options.get(Config.INCLUDE_VAT, False)
-    price_in_cents = display_unit_setting == DisplayUnit.CENTS # Use resolved display_unit_setting
+    price_in_cents = display_unit_setting == DisplayUnit.CENTS  # Use resolved display_unit_setting
 
     # Create sensor entities (passing the populated config_data)
 
@@ -78,11 +83,11 @@ async def async_setup_entry(
     entities.append(
         PriceValueSensor(
             coordinator,
-            config_data, # Pass the correctly populated config_data
-            "current_price", # Pass only the sensor type
+            config_data,  # Pass the correctly populated config_data
+            "current_price",  # Pass only the sensor type
             "Current Price",
-            get_current_price, # Pass the function
-            get_base_attrs     # Pass the function for additional attributes
+            get_current_price,  # Pass the function
+            get_base_attrs,  # Pass the function for additional attributes
         )
     )
 
@@ -90,11 +95,11 @@ async def async_setup_entry(
     entities.append(
         PriceValueSensor(
             coordinator,
-            config_data, # Pass the correctly populated config_data
-            "next_interval_price", # Pass only the sensor type
+            config_data,  # Pass the correctly populated config_data
+            "next_interval_price",  # Pass only the sensor type
             "Next Interval Price",
-            get_next_interval_price, # Pass the function
-            None                 # No specific additional attributes needed here yet
+            get_next_interval_price,  # Pass the function
+            None,  # No specific additional attributes needed here yet
         )
     )
 
@@ -102,10 +107,10 @@ async def async_setup_entry(
     entities.append(
         PriceStatisticSensor(
             coordinator,
-            config_data, # Pass config_data
-            "average_price", # Pass only the sensor type
+            config_data,  # Pass config_data
+            "average_price",  # Pass only the sensor type
             "Average Price",
-            "avg"
+            "avg",
         )
     )
 
@@ -113,10 +118,10 @@ async def async_setup_entry(
     entities.append(
         ExtremaPriceSensor(
             coordinator,
-            config_data, # Pass the correctly populated config_data
-            "peak_price", # Pass only the sensor type
+            config_data,  # Pass the correctly populated config_data
+            "peak_price",  # Pass only the sensor type
             "Peak Price",
-            extrema_type="max" # Removed additional_attrs
+            extrema_type="max",  # Removed additional_attrs
         )
     )
 
@@ -124,10 +129,10 @@ async def async_setup_entry(
     entities.append(
         ExtremaPriceSensor(
             coordinator,
-            config_data, # Pass the correctly populated config_data
-            "off_peak_price", # Pass only the sensor type
+            config_data,  # Pass the correctly populated config_data
+            "off_peak_price",  # Pass only the sensor type
             "Off-Peak Price",
-            extrema_type="min" # Removed additional_attrs
+            extrema_type="min",  # Removed additional_attrs
         )
     )
 
@@ -135,11 +140,11 @@ async def async_setup_entry(
     entities.append(
         PriceDifferenceSensor(
             coordinator,
-            config_data, # Pass config_data
-            "price_difference", # Pass only the sensor type
+            config_data,  # Pass config_data
+            "price_difference",  # Pass only the sensor type
             "Price Difference",
             "current_price",
-            "average"
+            "average",
         )
     )
 
@@ -147,11 +152,11 @@ async def async_setup_entry(
     entities.append(
         PricePercentSensor(
             coordinator,
-            config_data, # Pass config_data
-            "price_percentage", # Pass only the sensor type
+            config_data,  # Pass config_data
+            "price_percentage",  # Pass only the sensor type
             "Price Percentage",
             "current_price",
-            "average"
+            "average",
         )
     )
 
@@ -163,11 +168,11 @@ async def async_setup_entry(
     entities.append(
         TomorrowAveragePriceSensor(
             coordinator,
-            config_data, # Pass the correctly populated config_data
-            "tomorrow_average_price", # Pass only the sensor type
+            config_data,  # Pass the correctly populated config_data
+            "tomorrow_average_price",  # Pass only the sensor type
             "Tomorrow Average Price",
-            get_tomorrow_avg_price, # Pass the function
-            additional_attrs=get_base_attrs # Keep here, TomorrowAveragePriceSensor inherits from PriceValueSensor correctly
+            get_tomorrow_avg_price,  # Pass the function
+            additional_attrs=get_base_attrs,  # Keep here, TomorrowAveragePriceSensor inherits from PriceValueSensor correctly
         )
     )
 
@@ -175,11 +180,11 @@ async def async_setup_entry(
     entities.append(
         TomorrowExtremaPriceSensor(
             coordinator,
-            config_data, # Pass the correctly populated config_data
-            "tomorrow_peak_price", # Pass only the sensor type
+            config_data,  # Pass the correctly populated config_data
+            "tomorrow_peak_price",  # Pass only the sensor type
             "Tomorrow Peak Price",
-            day_offset=1,       # Specify tomorrow
-            extrema_type="max"  # Specify peak
+            day_offset=1,  # Specify tomorrow
+            extrema_type="max",  # Specify peak
         )
     )
 
@@ -187,11 +192,11 @@ async def async_setup_entry(
     entities.append(
         TomorrowExtremaPriceSensor(
             coordinator,
-            config_data, # Pass the correctly populated config_data
-            "tomorrow_off_peak_price", # Pass only the sensor type
+            config_data,  # Pass the correctly populated config_data
+            "tomorrow_off_peak_price",  # Pass only the sensor type
             "Tomorrow Off-Peak Price",
-            day_offset=1,       # Specify tomorrow
-            extrema_type="min"  # Specify off-peak
+            day_offset=1,  # Specify tomorrow
+            extrema_type="min",  # Specify off-peak
         )
     )
     # --- End Tomorrow Sensors ---

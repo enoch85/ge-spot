@@ -1,4 +1,5 @@
 """Session management for API connections."""
+
 import logging
 import aiohttp
 import asyncio
@@ -10,6 +11,7 @@ _LOGGER = logging.getLogger(__name__)
 # Global session registry to prevent leaks
 _SESSION_REGISTRY = weakref.WeakSet()
 
+
 async def close_all_sessions():
     """Close all registered sessions."""
     for session in list(_SESSION_REGISTRY):
@@ -18,6 +20,7 @@ async def close_all_sessions():
                 await session.close()
             except Exception as e:
                 _LOGGER.error(f"Error closing session: {e}")
+
 
 async def ensure_session(api_obj):
     """Ensure that an API object has an aiohttp session."""
@@ -31,6 +34,7 @@ async def ensure_session(api_obj):
     except Exception as e:
         _LOGGER.error(f"Error creating session in {api_obj.__class__.__name__}: {str(e)}")
 
+
 async def close_session(api_obj):
     """Close an API object's session if it owns it."""
     if api_obj.session and api_obj._owns_session and not api_obj.session.closed:
@@ -42,6 +46,7 @@ async def close_session(api_obj):
         finally:
             api_obj.session = None
             api_obj._owns_session = False
+
 
 async def fetch_with_retry(api_obj, url, params=None, headers=None, timeout=30, max_retries=3):
     """Fetch data from URL with retry mechanism."""
@@ -55,19 +60,25 @@ async def fetch_with_retry(api_obj, url, params=None, headers=None, timeout=30, 
     if headers is None:
         headers = {
             "User-Agent": "HomeAssistantGESpot/1.0",
-            "Accept": "application/json, text/plain, */*"
+            "Accept": "application/json, text/plain, */*",
         }
 
     for attempt in range(max_retries):
         try:
             _LOGGER.debug(f"API request attempt {attempt+1}/{max_retries}: {url}")
 
-            async with api_obj.session.get(url, params=params, headers=headers, timeout=timeout) as response:
+            async with api_obj.session.get(
+                url, params=params, headers=headers, timeout=timeout
+            ) as response:
                 if response.status != 200:
-                    _LOGGER.error(f"Error fetching from URL (attempt {attempt+1}/{max_retries}): HTTP {response.status}")
+                    _LOGGER.error(
+                        f"Error fetching from URL (attempt {attempt+1}/{max_retries}): HTTP {response.status}"
+                    )
 
                     # Log response body for debugging if not successful
-                    if response.status != 404:  # Don't log 404 body as it's usually large error pages
+                    if (
+                        response.status != 404
+                    ):  # Don't log 404 body as it's usually large error pages
                         try:
                             error_text = await response.text()
                             _LOGGER.debug(f"Error response (first 500 chars): {error_text[:500]}")
@@ -75,14 +86,14 @@ async def fetch_with_retry(api_obj, url, params=None, headers=None, timeout=30, 
                             _LOGGER.debug("Could not read error response body")
 
                     if attempt < max_retries - 1:
-                        retry_delay = 2 ** attempt  # Exponential backoff
+                        retry_delay = 2**attempt  # Exponential backoff
                         _LOGGER.debug(f"Retrying in {retry_delay} seconds...")
                         await asyncio.sleep(retry_delay)
                         continue
                     return None
 
                 # Check content type to handle response appropriately
-                content_type = response.headers.get('Content-Type', '')
+                content_type = response.headers.get("Content-Type", "")
                 _LOGGER.debug(f"Response content type: {content_type}")
 
                 response_text = await response.text()
@@ -93,7 +104,7 @@ async def fetch_with_retry(api_obj, url, params=None, headers=None, timeout=30, 
                 else:
                     _LOGGER.debug(f"Raw API response: {response_text}")
 
-                if 'application/json' in content_type:
+                if "application/json" in content_type:
                     try:
                         json_data = await response.json()
                         _LOGGER.debug(f"Parsed JSON data successfully")
@@ -108,30 +119,34 @@ async def fetch_with_retry(api_obj, url, params=None, headers=None, timeout=30, 
         except asyncio.TimeoutError:
             _LOGGER.error(f"Timeout fetching from URL (attempt {attempt+1}/{max_retries})")
             if attempt < max_retries - 1:
-                retry_delay = 2 ** attempt  # Exponential backoff
+                retry_delay = 2**attempt  # Exponential backoff
                 await asyncio.sleep(retry_delay)
                 continue
             raise
         except aiohttp.ClientConnectorError as e:
-            _LOGGER.error(f"Connection error fetching from URL (attempt {attempt+1}/{max_retries}): {e}")
+            _LOGGER.error(
+                f"Connection error fetching from URL (attempt {attempt+1}/{max_retries}): {e}"
+            )
             if attempt < max_retries - 1:
-                retry_delay = 2 ** attempt  # Exponential backoff
+                retry_delay = 2**attempt  # Exponential backoff
                 await asyncio.sleep(retry_delay)
                 continue
             raise
         except Exception as e:
             _LOGGER.error(f"Error in fetch_with_retry: {str(e)}")
             if attempt < max_retries - 1:
-                retry_delay = 2 ** attempt  # Exponential backoff
+                retry_delay = 2**attempt  # Exponential backoff
                 await asyncio.sleep(retry_delay)
                 continue
             raise
 
     return None
 
+
 def register_shutdown_task(hass):
     """Register session cleanup as a shutdown task."""
     if hass:
+
         async def _async_shutdown(_):
             await close_all_sessions()
 

@@ -38,7 +38,7 @@ class AemoAPI(BasePriceAPI):
         self,
         config: Optional[Dict[str, Any]] = None,
         session: Optional[aiohttp.ClientSession] = None,
-        timezone_service=None
+        timezone_service=None,
     ):
         """Initialize the API client.
 
@@ -97,7 +97,7 @@ class AemoAPI(BasePriceAPI):
 
             # Step 3: Extract CSV from ZIP
             _LOGGER.debug(f"Extracting CSV from ZIP ({len(zip_data):,} bytes)")
-            csv_content = unzip_single_file(zip_data, expected_extension='.csv')
+            csv_content = unzip_single_file(zip_data, expected_extension=".csv")
 
             _LOGGER.info(f"Extracted CSV ({len(csv_content):,} characters) for region {area}")
 
@@ -111,8 +111,8 @@ class AemoAPI(BasePriceAPI):
                     "file_url": file_url,
                     "file_size_bytes": len(zip_data),
                     "csv_size_chars": len(csv_content),
-                    "fetched_at": now_utc.isoformat()
-                }
+                    "fetched_at": now_utc.isoformat(),
+                },
             }
 
         except Exception as e:
@@ -139,7 +139,7 @@ class AemoAPI(BasePriceAPI):
             html = await client.fetch(
                 Aemo.NEMWEB_PREDISPATCH_URL,
                 timeout=Network.Defaults.HTTP_TIMEOUT,
-                response_format='text'
+                response_format="text",
             )
 
             if not html:
@@ -225,11 +225,11 @@ class AemoAPI(BasePriceAPI):
             Timezone string (e.g. "Australia/Sydney")
         """
         timezone_map = {
-            "NSW1": "Australia/Sydney",      # New South Wales
-            "QLD1": "Australia/Brisbane",    # Queensland
-            "SA1": "Australia/Adelaide",     # South Australia
-            "TAS1": "Australia/Hobart",      # Tasmania
-            "VIC1": "Australia/Melbourne"    # Victoria
+            "NSW1": "Australia/Sydney",  # New South Wales
+            "QLD1": "Australia/Brisbane",  # Queensland
+            "SA1": "Australia/Adelaide",  # South Australia
+            "TAS1": "Australia/Hobart",  # Tasmania
+            "VIC1": "Australia/Melbourne",  # Victoria
         }
 
         return timezone_map.get(area, "Australia/Sydney")
@@ -244,4 +244,5 @@ class AemoAPI(BasePriceAPI):
             AemoParser instance
         """
         from .parsers.aemo_parser import AemoParser
+
         return AemoParser(timezone_service=self.timezone_service)

@@ -1,4 +1,5 @@
 """Options flow for GE-Spot integration."""
+
 import logging
 import voluptuous as vol
 
@@ -13,12 +14,10 @@ from ..const.areas import AreaMapping
 from ..const.time import TimezoneReference
 from ..api import get_sources_for_region, create_api
 from ..api import entsoe
-from .schemas import (
-    get_options_schema,
-    get_default_values
-)
+from .schemas import get_options_schema, get_default_values
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class GSpotOptionsFlow(OptionsFlow):
     """Handle GE-Spot options."""
@@ -65,7 +64,9 @@ class GSpotOptionsFlow(OptionsFlow):
                                 # Update self._data so subsequent updates see it
                                 self._data[Config.API_KEY] = api_key
                             else:
-                                self._errors[f"{Source.ENTSOE}_api_key"] = "invalid_api_key_in_options"
+                                self._errors[f"{Source.ENTSOE}_api_key"] = (
+                                    "invalid_api_key_in_options"
+                                )
                                 return await self._show_form()
                         else:
                             # Key unchanged, but ensure it's in entry.data
@@ -74,7 +75,7 @@ class GSpotOptionsFlow(OptionsFlow):
                                 updated_data[Config.API_KEY] = api_key
                                 self.hass.config_entries.async_update_entry(
                                     self.hass.config_entries.async_get_entry(self.entry_id),
-                                    data=updated_data
+                                    data=updated_data,
                                 )
 
                     # Remove the API key field from options to avoid duplication
@@ -95,7 +96,9 @@ class GSpotOptionsFlow(OptionsFlow):
                     data_changed = True
 
                 if Config.TIMEZONE_REFERENCE in user_input:
-                    _LOGGER.debug(f"Saving timezone reference setting: {user_input[Config.TIMEZONE_REFERENCE]}")
+                    _LOGGER.debug(
+                        f"Saving timezone reference setting: {user_input[Config.TIMEZONE_REFERENCE]}"
+                    )
                     updated_data[Config.TIMEZONE_REFERENCE] = user_input[Config.TIMEZONE_REFERENCE]
                     # Keep in options as well
                     data_changed = True
@@ -112,7 +115,9 @@ class GSpotOptionsFlow(OptionsFlow):
                 # Update the config entry data (this includes the API key from self._data)
                 entry = self.hass.config_entries.async_get_entry(self.entry_id)
                 self.hass.config_entries.async_update_entry(entry, data=updated_data)
-                _LOGGER.debug(f"Updated entry.data with keys: {list(updated_data.keys())}, api_key present: {Config.API_KEY in updated_data}")
+                _LOGGER.debug(
+                    f"Updated entry.data with keys: {list(updated_data.keys())}, api_key present: {Config.API_KEY in updated_data}"
+                )
 
                 # Handle clear cache action if present
                 if "clear_cache" in user_input and user_input["clear_cache"]:
@@ -122,6 +127,7 @@ class GSpotOptionsFlow(OptionsFlow):
                         try:
                             # Check if the clear_cache method is a coroutine function
                             import inspect
+
                             if inspect.iscoroutinefunction(coordinator.clear_cache):
                                 await coordinator.clear_cache()
                             else:
@@ -168,7 +174,7 @@ class GSpotOptionsFlow(OptionsFlow):
                 step_id="init",
                 data_schema=schema,
                 errors=self._errors,
-                description_placeholders={"data_description": "data_description"}
+                description_placeholders={"data_description": "data_description"},
             )
         except Exception as e:
             _LOGGER.error(f"Failed to create options form: {e}", exc_info=True)
@@ -177,15 +183,27 @@ class GSpotOptionsFlow(OptionsFlow):
             # Provide a fallback schema if needed
             return self.async_show_form(
                 step_id="init",
-                data_schema=vol.Schema({
-                    vol.Optional(Config.VAT, default=0): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-                    vol.Optional(Config.TIMEZONE_REFERENCE, default=Defaults.TIMEZONE_REFERENCE): vol.In({
-                        TimezoneReference.HOME_ASSISTANT: TimezoneReference.OPTIONS[TimezoneReference.HOME_ASSISTANT],
-                        TimezoneReference.LOCAL_AREA: TimezoneReference.OPTIONS[TimezoneReference.LOCAL_AREA]
-                    }),
-                }),
+                data_schema=vol.Schema(
+                    {
+                        vol.Optional(Config.VAT, default=0): vol.All(
+                            vol.Coerce(float), vol.Range(min=0, max=100)
+                        ),
+                        vol.Optional(
+                            Config.TIMEZONE_REFERENCE, default=Defaults.TIMEZONE_REFERENCE
+                        ): vol.In(
+                            {
+                                TimezoneReference.HOME_ASSISTANT: TimezoneReference.OPTIONS[
+                                    TimezoneReference.HOME_ASSISTANT
+                                ],
+                                TimezoneReference.LOCAL_AREA: TimezoneReference.OPTIONS[
+                                    TimezoneReference.LOCAL_AREA
+                                ],
+                            }
+                        ),
+                    }
+                ),
                 errors=self._errors,
-                description_placeholders={"data_description": "data_description"}
+                description_placeholders={"data_description": "data_description"},
             )
 
     async def _find_existing_api_key(self, source_type):
@@ -196,6 +214,7 @@ class GSpotOptionsFlow(OptionsFlow):
 
         # Then check other entries
         from ..const import DOMAIN
+
         existing_entries = self.hass.config_entries.async_entries(DOMAIN)
         for entry in existing_entries:
             if entry.entry_id == self.entry_id:

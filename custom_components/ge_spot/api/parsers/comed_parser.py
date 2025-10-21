@@ -1,4 +1,5 @@
 """Parser for ComEd API responses."""
+
 import logging
 import json
 import re
@@ -14,6 +15,7 @@ from ...const.api import ComEd, SourceTimezone
 from ..interval_expander import convert_to_target_intervals
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class ComedParser(BasePriceParser):
     """Parser for ComEd API responses."""
@@ -39,7 +41,9 @@ class ComedParser(BasePriceParser):
         result = {
             "interval_raw": {},  # Changed from interval_prices
             "currency": Currency.CENTS,  # ComEd API returns prices in cents/kWh, not USD/kWh
-            "timezone": SourceTimezone.API_TIMEZONES.get(Source.COMED, "America/Chicago")  # ComEd timezone
+            "timezone": SourceTimezone.API_TIMEZONES.get(
+                Source.COMED, "America/Chicago"
+            ),  # ComEd timezone
         }
 
         # Check for valid data
@@ -59,7 +63,9 @@ class ComedParser(BasePriceParser):
             self._parse_price_data(raw_data, endpoint, result)
         # Handle pre-processed data
         elif isinstance(raw_data, dict):
-            if "interval_raw" in raw_data and isinstance(raw_data["interval_raw"], dict):  # Changed from interval_prices
+            if "interval_raw" in raw_data and isinstance(
+                raw_data["interval_raw"], dict
+            ):  # Changed from interval_prices
                 result["interval_raw"] = raw_data["interval_raw"]  # Changed from interval_prices
             elif "raw_data" in raw_data:
                 json_data = self._fix_and_parse_json(raw_data["raw_data"])
@@ -69,10 +75,14 @@ class ComedParser(BasePriceParser):
 
         # Calculate current and next interval prices
         if not result.get("current_price"):
-            result["current_price"] = self._get_current_price(result["interval_raw"])  # Changed from interval_prices
+            result["current_price"] = self._get_current_price(
+                result["interval_raw"]
+            )  # Changed from interval_prices
 
         if not result.get("next_interval_price"):
-            result["next_interval_price"] = self._get_next_interval_price(result["interval_raw"])  # Changed from interval_prices
+            result["next_interval_price"] = self._get_next_interval_price(
+                result["interval_raw"]
+            )  # Changed from interval_prices
 
         return result
 
@@ -86,11 +96,13 @@ class ComedParser(BasePriceParser):
             Metadata dictionary
         """
         metadata = super().extract_metadata(data)
-        metadata.update({
-            "currency": Currency.CENTS,  # ComEd API returns prices in cents/kWh, not USD/kWh
-            "timezone": SourceTimezone.API_TIMEZONES.get(Source.COMED, "America/Chicago"),
-            "area": "5minutefeed"  # Default area
-        })
+        metadata.update(
+            {
+                "currency": Currency.CENTS,  # ComEd API returns prices in cents/kWh, not USD/kWh
+                "timezone": SourceTimezone.API_TIMEZONES.get(Source.COMED, "America/Chicago"),
+                "area": "5minutefeed",  # Default area
+            }
+        )
 
         # Extract additional metadata
         if isinstance(data, dict):
@@ -138,10 +150,10 @@ class ComedParser(BasePriceParser):
                 # Add missing commas between properties
                 fixed_json = re.sub(r'""', '","', raw_data)
                 # Fix array brackets if needed
-                if not fixed_json.startswith('['):
-                    fixed_json = '[' + fixed_json
-                if not fixed_json.endswith(']'):
-                    fixed_json = fixed_json + ']'
+                if not fixed_json.startswith("["):
+                    fixed_json = "[" + fixed_json
+                if not fixed_json.endswith("]"):
+                    fixed_json = fixed_json + "]"
                 parsed_data = json.loads(fixed_json)
                 # If parsed data is a dict, wrap it in a list
                 if isinstance(parsed_data, dict):
@@ -187,7 +199,9 @@ class ComedParser(BasePriceParser):
 
             # Use centralized conversion to convert 5-min data to target intervals
             if five_min_prices:
-                converted_prices = convert_to_target_intervals(five_min_prices, source_interval_minutes=5)
+                converted_prices = convert_to_target_intervals(
+                    five_min_prices, source_interval_minutes=5
+                )
                 result["interval_raw"].update(converted_prices)
 
         # For current hour average, just use the current price
@@ -203,11 +217,15 @@ class ComedParser(BasePriceParser):
                         timestamp = datetime.now(timezone.utc)
                     hour_dt = timestamp.replace(minute=0, second=0, microsecond=0)
                     interval_key = hour_dt.isoformat()
-                    result["interval_raw"][interval_key] = current_price  # Changed from interval_prices
+                    result["interval_raw"][
+                        interval_key
+                    ] = current_price  # Changed from interval_prices
                 except (ValueError, TypeError) as e:
                     _LOGGER.warning(f"Failed to parse current hour price: {e}")
 
-    def _get_current_price(self, interval_raw: Dict[str, float]) -> Optional[float]:  # Changed from interval_prices
+    def _get_current_price(
+        self, interval_raw: Dict[str, float]
+    ) -> Optional[float]:  # Changed from interval_prices
         """Get current interval price.
 
         Args:
@@ -227,7 +245,9 @@ class ComedParser(BasePriceParser):
 
         return interval_raw.get(current_interval_key)  # Changed from interval_prices
 
-    def _get_next_interval_price(self, interval_raw: Dict[str, float]) -> Optional[float]:  # Changed from interval_prices
+    def _get_next_interval_price(
+        self, interval_raw: Dict[str, float]
+    ) -> Optional[float]:  # Changed from interval_prices
         """Get next interval price.
 
         Args:

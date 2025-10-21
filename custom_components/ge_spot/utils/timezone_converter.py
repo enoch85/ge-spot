@@ -7,6 +7,7 @@ from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class TimezoneConverter:
     """Handles centralized timezone normalization for price data."""
 
@@ -18,7 +19,9 @@ class TimezoneConverter:
         """
         self._tz_service = tz_service
 
-    def parse_datetime_with_tz(self, iso_datetime_str: str, source_timezone_str: Optional[str] = None) -> Optional[datetime]:
+    def parse_datetime_with_tz(
+        self, iso_datetime_str: str, source_timezone_str: Optional[str] = None
+    ) -> Optional[datetime]:
         """Parse an ISO datetime string into an aware datetime object.
 
         Args:
@@ -30,7 +33,7 @@ class TimezoneConverter:
         """
         try:
             # Try to parse with fromisoformat, handling Z for UTC
-            iso_str = iso_datetime_str.replace('Z', '+00:00')
+            iso_str = iso_datetime_str.replace("Z", "+00:00")
             dt = datetime.fromisoformat(iso_str)
 
             # If dt is naive but we have a source_timezone_str, make it aware
@@ -60,7 +63,7 @@ class TimezoneConverter:
         self,
         interval_prices: Dict[str, Any],
         source_timezone_str: Optional[str] = None,
-        preserve_date: bool = True
+        preserve_date: bool = True,
     ) -> Dict[str, Any]:
         """Normalizes timestamps in the interval price dictionary to the target timezone.
 
@@ -79,7 +82,7 @@ class TimezoneConverter:
             "Normalizing %d interval price timestamps using target timezone: %s (preserve_date=%s)",
             len(interval_prices),
             self._tz_service.target_timezone,
-            preserve_date
+            preserve_date,
         )
 
         normalized_prices = {}
@@ -111,24 +114,32 @@ class TimezoneConverter:
                     # This aligns with how most energy markets handle the extra hour
 
                 # Store the price
-                normalized_prices[target_key] = price_data if isinstance(price_data, dict) else price_data
+                normalized_prices[target_key] = (
+                    price_data if isinstance(price_data, dict) else price_data
+                )
 
-            _LOGGER.debug("Normalization complete. Result keys: %s", list(normalized_prices.keys())[:5] + ["..."] if len(normalized_prices) > 5 else list(normalized_prices.keys()))
+            _LOGGER.debug(
+                "Normalization complete. Result keys: %s",
+                (
+                    list(normalized_prices.keys())[:5] + ["..."]
+                    if len(normalized_prices) > 5
+                    else list(normalized_prices.keys())
+                ),
+            )
 
         except Exception as e:
             _LOGGER.error(
                 "Error during timezone normalization: %s. Input keys: %s",
                 e,
                 list(interval_prices.keys()),
-                exc_info=True
+                exc_info=True,
             )
             return {}
 
         return normalized_prices
 
     def split_into_today_tomorrow(
-        self,
-        normalized_prices: Dict[str, Any]
+        self, normalized_prices: Dict[str, Any]
     ) -> tuple[Dict[str, Any], Dict[str, Any]]:
         """Split normalized hourly prices into today and tomorrow buckets.
 
@@ -183,14 +194,16 @@ class TimezoneConverter:
                 elif interval_key in tomorrow_hours:
                     tomorrow_prices[interval_key] = price
 
-        _LOGGER.debug(f"Split prices into today ({len(today_prices)} intervals) and tomorrow ({len(tomorrow_prices)} intervals)")
+        _LOGGER.debug(
+            f"Split prices into today ({len(today_prices)} intervals) and tomorrow ({len(tomorrow_prices)} intervals)"
+        )
         return today_prices, tomorrow_prices
 
     def normalize_today_and_tomorrow_prices(
         self,
         today_prices_raw: Optional[Dict[str, Any]],
         tomorrow_prices_raw: Optional[Dict[str, Any]],
-        source_timezone_str: Optional[str] = None
+        source_timezone_str: Optional[str] = None,
     ) -> tuple[Dict[str, Any], Dict[str, Any]]:
         """Normalizes timestamps for both today's and tomorrow's raw prices."""
 
@@ -199,13 +212,18 @@ class TimezoneConverter:
 
         if today_prices_raw:
             _LOGGER.debug("Normalizing today's prices...")
-            final_today_prices = self.normalize_interval_prices(today_prices_raw, source_timezone_str)
+            final_today_prices = self.normalize_interval_prices(
+                today_prices_raw, source_timezone_str
+            )
 
         if tomorrow_prices_raw:
             _LOGGER.debug("Normalizing tomorrow's prices...")
-            final_tomorrow_prices = self.normalize_interval_prices(tomorrow_prices_raw, source_timezone_str)
+            final_tomorrow_prices = self.normalize_interval_prices(
+                tomorrow_prices_raw, source_timezone_str
+            )
 
         return final_today_prices, final_tomorrow_prices
+
 
 # Example usage (would be in DataProcessor):
 # tz_converter = TimezoneConverter(self._tz_service)

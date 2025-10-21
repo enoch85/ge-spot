@@ -1,4 +1,5 @@
 """API handler for ComEd 5-Minute Pricing."""
+
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
@@ -17,6 +18,7 @@ from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class ComedAPI(BasePriceAPI):
     """API client for ComEd 5-Minute Pricing (aggregated to 15-minute intervals)."""
@@ -70,11 +72,7 @@ class ComedAPI(BasePriceAPI):
                 "timezone": metadata.get("timezone", "America/Chicago"),
                 "currency": metadata.get("currency", "cents"),
                 "source_name": "comed",
-                "raw_data": {
-                    "data": raw_data,
-                    "timestamp": now_utc.isoformat(),
-                    "area": area
-                },
+                "raw_data": {"data": raw_data, "timestamp": now_utc.isoformat(), "area": area},
             }
         finally:
             if session is None and client:
@@ -130,7 +128,9 @@ class ComedAPI(BasePriceAPI):
                 url = f"{ComEd.BASE_URL}?type={endpoint}"
 
                 # ComEd API doesn't use date parameters in the URL, but we log the date range for debugging
-                _LOGGER.debug(f"Fetching ComEd data from URL: {url} for date range: {start_date.isoformat()} to {end_date.isoformat()}")
+                _LOGGER.debug(
+                    f"Fetching ComEd data from URL: {url} for date range: {start_date.isoformat()} to {end_date.isoformat()}"
+                )
 
                 response = None
                 try:
@@ -144,7 +144,9 @@ class ComedAPI(BasePriceAPI):
                     continue  # Try next date range
 
                 if not response:
-                    _LOGGER.warning(f"Empty response from ComEd API for date range: {start_date.isoformat()} to {end_date.isoformat()}")
+                    _LOGGER.warning(
+                        f"Empty response from ComEd API for date range: {start_date.isoformat()} to {end_date.isoformat()}"
+                    )
                     continue  # Try next date range
 
                 # If we got a valid response, process it
@@ -158,7 +160,9 @@ class ComedAPI(BasePriceAPI):
 
             # Check if response is valid
             if isinstance(response, dict) and "error" in response:
-                _LOGGER.error(f"Error response from ComEd API: {response.get('message', 'Unknown error')}")
+                _LOGGER.error(
+                    f"Error response from ComEd API: {response.get('message', 'Unknown error')}"
+                )
                 return None
 
             # Check if response is valid JSON
@@ -174,10 +178,10 @@ class ComedAPI(BasePriceAPI):
                     # Add missing commas between properties
                     fixed_json = re.sub(r'""', '","', response)
                     # Fix array brackets if needed
-                    if not fixed_json.startswith('['):
-                        fixed_json = '[' + fixed_json
-                    if not fixed_json.endswith(']'):
-                        fixed_json = fixed_json + ']'
+                    if not fixed_json.startswith("["):
+                        fixed_json = "[" + fixed_json
+                    if not fixed_json.endswith("]"):
+                        fixed_json = fixed_json + "]"
                     json.loads(fixed_json)
                     _LOGGER.debug("Successfully fixed malformed JSON from ComEd API")
                     # Replace the response with the fixed JSON
@@ -186,11 +190,7 @@ class ComedAPI(BasePriceAPI):
                     _LOGGER.error(f"Invalid JSON response from ComEd API: {e}")
                     return None
 
-            return {
-                "raw_data": response,
-                "endpoint": endpoint,
-                "url": url
-            }
+            return {"raw_data": response, "endpoint": endpoint, "url": url}
         except Exception as e:
             _LOGGER.error(f"Failed to fetch data from ComEd API: {e}", exc_info=True)
             return None

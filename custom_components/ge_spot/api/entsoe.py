@@ -1,4 +1,5 @@
 """API handler for ENTSO-E Transparency Platform."""
+
 import logging
 import asyncio
 from datetime import datetime, timezone, timedelta, time
@@ -7,10 +8,10 @@ from typing import Dict, Any, Optional
 
 from .base.api_client import ApiClient
 from ..utils.debug_utils import sanitize_sensitive_data
-from ..utils.date_range import generate_date_ranges # Re-add this import
+from ..utils.date_range import generate_date_ranges  # Re-add this import
 from ..timezone import TimezoneService
-from ..const.api import EntsoE, SourceTimezone # Update import
-from ..const.sources import Source # Add Source import
+from ..const.api import EntsoE, SourceTimezone  # Update import
+from ..const.sources import Source  # Add Source import
 from ..const.areas import AreaMapping
 from ..const.config import Config
 from ..const.display import DisplayUnit
@@ -28,10 +29,13 @@ from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class EntsoeAPI(BasePriceAPI):
     """API implementation for ENTSO-E Transparency Platform."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None):
+    def __init__(
+        self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None
+    ):
         """Initialize the API.
 
         Args:
@@ -77,13 +81,15 @@ class EntsoeAPI(BasePriceAPI):
                 self._fetch_data,
                 client=client,
                 area=area,
-                reference_time=kwargs.get('reference_time')
+                reference_time=kwargs.get("reference_time"),
             )
         finally:
             if session is None and client:
                 await client.close()
 
-    async def _fetch_data(self, client: ApiClient, area: str, reference_time: Optional[datetime] = None) -> Dict[str, Any]:
+    async def _fetch_data(
+        self, client: ApiClient, area: str, reference_time: Optional[datetime] = None
+    ) -> Dict[str, Any]:
         """Fetch data from ENTSO-E API.
 
         Args:
@@ -99,7 +105,7 @@ class EntsoeAPI(BasePriceAPI):
             "ENTSO-E config check: config keys=%s, API_KEY constant='%s', api_key value=%s",
             list(self.config.keys()),
             Config.API_KEY,
-            self.config.get(Config.API_KEY) or self.config.get("api_key") or "NOT FOUND"
+            self.config.get(Config.API_KEY) or self.config.get("api_key") or "NOT FOUND",
         )
 
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
@@ -109,7 +115,7 @@ class EntsoeAPI(BasePriceAPI):
                 "Global Electricity Spot Prices → Configure → add your API key. "
                 "Config keys available: %s",
                 self.source_type,
-                list(self.config.keys())
+                list(self.config.keys()),
             )
             raise ValueError(f"No API key provided for {self.source_type}")
 
@@ -127,7 +133,7 @@ class EntsoeAPI(BasePriceAPI):
         headers = {
             "User-Agent": Network.Defaults.USER_AGENT,
             "Accept": ContentType.XML,
-            "Content-Type": ContentType.XML
+            "Content-Type": ContentType.XML,
         }
 
         # Generate date ranges based on the reference time
@@ -157,86 +163,119 @@ class EntsoeAPI(BasePriceAPI):
                     "periodEnd": period_end,
                 }
 
-                _LOGGER.debug(f"ENTSO-E fetch: doc_type={doc_type}, range={period_start}-{period_end}, params={sanitize_sensitive_data(params)}")
+                _LOGGER.debug(
+                    f"ENTSO-E fetch: doc_type={doc_type}, range={period_start}-{period_end}, params={sanitize_sensitive_data(params)}"
+                )
 
                 try:
                     response = await client.fetch(
                         self.base_url,
                         params=params,
                         headers=headers,
-                        timeout=Network.Defaults.HTTP_TIMEOUT
+                        timeout=Network.Defaults.HTTP_TIMEOUT,
                     )
 
                     # --- Refined Error Handling ---
                     # Explicitly check for the error dictionary format first
                     if isinstance(response, dict) and response.get("error"):
                         status_code = response.get("status_code")
-                        message = response.get('message', 'Unknown API error')
-                        _LOGGER.error(f"ENTSO-E API error (status {status_code}) for doc_type={doc_type}, range={period_start}-{period_end}: {message}")
+                        message = response.get("message", "Unknown API error")
+                        _LOGGER.error(
+                            f"ENTSO-E API error (status {status_code}) for doc_type={doc_type}, range={period_start}-{period_end}: {message}"
+                        )
                         if status_code == 401:
                             # Raise specific error for auth failure, including message from API if available
-                            raise ValueError(f"ENTSO-E API authentication failed (401 Unauthorized). Check your API key. Message: {message}")
+                            raise ValueError(
+                                f"ENTSO-E API authentication failed (401 Unauthorized). Check your API key. Message: {message}"
+                            )
                         else:
                             # For other HTTP errors (e.g. 400, 500), log and continue to the next attempt
-                            continue # Go to next doc_type/date_range
+                            continue  # Go to next doc_type/date_range
 
                     # --- Handle Non-Error Responses ---
                     # If it wasn't an error dict, proceed with normal checks
                     if not response:
-                        _LOGGER.debug(f"ENTSO-E empty response for doc_type={doc_type}, range={period_start}-{period_end}")
+                        _LOGGER.debug(
+                            f"ENTSO-E empty response for doc_type={doc_type}, range={period_start}-{period_end}"
+                        )
                         continue
 
                     if isinstance(response, str):
                         # Check for specific error strings in text/xml response (redundant for 401 now, but good practice)
                         if "Not authorized" in response:
-                            _LOGGER.error("ENTSO-E API authentication failed: 'Not authorized' string found in response.")
-                            raise ValueError("ENTSO-E API authentication failed: 'Not authorized' string found.")
+                            _LOGGER.error(
+                                "ENTSO-E API authentication failed: 'Not authorized' string found in response."
+                            )
+                            raise ValueError(
+                                "ENTSO-E API authentication failed: 'Not authorized' string found."
+                            )
                         elif "No matching data found" in response:
-                            _LOGGER.debug(f"ENTSO-E 'No matching data found' for doc_type={doc_type}, range={period_start}-{period_end}")
+                            _LOGGER.debug(
+                                f"ENTSO-E 'No matching data found' for doc_type={doc_type}, range={period_start}-{period_end}"
+                            )
                             continue
                         elif "Publication_MarketDocument" in response:
-                            _LOGGER.info(f"Fetched ENTSO-E XML data with doc_type={doc_type} for area {area}")
+                            _LOGGER.info(
+                                f"Fetched ENTSO-E XML data with doc_type={doc_type} for area {area}"
+                            )
                             xml_responses.append(response)
-                            break # Got XML data, break inner loop (doc_types)
+                            break  # Got XML data, break inner loop (doc_types)
                         else:
-                            _LOGGER.warning(f"Unexpected string response content from ENTSO-E for doc_type={doc_type}: {response[:200]}...")
+                            _LOGGER.warning(
+                                f"Unexpected string response content from ENTSO-E for doc_type={doc_type}: {response[:200]}..."
+                            )
                             # Treat as potentially recoverable, continue to next attempt
                             continue
-                    elif isinstance(response, dict) and response: # Now this should only catch *valid* dict responses
-                        _LOGGER.info(f"Fetched ENTSO-E dict data with doc_type={doc_type} for area {area}")
+                    elif (
+                        isinstance(response, dict) and response
+                    ):  # Now this should only catch *valid* dict responses
+                        _LOGGER.info(
+                            f"Fetched ENTSO-E dict data with doc_type={doc_type} for area {area}"
+                        )
                         if not dict_response_found:
                             dict_response_found = response
                             found_doc_type = doc_type
-                        break # Got dict data, break inner loop (doc_types)
+                        break  # Got dict data, break inner loop (doc_types)
                     else:
                         # Handle unexpected response types if necessary
-                        _LOGGER.warning(f"Unexpected response type from ENTSO-E: {type(response).__name__}")
+                        _LOGGER.warning(
+                            f"Unexpected response type from ENTSO-E: {type(response).__name__}"
+                        )
                         continue
 
                 except asyncio.TimeoutError:
-                    _LOGGER.warning(f"ENTSO-E request timed out for doc_type={doc_type}, range={period_start}-{period_end}")
-                    continue # Go to next doc_type/date_range
+                    _LOGGER.warning(
+                        f"ENTSO-E request timed out for doc_type={doc_type}, range={period_start}-{period_end}"
+                    )
+                    continue  # Go to next doc_type/date_range
                 except ValueError as e:
                     # Catch specific ValueErrors raised above (like auth error) or potentially from parsing
-                    _LOGGER.error(f"ValueError during ENTSO-E fetch processing for doc_type={doc_type}: {e}")
+                    _LOGGER.error(
+                        f"ValueError during ENTSO-E fetch processing for doc_type={doc_type}: {e}"
+                    )
                     if "authentication failed" in str(e):
-                        raise e # Re-raise auth error to be caught by caller (validate_api_key or error_handler)
+                        raise e  # Re-raise auth error to be caught by caller (validate_api_key or error_handler)
                     # For other ValueErrors, treat as failure for this attempt and continue
                     continue
                 except Exception as e:
                     # Catch other unexpected exceptions during fetch/processing for this attempt
-                    _LOGGER.error(f"Unexpected error during ENTSO-E fetch for doc_type={doc_type}: {e}", exc_info=True)
-                    continue # Go to next doc_type/date_range
+                    _LOGGER.error(
+                        f"Unexpected error during ENTSO-E fetch for doc_type={doc_type}: {e}",
+                        exc_info=True,
+                    )
+                    continue  # Go to next doc_type/date_range
 
             if xml_responses or dict_response_found:
-                _LOGGER.info(f"Got valid ENTSO-E response(s) for date range {period_start} to {period_end}, skipping remaining ranges")
+                _LOGGER.info(
+                    f"Got valid ENTSO-E response(s) for date range {period_start} to {period_end}, skipping remaining ranges"
+                )
                 break
 
         # Tomorrow's data retry logic
         tomorrow_xml = None
         now_utc = datetime.now(timezone.utc)
         # Use the imported function directly
-        cet_tz = get_timezone_object("Europe/Paris") # Use Paris time for ENTSO-E
+        cet_tz = get_timezone_object("Europe/Paris")  # Use Paris time for ENTSO-E
         now_cet = now_utc.astimezone(cet_tz)
 
         # Define expected release hour (e.g. 13:00 CET)
@@ -247,14 +286,18 @@ class EntsoeAPI(BasePriceAPI):
         should_fetch_tomorrow = now_cet.hour >= release_hour_cet
 
         if should_fetch_tomorrow:
-            tomorrow = (reference_time + timedelta(days=1))
+            tomorrow = reference_time + timedelta(days=1)
             # Corrected periodEnd for tomorrow to cover the full day
-            period_start = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).strftime(TimeFormat.ENTSOE_DATE_HOUR)
-            period_end = (tomorrow.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).strftime(TimeFormat.ENTSOE_DATE_HOUR)
+            period_start = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).strftime(
+                TimeFormat.ENTSOE_DATE_HOUR
+            )
+            period_end = (
+                tomorrow.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            ).strftime(TimeFormat.ENTSOE_DATE_HOUR)
 
             params_tomorrow = {
                 "securityToken": api_key,
-                "documentType": "A44", # Only fetch DayAhead for tomorrow
+                "documentType": "A44",  # Only fetch DayAhead for tomorrow
                 "in_Domain": entsoe_area,
                 "out_Domain": entsoe_area,
                 "periodStart": period_start,
@@ -262,7 +305,12 @@ class EntsoeAPI(BasePriceAPI):
             }
 
             async def fetch_tomorrow():
-                return await client.fetch(self.base_url, params=params_tomorrow, headers=headers, timeout=Network.Defaults.HTTP_TIMEOUT)
+                return await client.fetch(
+                    self.base_url,
+                    params=params_tomorrow,
+                    headers=headers,
+                    timeout=Network.Defaults.HTTP_TIMEOUT,
+                )
 
             def is_data_available(data):
                 # Check for non-empty string containing the success marker
@@ -273,7 +321,7 @@ class EntsoeAPI(BasePriceAPI):
                 is_data_available,
                 retry_interval=1800,
                 end_time=time(23, 50),
-                local_tz_name=TimezoneName.EUROPE_PARIS
+                local_tz_name=TimezoneName.EUROPE_PARIS,
             )
 
             if tomorrow_xml:
@@ -288,16 +336,24 @@ class EntsoeAPI(BasePriceAPI):
                     f"but was not available or invalid. Triggering fallback."
                 )
                 # Store the specific error before returning None
-                last_exception = ValueError(f"Tomorrow's data missing after {failure_check_hour_cet}:00 CET")
+                last_exception = ValueError(
+                    f"Tomorrow's data missing after {failure_check_hour_cet}:00 CET"
+                )
                 # Return None to signal failure for tomorrow's data
                 return None
 
         # --- Final Check for Today's Data ---
         # Ensure we have *some* valid data (today or initial fetch) before proceeding
         if not dict_response_found and not xml_responses:
-            _LOGGER.error(f"ENTSO-E fetch failed for area {area}: No valid data found for today either.")
+            _LOGGER.error(
+                f"ENTSO-E fetch failed for area {area}: No valid data found for today either."
+            )
             # If last_exception was set during initial loops or the tomorrow check, use it, otherwise create a generic one
-            final_error = last_exception if last_exception else ValueError(f"No valid data found for area {area}")
+            final_error = (
+                last_exception
+                if last_exception
+                else ValueError(f"No valid data found for area {area}")
+            )
             # Return the error structure expected by FallbackManager
             return {"attempted_sources": [self.source_type], "error": final_error}
 
@@ -309,7 +365,7 @@ class EntsoeAPI(BasePriceAPI):
             "area": area,
             "entsoe_area": entsoe_area,
             # Ensure raw_data key exists for FallbackManager check
-            "raw_data": {}
+            "raw_data": {},
         }
 
         if dict_response_found:
@@ -324,14 +380,18 @@ class EntsoeAPI(BasePriceAPI):
 
         # If raw_data is still empty, something went wrong, signal failure
         if not final_result["raw_data"]:
-             _LOGGER.error(f"ENTSO-E logic error: No dict_response or xml_responses added to raw_data for area {area}")
-             return None
+            _LOGGER.error(
+                f"ENTSO-E logic error: No dict_response or xml_responses added to raw_data for area {area}"
+            )
+            return None
 
         return final_result
 
     async def parse_raw_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse the raw data dictionary fetched by fetch_raw_data."""
-        _LOGGER.debug(f"ENTSOE API: Starting parse_raw_data with input keys: {list(raw_data.keys())}")
+        _LOGGER.debug(
+            f"ENTSOE API: Starting parse_raw_data with input keys: {list(raw_data.keys())}"
+        )
 
         # The parser expects the dictionary containing 'xml_responses' or 'raw_data'
         # No need to loop here, the parser handles the list internally.
@@ -340,8 +400,8 @@ class EntsoeAPI(BasePriceAPI):
             parsed_data = self.parser.parse(raw_data)
 
             if not parsed_data or not parsed_data.get("interval_raw"):
-                 _LOGGER.warning("ENTSOE API: Parser returned no interval_raw data.")
-                 return {}
+                _LOGGER.warning("ENTSOE API: Parser returned no interval_raw data.")
+                return {}
 
             _LOGGER.debug(f"ENTSOE API: Parser returned keys: {list(parsed_data.keys())}")
 
@@ -364,6 +424,7 @@ class EntsoeAPI(BasePriceAPI):
             _LOGGER.error(f"ENTSOE API: Error during parsing: {e}", exc_info=True)
             return {}
 
+
 async def validate_api_key(api_key, area, session=None):
     """Validate an API key by making a test request.
 
@@ -379,10 +440,7 @@ async def validate_api_key(api_key, area, session=None):
         _LOGGER.info(f"Validating ENTSO-E API key for area {area}")
 
         # Create a simple configuration for validation
-        config = {
-            "area": area,
-            "api_key": api_key
-        }
+        config = {"area": area, "api_key": api_key}
 
         # Create a temporary instance of the API
         api = EntsoeAPI(config, session)
@@ -421,23 +479,31 @@ async def validate_api_key(api_key, area, session=None):
                         alt_config = {"area": alt_area, "api_key": api_key}
                         alt_api = EntsoeAPI(alt_config, session)
                         await alt_api.fetch_raw_data(alt_area, session)
-                        _LOGGER.info(f"API key validation successful with alternative area {alt_area}")
+                        _LOGGER.info(
+                            f"API key validation successful with alternative area {alt_area}"
+                        )
                         return True
                     except ValueError as alt_e:
                         # Check specifically for auth failure with the alternative area
                         if "ENTSO-E API authentication failed" in str(alt_e):
-                            _LOGGER.warning(f"API key validation failed with alternative area {alt_area}: {alt_e}")
+                            _LOGGER.warning(
+                                f"API key validation failed with alternative area {alt_area}: {alt_e}"
+                            )
                             return False
                         elif "No matching data found" in str(alt_e):
-                            _LOGGER.info(f"API key is valid but no data found for alternative area {alt_area}")
+                            _LOGGER.info(
+                                f"API key is valid but no data found for alternative area {alt_area}"
+                            )
                             return True
                         else:
                             _LOGGER.warning(f"Error with alternative area {alt_area}: {alt_e}")
-                            continue # Continue to the next alternative area
+                            continue  # Continue to the next alternative area
 
                 # If we get here, all attempts failed but not due to auth issues
                 # Assume key is valid if the error is not clearly an auth error
-                _LOGGER.info("API key seems valid but encountered data retrieval issues with all tested areas")
+                _LOGGER.info(
+                    "API key seems valid but encountered data retrieval issues with all tested areas"
+                )
                 return True
     except Exception as e:
         _LOGGER.error(f"Error validating ENTSO-E API key: {e}")

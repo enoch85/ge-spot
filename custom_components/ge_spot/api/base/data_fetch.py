@@ -1,4 +1,5 @@
 """Base data fetching utilities for API modules."""
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Union, Type
@@ -10,6 +11,7 @@ from .base_price_api import BasePriceAPI
 from .data_structure import StandardizedPriceData, create_standardized_price_data
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class BaseDataFetcher(ABC):
     """Base class for API data fetchers."""
@@ -83,6 +85,7 @@ class BaseDataFetcher(ABC):
         """
         return create_skipped_response(self.source, reason)
 
+
 def create_skipped_response(source: str, reason: str = "missing_api_key") -> Dict[str, Any]:
     """Create a standardized response for when an API is skipped.
 
@@ -94,11 +97,8 @@ def create_skipped_response(source: str, reason: str = "missing_api_key") -> Dic
         A dictionary with standardized skipped response format
     """
     _LOGGER.debug(f"Creating skipped response for {source}: {reason}")
-    return {
-        "skipped": True,
-        "reason": reason,
-        "source": source
-    }
+    return {"skipped": True, "reason": reason, "source": source}
+
 
 def is_skipped_response(data: Any) -> bool:
     """Check if a response is a skipped response.
@@ -110,11 +110,12 @@ def is_skipped_response(data: Any) -> bool:
         True if the data is a skipped response, False otherwise
     """
     return (
-        isinstance(data, dict) and
-        data.get("skipped") is True and
-        "reason" in data and
-        "source" in data
+        isinstance(data, dict)
+        and data.get("skipped") is True
+        and "reason" in data
+        and "source" in data
     )
+
 
 class PriceDataFetcher:
     """Centralized data fetching with standardized fallback handling."""
@@ -135,7 +136,7 @@ class PriceDataFetcher:
         vat: Optional[float] = None,
         include_vat: bool = False,
         cache_expiry_hours: Optional[float] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         """Fetch data from multiple sources with fallback.
 
@@ -193,11 +194,15 @@ class PriceDataFetcher:
                     vat=vat,
                     include_vat=include_vat,
                     session=session,
-                    **kwargs
+                    **kwargs,
                 )
 
                 # Check if we got valid data
-                if source_result and "today_interval_prices" in source_result and source_result["today_interval_prices"]:
+                if (
+                    source_result
+                    and "today_interval_prices" in source_result
+                    and source_result["today_interval_prices"]
+                ):
                     _LOGGER.info(f"Successfully fetched data from {source_name} for area {area}")
 
                     # If this isn't the primary source, record as fallback
@@ -212,14 +217,16 @@ class PriceDataFetcher:
                     self.cache[cache_key] = {
                         "data": source_result,
                         "timestamp": datetime.now(timezone.utc).timestamp(),
-                        "source": source_name
+                        "source": source_name,
                     }
 
                     # Use this result
                     result = source_result
                     break
                 else:
-                    _LOGGER.warning(f"Source {source_name} returned empty or invalid data for area {area}")
+                    _LOGGER.warning(
+                        f"Source {source_name} returned empty or invalid data for area {area}"
+                    )
                     errors[source_name] = "Empty or invalid data"
                     # Add to fallback sources since it failed
                     fallback_sources.append(source_name)
@@ -261,11 +268,15 @@ class PriceDataFetcher:
                         f"({int(cache_age / 60)} minutes, max {int(max_cache_age / 60)} minutes)"
                     )
                     # Return an empty result structure in this case
-                    result = self._create_empty_result(area, currency, "All sources failed and cache expired")
+                    result = self._create_empty_result(
+                        area, currency, "All sources failed and cache expired"
+                    )
             else:
                 _LOGGER.error(f"All sources failed for area {area} and no cache available")
                 # Return an empty result structure
-                result = self._create_empty_result(area, currency, "All sources failed and no cache available")
+                result = self._create_empty_result(
+                    area, currency, "All sources failed and no cache available"
+                )
 
         # Add metadata about the fetch process to the result
         if result:
@@ -285,7 +296,9 @@ class PriceDataFetcher:
 
         return result
 
-    def _create_empty_result(self, area: str, currency: str, error_message: str = "") -> Dict[str, Any]:
+    def _create_empty_result(
+        self, area: str, currency: str, error_message: str = ""
+    ) -> Dict[str, Any]:
         """Create a standardized empty result structure.
 
         Args:
@@ -300,9 +313,7 @@ class PriceDataFetcher:
 
         # Generate empty result with proper structure
         empty_result = StandardizedPriceData.create_empty(
-            source="None",
-            area=area,
-            currency=currency
+            source="None", area=area, currency=currency
         ).to_dict()
 
         # Add error message if provided
@@ -320,7 +331,7 @@ class PriceDataFetcher:
         session=None,
         vat: Optional[Dict[str, float]] = None,
         include_vat: Dict[str, bool] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Dict[str, Any]]:
         """Fetch data for multiple regions in parallel.
 
@@ -365,7 +376,7 @@ class PriceDataFetcher:
                 session=session,
                 vat=region_vat,
                 include_vat=region_include_vat,
-                **kwargs
+                **kwargs,
             )
 
         # Wait for all tasks to complete
@@ -377,9 +388,7 @@ class PriceDataFetcher:
                 _LOGGER.error(f"Error fetching data for region {region}: {e}")
                 # Initialize with empty data
                 results[region] = StandardizedPriceData.create_empty(
-                    source="None",
-                    area=region,
-                    currency=default_currency
+                    source="None", area=region, currency=default_currency
                 ).to_dict()
 
                 # Add error information
@@ -402,8 +411,7 @@ class PriceDataFetcher:
             if older_than:
                 now = datetime.now(timezone.utc).timestamp()
                 keys_to_clear = [
-                    key for key in keys_to_clear
-                    if now - self.cache[key]["timestamp"] > older_than
+                    key for key in keys_to_clear if now - self.cache[key]["timestamp"] > older_than
                 ]
 
             # Clear the specified keys
@@ -418,7 +426,8 @@ class PriceDataFetcher:
             if older_than:
                 now = datetime.now(timezone.utc).timestamp()
                 keys_to_clear = [
-                    key for key in self.cache.keys()
+                    key
+                    for key in self.cache.keys()
                     if now - self.cache[key]["timestamp"] > older_than
                 ]
 
@@ -446,7 +455,7 @@ class PriceDataFetcher:
             "sources": set(),
             "oldest_entry": None,
             "newest_entry": None,
-            "average_age": None
+            "average_age": None,
         }
 
         if not self.cache:

@@ -1,4 +1,5 @@
 """Data validation utilities for API responses."""
+
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -11,6 +12,7 @@ from ...utils.data_validator import DataValidator
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class ApiValidator:
     """Utility class for validating API responses."""
 
@@ -18,9 +20,12 @@ class ApiValidator:
     _data_validator = DataValidator()
 
     @staticmethod
-    def is_data_adequate(data: Dict[str, Any], source_name: str = "unknown",
-                        require_current_hour: bool = True,
-                        min_intervals: int = 48) -> bool:
+    def is_data_adequate(
+        data: Dict[str, Any],
+        source_name: str = "unknown",
+        require_current_hour: bool = True,
+        min_intervals: int = 48,
+    ) -> bool:
         """Check if the data is adequate for use.
 
         Args:
@@ -58,10 +63,14 @@ class ApiValidator:
             # For ENTSO-E, we only require at least 24 intervals of data (6 hours with 15-min intervals)
             # This is because ENTSO-E sometimes only provides partial data
             if interval_count < 24:
-                _LOGGER.warning(f"Insufficient interval prices from {source_name}: {interval_count}/24")
+                _LOGGER.warning(
+                    f"Insufficient interval prices from {source_name}: {interval_count}/24"
+                )
                 return False
         elif interval_count < min_intervals:
-            _LOGGER.warning(f"Insufficient interval prices from {source_name}: {interval_count}/{min_intervals}")
+            _LOGGER.warning(
+                f"Insufficient interval prices from {source_name}: {interval_count}/{min_intervals}"
+            )
             return False
 
         # Check for current interval price if required
@@ -71,12 +80,16 @@ class ApiValidator:
                 current_interval_key = tz_service.get_current_interval_key()
 
                 if current_interval_key not in data.get("today_interval_prices", {}):
-                    _LOGGER.warning(f"Current interval {current_interval_key} missing from {source_name}")
+                    _LOGGER.warning(
+                        f"Current interval {current_interval_key} missing from {source_name}"
+                    )
                     return False
 
                 current_price = data["today_interval_prices"][current_interval_key]
                 if current_price is None or not isinstance(current_price, (int, float)):
-                    _LOGGER.warning(f"Invalid current interval price from {source_name}: {current_price}")
+                    _LOGGER.warning(
+                        f"Invalid current interval price from {source_name}: {current_price}"
+                    )
                     return False
             except ValueError as e:
                 _LOGGER.error(f"Timezone error checking current hour price: {e}")
@@ -89,10 +102,14 @@ class ApiValidator:
         # Check for anomalies
         if validation_result.get("anomalies"):
             anomalies = validation_result["anomalies"]
-            _LOGGER.warning(f"Price anomalies detected from {source_name}: {len(anomalies)} anomalies")
+            _LOGGER.warning(
+                f"Price anomalies detected from {source_name}: {len(anomalies)} anomalies"
+            )
             # Log the top 3 anomalies
             for i, anomaly in enumerate(anomalies[:3]):
-                _LOGGER.warning(f"Anomaly {i+1}: Hour {anomaly['hour']}, Price {anomaly['price']}, Z-score {anomaly['z_score']:.2f}")
+                _LOGGER.warning(
+                    f"Anomaly {i+1}: Hour {anomaly['hour']}, Price {anomaly['price']}, Z-score {anomaly['z_score']:.2f}"
+                )
             # Don't fail validation for anomalies, just log warnings
 
         return True

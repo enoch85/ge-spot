@@ -1,4 +1,5 @@
 """DST transition handling utilities."""
+
 import logging
 from datetime import datetime, timedelta
 from typing import Tuple, Optional
@@ -8,6 +9,7 @@ from homeassistant.util import dt as dt_util
 from ..const.time import DSTTransitionType, TimezoneConstants
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class DSTHandler:
     """Handler for DST transitions."""

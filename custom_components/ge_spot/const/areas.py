@@ -1,7 +1,9 @@
 """Area constants for GE-Spot integration."""
 
+
 class Area:
     """Area code constants."""
+
     # Nordic regions
     SE1 = "SE1"
     SE2 = "SE2"
@@ -43,6 +45,7 @@ class Area:
 
 class Timezone:
     """Timezone mappings for areas."""
+
     AREA_TIMEZONES = {
         # European regions
         Area.DK1: "Europe/Copenhagen",
@@ -93,7 +96,6 @@ class Timezone:
         Area.PT: "Europe/Lisbon",
         Area.CH: "Europe/Zurich",
         Area.PL: "Europe/Warsaw",
-
         # Australian regions
         Area.NSW1: "Australia/Sydney",
         Area.QLD1: "Australia/Brisbane",
@@ -151,7 +153,7 @@ class AreaMapping:
         Area.NO5: "Norway",
         Area.LT: "Lithuania",
         Area.LV: "Latvia",
-        Area.EE: "Estonia"
+        Area.EE: "Estonia",
     }
 
     # Nordpool areas display names
@@ -230,7 +232,6 @@ class AreaMapping:
         Area.SE3: "10Y1001A1001A46L",  # Updated EIC code (was: 10YSE-3--------Y)
         Area.SE4: "10Y1001A1001A47J",  # Updated EIC code (was: 10YSE-4--------4)
         Area.CH: "10YCH-SWISSGRIDZ",
-
         # Other ENTSO-E Areas
         "GB": "10Y1001A1001A59C",  # Updated to use IE(SEM) code - working!
         "IE(SEM)": "10Y1001A1001A59C",
@@ -288,7 +289,6 @@ class AreaMapping:
         Area.SE3: "Sweden (SE3, Stockholm/South-Central)",
         Area.SE4: "Sweden (SE4, Malmö/South)",
         Area.CH: "Switzerland (CH)",
-
         # Other ENTSO-E Areas
         "GB": "Great Britain (GB)",
         "IE(SEM)": "Ireland/Northern Ireland (SEM)",
@@ -378,19 +378,19 @@ class AreaMapping:
     # ComEd areas
     COMED_AREAS = {
         "5minutefeed": "ComEd 5 Minute Price",
-        "currenthouraverage": "ComEd Current Hour Average Price"
+        "currenthouraverage": "ComEd Current Hour Average Price",
     }
 
     # All areas combined for lookup
     ALL_AREAS = {
-        'nordpool': NORDPOOL_AREAS,
-        'energi_data_service': ENERGI_DATA_AREAS,
-        'entsoe': ENTSOE_AREAS,
-        'energy_charts': ENERGY_CHARTS_BZN,
-        'omie': OMIE_AREAS,
-        'aemo': AEMO_AREAS,
-        'stromligning': STROMLIGNING_AREAS,
-        'comed': COMED_AREAS
+        "nordpool": NORDPOOL_AREAS,
+        "energi_data_service": ENERGI_DATA_AREAS,
+        "entsoe": ENTSOE_AREAS,
+        "energy_charts": ENERGY_CHARTS_BZN,
+        "omie": OMIE_AREAS,
+        "aemo": AEMO_AREAS,
+        "stromligning": STROMLIGNING_AREAS,
+        "comed": COMED_AREAS,
     }
 
     # Default areas for each source
@@ -427,7 +427,6 @@ class AreaInfo:
         "EE": "Baltic",
         "LT": "Baltic",
         "LV": "Baltic",
-
         # Central Europe
         "DE": "Central Europe",
         "DE-LU": "Central Europe",
@@ -441,7 +440,6 @@ class AreaInfo:
         "HU": "Central Europe",
         "SK": "Central Europe",
         "SI": "Central Europe",
-
         # Southern Europe
         "ES": "Southern Europe",
         "PT": "Southern Europe",
@@ -450,19 +448,16 @@ class AreaInfo:
         "HR": "Southern Europe",
         "BG": "Southern Europe",
         "RO": "Southern Europe",
-
         # British Isles
         "GB": "British Isles",
         "UK": "British Isles",
         "IE": "British Isles",
-
         # Australia
         "NSW1": "Australia",
         "QLD1": "Australia",
         "SA1": "Australia",
         "TAS1": "Australia",
         "VIC1": "Australia",
-
         # USA
         "COMED": "USA",
         "US": "USA",
@@ -486,7 +481,6 @@ class AreaInfo:
         "EE": "Estonia",
         "LT": "Lithuania",
         "LV": "Latvia",
-
         # Central Europe
         "DE": "Germany",
         "DE-LU": "Germany-Luxembourg",
@@ -495,11 +489,9 @@ class AreaInfo:
         "BE": "Belgium",
         "NL": "Netherlands",
         "CH": "Switzerland",
-
         # Southern Europe
         "ES": "Spain",
         "PT": "Portugal",
-
         # Australia
         "NSW1": "New South Wales",
         "QLD1": "Queensland",

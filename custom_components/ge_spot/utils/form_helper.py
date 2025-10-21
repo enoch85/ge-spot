@@ -1,4 +1,5 @@
 """Form helper utilities for GE-Spot integration."""
+
 import logging
 from typing import Dict, Any, List
 
@@ -7,6 +8,7 @@ from homeassistant.helpers import selector
 from ..const.display import DisplayUnit
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class FormHelper:
     """Helper class for creating consistent form selectors."""
@@ -22,10 +24,7 @@ class FormHelper:
             A TextSelector for API keys
         """
         return selector.TextSelector(
-            selector.TextSelectorConfig(
-                type=selector.TextSelectorType.TEXT,
-                autocomplete="off"
-            )
+            selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT, autocomplete="off")
         )
 
     @staticmethod
@@ -59,8 +58,7 @@ class FormHelper:
         return selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
-                    {"value": key, "label": value}
-                    for key, value in DisplayUnit.OPTIONS.items()
+                    {"value": key, "label": value} for key, value in DisplayUnit.OPTIONS.items()
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )

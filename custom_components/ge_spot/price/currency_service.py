@@ -1,4 +1,5 @@
 """Currency service for GE-Spot integration."""
+
 import logging
 from typing import Dict, Any, Optional
 
@@ -24,7 +25,6 @@ AREA_DEFAULT_CURRENCIES = {
     "NO3": Currency.NOK,
     "NO4": Currency.NOK,
     "NO5": Currency.NOK,
-
     # Central Europe
     "DE": Currency.EUR,
     "AT": Currency.EUR,
@@ -37,7 +37,6 @@ AREA_DEFAULT_CURRENCIES = {
     "ES": Currency.EUR,
     "PT": Currency.EUR,
     "GR": Currency.EUR,
-
     # Eastern Europe
     "PL": Currency.EUR,  # Using EUR as fallback
     "CZ": Currency.EUR,  # Using EUR as fallback
@@ -47,23 +46,19 @@ AREA_DEFAULT_CURRENCIES = {
     "BG": Currency.EUR,  # Using EUR as fallback
     "HR": Currency.EUR,
     "SI": Currency.EUR,
-
     # Baltics
     "EE": Currency.EUR,
     "LV": Currency.EUR,
     "LT": Currency.EUR,
-
     # United Kingdom
     "GB": Currency.GBP,
     "UK": Currency.GBP,
-
     # Australia
     "NSW1": Currency.AUD,
     "QLD1": Currency.AUD,
     "SA1": Currency.AUD,
     "TAS1": Currency.AUD,
     "VIC1": Currency.AUD,
-
     # USA
     "US": Currency.USD,
     "COMED": Currency.USD,
@@ -80,6 +75,7 @@ SOURCE_DEFAULT_CURRENCIES = {
     Source.COMED: Currency.USD,
     Source.STROMLIGNING: Currency.EUR,
 }
+
 
 def get_default_currency(area: str) -> str:
     """Get default currency for a specific area.
@@ -116,6 +112,7 @@ def get_default_currency(area: str) -> str:
     _LOGGER.debug(f"No specific currency found for area {area}, using EUR as default")
     return Currency.EUR
 
+
 def format_currency_for_display(value: float, currency: str) -> str:
     """Format currency value for display.
 
@@ -140,6 +137,7 @@ def format_currency_for_display(value: float, currency: str) -> str:
 
     # For most currencies, show 2 decimal places
     return f"{symbol}{value:.2f}"
+
 
 def get_currency_symbol(currency: str) -> str:
     """Get symbol for a currency code.

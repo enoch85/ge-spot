@@ -1,4 +1,5 @@
 """Statistics utility functions for price calculations."""
+
 from typing import Dict, List, Optional
 
 from ..api.base.data_structure import PriceStatistics
@@ -44,5 +45,5 @@ def calculate_statistics(interval_prices: Dict[str, float]) -> PriceStatistics:
         min=min_price,
         max=max_price,
         min_timestamp=min_timestamp,
-        max_timestamp=max_timestamp
+        max_timestamp=max_timestamp,
     )

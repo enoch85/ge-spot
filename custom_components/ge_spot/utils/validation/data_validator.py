@@ -1,4 +1,5 @@
 """Data validation for API responses."""
+
 import logging
 from typing import Dict, Any
 
@@ -11,92 +12,109 @@ _LOGGER = logging.getLogger(__name__)
 
 # Define schemas for different API sources
 _SCHEMAS = {
-    Source.NORDPOOL: Schema({
-        "type": "object",
-        "properties": {
-            "data": {"type": "object", "optional": True},
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    Source.NORDPOOL: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "data": {"type": "object", "optional": True},
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.ENTSOE: Schema({
-        "type": "object",
-        "properties": {
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.ENTSOE: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.ENERGI_DATA_SERVICE: Schema({
-        "type": "object",
-        "properties": {
-            "records": {"type": "array", "optional": True},
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.ENERGI_DATA_SERVICE: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "records": {"type": "array", "optional": True},
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.AEMO: Schema({
-        "type": "object",
-        "properties": {
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.AEMO: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.ENERGY_CHARTS: Schema({
-        "type": "object",
-        "properties": {
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.ENERGY_CHARTS: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.OMIE: Schema({
-        "type": "object",
-        "properties": {
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.OMIE: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    }),
-    Source.STROMLIGNING: Schema({
-        "type": "object",
-        "properties": {
-            "prices": {"type": "array", "optional": True},
-            "currency": {"type": "string", "optional": True},
-            "today_interval_prices": {"type": "object", "optional": True},
-            "current_price": {"type": "number", "optional": True},
-            "next_interval_price": {"type": "number", "optional": True},
-            "raw_data": {"type": "string", "optional": True}
+    ),
+    Source.STROMLIGNING: Schema(
+        {
+            "type": "object",
+            "properties": {
+                "prices": {"type": "array", "optional": True},
+                "currency": {"type": "string", "optional": True},
+                "today_interval_prices": {"type": "object", "optional": True},
+                "current_price": {"type": "number", "optional": True},
+                "next_interval_price": {"type": "number", "optional": True},
+                "raw_data": {"type": "string", "optional": True},
+            },
         }
-    })
+    ),
 }
 
 # Default schema for unknown sources
-_DEFAULT_SCHEMA = Schema({
-    "type": "object",
-    "properties": {
-        "currency": {"type": "string", "optional": True},
-        "today_interval_prices": {"type": "object", "optional": True},
-        "current_price": {"type": "number", "optional": True},
-        "next_interval_price": {"type": "number", "optional": True},
-        "raw_data": {"type": "string", "optional": True}
+_DEFAULT_SCHEMA = Schema(
+    {
+        "type": "object",
+        "properties": {
+            "currency": {"type": "string", "optional": True},
+            "today_interval_prices": {"type": "object", "optional": True},
+            "current_price": {"type": "number", "optional": True},
+            "next_interval_price": {"type": "number", "optional": True},
+            "raw_data": {"type": "string", "optional": True},
+        },
     }
-})
+)
+
 
 def validate_data(data: Dict[str, Any], source: str) -> Dict[str, Any]:
     """Validate API response data.

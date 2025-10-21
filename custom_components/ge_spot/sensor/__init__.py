@@ -1,4 +1,5 @@
 """Sensor functionality for electricity price data."""
+
 from .electricity import async_setup_entry
 from .base import BaseElectricityPriceSensor
 from .price import (

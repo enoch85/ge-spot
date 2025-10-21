@@ -1,4 +1,5 @@
 """Advanced caching system for price data."""
+
 import logging
 import json
 import os
@@ -13,6 +14,7 @@ from ..const.config import Config
 from ..const.defaults import Defaults
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class CacheEntry:
     """Cache entry with TTL and metadata."""
@@ -57,7 +59,7 @@ class CacheEntry:
             "is_expired": self.is_expired,
             "access_count": self.access_count,
             "last_accessed": self.last_accessed.isoformat(),
-            "metadata": self.metadata
+            "metadata": self.metadata,
         }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -68,11 +70,11 @@ class CacheEntry:
             "ttl": self.ttl,
             "metadata": self.metadata,
             "access_count": self.access_count,
-            "last_accessed": self.last_accessed.isoformat()
+            "last_accessed": self.last_accessed.isoformat(),
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'CacheEntry':
+    def from_dict(cls, data: Dict[str, Any]) -> "CacheEntry":
         """Create a cache entry from a dictionary.
 
         Args:
@@ -95,7 +97,9 @@ class CacheEntry:
 class AdvancedCache:
     """Advanced cache with TTL, persistence, and memory optimization."""
 
-    def __init__(self, hass: Optional[HomeAssistant] = None, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, hass: Optional[HomeAssistant] = None, config: Optional[Dict[str, Any]] = None
+    ):
         """Initialize the cache.
 
         Args:
@@ -144,8 +148,13 @@ class AdvancedCache:
 
         return entry.data
 
-    def set(self, key: str, value: Any, ttl: Optional[int] = None,
-           metadata: Optional[Dict[str, Any]] = None) -> None:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        ttl: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """Set a value in the cache.
 
         Args:
@@ -214,7 +223,7 @@ class AdvancedCache:
             "default_ttl": self.default_ttl,
             "persist_cache": self.persist_cache,
             "cache_dir": self.cache_dir,
-            "entries": {key: entry.info for key, entry in self._cache.items()}
+            "entries": {key: entry.info for key, entry in self._cache.items()},
         }
 
     def _evict_if_needed(self) -> None:
@@ -230,10 +239,7 @@ class AdvancedCache:
         # If still too many entries, remove least recently used
         if len(self._cache) > self.max_entries:
             # Sort by last accessed time
-            sorted_keys = sorted(
-                self._cache.keys(),
-                key=lambda k: self._cache[k].last_accessed
-            )
+            sorted_keys = sorted(self._cache.keys(), key=lambda k: self._cache[k].last_accessed)
 
             # Remove oldest entries
             to_remove = len(self._cache) - self.max_entries

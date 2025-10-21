@@ -1,4 +1,5 @@
 """Enhanced timezone handling for price data."""
+
 import logging
 import re
 from datetime import datetime, timedelta, tzinfo
@@ -10,6 +11,7 @@ from ..const.defaults import Defaults
 from .timezone_utils import get_source_timezone, convert_datetime, get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class TimezoneProvider:
     """Provider for timezone handling and conversion."""
@@ -119,8 +121,9 @@ class TimezoneProvider:
         utc_dt = dt.replace(tzinfo=zoneinfo.ZoneInfo("UTC"))
         return utc_dt.astimezone(local_tz)
 
-    def convert_from_source(self, dt: datetime, source: str,
-                          area: Optional[str] = None) -> datetime:
+    def convert_from_source(
+        self, dt: datetime, source: str, area: Optional[str] = None
+    ) -> datetime:
         """Convert a datetime from source timezone to local timezone.
 
         Args:
@@ -168,8 +171,9 @@ class TimezoneProvider:
 
         return dt.strftime(format_str)
 
-    def parse_datetime(self, datetime_str: str,
-                      timezone_id: Optional[str] = None) -> Optional[datetime]:
+    def parse_datetime(
+        self, datetime_str: str, timezone_id: Optional[str] = None
+    ) -> Optional[datetime]:
         """Parse a datetime string.
 
         Args:
@@ -181,7 +185,7 @@ class TimezoneProvider:
         """
         # Try ISO format
         try:
-            dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+            dt = datetime.fromisoformat(datetime_str.replace("Z", "+00:00"))
 
             # Convert to specified timezone if needed
             if timezone_id:
@@ -200,7 +204,7 @@ class TimezoneProvider:
             "%Y-%m-%d %H:%M:%S",
             "%Y-%m-%d %H:%M:%S.%f",
             "%Y-%m-%d %H:%M",
-            "%Y-%m-%d"
+            "%Y-%m-%d",
         ]
 
         for fmt in formats:
@@ -216,8 +220,8 @@ class TimezoneProvider:
                 continue
 
         # Try to extract date and time with regex
-        date_pattern = r'(\d{4})-(\d{1,2})-(\d{1,2})'
-        time_pattern = r'(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?'
+        date_pattern = r"(\d{4})-(\d{1,2})-(\d{1,2})"
+        time_pattern = r"(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?"
 
         date_match = re.search(date_pattern, datetime_str)
         time_match = re.search(time_pattern, datetime_str)
@@ -315,7 +319,9 @@ class TimezoneProvider:
         # Get all intervals for the day
         interval_minutes = TimeInterval.get_interval_minutes()
         intervals_per_day = TimeInterval.get_intervals_per_day()
-        return [day_start + timedelta(minutes=i * interval_minutes) for i in range(intervals_per_day)]
+        return [
+            day_start + timedelta(minutes=i * interval_minutes) for i in range(intervals_per_day)
+        ]
 
     def is_dst_transition_day(self, dt: datetime) -> bool:
         """Check if a day is a DST transition day.
@@ -367,7 +373,7 @@ class TimezoneProvider:
 
         # Find transition hour
         for i in range(1, len(hours)):
-            if offsets[i] != offsets[i-1]:
+            if offsets[i] != offsets[i - 1]:
                 transition_hour = hours[i]
 
                 # Adjust datetime based on transition

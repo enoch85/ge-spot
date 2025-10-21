@@ -1,4 +1,5 @@
 """Parser for Energy-Charts API responses."""
+
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Any
@@ -9,6 +10,7 @@ from ...const.currencies import Currency
 from ...const.energy import EnergyUnit
 
 _LOGGER = logging.getLogger(__name__)
+
 
 class EnergyChartsParser(BasePriceParser):
     """Parser for Energy-Charts API responses.
@@ -97,7 +99,7 @@ class EnergyChartsParser(BasePriceParser):
                 # Skip None prices (future intervals not yet published)
                 if price is None:
                     continue
-                    
+
                 # Convert unix timestamp to datetime UTC
                 dt_utc = datetime.fromtimestamp(timestamp, tz=timezone.utc)
                 interval_key_iso = dt_utc.isoformat()
@@ -125,7 +127,7 @@ class EnergyChartsParser(BasePriceParser):
             "timezone": source_timezone,
             "source": Source.ENERGY_CHARTS,
             "source_unit": EnergyUnit.MWH,
-            "license_info": license_info
+            "license_info": license_info,
         }
 
         if not self.validate(result):
@@ -138,7 +140,7 @@ class EnergyChartsParser(BasePriceParser):
         self,
         original_data: Dict[str, Any],
         timezone: str = "Europe/Berlin",
-        currency: str = Currency.EUR
+        currency: str = Currency.EUR,
     ) -> Dict[str, Any]:
         """Helper to create a standard empty result structure.
 
@@ -155,7 +157,7 @@ class EnergyChartsParser(BasePriceParser):
             "currency": original_data.get("currency", currency),
             "timezone": original_data.get("timezone", timezone),
             "source": Source.ENERGY_CHARTS,
-            "source_unit": EnergyUnit.MWH
+            "source_unit": EnergyUnit.MWH,
         }
 
     def validate(self, data: Dict[str, Any]) -> bool:
@@ -189,7 +191,7 @@ class EnergyChartsParser(BasePriceParser):
         for key, value in interval_raw.items():
             try:
                 # Validate ISO timestamp format
-                datetime.fromisoformat(key.replace('Z', '+00:00'))
+                datetime.fromisoformat(key.replace("Z", "+00:00"))
             except ValueError:
                 _LOGGER.warning(f"[{self.__class__.__name__}] Invalid timestamp key '{key}'")
                 return False

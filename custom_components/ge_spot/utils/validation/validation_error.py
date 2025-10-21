@@ -1,5 +1,6 @@
 """Validation error class."""
 
+
 class ValidationError(Exception):
     """Validation error with path information."""
 

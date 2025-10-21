@@ -1,7 +1,9 @@
 """Attribute constants for GE-Spot integration."""
 
+
 class Attributes:
     """Sensor attributes."""
+
     DATA_SOURCE = "data_source"  # Which API provided the data
     FALLBACK_USED = "fallback_used"  # Whether a fallback API was used
     RAW_API_DATA = "raw_api_data"  # Raw, unprocessed API response
@@ -10,7 +12,7 @@ class Attributes:
     USING_CACHED_DATA = "using_cached_data"  # Whether using cached data
     ATTEMPTED_SOURCES = "attempted_sources"  # All attempted API sources (backend only)
     ACTIVE_SOURCE = "active_source"  # Source that succeeded
-    VALIDATED_SOURCES = "validated_sources"    # Sources proven to work
+    VALIDATED_SOURCES = "validated_sources"  # Sources proven to work
     RAW_VALUE = "raw_value"  # Raw value for a specific metric
     CONVERSION_INFO = "conversion_info"  # Information about value conversions
     CURRENCY = "currency"

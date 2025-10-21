@@ -1,7 +1,9 @@
 """Configuration constants for GE-Spot integration."""
 
+
 class Config:
     """Configuration keys used in the integration."""
+
     SOURCE = "source"
     AREA = "area"
     VAT = "vat"
@@ -18,7 +20,7 @@ class Config:
     CACHE_MAX_ENTRIES = "cache_max_entries"
     CACHE_TTL = "cache_ttl"
     PERSIST_CACHE = "persist_cache"
-    CACHE_DIR = "cache_dir" # Added cache directory config key
+    CACHE_DIR = "cache_dir"  # Added cache directory config key
 
     # API & Network
     # API Keys (Sensitive - Handled separately)
@@ -30,7 +32,7 @@ class Config:
 
     # API configuration
     SOURCE_PRIORITY = "source_priority"  # Priority order for data sources
-    FALLBACK_SOURCES = "fallback_sources" # Added fallback sources config key
+    FALLBACK_SOURCES = "fallback_sources"  # Added fallback sources config key
     ORIGINAL_AREA = "original_area"  # Original area code before mapping
     TIMEZONE_REFERENCE = "timezone_reference"  # Timezone reference for area
 

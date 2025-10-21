@@ -1,4 +1,5 @@
 """Integration for electricity spot prices."""
+
 import asyncio
 import logging
 from datetime import date, timedelta
@@ -27,6 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # UnifiedPriceCoordinator is the sole supported approach; legacy coordinator has been removed.
 
+
 async def async_setup(hass: HomeAssistant, config):  # pylint: disable=unused-argument
     """Set up the GE-Spot component."""
     # Initialize exchange rate service and register update handlers
@@ -34,6 +36,7 @@ async def async_setup(hass: HomeAssistant, config):  # pylint: disable=unused-ar
     exchange_service.register_update_handlers(hass)
 
     return True
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up from a config entry."""
@@ -72,7 +75,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # The task itself will run immediate validation, then continue daily schedule
         if not coordinator.price_manager._health_check_scheduled:
             _LOGGER.info(f"Scheduling health check task for {area}")
-            asyncio.create_task(coordinator.price_manager._schedule_health_check(run_immediately=True))
+            asyncio.create_task(
+                coordinator.price_manager._schedule_health_check(run_immediately=True)
+            )
             coordinator.price_manager._health_check_scheduled = True
 
     except Exception as e:
@@ -90,6 +95,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return True
 
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -100,6 +106,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
 
     return unload_ok
+
 
 async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update."""
