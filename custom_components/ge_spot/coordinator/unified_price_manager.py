@@ -817,38 +817,105 @@ class UnifiedPriceManager:
                         # Store partial data as backup
                         partial_data_backup = processed_data
                         
-                        # Try remaining sources
+                        # Try remaining sources ONE AT A TIME until we get complete data
                         _LOGGER.debug(f"[{self.area}] Attempting remaining source(s): {', '.join(remaining_sources)}")
-                        remaining_api_instances = [
-                            api for api in api_instances 
-                            if getattr(api, 'source_type', type(api).__name__) in remaining_sources
-                        ]
+                        processed_retry = None
+                        has_complete_retry = False
                         
-                        # Fetch from remaining sources
-                        retry_result = await self._fallback_manager.fetch_with_fallback(
-                            api_instances=remaining_api_instances,
-                            area=self.area,
-                            reference_time=now,
-                            session=session,
-                        )
-                        
-                        # Process retry result
-                        if isinstance(retry_result, dict) and "error" not in retry_result:
-                            processed_retry = await self._process_result(retry_result)
-                            has_today_retry = processed_retry and bool(processed_retry.get("today_interval_prices"))
-                            has_tomorrow_retry = processed_retry and bool(processed_retry.get("tomorrow_interval_prices"))
-                            has_complete_retry = has_today_retry and has_tomorrow_retry
-                            has_any_retry = has_today_retry or has_tomorrow_retry
+                        for remaining_source in remaining_sources:
+                            remaining_api_instances = [
+                                api for api in api_instances 
+                                if getattr(api, 'source_type', type(api).__name__) == remaining_source
+                            ]
                             
-                            if processed_retry and has_any_retry and "error" not in processed_retry:
-                                # Only accept retry if it's COMPLETE data
+                            if not remaining_api_instances:
+                                continue
+                            
+                            _LOGGER.debug(f"[{self.area}] Trying remaining source: {remaining_source}")
+                            
+                            # Fetch from this source
+                            retry_result = await self._fallback_manager.fetch_with_fallback(
+                                api_instances=remaining_api_instances,
+                                area=self.area,
+                                reference_time=now,
+                                session=session,
+                            )
+                            
+                            # Process retry result
+                            if isinstance(retry_result, dict) and "error" not in retry_result:
+                                processed_retry = await self._process_result(retry_result)
+                                has_today_retry = processed_retry and bool(processed_retry.get("today_interval_prices"))
+                                has_tomorrow_retry = processed_retry and bool(processed_retry.get("tomorrow_interval_prices"))
+                                has_complete_retry = has_today_retry and has_tomorrow_retry
+                                
                                 if has_complete_retry:
-                                    # Retry source provided complete data!
-                                    _LOGGER.info(f"[{self.area}] Fallback source provided complete data")
+                                    # Found complete data! Stop trying more sources
+                                    _LOGGER.info(f"[{self.area}] Source '{remaining_source}' provided complete data - stopping search")
+                                    break
+                                else:
+                                    # This source also has partial data - try next if today's data preferred
+                                    if has_today_retry and not has_today:
+                                        # This source has today's data which we're missing - use it
+                                        _LOGGER.info(f"[{self.area}] Source '{remaining_source}' has today's data - using it")
+                                        break
+                                    else:
+                                        _LOGGER.debug(f"[{self.area}] Source '{remaining_source}' also has partial data - continuing search")
+                            else:
+                                _LOGGER.debug(f"[{self.area}] Source '{remaining_source}' failed - continuing search")
+                        
+                        # Now check what we got from the remaining sources
+                        has_any_retry = processed_retry and (
+                            bool(processed_retry.get("today_interval_prices")) or 
+                            bool(processed_retry.get("tomorrow_interval_prices"))
+                        )
+                            
+                        if processed_retry and has_any_retry and "error" not in processed_retry:
+                            # Get retry data details
+                            has_today_retry = bool(processed_retry.get("today_interval_prices"))
+                            has_tomorrow_retry = bool(processed_retry.get("tomorrow_interval_prices"))
+                            has_complete_retry = has_today_retry and has_tomorrow_retry
+                            
+                            # Only accept retry if it's COMPLETE data
+                            if has_complete_retry:
+                                # Retry source provided complete data!
+                                _LOGGER.info(f"[{self.area}] Fallback source provided complete data")
+                                self._consecutive_failures = 0
+                                self._last_api_fetch = now
+                                self._active_source = processed_retry.get("data_source", "unknown")
+                                self._attempted_sources = attempted_so_far + processed_retry.get("attempted_sources", [])
+                                self._fallback_sources = [s for s in self._attempted_sources if s != self._active_source]
+                                self._using_cached_data = False
+                                processed_retry["using_cached_data"] = False
+                                processed_retry["attempted_sources"] = self._attempted_sources
+                                
+                                # Track all attempted sources
+                                for source_name in self._attempted_sources:
+                                    self._mark_source_attempted(source_name)
+                                
+                                # Mark successful source as working
+                                if self._active_source and self._active_source not in ("unknown", "None", None):
+                                    self._failed_sources[self._active_source] = None
+                                    _LOGGER.debug(f"[{self.area}] Source '{self._active_source}' marked as working")
+                                
+                                # Cache the data
+                                self._cache_manager.store(
+                                    data=processed_retry,
+                                    area=self.area,
+                                    source=self._active_source,
+                                    timestamp=now
+                                )
+                                return processed_retry
+                            else:
+                                # Retry also provided partial data - prefer TODAY's data over tomorrow's
+                                has_today_backup = bool(partial_data_backup.get("today_interval_prices"))
+                                
+                                if has_today_retry:
+                                    # Retry has today's data - prefer it (today is more important)
+                                    _LOGGER.info(f"[{self.area}] Fallback source provided partial data with today's prices - using it")
                                     self._consecutive_failures = 0
                                     self._last_api_fetch = now
                                     self._active_source = processed_retry.get("data_source", "unknown")
-                                    self._attempted_sources = attempted_so_far + retry_result.get("attempted_sources", [])
+                                    self._attempted_sources = attempted_so_far + processed_retry.get("attempted_sources", [])
                                     self._fallback_sources = [s for s in self._attempted_sources if s != self._active_source]
                                     self._using_cached_data = False
                                     processed_retry["using_cached_data"] = False
@@ -871,51 +938,17 @@ class UnifiedPriceManager:
                                         timestamp=now
                                     )
                                     return processed_retry
+                                elif has_today_backup:
+                                    # Backup has today's data, retry only has tomorrow - use backup
+                                    _LOGGER.info(f"[{self.area}] Fallback only has tomorrow, using backup with today's prices")
+                                    attempted_so_far = attempted_so_far + processed_retry.get("attempted_sources", [])
                                 else:
-                                    # Retry also provided partial data - prefer TODAY's data over tomorrow's
-                                    has_today_backup = bool(partial_data_backup.get("today_interval_prices"))
-                                    
-                                    if has_today_retry:
-                                        # Retry has today's data - prefer it (today is more important)
-                                        _LOGGER.info(f"[{self.area}] Fallback source provided partial data with today's prices - using it")
-                                        self._consecutive_failures = 0
-                                        self._last_api_fetch = now
-                                        self._active_source = processed_retry.get("data_source", "unknown")
-                                        self._attempted_sources = attempted_so_far + retry_result.get("attempted_sources", [])
-                                        self._fallback_sources = [s for s in self._attempted_sources if s != self._active_source]
-                                        self._using_cached_data = False
-                                        processed_retry["using_cached_data"] = False
-                                        processed_retry["attempted_sources"] = self._attempted_sources
-                                        
-                                        # Track all attempted sources
-                                        for source_name in self._attempted_sources:
-                                            self._mark_source_attempted(source_name)
-                                        
-                                        # Mark successful source as working
-                                        if self._active_source and self._active_source not in ("unknown", "None", None):
-                                            self._failed_sources[self._active_source] = None
-                                            _LOGGER.debug(f"[{self.area}] Source '{self._active_source}' marked as working")
-                                        
-                                        # Cache the data
-                                        self._cache_manager.store(
-                                            data=processed_retry,
-                                            area=self.area,
-                                            source=self._active_source,
-                                            timestamp=now
-                                        )
-                                        return processed_retry
-                                    elif has_today_backup:
-                                        # Backup has today's data, retry only has tomorrow - use backup
-                                        _LOGGER.info(f"[{self.area}] Fallback only has tomorrow, using backup with today's prices")
-                                        attempted_so_far = attempted_so_far + retry_result.get("attempted_sources", [])
-                                    else:
-                                        # Both only have tomorrow - use first partial (backup)
-                                        _LOGGER.info(f"[{self.area}] Both sources only have tomorrow, using first partial as backup")
-                                        attempted_so_far = attempted_so_far + retry_result.get("attempted_sources", [])
-                            else:
-                                # Retry validation also failed
-                                _LOGGER.debug(f"[{self.area}] Retry source '{retry_result.get('data_source', 'unknown')}' also failed validation")
-                                attempted_so_far.extend(retry_result.get("attempted_sources", []))
+                                    # Both only have tomorrow - use first partial (backup)
+                                    _LOGGER.info(f"[{self.area}] Both sources only have tomorrow, using first partial as backup")
+                                    attempted_so_far = attempted_so_far + processed_retry.get("attempted_sources", [])
+                        else:
+                            # All remaining sources failed or had errors
+                            _LOGGER.debug(f"[{self.area}] All remaining sources failed or returned invalid data")
                         
                         # If all remaining sources failed, use the partial data backup
                         _LOGGER.info(
