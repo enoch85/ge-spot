@@ -33,10 +33,10 @@ class OmieParser(BasePriceParser):
         Args:
             data: Dictionary from OmieAPI._fetch_data containing:
                   'raw_data': Dict like {"today": str|None, "tomorrow": str|None}
-                  'timezone': The timezone name string (e.g., 'Europe/Madrid').
+                  'timezone': The timezone name string (e.g. 'Europe/Madrid').
                   'area': The area code ('ES' or 'PT').
-                  'currency': Currency code (e.g., 'EUR').
-                  'source': The source identifier (e.g., 'omie').
+                  'currency': Currency code (e.g. 'EUR').
+                  'source': The source identifier (e.g. 'omie').
                   'fetched_at': ISO timestamp of fetch.
 
         Returns:
@@ -200,7 +200,7 @@ class OmieParser(BasePriceParser):
                     _LOGGER.debug(f"[OmieParser/_parse_csv] Found target price line for {area}: '{price_line[:100]}...'")
                     break
 
-            # Fallback if primary area line not found (e.g., PT requested but only ES exists)
+            # Fallback if primary area line not found (e.g. PT requested but only ES exists)
             if not price_line:
                  _LOGGER.warning(f"[OmieParser/_parse_csv] Target price line for {area} not found, trying fallback.")
                  for i, line in enumerate(lines):

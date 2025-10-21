@@ -207,7 +207,7 @@ class BasePriceParser(ABC):
         Args:
             dt: The timezone-aware datetime object in UTC.
             target_timezone: The target timezone object.
-            date_context: Optional specific date to use for comparison (e.g., for historical data).
+            date_context: Optional specific date to use for comparison (e.g. for historical data).
 
         Returns:
             'today', 'tomorrow', or 'other'.
@@ -285,7 +285,7 @@ class BasePriceParser(ABC):
             prices: Dictionary with timestamp strings as keys and prices as values.
             source_timezone: Timezone object for interpreting ambiguous timestamps.
             target_timezone: Timezone object for the output format and date classification.
-            date_context: Optional specific date to use for comparison (e.g., for historical data).
+            date_context: Optional specific date to use for comparison (e.g. for historical data).
 
         Returns:
             Dictionary with keys 'today', 'tomorrow', 'other', each containing
@@ -336,7 +336,7 @@ class BasePriceParser(ABC):
             return None
 
         now_utc = datetime.now(timezone.utc)
-        # Round down to nearest interval boundary (e.g., 21:20 → 21:15 for 15-min intervals)
+        # Round down to nearest interval boundary (e.g. 21:20 → 21:15 for 15-min intervals)
         interval_minutes = TimeInterval.get_interval_minutes()
         minute = (now_utc.minute // interval_minutes) * interval_minutes
         current_interval_utc = now_utc.replace(minute=minute, second=0, microsecond=0)

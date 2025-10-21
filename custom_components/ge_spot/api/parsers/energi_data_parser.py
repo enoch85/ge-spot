@@ -72,7 +72,7 @@ class EnergiDataParser(BasePriceParser):
             else:
                 _LOGGER.warning("Nested 'raw_data' key found, but its value is None.")
 
-        # Fallback: Check for top-level 'records' key (e.g., from direct test data)
+        # Fallback: Check for top-level 'records' key (e.g. from direct test data)
         if not records and "records" in raw_data and isinstance(raw_data["records"], list):
              _LOGGER.debug("Using top-level 'records' key.")
              records = raw_data["records"]

@@ -20,7 +20,7 @@ class DataValidity:
     """
 
     # The last interval timestamp we have data for
-    # e.g., "2025-10-03 23:45:00+02:00" means we have data up to and including this interval
+    # e.g. "2025-10-03 23:45:00+02:00" means we have data up to and including this interval
     last_valid_interval: Optional[datetime] = None
 
     # When our data coverage runs out (same as last_valid_interval + interval duration)
@@ -152,8 +152,8 @@ def calculate_data_validity(
         interval_prices: Today's interval prices {interval_key: price}
         tomorrow_interval_prices: Tomorrow's interval prices {interval_key: price}
         now: Current datetime
-        current_interval_key: Current interval key (e.g., "18:15")
-        target_timezone: Target timezone for interval keys (e.g., "Australia/Sydney").
+        current_interval_key: Current interval key (e.g. "18:15")
+        target_timezone: Target timezone for interval keys (e.g. "Australia/Sydney").
                         The interval keys are already in this timezone. If not provided, uses HA timezone.
 
     Returns:
@@ -180,7 +180,7 @@ def calculate_data_validity(
     all_intervals = []
 
     # Determine which timezone to use for localizing interval keys
-    # The interval keys (e.g., "04:15") are ALREADY in the target timezone
+    # The interval keys (e.g. "04:15") are ALREADY in the target timezone
     if target_timezone:
         try:
             tz = ZoneInfo(target_timezone)

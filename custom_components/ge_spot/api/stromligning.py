@@ -52,9 +52,9 @@ class StromligningAPI(BasePriceAPI):
         """Fetch raw data from Stromligning.dk API.
 
         Args:
-            area: Area code (e.g., DK1, DK2)
+            area: Area code (e.g. DK1, DK2)
             session: Optional aiohttp session
-            **kwargs: Additional keyword arguments (e.g., reference_time)
+            **kwargs: Additional keyword arguments (e.g. reference_time)
 
         Returns:
             Dictionary containing raw data and metadata for the parser.
@@ -106,7 +106,7 @@ class StromligningAPI(BasePriceAPI):
 
         Args:
             client: API client
-            area: Area code (e.g., DK1, DK2)
+            area: Area code (e.g. DK1, DK2)
             reference_time: Optional reference time
 
         Returns:

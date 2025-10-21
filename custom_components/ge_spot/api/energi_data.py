@@ -49,7 +49,7 @@ class EnergiDataAPI(BasePriceAPI):
         Args:
             area: Area code
             session: Optional aiohttp session
-            **kwargs: Additional keyword arguments (e.g., reference_time)
+            **kwargs: Additional keyword arguments (e.g. reference_time)
 
         Returns:
             Dictionary containing raw data and metadata for the parser.
@@ -78,9 +78,9 @@ class EnergiDataAPI(BasePriceAPI):
             now_cet = now_utc.astimezone(cet_tz)
             raw_tomorrow = None
 
-            # Define expected release hour (e.g., 13:00 CET)
+            # Define expected release hour (e.g. 13:00 CET)
             release_hour_cet = 13
-            # Define a buffer hour to consider it a failure (e.g., 16:00 CET)
+            # Define a buffer hour to consider it a failure (e.g. 16:00 CET)
             failure_check_hour_cet = 16
 
             should_fetch_tomorrow = now_cet.hour >= release_hour_cet

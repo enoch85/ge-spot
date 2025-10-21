@@ -40,7 +40,7 @@ class TimezoneConverter:
                     try:
                         dt = source_tz.localize(dt)
                     except AttributeError:
-                        # If timezone object doesn't have localize method (e.g., zoneinfo)
+                        # If timezone object doesn't have localize method (e.g. zoneinfo)
                         dt = dt.replace(tzinfo=source_tz)
                 else:
                     _LOGGER.error(f"Invalid source timezone: {source_timezone_str}")

@@ -18,7 +18,7 @@ def generate_energy_charts_mock_data(base_date_str, bidding_zone="DE-LU"):
     
     Args:
         base_date_str: Date string in format "2025-10-07"
-        bidding_zone: Bidding zone code (e.g., "DE-LU", "FR")
+        bidding_zone: Bidding zone code (e.g. "DE-LU", "FR")
         
     Returns:
         Dict with unix_seconds and price arrays (96 intervals)

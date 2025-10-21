@@ -19,7 +19,7 @@ def get_timezone_for_area(area: str) -> str:
         area: The area code to get timezone for
 
     Returns:
-        Timezone string (e.g., 'Europe/Oslo')
+        Timezone string (e.g. 'Europe/Oslo')
     """
     return Timezone.AREA_TIMEZONES.get(area)
 

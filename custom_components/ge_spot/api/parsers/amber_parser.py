@@ -129,7 +129,7 @@ class AmberParser(BasePriceParser):
         if isinstance(data, dict) and "area" in data:
             metadata["area"] = data["area"]
 
-        # Add specific Amber metadata if available (e.g., from headers or wrapper dict)
+        # Add specific Amber metadata if available (e.g. from headers or wrapper dict)
         if isinstance(data, dict):
             if "channelType" in data: # Example field
                  metadata["channel_type"] = data["channelType"]

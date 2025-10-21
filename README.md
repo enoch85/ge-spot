@@ -130,13 +130,13 @@ After installation:
 
 ### Basic Settings
 
-- **Region/Area**: Select your electricity price area (e.g., SE4, DK1)
+- **Region/Area**: Select your electricity price area (e.g. SE4, DK1)
 - **Source Priority**: Order of data sources to try (first = highest priority)
-- **VAT Rate**: Set your applicable VAT percentage (e.g., 25 for 25%)
+- **VAT Rate**: Set your applicable VAT percentage (e.g. 25 for 25%)
 
 ### Advanced Settings
 
-- **Display Format**: Choose between decimal (e.g., 0.15 EUR/kWh) or subunit (e.g., 15 cents/kWh)
+- **Display Format**: Choose between decimal (e.g. 0.15 EUR/kWh) or subunit (e.g. 15 cents/kWh)
 - **API Keys**: For ENTSO-E, you'll need to [register for an API key](https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html)
 - **API Key Reuse**: The integration will reuse API keys across different regions using the same source
 

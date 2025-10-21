@@ -19,7 +19,7 @@ def generate_15min_intervals(base_date_str, base_prices, area_code):
     Args:
         base_date_str: Date string in format "2025-04-27"
         base_prices: List of 24 hourly prices to interpolate
-        area_code: Area code (e.g., "SE3", "FI")
+        area_code: Area code (e.g. "SE3", "FI")
 
     Returns:
         List of 96 interval entries with 15-minute granularity

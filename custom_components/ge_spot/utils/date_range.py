@@ -20,7 +20,7 @@ def generate_date_ranges(
     """Generate a list of date ranges to try when fetching API data.
 
     Note: This utility only generates date ranges for API requests. The actual
-    filtering of data by date (e.g., extracting today's or tomorrow's prices)
+    filtering of data by date (e.g. extracting today's or tomorrow's prices)
     is handled by the individual API parsers after data is fetched.
 
     Args:

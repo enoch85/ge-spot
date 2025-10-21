@@ -88,7 +88,7 @@ class TimezoneService:
             source_type: The API source identifier
 
         Returns:
-            Timezone string (e.g., 'Europe/Oslo')
+            Timezone string (e.g. 'Europe/Oslo')
         """
         # Try to get from response metadata
         if isinstance(api_data, dict):
@@ -200,7 +200,7 @@ class TimezoneService:
 
         Args:
             timestamp_str: ISO format timestamp string
-            source_hint: Optional timezone name (e.g., 'Europe/Copenhagen')
+            source_hint: Optional timezone name (e.g. 'Europe/Copenhagen')
 
         Returns:
             Timezone-aware datetime in UTC, or None if parsing fails

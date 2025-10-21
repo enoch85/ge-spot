@@ -177,7 +177,7 @@ class EntsoeAPI(BasePriceAPI):
                             # Raise specific error for auth failure, including message from API if available
                             raise ValueError(f"ENTSO-E API authentication failed (401 Unauthorized). Check your API key. Message: {message}")
                         else:
-                            # For other HTTP errors (e.g., 400, 500), log and continue to the next attempt
+                            # For other HTTP errors (e.g. 400, 500), log and continue to the next attempt
                             continue # Go to next doc_type/date_range
 
                     # --- Handle Non-Error Responses ---
@@ -239,9 +239,9 @@ class EntsoeAPI(BasePriceAPI):
         cet_tz = get_timezone_object("Europe/Paris") # Use Paris time for ENTSO-E
         now_cet = now_utc.astimezone(cet_tz)
 
-        # Define expected release hour (e.g., 13:00 CET)
+        # Define expected release hour (e.g. 13:00 CET)
         release_hour_cet = 13
-        # Define a buffer hour to consider it a failure (e.g., 16:00 CET)
+        # Define a buffer hour to consider it a failure (e.g. 16:00 CET)
         failure_check_hour_cet = 16
 
         should_fetch_tomorrow = now_cet.hour >= release_hour_cet

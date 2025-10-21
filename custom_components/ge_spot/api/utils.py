@@ -20,7 +20,7 @@ async def fetch_with_retry(fetch_func, is_data_available, retry_interval=1800, e
     """
     Repeatedly call fetch_func until is_data_available(result) is True or until end_time is reached.
     retry_interval is in seconds (default: 1800 = 30 minutes).
-    end_time: a datetime.time object (e.g., time(23, 50)) in the local timezone.
+    end_time: a datetime.time object (e.g. time(23, 50)) in the local timezone.
     local_tz_name: string, e.g. 'Europe/Oslo', 'Europe/Berlin', etc.
     """
     import datetime

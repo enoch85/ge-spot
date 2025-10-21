@@ -89,7 +89,7 @@ class RateLimiter:
             log_rate_limiting(area or "unknown", False, reason, source)
             return False, reason
 
-        # PRIORITY 3: Check for special time windows (e.g., when new prices are released)
+        # PRIORITY 3: Check for special time windows (e.g. when new prices are released)
         # Use reduced rate limiting (1 min) during these windows for faster data acquisition
         hour = current_time.hour
         in_special_window = False

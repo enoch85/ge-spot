@@ -19,9 +19,9 @@ class CurrencyConverter:
         self,
         exchange_service: ExchangeRateService,
         target_currency: str,
-        display_unit: str, # e.g., 'kWh' or 'MWh' or 'cents'
+        display_unit: str, # e.g. 'kWh' or 'MWh' or 'cents'
         include_vat: bool,
-        vat_rate: float, # VAT rate as a decimal (e.g., 0.25 for 25%)
+        vat_rate: float, # VAT rate as a decimal (e.g. 0.25 for 25%)
         additional_tariff: float = 0.0, # Additional tariff/fees per kWh
         energy_tax: float = 0.0 # Fixed energy tax per kWh
     ):
@@ -47,8 +47,8 @@ class CurrencyConverter:
 
         Args:
             interval_prices: Dict of {'HH:MM': price} in source currency/unit.
-            source_currency: The currency code of the source prices (e.g., 'EUR').
-            source_unit: The energy unit of the source prices (e.g., 'MWh').
+            source_currency: The currency code of the source prices (e.g. 'EUR').
+            source_unit: The energy unit of the source prices (e.g. 'MWh').
 
         Returns:
             A tuple containing:
@@ -109,7 +109,7 @@ class CurrencyConverter:
         else:
             _LOGGER.debug("Source and target currency (%s) are the same. No exchange rate needed.", source_currency)
 
-        # Determine display unit multiplier (e.g., cents/øre if requested)
+        # Determine display unit multiplier (e.g. cents/øre if requested)
         display_unit_multiplier = get_display_unit_multiplier(self.display_unit) if self.use_subunit else 1
 
         for interval_key, price in interval_prices.items():
@@ -118,7 +118,7 @@ class CurrencyConverter:
                 continue
 
             try:
-                # Handle price if it's a dictionary (e.g., {'price': 8.06})
+                # Handle price if it's a dictionary (e.g. {'price': 8.06})
                 if isinstance(price, dict) and 'price' in price:
                     price = price['price']
 

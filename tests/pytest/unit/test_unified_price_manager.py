@@ -9,7 +9,7 @@ These tests verify real-world behavior of the UnifiedPriceManager to ensure it:
 5. Processes and validates data from different sources consistently
 
 IMPORTANT: These tests are aligned with the 15-minute interval implementation.
-- All mock data uses 15-minute interval timestamps (HH:MM format, e.g., 10:00, 10:15, 10:30)
+- All mock data uses 15-minute interval timestamps (HH:MM format, e.g. 10:00, 10:15, 10:30)
 - Mock data includes 4 intervals per hour to demonstrate 15-minute granularity
 - Tests use TimeInterval configuration for interval-aware assertions
 - System expects 96 intervals per day (24 hours × 4 intervals/hour)
@@ -305,7 +305,7 @@ class TestUnifiedPriceManager:
             # Configure processor to return this cached data when called
             mock_processor.return_value = MOCK_PROCESSED_RESULT
 
-            # Advance time slightly (e.g., 1 minute), still within rate limit
+            # Advance time slightly (e.g. 1 minute), still within rate limit
             freezer = freeze_time("2025-04-26 12:01:00 UTC")
             freezer.start()
             mock_now.return_value = datetime(2025, 4, 26, 12, 1, 0, tzinfo=timezone.utc)
@@ -613,7 +613,7 @@ class TestUnifiedPriceManager:
             # Assume processor returns cached data when processing cached input
             mock_processor.return_value = MOCK_CACHED_RESULT
 
-            # Advance time slightly, but less than min interval (e.g., 3 minutes for a 5 minute interval)
+            # Advance time slightly, but less than min interval (e.g. 3 minutes for a 5 minute interval)
             min_interval_minutes = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
             mock_now.return_value = now_time + timedelta(minutes=min_interval_minutes / 2)
 

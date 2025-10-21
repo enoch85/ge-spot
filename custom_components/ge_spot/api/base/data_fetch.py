@@ -87,7 +87,7 @@ def create_skipped_response(source: str, reason: str = "missing_api_key") -> Dic
     """Create a standardized response for when an API is skipped.
 
     Args:
-        source: The source identifier (e.g., Source.ENTSOE)
+        source: The source identifier (e.g. Source.ENTSOE)
         reason: The reason for skipping (default: "missing_api_key")
 
     Returns:

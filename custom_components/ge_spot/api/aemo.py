@@ -61,7 +61,7 @@ class AemoAPI(BasePriceAPI):
         """Fetch raw price data from NEMWEB Pre-dispatch.
 
         Args:
-            area: Area code (e.g., NSW1, QLD1, SA1, TAS1, VIC1)
+            area: Area code (e.g. NSW1, QLD1, SA1, TAS1, VIC1)
             session: Optional session for API requests
             **kwargs: Additional parameters
 
@@ -222,7 +222,7 @@ class AemoAPI(BasePriceAPI):
             area: Area code (NSW1, QLD1, etc.)
 
         Returns:
-            Timezone string (e.g., "Australia/Sydney")
+            Timezone string (e.g. "Australia/Sydney")
         """
         timezone_map = {
             "NSW1": "Australia/Sydney",      # New South Wales

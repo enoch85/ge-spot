@@ -7,8 +7,8 @@ class DisplayUnit:
 
     # Units displayable to the user
     OPTIONS = {
-        CENTS: "Cents (e.g., 15 cents/kWh)",
-        DECIMAL: "Decimal (e.g., 0.15 EUR/kWh)",
+        CENTS: "Cents (e.g. 15 cents/kWh)",
+        DECIMAL: "Decimal (e.g. 0.15 EUR/kWh)",
     }
 
 

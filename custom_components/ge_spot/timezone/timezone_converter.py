@@ -103,7 +103,7 @@ class TimezoneConverter:
 
                 # Handle potential DST fallback duplicates
                 # Only log as DST fallback if the keys don't have dates (when preserve_date=False)
-                # With preserve_date=True, duplicates across days are normal (e.g., "2025-10-02 00:00" and "2025-10-03 00:00")
+                # With preserve_date=True, duplicates across days are normal (e.g. "2025-10-02 00:00" and "2025-10-03 00:00")
                 if target_key in normalized_prices:
                     if preserve_date:
                         # With dates, this is just a different day - overwrite is expected

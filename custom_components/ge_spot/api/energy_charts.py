@@ -165,7 +165,7 @@ class EnergyChartsAPI(BasePriceAPI):
         """Map area code to Energy-Charts bidding zone.
 
         Args:
-            area: Area code (e.g., "DE-LU", "FR", "SE1")
+            area: Area code (e.g. "DE-LU", "FR", "SE1")
 
         Returns:
             Bidding zone code for Energy-Charts API

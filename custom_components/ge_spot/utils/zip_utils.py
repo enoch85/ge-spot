@@ -14,7 +14,7 @@ def unzip_single_file(zip_bytes: bytes, expected_extension: Optional[str] = None
 
     Args:
         zip_bytes: ZIP file content as bytes
-        expected_extension: Optional file extension to validate (e.g., '.csv')
+        expected_extension: Optional file extension to validate (e.g. '.csv')
 
     Returns:
         File content as string (UTF-8 decoded)

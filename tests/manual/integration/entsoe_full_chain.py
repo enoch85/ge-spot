@@ -12,7 +12,7 @@ This script performs an end-to-end test of the ENTSO-E API integration:
 Usage:
     python entsoe_full_chain.py [area] [api_key] [--date YYYY-MM-DD] [--debug]
 
-    area: Optional area code (e.g., SE1, SE2, SE3, SE4, FI, DK1, etc.)
+    area: Optional area code (e.g. SE1, SE2, SE3, SE4, FI, DK1, etc.)
           Defaults to FI if not provided
     api_key: Optional ENTSO-E API key
              Can also be provided via ENTSOE_API_KEY environment variable
@@ -63,7 +63,7 @@ async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Test ENTSO-E API integration')
     parser.add_argument('area', nargs='?', default='FI',
-                        help=f'Area code (e.g., {", ".join(COMMON_AREAS[:5])})')
+                        help=f'Area code (e.g. {", ".join(COMMON_AREAS[:5])})')
     parser.add_argument('api_key', nargs='?', default=None,
                         help='ENTSO-E API key (optional if environment variable is set)')
     parser.add_argument('--date', default=None,

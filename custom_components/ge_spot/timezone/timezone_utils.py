@@ -54,7 +54,7 @@ def get_source_timezone(source: str, area: Optional[str] = None) -> str:
         return tz
 
     # If source is not a recognized Source constant, it might be a direct timezone string
-    if "/" in source:  # Looks like a timezone string (e.g., "Europe/Berlin")
+    if "/" in source:  # Looks like a timezone string (e.g. "Europe/Berlin")
         return source
 
     # Log clear error but return fallback

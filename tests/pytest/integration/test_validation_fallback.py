@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Integration test for validation-based fallback behavior.
 
-This test verifies that when a primary source (e.g., ENTSO-E) returns only
+This test verifies that when a primary source (e.g. ENTSO-E) returns only
 tomorrow's data (missing current interval), the system correctly fails validation
-and falls back to alternative sources (e.g., Nordpool, Energy Charts).
+and falls back to alternative sources (e.g. Nordpool, Energy Charts).
 
 Scenario:
 - Time: 16:00 local (after 01:00 cutoff)

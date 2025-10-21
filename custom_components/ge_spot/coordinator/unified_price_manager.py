@@ -98,7 +98,7 @@ class UnifiedPriceManager:
         self._health_check_scheduled = False
         self._health_check_task: Optional[asyncio.Task] = None  # Reference to health check task for lifecycle management
         self._last_health_check = None  # datetime of last health check
-        self._last_check_window = None  # Track last window hour checked (e.g., 0 or 13)
+        self._last_check_window = None  # Track last window hour checked (e.g. 0 or 13)
         self._health_check_in_progress = False  # Track when health check is actively running
 
         # Services and utilities

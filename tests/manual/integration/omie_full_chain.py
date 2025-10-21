@@ -225,7 +225,7 @@ async def main():
             logger.warning(f"Missing today hours: {', '.join(sorted(missing_today))}")
 
         if not tomorrow_complete:
-            # Check if it's before typical publication time (e.g., 13:00 local time)
+            # Check if it's before typical publication time (e.g. 13:00 local time)
             now_local = datetime.now(local_tz)
             if now_local.hour >= 13 or reference_date_str: # If specific date requested, expect full data
                 missing_tomorrow = set(tomorrow_hour_range) - tomorrow_hours_found

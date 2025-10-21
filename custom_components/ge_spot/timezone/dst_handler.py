@@ -55,7 +55,7 @@ class DSTHandler:
             return True, DSTTransitionType.FALL_BACK
 
     def get_dst_offset_info(self, dt: Optional[datetime] = None) -> str:
-        """Get DST offset info as a string (e.g., '+1 hour').
+        """Get DST offset info as a string (e.g. '+1 hour').
 
         Args:
             dt: The datetime to check (defaults to now)

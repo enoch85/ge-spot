@@ -261,7 +261,7 @@ Hour Ending | Real-Time Price
 
 ### Floating Point Precision
 
-The long decimals (e.g., `0.2966666666666667`) are **mathematically correct**:
+The long decimals (e.g. `0.2966666666666667`) are **mathematically correct**:
 
 ```python
 # Example: Three 5-minute prices averaged to one 15-minute interval
@@ -279,7 +279,7 @@ This proves the 5-min→15-min aggregation is working properly.
 |--------|--------------------------------|------------------------|
 | **Data Type** | Future prices (next 24-48h) | Historical + current (last 24h) |
 | **Granularity** | Hourly or 15-min intervals | 5-minute real-time updates |
-| **Current Price** | Lookup by interval key (e.g., "14:15") | Most recent data point (data[0]) |
+| **Current Price** | Lookup by interval key (e.g. "14:15") | Most recent data point (data[0]) |
 | **Tomorrow Prices** | ✅ Available via API | ❌ Not in public API |
 | **Use Case** | Plan ahead, optimize schedules | React to current conditions |
 | **Update Frequency** | Once daily (~14:00 CET) | Every 5 minutes |
@@ -476,7 +476,7 @@ Reload integration or restart HA instance
 **Sensor Entity:** `sensor.electricity_price_comed_5minutefeed`
 
 **Expected State:**
-- Value: Price in cents (e.g., `2.60`)
+- Value: Price in cents (e.g. `2.60`)
 - Unit: `¢/kWh` or configured display unit
 - NOT "Unknown" or "Unavailable"
 

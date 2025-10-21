@@ -180,7 +180,7 @@ class ExchangeRateService:
                 _LOGGER.error("Failed to fetch exchange rates and no cache available.")
                 # Raise the original exception if it exists, otherwise a generic one
                 if fetch_exception:
-                    raise fetch_exception # Raise the original error (e.g., ClientConnectorError)
+                    raise fetch_exception # Raise the original error (e.g. ClientConnectorError)
                 else:
                     # Should not happen if fetch was attempted, but as a fallback
                     raise ValueError("Could not retrieve exchange rates (fetch attempt failed silently)")

@@ -190,7 +190,7 @@ def create_standardized_price_data(
             # Create simple HH:MM key for compatibility if needed, but prefer ISO
             simple_interval_key = dt_obj.strftime("%H:%M")
         except (ValueError, TypeError):
-            # Fallback if key is not ISO (e.g., HH:MM) - less ideal
+            # Fallback if key is not ISO (e.g. HH:MM) - less ideal
             iso_dt = f"{today.isoformat()}T{interval_key}:00" # Placeholder
             simple_interval_key = interval_key
 

@@ -13,7 +13,7 @@ def format_price(price: float, currency: str, use_subunit: bool = False) -> str:
     Args:
         price: Price value
         currency: Currency code
-        use_subunit: Whether to use subunit (e.g., cents)
+        use_subunit: Whether to use subunit (e.g. cents)
 
     Returns:
         Formatted price string
@@ -52,7 +52,7 @@ def format_relative_price(price: float, reference_price: float,
         price: Price value
         reference_price: Reference price value
         currency: Optional currency code
-        use_subunit: Whether to use subunit (e.g., cents)
+        use_subunit: Whether to use subunit (e.g. cents)
 
     Returns:
         Formatted relative price string

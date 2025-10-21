@@ -21,8 +21,8 @@ interval_dt = dt_util.as_local(interval_dt)  # Always HA timezone
 ```
 
 This created a semantic mismatch:
-- Interval keys like `"04:15"` represent times in **target timezone** (e.g., Sydney)
-- But timestamps were localized in **HA timezone** (e.g., Berlin)
+- Interval keys like `"04:15"` represent times in **target timezone** (e.g. Sydney)
+- But timestamps were localized in **HA timezone** (e.g. Berlin)
 
 ## Solution
 
@@ -65,7 +65,7 @@ else:
 
 ### Data Flow Understanding
 
-1. **API Returns**: Data in source timezone (e.g., Sydney +11:00)
+1. **API Returns**: Data in source timezone (e.g. Sydney +11:00)
    ```python
    # AEMO API returns:
    interval_raw = {"2025-10-07T03:00:00+11:00": 124.96}
@@ -96,12 +96,12 @@ else:
 ### Time Reference Modes
 
 **Local Area Time:**
-- `target_timezone` = Area's timezone (e.g., Sydney)
+- `target_timezone` = Area's timezone (e.g. Sydney)
 - Keys: Times in Sydney
 - Validity: Timestamps in Sydney ✅
 
 **Home Assistant Time:**
-- `target_timezone` = HA's timezone (e.g., Berlin)
+- `target_timezone` = HA's timezone (e.g. Berlin)
 - Keys: Times in Berlin (converted from Sydney)
 - Validity: Timestamps in Berlin ✅
 

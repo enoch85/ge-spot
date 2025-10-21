@@ -132,7 +132,7 @@ class DataProcessor:
             raise RuntimeError("Currency converter could not be initialized.")
 
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        # Accepts raw data from API adapter (e.g., entsoe.py)
+        # Accepts raw data from API adapter (e.g. entsoe.py)
         # Expects keys: 'interval_raw', 'timezone', 'currency', 'source_name', ...
         await self._ensure_exchange_service()
 

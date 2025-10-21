@@ -37,7 +37,7 @@ class ApiClient:
             params: Optional query parameters
             headers: Optional request headers
             timeout: Optional timeout in seconds
-            encoding: Optional encoding for text responses (e.g., 'utf-8', 'iso-8859-1')
+            encoding: Optional encoding for text responses (e.g. 'utf-8', 'iso-8859-1')
 
         Returns:
             The response data as a dictionary or string depending on content type

@@ -8,13 +8,13 @@ from ..const.display import DisplayUnit
 _LOGGER = logging.getLogger(__name__)
 
 def get_display_unit_multiplier(display_unit: str) -> int:
-    """Get the multiplier for converting to the display subunit (e.g., cents).
+    """Get the multiplier for converting to the display subunit (e.g. cents).
 
     Args:
-        display_unit: The target display unit (e.g., DisplayUnit.CENTS).
+        display_unit: The target display unit (e.g. DisplayUnit.CENTS).
 
     Returns:
-        Multiplier (e.g., 100 for cents) or 1 if no subunit conversion needed.
+        Multiplier (e.g. 100 for cents) or 1 if no subunit conversion needed.
     """
     if display_unit == DisplayUnit.CENTS:
         return 100
@@ -24,19 +24,19 @@ def convert_energy_price(
     price: float,
     source_unit: str,
     target_unit: str = EnergyUnit.TARGET, # Default target is kWh
-    vat_rate: float = 0.0, # VAT rate (e.g., 0.25 for 25%), defaults to 0
-    display_unit_multiplier: int = 1, # Multiplier for subunits (e.g., 100 for cents)
+    vat_rate: float = 0.0, # VAT rate (e.g. 0.25 for 25%), defaults to 0
+    display_unit_multiplier: int = 1, # Multiplier for subunits (e.g. 100 for cents)
     additional_tariff: float = 0.0, # Additional tariff/fees per kWh, defaults to 0
-    energy_tax: float = 0.0, # Fixed energy tax per kWh (e.g., government levy), defaults to 0
+    energy_tax: float = 0.0, # Fixed energy tax per kWh (e.g. government levy), defaults to 0
     tariff_in_subunit: bool = False # Whether tariff is entered in subunit (cents/øre)
 ) -> Optional[float]:
     """Convert energy price between units, apply VAT, and adjust for display units.
 
     Calculation order follows EU tax standards:
-    1. Convert energy units (e.g., MWh → kWh)
+    1. Convert energy units (e.g. MWh → kWh)
     2. Add all costs: spot_price + additional_tariff + energy_tax
     3. Apply VAT to total: (spot_price + fees) × (1 + VAT%)
-    4. Convert to display unit (e.g., cents)
+    4. Convert to display unit (e.g. cents)
 
     Example (Netherlands):
     - Spot: 0.08 EUR/kWh, Tariff: 0.0219 EUR/kWh, Tax: 0.10154 EUR/kWh, VAT: 21%
@@ -44,12 +44,12 @@ def convert_energy_price(
 
     Args:
         price: The original price value.
-        source_unit: The energy unit of the original price (e.g., EnergyUnit.MWH).
-        target_unit: The target energy unit (e.g., EnergyUnit.KWH).
+        source_unit: The energy unit of the original price (e.g. EnergyUnit.MWH).
+        target_unit: The target energy unit (e.g. EnergyUnit.KWH).
         vat_rate: The VAT rate to apply (0 to 1). Defaults to 0.
-        display_unit_multiplier: Multiplier for display subunits (e.g., 100). Defaults to 1.
+        display_unit_multiplier: Multiplier for display subunits (e.g. 100). Defaults to 1.
         additional_tariff: Additional tariff/fees from provider (per kWh). Defaults to 0.
-        energy_tax: Fixed energy tax per kWh (e.g., government levy). Defaults to 0.
+        energy_tax: Fixed energy tax per kWh (e.g. government levy). Defaults to 0.
         tariff_in_subunit: If True, tariff is in subunit (cents/øre), else main unit. Defaults to False.
 
     Returns:
@@ -106,7 +106,7 @@ def convert_energy_price(
         # VAT is calculated on the sum of all components (spot price + fees + taxes)
         price *= (1 + vat_rate)
 
-        # 4. Apply display unit multiplier (e.g., for cents)
+        # 4. Apply display unit multiplier (e.g. for cents)
         price *= display_unit_multiplier
 
         return price

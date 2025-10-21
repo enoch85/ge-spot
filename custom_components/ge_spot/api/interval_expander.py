@@ -54,11 +54,11 @@ def convert_to_target_intervals(source_prices: Dict[str, float],
         _LOGGER.debug(f"No conversion needed: source = target = {target_interval_minutes}min")
         return source_prices
 
-    # Case 2: Source is coarser (e.g., 60min or 30min) - expand/duplicate
+    # Case 2: Source is coarser (e.g. 60min or 30min) - expand/duplicate
     if source_interval_minutes > target_interval_minutes:
         return _expand_intervals(source_prices, source_interval_minutes, target_interval_minutes)
 
-    # Case 3: Source is finer (e.g., 5min) - aggregate/average
+    # Case 3: Source is finer (e.g. 5min) - aggregate/average
     return _aggregate_intervals(source_prices, target_interval_minutes)
 
 

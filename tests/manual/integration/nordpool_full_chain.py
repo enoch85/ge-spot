@@ -13,7 +13,7 @@ This script performs an end-to-end test of the Nordpool API integration:
 Usage:
     python nordpool_full_chain.py [area] [date]
 
-    area: Optional area code (e.g., SE1, SE2, SE3, SE4, FI, DK1, etc.)
+    area: Optional area code (e.g. SE1, SE2, SE3, SE4, FI, DK1, etc.)
           Defaults to SE3 if not provided
     date: Optional date to fetch data for (format: YYYY-MM-DD)
           Defaults to today if not provided
@@ -261,7 +261,7 @@ async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Test Nordpool API integration')
     parser.add_argument('area', nargs='?', default='SE3',
-                        help=f'Area code (e.g., {", ".join(COMMON_AREAS[:5])})')
+                        help=f'Area code (e.g. {", ".join(COMMON_AREAS[:5])})')
     parser.add_argument('date', nargs='?', default=None,
                         help='Date to fetch data for (format: YYYY-MM-DD, default: today)')
     parser.add_argument('--no-cache', action='store_true', help='Skip cache check and force fetch from API')
