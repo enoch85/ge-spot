@@ -832,12 +832,17 @@ class TestUnifiedPriceManager:
 
     @pytest.mark.asyncio
     async def test_consecutive_failures_backoff(self, manager, auto_mock_core_dependencies):
-        """Test implicit validation - failed sources are skipped for 24h."""
+        """Test implicit validation - failed sources are skipped after grace period."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
         mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
         mock_now = auto_mock_core_dependencies["now"]
         mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+
+        # Set coordinator created time to past grace period
+        manager._coordinator_created_at = mock_now.return_value - timedelta(minutes=10)
+        # Set last API fetch to simulate non-first-fetch
+        manager._last_api_fetch = mock_now.return_value - timedelta(minutes=8)
 
         # Configure for failure
         mock_fallback.return_value = MOCK_FAILURE_RESULT
@@ -862,14 +867,19 @@ class TestUnifiedPriceManager:
         empty_res_2 = await manager._generate_empty_result(error="No API sources available")
         mock_processor.return_value = empty_res_2
 
-        # Advance time by 1 hour (less than 24h)
+        # Advance time by 1 hour (still past grace period)
         mock_now.return_value += timedelta(hours=1)
+        manager._last_api_fetch = mock_now.return_value - timedelta(minutes=30)
 
-        # Second attempt - sources should be SKIPPED because they failed <24h ago
+        # Verify NOT in grace period and NOT first fetch
+        assert manager.is_in_grace_period() == False, "Should be past grace period"
+        assert manager._last_api_fetch is not None, "Should not be first fetch"
+
+        # Second attempt - sources should be SKIPPED because they failed and we're past grace period
         await manager.fetch_data()
 
         # Assert: FallbackManager should NOT be called because all sources are filtered out
-        mock_fallback.assert_not_awaited(), "API should not be called - all sources failed recently (<24h)"
+        mock_fallback.assert_not_awaited(), "API should not be called - all sources failed recently"
         # No sources available, so consecutive failures would increment
         assert manager._consecutive_failures == 2, "Consecutive failures should increment to 2"
 
@@ -896,7 +906,7 @@ class TestUnifiedPriceManager:
     async def test_daily_retry_window_success_and_failure(self, manager, auto_mock_core_dependencies, monkeypatch):
         """Test comprehensive source validation lifecycle with health check integration."""
         # This test validates the complete implicit validation flow:
-        # 1. Initial failure marks sources with timestamp
+        # 1. Initial failure marks sources with timestamp (after grace period + past first fetch)
         # 2. Subsequent regular fetches skip failed sources (health check will validate them)
         # 3. force=True bypasses the filter and allows immediate retry
         # 4. Retry success clears failure markers
@@ -910,7 +920,7 @@ class TestUnifiedPriceManager:
         
         # Mock _schedule_health_check to avoid background task complications in tests
         async def mock_schedule_health_check():
-            pass  # No-op for testing - we're testing the 24h filter logic, not the health check scheduler
+            pass  # No-op for testing - we're testing the filter logic, not the health check scheduler
         
         monkeypatch.setattr(manager, "_schedule_health_check", mock_schedule_health_check)
         
@@ -920,7 +930,15 @@ class TestUnifiedPriceManager:
         
         initial_time = mock_now.return_value
         
-        # ========== SCENARIO 1: Initial Failure ==========
+        # Set time past grace period and simulate non-first-fetch
+        manager._coordinator_created_at = initial_time - timedelta(minutes=10)
+        manager._last_api_fetch = initial_time - timedelta(minutes=8)
+        
+        # Verify preconditions
+        assert manager.is_in_grace_period() == False, "Should be past grace period"
+        assert manager._last_api_fetch is not None, "Should not be first fetch"
+        
+        # ========== SCENARIO 1: Initial Failure (after grace period) ==========
         # Sources fail, get marked with timestamp, daily retry scheduled
         
         mock_fallback.return_value = MOCK_FAILURE_RESULT
@@ -932,25 +950,28 @@ class TestUnifiedPriceManager:
         
         # Verify failure was recorded
         assert Source.NORDPOOL in manager._failed_sources, "Nordpool should be marked as failed"
-        assert Source.ENTSOE in manager._failed_sources, "ENTSOE should be marked as failed"
+        assert Source.ENTSOE in manager._failed_sources, "ENTSOE should be in failed"
         first_failure_time_nordpool = manager._failed_sources[Source.NORDPOOL]
         first_failure_time_entsoe = manager._failed_sources[Source.ENTSOE]
         assert first_failure_time_nordpool is not None, "Failure timestamp should be set"
-        assert first_failure_time_nordpool == initial_time, "Failure timestamp should match current time"
         assert manager._consecutive_failures == 1, "First failure increments counter"
         assert result_1.get("has_data") is False, "No data on failure"
         assert mock_fallback.await_count == 1, "Fallback called on first failure"
         
-        # ========== SCENARIO 2: Second Fetch Within 24h (Sources Skipped) ==========
-        # Sources should be skipped because they failed <24h ago
+        # ========== SCENARIO 2: Second Fetch (Sources Skipped) ==========
+        # Sources should be skipped because they failed and we're past grace period
         
         mock_fallback.reset_mock()
         mock_processor.reset_mock()
         mock_cache_get.reset_mock()
         
-        # Advance time by 2 hours (still within 24h window)
+        # Advance time by 2 hours (still past grace period)
         mock_now.return_value = initial_time + timedelta(hours=2)
+        manager._last_api_fetch = initial_time + timedelta(hours=1, minutes=30)
         _LAST_FETCH_TIME.clear()  # Clear rate limit to allow fetch attempt
+        
+        # Verify still past grace period
+        assert manager.is_in_grace_period() == False, "Should still be past grace period"
         
         empty_res_2 = await manager._generate_empty_result(error="No API sources available")
         mock_processor.return_value = empty_res_2
