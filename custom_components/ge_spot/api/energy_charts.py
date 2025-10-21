@@ -120,11 +120,18 @@ class EnergyChartsAPI(BasePriceAPI):
                 params=params
             )
 
+            # Check for error response from API client first
+            if isinstance(response, dict) and response.get("error"):
+                error_msg = response.get("message", "Unknown error")
+                _LOGGER.error(f"Energy-Charts API request failed for {area}: {error_msg}")
+                return None
+
+            # Check for valid response structure
             if not response or not isinstance(response, dict):
                 _LOGGER.error(f"Energy-Charts API returned invalid response for {area}")
                 return None
 
-            # Check for required fields
+            # Check for required fields (only if we have a valid dict without error)
             if "unix_seconds" not in response or "price" not in response:
                 _LOGGER.error(f"Energy-Charts response missing required fields for {area}")
                 return None

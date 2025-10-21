@@ -1307,3 +1307,141 @@ class TestHealthCheck:
                 manager._failed_sources.get(cls(config={}).source_type) is None
                 for cls in manager._api_classes
             ), "All sources should be validated"
+
+    @pytest.mark.asyncio
+    async def test_first_fetch_tries_all_sources(self, manager):
+        """Test that first fetch tries ALL sources regardless of validation failures.
+        
+        This is Phase 1.1 fix: During first fetch, even if a source failed during
+        initialization/validation, it should still be attempted.
+        """
+        # Arrange - Mark one source as failed
+        manager._failed_sources[Source.NORDPOOL] = datetime.now(timezone.utc) - timedelta(minutes=5)
+        
+        # Ensure _last_api_fetch is None (first fetch)
+        assert manager._last_api_fetch is None, "Should be first fetch"
+        
+        with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback, \
+             patch.object(manager, '_process_result', new_callable=AsyncMock) as mock_process:
+            
+            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            mock_process.return_value = MOCK_PROCESSED_RESULT
+            
+            # Act
+            result = await manager.fetch_data(force=False)
+            
+            # Assert - ALL sources should be tried on first fetch
+            call_args = mock_fallback.call_args
+            api_instances = call_args.kwargs['api_instances']
+            
+            # Should have all configured sources, not filtered
+            assert len(api_instances) == len(manager._api_classes), \
+                "First fetch should try ALL sources regardless of failures"
+            
+            # Verify result is valid
+            assert result is not None
+            assert result.get("has_data") == True
+
+    @pytest.mark.asyncio
+    async def test_grace_period_ignores_failures(self, manager):
+        """Test that grace period allows all sources to be tried.
+        
+        This is Phase 1.1 fix: During grace period (first 5 minutes after reload),
+        all sources should be tried regardless of recent failures.
+        """
+        # Arrange - Mark sources as failed
+        now = datetime.now(timezone.utc)
+        manager._failed_sources[Source.NORDPOOL] = now - timedelta(minutes=2)
+        manager._failed_sources[Source.ENTSOE] = now - timedelta(minutes=1)
+        
+        # Set _last_api_fetch to simulate non-first fetch
+        manager._last_api_fetch = now - timedelta(minutes=10)
+        
+        # Ensure we're in grace period
+        assert manager.is_in_grace_period() == True, "Should be in grace period"
+        
+        with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback, \
+             patch.object(manager, '_process_result', new_callable=AsyncMock) as mock_process:
+            
+            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            mock_process.return_value = MOCK_PROCESSED_RESULT
+            
+            # Act
+            result = await manager.fetch_data(force=False)
+            
+            # Assert - ALL sources should be tried during grace period
+            call_args = mock_fallback.call_args
+            api_instances = call_args.kwargs['api_instances']
+            
+            assert len(api_instances) == len(manager._api_classes), \
+                "Grace period should try ALL sources regardless of failures"
+            
+            assert result is not None
+            assert result.get("has_data") == True
+
+    @pytest.mark.asyncio
+    async def test_after_grace_period_skips_failed_sources(self, manager):
+        """Test that after grace period, failed sources are skipped.
+        
+        Normal operation: After grace period and after first successful fetch,
+        recently failed sources should be skipped until health check validates them.
+        """
+        # Arrange - Set coordinator created time to be past grace period
+        manager._coordinator_created_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+        
+        # Mark a source as failed and set last fetch time
+        now = datetime.now(timezone.utc)
+        manager._failed_sources[Source.NORDPOOL] = now - timedelta(minutes=2)
+        manager._last_api_fetch = now - timedelta(minutes=20)  # Past first fetch
+        
+        # Ensure we're NOT in grace period
+        assert manager.is_in_grace_period() == False, "Should NOT be in grace period"
+        
+        with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback, \
+             patch.object(manager, '_process_result', new_callable=AsyncMock) as mock_process:
+            
+            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            mock_process.return_value = MOCK_PROCESSED_RESULT
+            
+            # Act
+            result = await manager.fetch_data(force=False)
+            
+            # Assert - Failed source should be skipped
+            call_args = mock_fallback.call_args
+            api_instances = call_args.kwargs['api_instances']
+            
+            # Should have fewer sources (failed one skipped)
+            assert len(api_instances) < len(manager._api_classes), \
+                "After grace period, failed sources should be skipped"
+            
+            # Verify the failed source is not in the list
+            source_names = [type(api).__name__ for api in api_instances]
+            assert 'NordpoolAPI' not in source_names, \
+                "Failed Nordpool source should be skipped"
+
+    @pytest.mark.asyncio
+    async def test_successful_fetch_updates_last_api_fetch(self, manager):
+        """Test that successful fetch updates _last_api_fetch timestamp.
+        
+        This ensures first_fetch detection works correctly after the first successful fetch.
+        """
+        # Arrange
+        assert manager._last_api_fetch is None, "Should start with None"
+        
+        with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback, \
+             patch.object(manager, '_process_result', new_callable=AsyncMock) as mock_process, \
+             patch.object(manager._cache_manager, 'store') as mock_cache_store:
+            
+            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            mock_process.return_value = MOCK_PROCESSED_RESULT
+            
+            # Act
+            await manager.fetch_data(force=False)
+            
+            # Assert - _last_api_fetch should be updated to not None
+            assert manager._last_api_fetch is not None, \
+                "_last_api_fetch should be set after successful fetch"
+            
+            # Verify it's a datetime object
+            assert isinstance(manager._last_api_fetch, datetime), \
+                "_last_api_fetch should be a datetime object"

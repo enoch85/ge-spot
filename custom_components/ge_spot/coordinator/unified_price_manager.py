@@ -590,15 +590,34 @@ class UnifiedPriceManager:
 
             # Use all configured sources - health check validates them during special windows
             # force=True bypasses failed source tracking entirely
+            # On first fetch OR grace period, try ALL sources regardless of validation failures
+            first_fetch = self._last_api_fetch is None
+            in_grace_period = self.is_in_grace_period()
+            
+            # Debug logging for source filtering decision
+            _LOGGER.debug(f"[{self.area}] Source filtering:")
+            _LOGGER.debug(f"  - Configured sources: {[cls(config={}).source_type for cls in self._api_classes]}")
+            _LOGGER.debug(f"  - Failed sources: {list(self._failed_sources.keys())}")
+            _LOGGER.debug(f"  - First fetch: {first_fetch}")
+            _LOGGER.debug(f"  - Grace period active: {in_grace_period}")
+            _LOGGER.debug(f"  - Force fetch: {force}")
+            
             enabled_api_classes = []
             for cls in self._api_classes:
                 source_name = cls(config={}).source_type
                 last_failure = self._failed_sources.get(source_name)
 
-                # Skip failed sources during regular fetches (health check will validate them)
-                if not force and last_failure:
+                # Skip failed sources during regular fetches UNLESS:
+                # - force=True (explicit override)
+                # - first_fetch=True (first data fetch after init)
+                # - grace period active (recently reloaded/started)
+                # Health check will validate failed sources during special windows
+                if not force and not first_fetch and not in_grace_period and last_failure:
+                    time_since_failure = (now - last_failure).total_seconds() / 60
+                    _LOGGER.debug(f"  - Skipping '{source_name}' (failed {time_since_failure:.1f} minutes ago)")
                     continue
 
+                _LOGGER.debug(f"  - Including '{source_name}'")
                 enabled_api_classes.append(cls)
 
             # Log if any sources are skipped
@@ -608,9 +627,21 @@ class UnifiedPriceManager:
                     cls(config={}).source_type for cls in self._api_classes
                     if cls not in enabled_api_classes
                 ]
+                next_check = self._calculate_next_health_check(now)
+                next_check_str = next_check.strftime('%H:%M') if next_check else 'soon'
                 _LOGGER.info(
                     f"[{self.area}] Skipping {disabled_count} recently failed source(s): {', '.join(disabled_names)} "
-                    f"(will be retried during next health check window)"
+                    f"(will be retried during health check at {next_check_str})"
+                )
+            elif first_fetch:
+                _LOGGER.info(
+                    f"[{self.area}] First fetch - trying ALL {len(enabled_api_classes)} configured source(s): "
+                    f"{', '.join([cls(config={}).source_type for cls in enabled_api_classes])}"
+                )
+            elif in_grace_period:
+                _LOGGER.info(
+                    f"[{self.area}] Grace period active - trying ALL {len(enabled_api_classes)} configured source(s): "
+                    f"{', '.join([cls(config={}).source_type for cls in enabled_api_classes])}"
                 )
 
             api_instances = [
@@ -714,6 +745,7 @@ class UnifiedPriceManager:
                 if processed_data and has_valid_data and "error" not in processed_data:
                     _LOGGER.info(f"[{self.area}] Successfully processed data. Today: {len(processed_data.get('interval_prices', {}))}, Tomorrow: {len(processed_data.get('tomorrow_interval_prices', {}))}")
                     self._consecutive_failures = 0
+                    self._last_api_fetch = now  # Track successful fetch time
                     self._active_source = processed_data.get("data_source", "unknown") # Use source from processed data
                     self._attempted_sources = processed_data.get("attempted_sources", [])
                     self._fallback_sources = [s for s in self._attempted_sources if s != self._active_source]
