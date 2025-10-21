@@ -247,8 +247,6 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         # Set defaults if not provided
         if Config.VAT not in self._data:
             self._data[Config.VAT] = Defaults.VAT
-        if Config.UPDATE_INTERVAL not in self._data:
-            self._data[Config.UPDATE_INTERVAL] = Defaults.UPDATE_INTERVAL
         # Display unit is now required in schema
         if Config.TIMEZONE_REFERENCE not in self._data:
             self._data[Config.TIMEZONE_REFERENCE] = Defaults.TIMEZONE_REFERENCE

@@ -177,7 +177,6 @@ class GSpotOptionsFlow(OptionsFlow):
                 step_id="init",
                 data_schema=vol.Schema({
                     vol.Optional(Config.VAT, default=0): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-                    vol.Optional(Config.UPDATE_INTERVAL, default=60): vol.Coerce(int),
                     vol.Optional(Config.TIMEZONE_REFERENCE, default=Defaults.TIMEZONE_REFERENCE): vol.In({
                         TimezoneReference.HOME_ASSISTANT: TimezoneReference.OPTIONS[TimezoneReference.HOME_ASSISTANT],
                         TimezoneReference.LOCAL_AREA: TimezoneReference.OPTIONS[TimezoneReference.LOCAL_AREA]
