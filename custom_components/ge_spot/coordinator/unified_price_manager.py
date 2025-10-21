@@ -789,11 +789,75 @@ class UnifiedPriceManager:
                     )
                     return processed_data
                 else:
-                    # Processing failed to produce interval_raw or marked as no data
+                    # Processing/validation failed - mark this source as failed and retry with remaining sources
+                    failed_source = result.get("data_source", "unknown")
                     error_info = processed_data.get("error", "Processing failed to produce valid data") if processed_data else "Processing returned None or empty"
-                    # Changed to DEBUG - validation already logged the specific failure
-                    _LOGGER.debug(f"[{self.area}] Failed to process fetched data. Error: {error_info}")
-                    # Fall through to failure handling (try cache)
+                    _LOGGER.warning(f"[{self.area}] {failed_source}: Fetch succeeded but validation failed ({error_info}) - trying next source")
+                    
+                    # Temporarily mark this source as failed (with current timestamp)
+                    if failed_source and failed_source not in ("unknown", "None", None):
+                        self._failed_sources[failed_source] = now
+                        self._mark_source_attempted(failed_source)
+                    
+                    # Get remaining sources (sources not yet tried)
+                    attempted_so_far = result.get("attempted_sources", [failed_source]) if result else [failed_source]
+                    configured_sources = [getattr(api, 'source_type', type(api).__name__) for api in api_instances]
+                    remaining_sources = [s for s in configured_sources if s not in attempted_so_far]
+                    
+                    if remaining_sources:
+                        _LOGGER.info(f"[{self.area}] Retrying with remaining source(s): {', '.join(remaining_sources)}")
+                        # Retry with remaining sources by creating new api_instances list
+                        # Filter api_instances to only include remaining sources
+                        remaining_api_instances = [
+                            api for api in api_instances 
+                            if getattr(api, 'source_type', type(api).__name__) in remaining_sources
+                        ]
+                        # Recursive call with remaining sources
+                        retry_result = await self._fallback_manager.fetch_with_fallback(
+                            api_instances=remaining_api_instances,
+                            area=self.area,
+                            reference_time=now,
+                            session=session,
+                        )
+                        # Process retry result
+                        if isinstance(retry_result, dict) and "error" not in retry_result:
+                            processed_retry = await self._process_result(retry_result)
+                            has_today_retry = processed_retry and processed_retry.get("today_interval_prices")
+                            has_tomorrow_retry = processed_retry and processed_retry.get("tomorrow_interval_prices")
+                            has_valid_retry = has_today_retry or has_tomorrow_retry
+                            
+                            if processed_retry and has_valid_retry and "error" not in processed_retry:
+                                # Success with fallback source!
+                                _LOGGER.info(f"[{self.area}] Fallback source succeeded after validation failure")
+                                self._consecutive_failures = 0
+                                self._last_api_fetch = now
+                                self._active_source = processed_retry.get("data_source", "unknown")
+                                self._attempted_sources = attempted_so_far + retry_result.get("attempted_sources", [])
+                                self._fallback_sources = [s for s in self._attempted_sources if s != self._active_source]
+                                self._using_cached_data = False
+                                processed_retry["using_cached_data"] = False
+                                processed_retry["attempted_sources"] = self._attempted_sources
+                                
+                                # Track all attempted sources
+                                for source_name in self._attempted_sources:
+                                    self._mark_source_attempted(source_name)
+                                
+                                # Mark successful source as working
+                                if self._active_source and self._active_source not in ("unknown", "None", None):
+                                    self._failed_sources[self._active_source] = None
+                                    _LOGGER.debug(f"[{self.area}] Source '{self._active_source}' marked as working")
+                                
+                                # Cache the data
+                                self._cache_manager.store(
+                                    data=processed_retry,
+                                    area=self.area,
+                                    source=self._active_source,
+                                    timestamp=now
+                                )
+                                return processed_retry
+                    
+                    # If retry also failed or no remaining sources, fall through to cache handling
+                    _LOGGER.debug(f"[{self.area}] All sources failed fetch or validation. Error: {error_info}")
 
             # Handle fetch failure (result is None or the error dict from FallbackManager) OR processing failure
             error_info = "Unknown fetch/processing error" # Default error
