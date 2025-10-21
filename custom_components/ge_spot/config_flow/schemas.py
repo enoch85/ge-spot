@@ -123,24 +123,24 @@ def get_options_schema(defaults, supported_sources, area):
         vol.Optional(
             Config.ADDITIONAL_TARIFF,
             default=defaults.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF),
-            description="Additional transfer/grid fees from your provider. Use same unit as Price Display Format (e.g., 0.05 if decimal, or 5 if cents)"
+            description="Additional transfer/grid fees from your provider. Use same unit as Price Display Format (e.g. 0.05 if decimal, or 5 if cents)"
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.0,
                 max=1000.0,
-                step=0.0001,
+                step=0.001,
                 mode=selector.NumberSelectorMode.BOX,
             )
         ),
         vol.Optional(
             Config.ENERGY_TAX,
             default=defaults.get(Config.ENERGY_TAX, Defaults.ENERGY_TAX),
-            description="Fixed energy tax per kWh (e.g., government levy). Use same unit as Price Display Format. Applied before VAT."
+            description="Fixed energy tax per kWh (e.g. government levy). Use same unit as Price Display Format. Applied before VAT."
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.0,
                 max=1000.0,
-                step=0.0001,
+                step=0.001,
                 mode=selector.NumberSelectorMode.BOX,
             )
         ),

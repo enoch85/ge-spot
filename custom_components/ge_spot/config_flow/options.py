@@ -157,9 +157,11 @@ class GSpotOptionsFlow(OptionsFlow):
         try:
             # Get default values from existing data
             defaults = get_default_values(self._options, self._data)
+            _LOGGER.debug(f"Defaults for options form: {defaults}")
 
             # Build schema for options form, passing the area
             schema = get_options_schema(defaults, self._supported_sources, self._area)
+            _LOGGER.debug("Successfully created options schema")
 
             # Show options form
             return self.async_show_form(
@@ -169,7 +171,7 @@ class GSpotOptionsFlow(OptionsFlow):
                 description_placeholders={"data_description": "data_description"}
             )
         except Exception as e:
-            _LOGGER.error(f"Failed to create options form: {e}")
+            _LOGGER.error(f"Failed to create options form: {e}", exc_info=True)
             self._errors["base"] = "unknown"
 
             # Provide a fallback schema if needed
