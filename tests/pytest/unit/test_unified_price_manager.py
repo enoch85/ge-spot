@@ -79,8 +79,8 @@ MOCK_SUCCESS_RESULT = {
 # Mock data for processed result
 # Processed data with 15-minute intervals in target timezone
 MOCK_PROCESSED_RESULT = {
-    "data_source": Source.NORDPOOL,  # Coordinator expects this key
-    "source": Source.NORDPOOL,  # Keep for backward compatibility
+    "data_source": Source.NORDPOOL,  # Active source (set by coordinator for tracking)
+    "source": Source.NORDPOOL,  # Parser source (from data structure)
     "area": "SE1",
     "target_currency": "SEK",  # Added target currency
     "today_interval_prices": {
@@ -917,6 +917,181 @@ class TestUnifiedPriceManager:
             f"First interval should be converted to local time, got keys: {list(result['today_interval_prices'].keys())}"
         assert "2025-04-26T12:15:00+02:00" in result["today_interval_prices"], \
             f"Second interval should be converted to local time, got keys: {list(result['today_interval_prices'].keys())}"
+
+    @pytest.mark.asyncio
+    async def test_partial_data_fallback_to_complete(self, manager, auto_mock_core_dependencies):
+        """Test: Primary source has partial data (tomorrow only), fallback source provides complete data."""
+        # Arrange
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
+        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_cache_store = auto_mock_core_dependencies["cache_manager"].return_value.store
+        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        
+        # Mock ENTSOE returning tomorrow-only (partial data)
+        partial_result = {
+            "data_source": Source.ENTSOE,
+            "area": "NL",
+            "target_currency": "EUR",
+            "today_interval_prices": {},  # No today data
+            "tomorrow_interval_prices": {
+                "2025-04-27T00:00:00+02:00": 8.319,
+                "2025-04-27T00:15:00+02:00": 8.226,
+                "2025-04-27T00:30:00+02:00": 7.542,
+                "2025-04-27T00:45:00+02:00": 7.275,
+            },
+            "attempted_sources": [Source.ENTSOE],
+            "fallback_sources": [],
+            "using_cached_data": False,
+            "has_data": True,
+        }
+        
+        # Mock Nordpool returning complete data
+        complete_result = {
+            "data_source": Source.NORDPOOL,
+            "area": "NL",
+            "target_currency": "EUR",
+            "today_interval_prices": {
+                "2025-04-26T00:00:00+02:00": 10.5,
+                "2025-04-26T00:15:00+02:00": 10.2,
+            },
+            "tomorrow_interval_prices": {
+                "2025-04-27T00:00:00+02:00": 8.3,
+                "2025-04-27T00:15:00+02:00": 8.2,
+            },
+            "attempted_sources": [Source.NORDPOOL],
+            "fallback_sources": [],
+            "using_cached_data": False,
+            "has_data": True,
+        }
+        
+        # First fetch returns partial, second fetch returns complete
+        mock_fallback.side_effect = [
+            {"data_source": Source.ENTSOE, "raw_data": ["mock"], "attempted_sources": [Source.ENTSOE]},
+            {"data_source": Source.NORDPOOL, "raw_data": ["mock"], "attempted_sources": [Source.NORDPOOL]},
+        ]
+        mock_processor.side_effect = [partial_result, complete_result]
+        mock_cache_get.return_value = None
+        
+        # Act
+        result = await manager.fetch_data()
+        
+        # Assert
+        assert result is not None, "Should return data"
+        assert len(result.get("today_interval_prices", {})) > 0, "Should have today data from fallback"
+        assert len(result.get("tomorrow_interval_prices", {})) > 0, "Should have tomorrow data"
+        assert result["data_source"] == Source.NORDPOOL, "Should use fallback source"
+        
+        # Verify fallback was called twice (first source + retry)
+        assert mock_fallback.call_count == 2, "Should try primary source then fallback"
+        
+        # Verify ENTSOE is NOT marked as failed (it provided partial data, not a failure)
+        assert manager._failed_sources.get(Source.ENTSOE) is None, \
+            "ENTSOE should NOT be marked as failed (provided partial data)"
+
+    @pytest.mark.asyncio
+    async def test_partial_data_no_remaining_sources(self, manager, auto_mock_core_dependencies):
+        """Test: Primary source has partial data, no more sources available, accept partial."""
+        # Arrange - Only configure one source
+        manager.config[Config.SOURCE_PRIORITY] = [Source.ENTSOE]
+        manager._source_priority = [Source.ENTSOE]
+        manager._api_classes = [manager._source_api_map[Source.ENTSOE]]
+        
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
+        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        
+        # Mock ENTSOE returning tomorrow-only
+        partial_result = {
+            "data_source": Source.ENTSOE,
+            "area": "SE1",
+            "target_currency": "SEK",
+            "today_interval_prices": {},
+            "tomorrow_interval_prices": {
+                "2025-04-27T00:00:00+02:00": 8.319,
+                "2025-04-27T00:15:00+02:00": 8.226,
+            },
+            "attempted_sources": [Source.ENTSOE],
+            "fallback_sources": [],
+            "using_cached_data": False,
+            "has_data": True,
+        }
+        
+        mock_fallback.return_value = {
+            "data_source": Source.ENTSOE,
+            "raw_data": ["mock"],
+            "attempted_sources": [Source.ENTSOE]
+        }
+        mock_processor.return_value = partial_result
+        mock_cache_get.return_value = None
+        
+        # Act
+        result = await manager.fetch_data()
+        
+        # Assert
+        assert result is not None, "Should return partial data"
+        assert len(result.get("today_interval_prices", {})) == 0, "Should have no today data"
+        assert len(result.get("tomorrow_interval_prices", {})) > 0, "Should have tomorrow data"
+        assert result["data_source"] == Source.ENTSOE, "Should use primary source"
+        
+        # Verify only called once (no fallback attempt)
+        assert mock_fallback.call_count == 1, "Should only try primary source when no fallback available"
+
+    @pytest.mark.asyncio
+    async def test_partial_data_fallback_also_partial_uses_backup(self, manager, auto_mock_core_dependencies):
+        """Test: Primary has partial (tomorrow), fallback also partial (today), prefer today's data."""
+        # Arrange
+        mock_fallback = auto_mock_core_dependencies["fallback_manager"].return_value.fetch_with_fallback
+        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        
+        # ENTSOE returns tomorrow-only
+        entsoe_partial = {
+            "data_source": Source.ENTSOE,
+            "area": "SE1",
+            "target_currency": "SEK",
+            "today_interval_prices": {},
+            "tomorrow_interval_prices": {
+                "2025-04-27T00:00:00+02:00": 8.319,
+                "2025-04-27T00:15:00+02:00": 8.226,
+            },
+            "attempted_sources": [Source.ENTSOE],
+            "fallback_sources": [],
+            "using_cached_data": False,
+            "has_data": True,
+        }
+        
+        # Nordpool returns today-only (TODAY is more important!)
+        nordpool_partial = {
+            "data_source": Source.NORDPOOL,
+            "area": "SE1",
+            "target_currency": "SEK",
+            "today_interval_prices": {
+                "2025-04-26T00:00:00+02:00": 10.5,
+                "2025-04-26T00:15:00+02:00": 10.2,
+            },
+            "tomorrow_interval_prices": {},
+            "attempted_sources": [Source.NORDPOOL],
+            "fallback_sources": [],
+            "using_cached_data": False,
+            "has_data": True,
+        }
+        
+        mock_fallback.side_effect = [
+            {"data_source": Source.ENTSOE, "raw_data": ["mock"], "attempted_sources": [Source.ENTSOE]},
+            {"data_source": Source.NORDPOOL, "raw_data": ["mock"], "attempted_sources": [Source.NORDPOOL]},
+        ]
+        mock_processor.side_effect = [entsoe_partial, nordpool_partial]
+        mock_cache_get.return_value = None
+        
+        # Act
+        result = await manager.fetch_data()
+        
+        # Assert
+        assert result is not None, "Should return data"
+        # Should use Nordpool because it has TODAY's data (more important than tomorrow)
+        assert result["data_source"] == Source.NORDPOOL, "Should use source with today's data (more important)"
+        assert len(result.get("today_interval_prices", {})) > 0, "Should have today data from Nordpool"
+        assert len(result.get("tomorrow_interval_prices", {})) == 0, "Should not have tomorrow data"
 
     @pytest.mark.asyncio
     async def test_consecutive_failures_backoff(self, manager, auto_mock_core_dependencies):
