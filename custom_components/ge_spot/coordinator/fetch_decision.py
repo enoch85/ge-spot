@@ -97,7 +97,7 @@ class FetchDecisionMaker:
         # GRACE PERIOD CHECK: During grace period, if we have partial today data, try to get complete data
         # This handles cases where old cache has only tomorrow's data (0 today, 96 tomorrow)
         if in_grace_period:
-            from ..const.intervals import TimeInterval
+            from ..const.time import TimeInterval
             required_today_intervals = TimeInterval.get_intervals_per_day()
             
             if data_validity.today_interval_count < required_today_intervals:
