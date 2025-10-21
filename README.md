@@ -57,44 +57,45 @@ The table below shows which price sources support specific regions:
 
 | Region | Description | Nordpool | ENTSO-E | Energy-Charts | Energi Data | Stromligning | OMIE | AEMO | ComEd | Amber |
 |--------|-------------|:--------:|:-------:|:-------------:|:-----------:|:------------:|:----:|:----:|:-----:|:-----:|
-| SE1-4  | Sweden | ✓ | ✓ | ✓ | | | | | | |
-| DK1-2  | Denmark | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
-| NO1-5  | Norway | ✓ | ✓ | ✓ | | | | | | |
-| FI     | Finland | ✓ | ✓ | ✓ | | | | | | |
-| EE     | Estonia | ✓ | ✓ | ✓ | | | | | | |
-| LT     | Lithuania | ✓ | ✓ | ✓ | | | | | | |
-| LV     | Latvia | ✓ | | ✓ | | | | | | |
-| DE-LU  | Germany-Luxembourg | ✓ | ✓ | ✓ | | | | | | |
-| FR     | France | ✓ | ✓ | ✓ | | | | | | |
-| NL     | Netherlands | ✓ | ✓ | ✓ | | | | | | |
-| BE     | Belgium | ✓ | ✓ | ✓ | | | | | | |
 | AT     | Austria | ✓ | ✓ | ✓ | | | | | | |
-| CH     | Switzerland | | ✓ | ✓ | | | | | | |
-| PL     | Poland | ✓ | ✓ | ✓ | | | | | | |
-| CZ     | Czech Republic | | ✓ | ✓ | | | | | | |
-| SK     | Slovakia | | ✓ | ✓ | | | | | | |
-| HU     | Hungary | | ✓ | ✓ | | | | | | |
-| RO     | Romania | | ✓ | ✓ | | | | | | |
+| BE     | Belgium | ✓ | ✓ | ✓ | | | | | | |
 | BG     | Bulgaria | | ✓ | ✓ | | | | | | |
-| SI     | Slovenia | | ✓ | ✓ | | | | | | |
-| HR     | Croatia | | ✓ | ✓ | | | | | | |
-| RS     | Serbia | | ✓ | ✓ | | | | | | |
-| ME     | Montenegro | | | ✓ | | | | | | |
+| CH     | Switzerland | | ✓ | ✓ | | | | | | |
+| ComEd  | Chicago Area | | | | | | | | ✓ | |
+| CZ     | Czech Republic | | ✓ | ✓ | | | | | | |
+| DE     | Germany | ✓ | ✓ | ✓ | | | | | | |
+| DE-LU  | Germany-Luxembourg | ✓ | ✓ | ✓ | | | | | | |
+| DK1-2  | Denmark | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
+| EE     | Estonia | ✓ | ✓ | ✓ | | | | | | |
+| ES     | Spain | | ✓ | ✓ | | | ✓ | | | |
+| FI     | Finland | ✓ | ✓ | ✓ | | | | | | |
+| FR     | France | ✓ | ✓ | ✓ | | | | | | |
 | GR     | Greece | | ✓ | ✓ | | | | | | |
-| IT-North | Italy North | | ✓ | ✓ | | | | | | |
+| HR     | Croatia | | ✓ | ✓ | | | | | | |
+| HU     | Hungary | | ✓ | ✓ | | | | | | |
 | IT-Centre-North | Italy Centre-North | | | ✓ | | | | | | |
 | IT-Centre-South | Italy Centre-South | | | ✓ | | | | | | |
-| IT-South | Italy South | | | ✓ | | | | | | |
+| IT-North | Italy North | | ✓ | ✓ | | | | | | |
 | IT-Sardinia | Italy Sardinia | | | ✓ | | | | | | |
 | IT-Sicily | Italy Sicily | | | ✓ | | | | | | |
-| ES     | Spain | | ✓ | ✓ | | | ✓ | | | |
-| PT     | Portugal | | ✓ | ✓ | | | ✓ | | | |
+| IT-South | Italy South | | | ✓ | | | | | | |
+| LT     | Lithuania | ✓ | ✓ | ✓ | | | | | | |
+| LV     | Latvia | ✓ | | ✓ | | | | | | |
+| ME     | Montenegro | | | ✓ | | | | | | |
+| NL     | Netherlands | ✓ | ✓ | ✓ | | | | | | |
+| NO1-5  | Norway | ✓ | ✓ | ✓ | | | | | | |
 | NSW1   | Australia NSW | | | | | | | ✓ | | ✓ |
+| PL     | Poland | ✓ | ✓ | ✓ | | | | | | |
+| PT     | Portugal | | ✓ | ✓ | | | ✓ | | | |
 | QLD1   | Australia Queensland | | | | | | | ✓ | | ✓ |
+| RO     | Romania | | ✓ | ✓ | | | | | | |
+| RS     | Serbia | | ✓ | ✓ | | | | | | |
 | SA1    | Australia South | | | | | | | ✓ | | ✓ |
+| SE1-4  | Sweden | ✓ | ✓ | ✓ | | | | | | |
+| SI     | Slovenia | | ✓ | ✓ | | | | | | |
+| SK     | Slovakia | | ✓ | ✓ | | | | | | |
 | TAS1   | Australia Tasmania | | | | | | | ✓ | | ✓ |
 | VIC1   | Australia Victoria | | | | | | | ✓ | | ✓ |
-| ComEd  | Chicago Area | | | | | | | | ✓ | |
 
 For complete area mappings, see [`const/areas.py`](custom_components/ge_spot/const/areas.py).
 
