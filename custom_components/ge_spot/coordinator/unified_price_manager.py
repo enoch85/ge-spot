@@ -574,6 +574,7 @@ class UnifiedPriceManager:
             fetch_interval_minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES,
             in_grace_period=self.is_in_grace_period(),
             is_health_check=self._health_check_in_progress,
+            area=self.area,
         )
 
         # Log if health check is causing a rate limit bypass

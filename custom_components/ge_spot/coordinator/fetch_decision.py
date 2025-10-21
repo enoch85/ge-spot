@@ -39,6 +39,7 @@ class FetchDecisionMaker:
         fetch_interval_minutes: int = 15,
         in_grace_period: bool = False,
         is_health_check: bool = False,
+        area: Optional[str] = None,
     ) -> Tuple[bool, str]:
         """Determine if we need to fetch from API based on data validity.
 
@@ -120,6 +121,7 @@ class FetchDecisionMaker:
                     current_time=now,
                     min_interval=fetch_interval_minutes,
                     in_grace_period=in_grace_period,
+                    area=area,
                 )
 
                 if should_skip:
