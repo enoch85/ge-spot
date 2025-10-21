@@ -86,7 +86,8 @@ class UnifiedPriceManager:
         self._supported_sources = get_sources_for_region(area)
         self._source_priority = config.get(Config.SOURCE_PRIORITY, Source.DEFAULT_PRIORITY)
         self._active_source = None
-        self._attempted_sources = []
+        self._attempted_sources = []  # Sources attempted in last fetch (from FallbackManager)
+        self._all_attempted_sources = []  # All sources attempted including validation (complete history for debugging)
         self._fallback_sources = [] # Keep track of sources used as fallback
         self._using_cached_data = False
 
@@ -250,6 +251,19 @@ class UnifiedPriceManager:
 
         return sorted(failed_details, key=lambda x: x["source"])
 
+    def _mark_source_attempted(self, source_name: str):
+        """Track that a source was attempted.
+        
+        This tracks ALL source attempts including validation, not just FallbackManager attempts.
+        Used for comprehensive debugging and error reporting.
+        
+        Args:
+            source_name: Name of the source that was attempted
+        """
+        if source_name not in self._all_attempted_sources:
+            self._all_attempted_sources.append(source_name)
+            _LOGGER.debug(f"[{self.area}] Tracking source attempt: '{source_name}'")
+
     def _calculate_next_health_check(self, from_time: datetime) -> Optional[datetime]:
         """Calculate when the next health check will occur.
 
@@ -390,6 +404,9 @@ class UnifiedPriceManager:
 
             for api_class in self._api_classes:
                 source_name = api_class(config={}).source_type
+                
+                # Track that we're attempting this source
+                self._mark_source_attempted(source_name)
 
                 try:
                     # Create API instance with correct parameters (same as normal fetch)
@@ -751,6 +768,10 @@ class UnifiedPriceManager:
                     self._fallback_sources = [s for s in self._attempted_sources if s != self._active_source]
                     self._using_cached_data = False
                     processed_data["using_cached_data"] = False
+                    
+                    # Track all attempted sources in comprehensive list
+                    for source_name in self._attempted_sources:
+                        self._mark_source_attempted(source_name)
 
                     # Track source as successful (clear any failure timestamp)
                     validated_source = self._active_source
@@ -788,13 +809,23 @@ class UnifiedPriceManager:
             self._attempted_sources = result.get("attempted_sources", []) if result else []
             self._active_source = "None"
             self._fallback_sources = self._attempted_sources # All attempted sources failed or processing failed
+            
+            # Track all attempted sources in comprehensive list
+            for source_name in self._attempted_sources:
+                self._mark_source_attempted(source_name)
 
             # Mark attempted sources as failed
             if self._attempted_sources:
-                _LOGGER.info(
-                    f"[{self.area}] Marking {len(self._attempted_sources)} failed source(s): "
-                    f"{', '.join(self._attempted_sources)}"
+                # Calculate when sources will be retried
+                next_check = self._calculate_next_health_check(now)
+                next_check_str = next_check.strftime('%H:%M') if next_check else 'soon'
+                
+                _LOGGER.warning(
+                    f"[{self.area}] All attempted sources failed. "
+                    f"Failed source(s): {', '.join(self._attempted_sources)}. "
+                    f"Sources will be validated during next health check at {next_check_str}."
                 )
+                
                 for source_name in self._attempted_sources:
                     # Mark source as failed with current timestamp
                     self._failed_sources[source_name] = now
@@ -803,7 +834,8 @@ class UnifiedPriceManager:
                 if not self._health_check_scheduled:
                     _LOGGER.info(
                         f"[{self.area}] Scheduling daily health check task "
-                        f"(will validate all {len(self._api_classes)} sources)"
+                        f"(will validate all {len(self._api_classes)} sources during windows at "
+                        f"{', '.join([f'{start:02d}:00-{end:02d}:00' for start, end in Network.Defaults.SPECIAL_HOUR_WINDOWS])})"
                     )
                     self._health_check_task = asyncio.create_task(self._schedule_health_check())
                     self._health_check_scheduled = True
@@ -957,6 +989,7 @@ class UnifiedPriceManager:
             "raw_data": None,
             "source_timezone": None,
             "attempted_sources": self._attempted_sources,
+            "all_attempted_sources": self._all_attempted_sources,  # Complete history including validation
             "fallback_sources": self._fallback_sources,
             "using_cached_data": self._using_cached_data or (error == "Rate limited, no cache available"),
             "consecutive_failures": self._consecutive_failures,

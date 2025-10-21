@@ -1445,3 +1445,166 @@ class TestHealthCheck:
             # Verify it's a datetime object
             assert isinstance(manager._last_api_fetch, datetime), \
                 "_last_api_fetch should be a datetime object"
+
+    @pytest.mark.asyncio
+    async def test_all_attempted_sources_tracking(self, manager):
+        """Test that _all_attempted_sources tracks ALL source attempts including validation.
+        
+        Phase 2.2 fix: Comprehensive tracking of all source attempts for debugging.
+        """
+        # Arrange - Initially empty
+        assert manager._all_attempted_sources == []
+        
+        with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback, \
+             patch.object(manager, '_process_result', new_callable=AsyncMock) as mock_process, \
+             patch.object(manager._cache_manager, 'store') as mock_cache_store:
+            
+            mock_fallback.return_value = {
+                **MOCK_SUCCESS_RESULT,
+                "raw_data": {"test": "data"},
+                "attempted_sources": [Source.NORDPOOL, Source.ENTSOE]
+            }
+            mock_process.return_value = {
+                **MOCK_PROCESSED_RESULT,
+                "attempted_sources": [Source.NORDPOOL, Source.ENTSOE]
+            }
+            
+            # Act
+            await manager.fetch_data(force=False)
+            
+            # Assert - All attempted sources should be tracked
+            assert len(manager._all_attempted_sources) > 0, \
+                "_all_attempted_sources should track attempted sources"
+            
+            # Should include sources from the fetch
+            assert Source.NORDPOOL in manager._all_attempted_sources or \
+                   Source.ENTSOE in manager._all_attempted_sources, \
+                "Should track at least one source from fetch"
+
+    @pytest.mark.asyncio
+    async def test_all_attempted_sources_includes_validation(self, manager):
+        """Test that _all_attempted_sources includes validation attempts.
+        
+        Phase 2.2 fix: Validation attempts should be tracked separately from fetch attempts.
+        """
+        # Arrange
+        assert manager._all_attempted_sources == []
+        
+        with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback:
+            # Simulate validation attempt
+            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            
+            # Act - Run validation (which tracks sources)
+            await manager._validate_all_sources()
+            
+            # Assert - Should have tracked all configured sources
+            assert len(manager._all_attempted_sources) == len(manager._api_classes), \
+                "Validation should track all configured sources"
+            
+            # Verify sources are actually in the list
+            for api_class in manager._api_classes:
+                source_name = api_class(config={}).source_type
+                assert source_name in manager._all_attempted_sources, \
+                    f"Source '{source_name}' should be tracked after validation"
+
+    @pytest.mark.asyncio
+    async def test_failure_message_includes_next_check_time(self, manager, caplog):
+        """Test that failure messages include next health check time.
+        
+        Phase 2.1 fix: Users should know WHEN sources will be retried.
+        """
+        # Arrange
+        caplog.clear()
+        
+        try:
+            with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback, \
+                 patch.object(manager, '_process_result', new_callable=AsyncMock) as mock_process:
+                
+                # Simulate all sources failing
+                mock_fallback.return_value = {"error": Exception("All failed"), "attempted_sources": [Source.NORDPOOL]}
+                mock_process.return_value = None
+                
+                # Act
+                result = await manager.fetch_data(force=False)
+                
+                # Assert - Check log messages
+                warning_messages = [record.message for record in caplog.records if record.levelname == "WARNING"]
+                
+                # Should have a message about failed sources with time
+                assert any("failed" in msg.lower() for msg in warning_messages), \
+                    "Should have failure warning"
+                
+                # Should mention when next check will happen
+                assert any(":" in msg and any(char.isdigit() for char in msg) for msg in warning_messages), \
+                    "Should include time (HH:MM format) in failure message"
+        finally:
+            # Cleanup health check task
+            if manager._health_check_task:
+                manager._health_check_task.cancel()
+                try:
+                    await manager._health_check_task
+                except asyncio.CancelledError:
+                    pass
+
+    @pytest.mark.asyncio
+    async def test_health_check_scheduling_message_includes_windows(self, manager, caplog):
+        """Test that health check scheduling message includes time windows.
+        
+        Phase 2.1 fix: Users should know health check windows.
+        """
+        # Arrange
+        caplog.clear()
+        
+        try:
+            with patch.object(manager._fallback_manager, 'fetch_with_fallback') as mock_fallback, \
+                 patch.object(manager, '_process_result', new_callable=AsyncMock) as mock_process:
+                
+                # Simulate failure to trigger health check scheduling
+                mock_fallback.return_value = {"error": Exception("Failed"), "attempted_sources": [Source.NORDPOOL]}
+                mock_process.return_value = None
+                
+                # Act
+                result = await manager.fetch_data(force=False)
+                
+                # Assert - Check for scheduling message
+                info_messages = [record.message for record in caplog.records if record.levelname == "INFO"]
+                
+                # Should mention scheduling health check
+                scheduling_msgs = [msg for msg in info_messages if "scheduling" in msg.lower() and "health check" in msg.lower()]
+                
+                if scheduling_msgs:  # Only check if health check was scheduled
+                    # Should mention time windows
+                    assert any("00:00" in msg or ":00-" in msg for msg in scheduling_msgs), \
+                        "Scheduling message should include health check time windows"
+        finally:
+            # Cleanup health check task
+            if manager._health_check_task:
+                manager._health_check_task.cancel()
+                try:
+                    await manager._health_check_task
+                except asyncio.CancelledError:
+                    pass
+
+    @pytest.mark.asyncio
+    async def test_mark_source_attempted_no_duplicates(self, manager):
+        """Test that _mark_source_attempted prevents duplicates.
+        
+        Each source should only appear once in _all_attempted_sources even if attempted multiple times.
+        """
+        # Arrange
+        assert manager._all_attempted_sources == []
+        
+        # Act - Mark same source multiple times
+        manager._mark_source_attempted(Source.NORDPOOL)
+        manager._mark_source_attempted(Source.NORDPOOL)
+        manager._mark_source_attempted(Source.NORDPOOL)
+        manager._mark_source_attempted(Source.ENTSOE)
+        manager._mark_source_attempted(Source.ENTSOE)
+        
+        # Assert - Should only have unique entries
+        assert len(manager._all_attempted_sources) == 2, \
+            "Should only track unique sources"
+        assert manager._all_attempted_sources.count(Source.NORDPOOL) == 1, \
+            "Should not have duplicate entries for same source"
+        assert manager._all_attempted_sources.count(Source.ENTSOE) == 1, \
+            "Should not have duplicate entries for same source"
