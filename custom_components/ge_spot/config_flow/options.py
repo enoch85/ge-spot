@@ -85,7 +85,30 @@ class GSpotOptionsFlow(OptionsFlow):
                 if Config.VAT in user_input:
                     user_input[Config.VAT] = user_input[Config.VAT] / 100
 
-                # Handle source priority, timezone reference, and Stromligning supplier updates if present
+                # Check if price-affecting settings have changed
+                # These settings require cache invalidation because cached prices were calculated with old values
+                price_affecting_settings = [
+                    Config.VAT,
+                    Config.ADDITIONAL_TARIFF,
+                    Config.ENERGY_TAX,
+                    Config.DISPLAY_UNIT,
+                ]
+                settings_changed = False
+                for setting in price_affecting_settings:
+                    if setting in user_input:
+                        old_value = self._options.get(
+                            setting, Defaults.__dict__.get(setting.upper(), None)
+                        )
+                        new_value = user_input[setting]
+                        if old_value != new_value:
+                            _LOGGER.info(
+                                f"Price-affecting setting '{setting}' changed from {old_value} to {new_value}. "
+                                f"Cache will be cleared."
+                            )
+                            settings_changed = True
+                            break
+
+                # Handle source priority, timezone reference, and Stromlinging supplier updates if present
                 # ALWAYS update entry.data to ensure API key and other data fields are persisted
                 updated_data = dict(self._data)
                 data_changed = False
@@ -119,8 +142,26 @@ class GSpotOptionsFlow(OptionsFlow):
                     f"Updated entry.data with keys: {list(updated_data.keys())}, api_key present: {Config.API_KEY in updated_data}"
                 )
 
+                # Clear cache if price-affecting settings changed
+                if settings_changed:
+                    coordinator = self.hass.data[DOMAIN].get(self.entry_id)
+                    if coordinator and hasattr(coordinator, "clear_cache"):
+                        try:
+                            import inspect
+
+                            if inspect.iscoroutinefunction(coordinator.clear_cache):
+                                await coordinator.clear_cache()
+                            else:
+                                coordinator.clear_cache()
+                            _LOGGER.info(
+                                f"Cache cleared automatically due to price-affecting settings change for {self._area}"
+                            )
+                        except Exception as e:
+                            _LOGGER.warning(f"Failed to clear cache automatically: {e}")
+
                 # Handle clear cache action if present
                 if "clear_cache" in user_input and user_input["clear_cache"]:
+
                     # Get the coordinator from hass data
                     coordinator = self.hass.data[DOMAIN].get(self.entry_id)
                     if coordinator and hasattr(coordinator, "clear_cache"):
