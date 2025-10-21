@@ -27,6 +27,7 @@ class Area:
     BE = "BE"
     NL = "NL"
     CH = "CH"
+    PL = "PL"
 
     # Iberia
     ES = "ES"
@@ -64,6 +65,7 @@ class Timezone:
         Area.NL: "Europe/Amsterdam",
         Area.BE: "Europe/Brussels",
         Area.AT: "Europe/Vienna",
+        Area.DE: "Europe/Berlin",
         Area.DE_LU: "Europe/Berlin",
         "GER": "Europe/Berlin",
         "IT": "Europe/Rome",
@@ -90,7 +92,7 @@ class Timezone:
         Area.ES: "Europe/Madrid",
         Area.PT: "Europe/Lisbon",
         Area.CH: "Europe/Zurich",
-        "PL": "Europe/Warsaw",
+        Area.PL: "Europe/Warsaw",
 
         # Australian regions
         Area.NSW1: "Australia/Sydney",
@@ -106,6 +108,7 @@ class AreaMapping:
 
     # Nordpool delivery area mapping
     NORDPOOL_DELIVERY = {
+        # Nordic regions
         Area.NO1: Area.NO1,
         Area.NO2: Area.NO2,
         Area.NO3: Area.NO3,
@@ -118,9 +121,17 @@ class AreaMapping:
         Area.DK1: Area.DK1,
         Area.DK2: Area.DK2,
         Area.FI: Area.FI,
+        # Baltic regions
         Area.EE: Area.EE,
         Area.LV: Area.LV,
         Area.LT: Area.LT,
+        # Central/Western Europe
+        Area.AT: Area.AT,
+        Area.BE: Area.BE,
+        Area.FR: Area.FR,
+        Area.DE: "GER",  # Nordpool uses "GER" for Germany
+        Area.NL: Area.NL,
+        Area.PL: Area.PL,
     }
 
     # Nordpool region mapping for v2 API
@@ -145,6 +156,7 @@ class AreaMapping:
 
     # Nordpool areas display names
     NORDPOOL_AREAS = {
+        # Nordic regions
         Area.NO1: "Norway (NO1)",
         Area.NO2: "Norway (NO2)",
         Area.NO3: "Norway (NO3)",
@@ -157,9 +169,17 @@ class AreaMapping:
         Area.DK1: "Denmark (DK1)",
         Area.DK2: "Denmark (DK2)",
         Area.FI: "Finland (FI)",
+        # Baltic regions
         Area.EE: "Estonia (EE)",
         Area.LV: "Latvia (LV)",
-        Area.LT: "Lithuania (LT)"
+        Area.LT: "Lithuania (LT)",
+        # Central/Western Europe
+        Area.AT: "Austria (AT)",
+        Area.BE: "Belgium (BE)",
+        Area.FR: "France (FR)",
+        Area.DE: "Germany (DE)",
+        Area.NL: "Netherlands (NL)",
+        Area.PL: "Poland (PL)",
     }
 
     # Energi Data Service areas

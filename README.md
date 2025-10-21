@@ -64,13 +64,13 @@ The table below shows which price sources support specific regions:
 | EE     | Estonia | ✓ | ✓ | ✓ | | | | | | |
 | LT     | Lithuania | ✓ | ✓ | ✓ | | | | | | |
 | LV     | Latvia | ✓ | | ✓ | | | | | | |
-| DE-LU  | Germany-Luxembourg | | ✓ | ✓ | | | | | | |
-| FR     | France | | ✓ | ✓ | | | | | | |
-| NL     | Netherlands | | ✓ | ✓ | | | | | | |
-| BE     | Belgium | | ✓ | ✓ | | | | | | |
-| AT     | Austria | | ✓ | ✓ | | | | | | |
+| DE-LU  | Germany-Luxembourg | ✓ | ✓ | ✓ | | | | | | |
+| FR     | France | ✓ | ✓ | ✓ | | | | | | |
+| NL     | Netherlands | ✓ | ✓ | ✓ | | | | | | |
+| BE     | Belgium | ✓ | ✓ | ✓ | | | | | | |
+| AT     | Austria | ✓ | ✓ | ✓ | | | | | | |
 | CH     | Switzerland | | ✓ | ✓ | | | | | | |
-| PL     | Poland | | ✓ | ✓ | | | | | | |
+| PL     | Poland | ✓ | ✓ | ✓ | | | | | | |
 | CZ     | Czech Republic | | ✓ | ✓ | | | | | | |
 | SK     | Slovakia | | ✓ | ✓ | | | | | | |
 | HU     | Hungary | | ✓ | ✓ | | | | | | |
