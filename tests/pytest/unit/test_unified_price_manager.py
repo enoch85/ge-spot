@@ -79,20 +79,27 @@ MOCK_SUCCESS_RESULT = {
 # Mock data for processed result
 # Processed data with 15-minute intervals in target timezone
 MOCK_PROCESSED_RESULT = {
-    "source": Source.NORDPOOL, # Renamed from data_source
+    "data_source": Source.NORDPOOL,  # Coordinator expects this key
+    "source": Source.NORDPOOL,  # Keep for backward compatibility
     "area": "SE1",
-    "target_currency": "SEK", # Added target currency
+    "target_currency": "SEK",  # Added target currency
     "today_interval_prices": {
         "2025-04-26T10:00:00+02:00": 1.1,
         "2025-04-26T10:15:00+02:00": 1.2,
         "2025-04-26T10:30:00+02:00": 1.3,
         "2025-04-26T10:45:00+02:00": 1.4,
-    }, # Example processed data with 15-min intervals
+    },  # Example processed data with 15-min intervals
+    "tomorrow_interval_prices": {
+        "2025-04-27T10:00:00+02:00": 1.5,
+        "2025-04-27T10:15:00+02:00": 1.6,
+        "2025-04-27T10:30:00+02:00": 1.7,
+        "2025-04-27T10:45:00+02:00": 1.8,
+    },  # Add tomorrow data to make this complete dataset
     "attempted_sources": [Source.NORDPOOL],
     "fallback_sources": [],
     "using_cached_data": False,
     "has_data": True,
-    "last_update": "2025-04-26T12:00:00+00:00", # Example timestamp
+    "last_update": "2025-04-26T12:00:00+00:00",  # Example timestamp
     # Other keys added by DataProcessor
 }
 
