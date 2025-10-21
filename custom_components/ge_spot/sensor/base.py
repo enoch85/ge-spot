@@ -166,7 +166,6 @@ class BaseElectricityPriceSensor(SensorEntity):
 
                 # Calculate intervals remaining (if we have validity data)
                 if validity_dict.get("data_valid_until"):
-                    from homeassistant.util import dt as dt_util
                     from ..coordinator.data_validity import DataValidity
 
                     try:
