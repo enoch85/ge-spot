@@ -22,7 +22,8 @@ class CurrencyConverter:
         display_unit: str, # e.g., 'kWh' or 'MWh' or 'cents'
         include_vat: bool,
         vat_rate: float, # VAT rate as a decimal (e.g., 0.25 for 25%)
-        additional_tariff: float = 0.0 # Additional tariff/fees per kWh
+        additional_tariff: float = 0.0, # Additional tariff/fees per kWh
+        energy_tax: float = 0.0 # Fixed energy tax per kWh
     ):
         """Initialize the CurrencyConverter."""
         self._exchange_service = exchange_service
@@ -31,6 +32,7 @@ class CurrencyConverter:
         self.include_vat = include_vat
         self.vat_rate = vat_rate
         self.additional_tariff = additional_tariff
+        self.energy_tax = energy_tax
         # Use cents display format when explicitly set to DisplayUnit.CENTS
         self.use_subunit = display_unit == DisplayUnit.CENTS
         _LOGGER.debug("CurrencyConverter initialized with display_unit=%s, use_subunit=%s", display_unit, self.use_subunit)
@@ -58,7 +60,7 @@ class CurrencyConverter:
             return {}, None, None
 
         _LOGGER.debug(
-            "Converting %d prices from %s/%s to %s/%s (VAT included: %s, Rate: %.2f%%, Additional tariff: %.4f, Use Subunit/Cents: %s)",
+            "Converting %d prices from %s/%s to %s/%s (VAT included: %s, Rate: %.2f%%, Additional tariff: %.4f, Energy tax: %.4f, Use Subunit/Cents: %s)",
             len(interval_prices),
             source_currency,
             source_unit,
@@ -67,6 +69,7 @@ class CurrencyConverter:
             self.include_vat,
             self.vat_rate * 100,
             self.additional_tariff,
+            self.energy_tax,
             self.use_subunit
         )
 
@@ -132,6 +135,7 @@ class CurrencyConverter:
                     vat_rate=self.vat_rate if self.include_vat else 0.0,
                     display_unit_multiplier=display_unit_multiplier,
                     additional_tariff=self.additional_tariff,
+                    energy_tax=self.energy_tax,
                     tariff_in_subunit=self.use_subunit  # Tariff matches display format
                 )
                 converted_prices[interval_key] = converted_price

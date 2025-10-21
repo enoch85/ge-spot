@@ -6,7 +6,9 @@ class Config:
     AREA = "area"
     VAT = "vat"
     INCLUDE_VAT = "include_vat"  # Whether to include VAT in price calculations
+    # Price components (applied in order: spot + tariff + tax, then VAT on total)
     ADDITIONAL_TARIFF = "additional_tariff"  # Additional tariff/fees from energy provider (per kWh)
+    ENERGY_TAX = "energy_tax"  # Fixed energy tax per kWh (e.g., government levy, applied before VAT)
     UPDATE_INTERVAL = "update_interval"
     DISPLAY_UNIT = "display_unit"
     CURRENCY = "currency"

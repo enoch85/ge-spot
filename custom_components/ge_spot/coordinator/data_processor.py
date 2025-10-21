@@ -84,6 +84,7 @@ class DataProcessor:
         self.vat_rate = config.get(Config.VAT, Defaults.VAT_RATE) / 100  # Convert % to rate
         self.include_vat = config.get(Config.INCLUDE_VAT, Defaults.INCLUDE_VAT)
         self.additional_tariff = config.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF)
+        self.energy_tax = config.get(Config.ENERGY_TAX, Defaults.ENERGY_TAX)
         self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         self.use_subunit = self.display_unit == DisplayUnit.CENTS
         # Use Defaults.PRECISION instead of DEFAULT_PRICE_PRECISION
@@ -121,7 +122,8 @@ class DataProcessor:
                 display_unit=self.display_unit,
                 include_vat=self.include_vat,
                 vat_rate=self.vat_rate,
-                additional_tariff=self.additional_tariff
+                additional_tariff=self.additional_tariff,
+                energy_tax=self.energy_tax
             )
 
         # Ensure we have a valid currency converter

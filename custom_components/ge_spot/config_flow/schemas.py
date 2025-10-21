@@ -112,6 +112,9 @@ def get_stromligning_config_schema(existing_supplier=None):
 
 def get_options_schema(defaults, supported_sources, area):
     """Return schema for options."""
+    # Price calculation follows EU tax standards:
+    # Final Price = (Spot Price + Additional Tariff + Energy Tax) × (1 + VAT%)
+    # VAT is applied to the total of all costs, as per standard EU practice.
     schema = {
         vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0) * 100): vol.All(
             vol.Coerce(float),
@@ -125,7 +128,19 @@ def get_options_schema(defaults, supported_sources, area):
             selector.NumberSelectorConfig(
                 min=0.0,
                 max=1000.0,
-                step=0.01,
+                step=0.0001,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+        vol.Optional(
+            Config.ENERGY_TAX,
+            default=defaults.get(Config.ENERGY_TAX, Defaults.ENERGY_TAX),
+            description="Fixed energy tax per kWh (e.g., government levy). Use same unit as Price Display Format. Applied before VAT."
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0.0,
+                max=1000.0,
+                step=0.0001,
                 mode=selector.NumberSelectorMode.BOX,
             )
         ),
@@ -202,6 +217,12 @@ def get_default_values(options, data):
         defaults[Config.ADDITIONAL_TARIFF] = options.get(
             Config.ADDITIONAL_TARIFF,
             data.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF)
+        )
+
+        # Energy tax
+        defaults[Config.ENERGY_TAX] = options.get(
+            Config.ENERGY_TAX,
+            data.get(Config.ENERGY_TAX, Defaults.ENERGY_TAX)
         )
 
         # Display unit
