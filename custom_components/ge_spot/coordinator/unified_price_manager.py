@@ -855,8 +855,15 @@ class UnifiedPriceManager:
                                     timestamp=now
                                 )
                                 return processed_retry
+                            else:
+                                # Retry validation also failed - track those attempts too
+                                _LOGGER.debug(f"[{self.area}] Retry source '{retry_result.get('data_source', 'unknown')}' also failed validation")
+                                attempted_so_far.extend(retry_result.get("attempted_sources", []))
                     
                     # If retry also failed or no remaining sources, fall through to cache handling
+                    # Update attempted_sources to include retry attempts
+                    if retry_result and isinstance(retry_result, dict):
+                        result["attempted_sources"] = list(set(attempted_so_far))
                     _LOGGER.debug(f"[{self.area}] All sources failed fetch or validation. Error: {error_info}")
 
             # Handle fetch failure (result is None or the error dict from FallbackManager) OR processing failure

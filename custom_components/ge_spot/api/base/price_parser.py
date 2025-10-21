@@ -58,48 +58,53 @@ class BasePriceParser(ABC):
         return metadata
 
     def validate_parsed_data(self, data: Dict[str, Any]) -> bool:
-        """Validate parsed data.
+        """Validate parsed data structure only (NOT business logic).
+
+        Parser validation checks ONLY structural integrity:
+        - interval_raw exists and is a dict
+        - Contains at least one price entry
+        - Has required metadata (timezone, currency)
+
+        Parser validation does NOT check:
+        - Whether current interval exists (may be historical after day-ahead publication)
+        - Whether data is "enough" for statistics
+        - Time-based business rules
+
+        Business logic validation happens in DataProcessor after timezone conversion.
 
         Args:
             data: Parsed data
 
         Returns:
-            True if data is valid, False otherwise
+            True if data structure is valid, False otherwise
         """
-        # Check if interval_raw exists and is a dict
+        # Check 1: interval_raw exists and is a dict
         if "interval_raw" not in data or not isinstance(data["interval_raw"], dict):
             _LOGGER.warning(f"{self.source}: Missing or invalid interval_raw")
             return False
 
-        # Check if there are any prices
+        # Check 2: At least one price entry exists
         interval_raw = data["interval_raw"]
-        if not interval_raw:
+        if not interval_raw or len(interval_raw) < 1:
             _LOGGER.warning(f"{self.source}: No interval prices found in interval_raw")
             return False
 
-        # Check if current interval price is available when expected
-        current_price = self._get_current_price(interval_raw)
-        if current_price is None:
-            _LOGGER.warning(f"{self.source}: Current interval price not found in interval_raw - failing validation to try next source")
-            return False  # Fail validation to trigger fallback
+        # Check 3: Required metadata exists
+        if not data.get("timezone"):
+            _LOGGER.warning(f"{self.source}: Missing timezone in parsed data")
+            return False
+        
+        if not data.get("currency"):
+            _LOGGER.warning(f"{self.source}: Missing currency in parsed data")
+            return False
 
-        # Check if next interval price is available when it should be (within the same target timezone day)
-        target_tz = self.timezone_service.target_timezone # FIX: Access attribute directly
-        if target_tz:
-            now_target = datetime.now(target_tz)
-            next_hour_start_target = (now_target + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-
-            # Check if the *start* of the next hour in the target timezone is still on the same *calendar day* as *now* in the target timezone.
-            # This determines if we *expect* the next hour's price to be part of the current day's data fetch.
-            if next_hour_start_target.date() == now_target.date():
-                next_price = self._get_next_interval_price(data["interval_raw"])
-                if next_price is None:
-                    _LOGGER.warning(f"{self.source}: Next interval price expected within the same day ({now_target.date()}) but not found in interval_raw")
-                    # Allow validation to pass if next interval is missing, might be end of day data
-                    # return False # Temporarily commented out
-        else:
-            _LOGGER.warning(f"{self.source}: Target timezone not available in TimezoneService, skipping next hour price validation.")
-
+        # Structural validation passed
+        _LOGGER.debug(
+            f"{self.source}: Parsed data structure valid. "
+            f"Prices: {len(interval_raw)}, "
+            f"TZ: {data.get('timezone')}, "
+            f"Currency: {data.get('currency')}"
+        )
         return True
 
     def parse_timestamp(self, timestamp_str: str, source_timezone: Any, context_date: date | None = None) -> datetime:

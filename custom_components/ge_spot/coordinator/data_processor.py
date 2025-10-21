@@ -155,16 +155,20 @@ class DataProcessor:
             cached_today = data.get("today_interval_prices", {})
             cached_tomorrow = data.get("tomorrow_interval_prices", {})
 
-            # Validate the processed data has current interval
-            has_current_interval = False
-            if cached_today or cached_tomorrow:
-                # Use interval calculator to get properly rounded interval key (e.g., "15:30" not "15:33")
+            # Cached data is valid if we have today OR tomorrow prices
+            # Current interval may be historical (after 13:00 day-ahead publication)
+            # and not present in the data - this is EXPECTED behavior
+            has_valid_cached_data = bool(cached_today or cached_tomorrow)
+
+            if has_valid_cached_data:
+                # Use already-split data from cache - validated and safe
                 current_interval_key = self._tz_service.get_current_interval_key()
                 has_current_interval = current_interval_key in cached_today
-
-            if (cached_today or cached_tomorrow) and has_current_interval:
-                # Use already-split data from cache - validated and safe
-                _LOGGER.debug(f"[{self.area}] Using already-processed prices from cache (today={len(cached_today)}, tomorrow={len(cached_tomorrow)}, current interval present: {has_current_interval})")
+                _LOGGER.debug(
+                    f"[{self.area}] Using already-processed prices from cache "
+                    f"(today={len(cached_today)}, tomorrow={len(cached_tomorrow)}, "
+                    f"current interval present: {has_current_interval})"
+                )
 
                 # Extract metadata from cache
                 input_source_timezone = data.get("source_timezone")
@@ -186,11 +190,12 @@ class DataProcessor:
                 skip_currency_conversion = True
 
             else:
-                # Fallback to raw processing if:
-                # - No processed prices in cache
-                # - Current interval missing (incomplete data)
-                reason = "no processed prices" if not (cached_today or cached_tomorrow) else "missing current interval"
-                _LOGGER.warning(f"[{self.area}] Cached processed data invalid ({reason}), falling back to raw reprocessing")
+                # Fallback to raw processing if no processed prices in cache
+                _LOGGER.warning(
+                    f"[{self.area}] Cached data has no processed prices "
+                    f"(today={len(cached_today)}, tomorrow={len(cached_tomorrow)}), "
+                    f"falling back to raw reprocessing"
+                )
 
                 skip_normalization = False
                 skip_currency_conversion = False
@@ -227,11 +232,11 @@ class DataProcessor:
                         # The modified EntsoeParser will look for XML within this dict.
                         parsed_data = parser.parse(data)
 
-                        # Validate parsed data (checks for current interval price)
+                        # Validate parsed data (checks structural integrity only)
                         if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
-                            # Validation failed - cached data is incomplete, treat as invalid
+                            # Validation failed - data structure is invalid
                             _LOGGER.debug(f"[{self.area}] Cached data validation failed for source '{source_name}' - treating as invalid cache")
-                            return self._generate_empty_processed_result(data, error=f"Cached data validation failed: missing current interval")
+                            return self._generate_empty_processed_result(data, error=f"Cached data validation failed: invalid data structure")
 
                         input_interval_raw = parsed_data.get("interval_raw")
                         input_source_timezone = parsed_data.get("timezone")
@@ -258,11 +263,11 @@ class DataProcessor:
                 parsed_data = parser.parse(data)
                 _LOGGER.debug(f"[{self.area}] Parser {parser.__class__.__name__} output keys: {list(parsed_data.keys())}")
 
-                # Validate parsed data (checks for current interval price)
+                # Validate parsed data (checks structural integrity only)
                 if hasattr(parser, 'validate_parsed_data') and not parser.validate_parsed_data(parsed_data):
-                    # Validation failed - data is incomplete, trigger fallback to next source
+                    # Validation failed - data structure is invalid, trigger fallback to next source
                     _LOGGER.debug(f"[{self.area}] Parsed data validation failed for source '{source_name}' - triggering fallback to next source")
-                    return self._generate_empty_processed_result(data, error=f"Validation failed: source '{source_name}' missing current interval data")
+                    return self._generate_empty_processed_result(data, error=f"Validation failed: source '{source_name}' returned invalid data structure")
 
                 input_interval_raw = parsed_data.get("interval_raw")
                 input_source_timezone = parsed_data.get("timezone")

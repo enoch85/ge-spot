@@ -94,6 +94,10 @@ class EnergyChartsParser(BasePriceParser):
         interval_raw = {}
         for timestamp, price in zip(unix_seconds, prices):
             try:
+                # Skip None prices (future intervals not yet published)
+                if price is None:
+                    continue
+                    
                 # Convert unix timestamp to datetime UTC
                 dt_utc = datetime.fromtimestamp(timestamp, tz=timezone.utc)
                 interval_key_iso = dt_utc.isoformat()

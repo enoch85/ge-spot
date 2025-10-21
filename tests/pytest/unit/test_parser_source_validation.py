@@ -93,48 +93,46 @@ class TestParserSourceValidation:
                 )
 
     def test_parser_validation_missing_current_price(self, all_parsers, caplog):
-        """Test validation error messages when current price is not found."""
+        """Test validation accepts data with valid structure regardless of time.
+        
+        Parser validation checks ONLY structural integrity:
+        - interval_raw exists and is a dict
+        - Has at least one price
+        - Has required metadata (timezone, currency)
+        
+        Parser does NOT check time-based requirements like "current interval exists".
+        That's business logic handled by DataProcessor after timezone conversion.
+        """
         for source_name, parser in all_parsers.items():
             caplog.clear()
             
-            # Create data with interval_raw that doesn't include current time
-            # This should trigger "Current interval price not found" error
+            # Create structurally valid data with interval_raw that includes metadata
+            # Time of price is irrelevant for structural validation
             past_time = datetime.now(timezone.utc) - timedelta(hours=2)
             test_data = {
                 "interval_raw": {
                     past_time.isoformat(): 50.0
                 },
-                "currency": "EUR"
+                "currency": "EUR",
+                "timezone": "Europe/Amsterdam"
             }
             
-            with caplog.at_level(logging.WARNING):
+            with caplog.at_level(logging.DEBUG):
                 result = parser.validate_parsed_data(test_data)
             
-            # Should fail validation
-            assert result is False, (
-                f"{source_name} should fail validation when current price missing"
+            # Should PASS validation - structure is valid
+            assert result is True, (
+                f"{source_name} should accept structurally valid data "
+                f"(validation checks structure, not business logic)"
             )
             
-            # Check error messages
-            warning_messages = [rec.message for rec in caplog.records if rec.levelname == "WARNING"]
+            # Check for DEBUG message confirming structural validity
+            debug_messages = [rec.message for rec in caplog.records if rec.levelname == "DEBUG"]
             
-            # Should have at least one warning about current price
-            current_price_warnings = [
-                msg for msg in warning_messages 
-                if "current interval price" in msg.lower() or "current price" in msg.lower()
-            ]
-            
-            if current_price_warnings:
-                # Verify source name is in the message
-                assert any(source_name in msg for msg in current_price_warnings), (
-                    f"Source '{source_name}' not in current price warnings: {current_price_warnings}"
-                )
-                
-                # Verify NO TimezoneService object appears
-                for msg in current_price_warnings:
-                    assert "TimezoneService" not in msg, (
-                        f"TimezoneService leak in {source_name}: {msg}"
-                    )
+            # Should log that structure is valid
+            assert any("structure valid" in msg.lower() for msg in debug_messages), (
+                f"{source_name} should log DEBUG about structural validity"
+            )
 
     def test_parser_factory_creates_correct_parsers(self):
         """Test that get_parser_for_source creates parsers with correct sources."""
