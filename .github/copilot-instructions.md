@@ -103,9 +103,14 @@ grep -r "= 96" custom_components/
 
 # Test imports
 python3 -c "from custom_components.ge_spot.module import NewClass"
+
+# Format with black
+black custom_components/ tests/
 ```
 
 ## Code Standards
+
+**Format with Black:** All Python code must be formatted with `black` (line length 88) before committing. Run `black .` at project root or use pre-commit hooks.
 
 **Imports:** Group as stdlib, third-party, local. Relative imports within `custom_components/ge_spot/`.
 
