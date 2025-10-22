@@ -9,7 +9,7 @@ from homeassistant.helpers import selector
 from ..const.config import Config
 from ..const.defaults import Defaults
 from ..const.sources import Source
-from ..const.display import UpdateInterval
+from ..const.display import DisplayUnit, UpdateInterval
 from ..const.time import TimezoneReference
 from ..utils.form_helper import FormHelper
 from ..api import get_sources_for_region
