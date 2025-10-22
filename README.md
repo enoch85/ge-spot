@@ -1,6 +1,6 @@
 # GE-Spot: Global Electricity Spot Prices Integration for Home Assistant
 
-![Version](https://img.shields.io/badge/version-1.5.2-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg)
+![Version](https://img.shields.io/badge/version-1.5.2-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg) [![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 
 > *"Hit the right spot with your energy prices"*
 
@@ -25,12 +25,17 @@ Home Assistant custom integration providing **electricity spot prices** from glo
 
 ### HACS Installation (Recommended)
 
+GE-Spot is available in the default HACS store!
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=enoch85&repository=ge-spot&category=integration)
+
 1. Make sure [HACS](https://hacs.xyz/) is installed
-2. Add this repository as a custom repository in HACS
-3. Click "Add"
-4. Search for "GE-Spot: Global Electricity Spot Prices"
-5. Click Install
+2. Click the button above, or go to HACS → Integrations
+3. Click the "+ EXPLORE & DOWNLOAD REPOSITORIES" button
+4. Search for "GE-Spot" or "Global Electricity Spot Prices"
+5. Click "Download"
 6. Restart Home Assistant
+7. Go to Settings → Devices & Services → Add Integration → Search for "GE-Spot"
 
 ### Manual Installation
 
