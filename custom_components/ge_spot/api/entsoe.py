@@ -125,8 +125,14 @@ class EntsoeAPI(BasePriceAPI):
             # Convert to UTC if it's not already (coordinator may pass local timezone)
             reference_time = reference_time.astimezone(timezone.utc)
 
-        # Get the mapped ENTSO-E area code
-        entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area, area)
+        # Check if we need to fetch yesterday's data due to timezone offset
+        # ENTSO-E returns data in UTC, but areas may be in different timezones
+        extended_ranges = self.needs_extended_date_range("UTC", reference_time)
+        
+        _LOGGER.debug(
+            f"ENTSO-E timezone check for {area}: need_yesterday={extended_ranges['need_yesterday']}, "
+            f"need_tomorrow={extended_ranges['need_tomorrow']}"
+        )
 
         # Set up headers for XML request
         headers = {
@@ -134,6 +140,48 @@ class EntsoeAPI(BasePriceAPI):
             "Accept": ContentType.XML,
             "Content-Type": ContentType.XML,
         }
+
+        # Fetch yesterday's data if needed for timezone offset
+        yesterday_xml_responses = []
+        if extended_ranges["need_yesterday"]:
+            yesterday = reference_time - timedelta(days=1)
+            period_start = yesterday.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ).strftime(TimeFormat.ENTSOE_DATE_HOUR)
+            period_end = (
+                yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+                + timedelta(days=1)
+            ).strftime(TimeFormat.ENTSOE_DATE_HOUR)
+
+            params_yesterday = {
+                "securityToken": api_key,
+                "documentType": "A44",
+                "in_Domain": entsoe_area,
+                "out_Domain": entsoe_area,
+                "periodStart": period_start,
+                "periodEnd": period_end,
+            }
+
+            _LOGGER.debug(
+                f"ENTSO-E fetching yesterday's data for timezone offset: {period_start}-{period_end}"
+            )
+
+            try:
+                response = await client.fetch(
+                    self.base_url,
+                    params=params_yesterday,
+                    headers=headers,
+                    timeout=Network.Defaults.HTTP_TIMEOUT,
+                )
+
+                if isinstance(response, str) and "Publication_MarketDocument" in response:
+                    yesterday_xml_responses.append(response)
+                    _LOGGER.info(f"Successfully fetched yesterday's ENTSO-E data for {area}")
+                elif isinstance(response, dict) and not response.get("error"):
+                    yesterday_xml_responses.append(response)
+                    _LOGGER.info(f"Successfully fetched yesterday's ENTSO-E dict data for {area}")
+            except Exception as e:
+                _LOGGER.warning(f"Failed to fetch yesterday's data (non-critical): {e}")
 
         # Generate date ranges based on the reference time
         date_ranges = generate_date_ranges(reference_time, Source.ENTSOE)
@@ -374,15 +422,22 @@ class EntsoeAPI(BasePriceAPI):
             "raw_data": {},
         }
 
+        # Add yesterday's data if fetched (for timezone offset handling)
+        if yesterday_xml_responses:
+            final_result["raw_data"]["yesterday"] = yesterday_xml_responses
+
         if dict_response_found:
             final_result["dict_response"] = dict_response_found
             final_result["document_type"] = found_doc_type
             # Add to raw_data for parser
             final_result["raw_data"]["dict_response"] = dict_response_found
+            final_result["raw_data"]["today"] = dict_response_found
         if xml_responses:
             final_result["xml_responses"] = xml_responses
             # Add to raw_data for parser
             final_result["raw_data"]["xml_responses"] = xml_responses
+            if not dict_response_found:  # Only set today if not already set
+                final_result["raw_data"]["today"] = xml_responses
 
         # If raw_data is still empty, something went wrong, signal failure
         if not final_result["raw_data"]:

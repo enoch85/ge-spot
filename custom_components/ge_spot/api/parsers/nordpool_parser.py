@@ -53,8 +53,10 @@ class NordpoolParser(BasePriceParser):
 
         interval_raw = {}
 
-        # Nordpool data often comes in days (today, tomorrow)
+        # Nordpool data can include yesterday, today, and tomorrow (for timezone offset handling)
         days_to_process = []
+        if isinstance(raw_api_response.get("yesterday"), dict):
+            days_to_process.append(raw_api_response["yesterday"])
         if isinstance(raw_api_response.get("today"), dict):
             days_to_process.append(raw_api_response["today"])
         if isinstance(raw_api_response.get("tomorrow"), dict):

@@ -79,9 +79,33 @@ class EnergyChartsParser(BasePriceParser):
             f"Timezone: {source_timezone}, Currency: {source_currency}"
         )
 
-        # Extract unix timestamps and prices
-        unix_seconds = raw_api_response.get("unix_seconds", [])
-        prices = raw_api_response.get("price", [])
+        # Process yesterday/today/tomorrow structure (for timezone offset handling)
+        all_unix_seconds = []
+        all_prices = []
+        
+        # Check if raw_data has yesterday/today/tomorrow structure
+        if "today" in raw_api_response or "yesterday" in raw_api_response or "tomorrow" in raw_api_response:
+            _LOGGER.debug("[EnergyChartsParser] Processing multi-day structure")
+            
+            # Process yesterday, today, tomorrow in order
+            for day_key in ["yesterday", "today", "tomorrow"]:
+                if day_key in raw_api_response:
+                    day_data = raw_api_response[day_key]
+                    if isinstance(day_data, dict):
+                        unix_secs = day_data.get("unix_seconds", [])
+                        day_prices = day_data.get("price", [])
+                        if unix_secs and day_prices:
+                            _LOGGER.debug(f"[EnergyChartsParser] Adding {len(unix_secs)} points from {day_key}")
+                            all_unix_seconds.extend(unix_secs)
+                            all_prices.extend(day_prices)
+            
+            unix_seconds = all_unix_seconds
+            prices = all_prices
+        else:
+            # Legacy single-day structure
+            _LOGGER.debug("[EnergyChartsParser] Processing legacy single-day structure")
+            unix_seconds = raw_api_response.get("unix_seconds", [])
+            prices = raw_api_response.get("price", [])
 
         if not unix_seconds or not prices:
             _LOGGER.warning("[EnergyChartsParser] No timestamps or prices in response")

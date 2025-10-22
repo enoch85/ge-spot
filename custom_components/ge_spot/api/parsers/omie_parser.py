@@ -65,9 +65,9 @@ class OmieParser(BasePriceParser):
             )
             return result
 
-        # --- Parsing Logic for Today and Tomorrow ---
-        # Process only today and tomorrow data
-        days_to_parse = ["today", "tomorrow"]
+        # --- Parsing Logic for Yesterday, Today and Tomorrow ---
+        # Process yesterday (for timezone offset), today and tomorrow data
+        days_to_parse = ["yesterday", "today", "tomorrow"]
 
         for day_key in days_to_parse:
             raw_text = raw_data_payload.get(day_key)

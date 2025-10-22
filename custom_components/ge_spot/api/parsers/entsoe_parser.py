@@ -57,8 +57,35 @@ class EntsoeParser(BasePriceParser):
             _LOGGER.debug(
                 f"ENTSOE Parser: Processing dict input. Keys: {list(data.keys())}"
             )
+            
+            # Check for yesterday/today/tomorrow structure (for timezone offset handling)
+            if "raw_data" in data and isinstance(data["raw_data"], dict):
+                raw_data = data["raw_data"]
+                _LOGGER.debug(f"ENTSOE Parser: Found raw_data dict. Keys: {list(raw_data.keys())}")
+                
+                # Process yesterday, today, tomorrow in order
+                for day_key in ["yesterday", "today", "tomorrow"]:
+                    if day_key in raw_data:
+                        day_data = raw_data[day_key]
+                        if isinstance(day_data, list):
+                            _LOGGER.debug(f"ENTSOE Parser: Processing {day_key} with {len(day_data)} items")
+                            xml_to_parse.extend([item for item in day_data if isinstance(item, str)])
+                        elif isinstance(day_data, str):
+                            _LOGGER.debug(f"ENTSOE Parser: Processing {day_key} string")
+                            xml_to_parse.append(day_data)
+                
+                # Also check for xml_responses in raw_data (legacy support)
+                if "xml_responses" in raw_data and isinstance(raw_data["xml_responses"], list):
+                    _LOGGER.debug("ENTSOE Parser: Found 'xml_responses' in raw_data dict.")
+                    xml_to_parse.extend([item for item in raw_data["xml_responses"] if isinstance(item, str)])
+                
+                # Also check for dict_response in raw_data (legacy support)
+                if "dict_response" in raw_data:
+                    _LOGGER.debug("ENTSOE Parser: Found 'dict_response' in raw_data - skipping for now")
+                    # dict_response is not XML, skip it
+            
             # Check for 'xml_responses' (list of XML strings) - common from FallbackManager
-            if "xml_responses" in data and isinstance(data["xml_responses"], list):
+            elif "xml_responses" in data and isinstance(data["xml_responses"], list):
                 _LOGGER.debug("ENTSOE Parser: Found 'xml_responses' in dict.")
                 for item in data["xml_responses"]:
                     if isinstance(item, str):

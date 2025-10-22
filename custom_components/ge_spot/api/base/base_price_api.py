@@ -208,3 +208,67 @@ class BasePriceAPI(ABC):
 
         # Create parser with our timezone service
         return get_parser_for_source(self.source_type, self.timezone_service)
+
+    def needs_extended_date_range(self, source_timezone_str: str, reference_time=None) -> Dict[str, bool]:
+        """Determine if extended date ranges are needed due to timezone offset.
+        
+        When the target timezone is ahead of the source timezone, midnight in the target
+        timezone falls on the previous day in the source timezone, requiring yesterday's data.
+        Similarly, if target is behind source, we might need tomorrow's data.
+        
+        Args:
+            source_timezone_str: Source API timezone (e.g., "Europe/Oslo", "UTC")
+            reference_time: Reference time (defaults to now in UTC)
+            
+        Returns:
+            Dict with 'need_yesterday' and 'need_tomorrow' boolean flags
+        """
+        from datetime import datetime
+        from ...timezone.timezone_utils import get_timezone_object
+        from ...const.areas import Timezone
+        
+        result = {"need_yesterday": False, "need_tomorrow": False}
+        
+        # Get area from config
+        area = self.config.get("area")
+        if not area:
+            return result
+        
+        # Get target timezone for the area
+        target_tz_str = Timezone.AREA_TIMEZONES.get(area)
+        if not target_tz_str:
+            return result
+            
+        if reference_time is None:
+            reference_time = datetime.now(timezone.utc)
+        
+        source_tz = get_timezone_object(source_timezone_str)
+        target_tz = get_timezone_object(target_tz_str)
+        
+        if not source_tz or not target_tz:
+            return result
+        
+        # Test if midnight in target timezone falls on a different day in source timezone
+        now_target = reference_time.astimezone(target_tz)
+        test_midnight_target = datetime(
+            now_target.year, now_target.month, now_target.day, 0, 0, 0, tzinfo=target_tz
+        )
+        test_midnight_source = test_midnight_target.astimezone(source_tz)
+        
+        # If midnight target is on previous day in source, we need yesterday's data
+        if test_midnight_source.date() < test_midnight_target.date():
+            result["need_yesterday"] = True
+            _LOGGER.debug(
+                f"Area {area}: Target timezone ({target_tz_str}) is ahead of source ({source_timezone_str}). "
+                f"Need yesterday's data to cover early morning hours in target timezone."
+            )
+        
+        # If midnight target is on next day in source, we might need tomorrow's data
+        elif test_midnight_source.date() > test_midnight_target.date():
+            result["need_tomorrow"] = True
+            _LOGGER.debug(
+                f"Area {area}: Target timezone ({target_tz_str}) is behind source ({source_timezone_str}). "
+                f"Need tomorrow's data to cover late evening hours in target timezone."
+            )
+        
+        return result

@@ -219,7 +219,9 @@ class TestEnergyChartsErrorHandling:
         # Assert
         assert result is not None, "Should return data on success"
         assert "raw_data" in result
-        assert result["raw_data"]["unix_seconds"] == [
+        # raw_data now has a "today" key that wraps the API response
+        assert "today" in result["raw_data"]
+        assert result["raw_data"]["today"]["unix_seconds"] == [
             1729414800,
             1729414900,
             1729415000,
