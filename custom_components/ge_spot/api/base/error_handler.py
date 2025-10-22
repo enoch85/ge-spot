@@ -45,7 +45,8 @@ def with_error_handling(func=None, *, source_type: str = "unknown"):
         except Exception as error:
             error_type = handler.classify_error(error)
             _LOGGER.error(
-                f"Error in {source_type} API call: {error}. " f"Classified as {error_type}."
+                f"Error in {source_type} API call: {error}. "
+                f"Classified as {error_type}."
             )
             raise error
 
@@ -86,7 +87,10 @@ def retry_with_backoff(
     # Used as a decorator with arguments @retry_with_backoff(...)
     if func is None:
         return functools.partial(
-            retry_with_backoff, max_retries=max_retries, strategy=strategy, source_type=source_type
+            retry_with_backoff,
+            max_retries=max_retries,
+            strategy=strategy,
+            source_type=source_type,
         )
 
     # For direct function calls or @retry_with_backoff without arguments
@@ -127,26 +131,45 @@ class ErrorHandler:
         error_type = error.__class__.__name__
 
         # Network connectivity issues
-        if any(x in error_str for x in ["connection", "connect", "unreachable", "network"]):
+        if any(
+            x in error_str for x in ["connection", "connect", "unreachable", "network"]
+        ):
             return NetworkErrorType.CONNECTIVITY
 
         # Rate limiting or throttling
-        if any(x in error_str for x in ["rate limit", "throttle", "429", "too many requests"]):
+        if any(
+            x in error_str
+            for x in ["rate limit", "throttle", "429", "too many requests"]
+        ):
             return NetworkErrorType.RATE_LIMIT
 
         # Authentication or authorization issues
         if any(
             x in error_str
-            for x in ["auth", "token", "key", "credential", "permission", "access", "401", "403"]
+            for x in [
+                "auth",
+                "token",
+                "key",
+                "credential",
+                "permission",
+                "access",
+                "401",
+                "403",
+            ]
         ):
             return NetworkErrorType.AUTHENTICATION
 
         # Server-side errors
-        if any(x in error_str for x in ["server", "500", "502", "503", "504", "internal"]):
+        if any(
+            x in error_str for x in ["server", "500", "502", "503", "504", "internal"]
+        ):
             return NetworkErrorType.SERVER
 
         # Data parsing or format issues
-        if any(x in error_str for x in ["parse", "format", "json", "xml", "data", "value", "type"]):
+        if any(
+            x in error_str
+            for x in ["parse", "format", "json", "xml", "data", "value", "type"]
+        ):
             return NetworkErrorType.DATA_FORMAT
 
         # Timeout issues
@@ -196,7 +219,10 @@ class ErrorHandler:
         return True
 
     def get_retry_delay(
-        self, error_type: str, retry_count: int, strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF
+        self,
+        error_type: str,
+        retry_count: int,
+        strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF,
     ) -> float:
         """Calculate the delay before retrying.
 
@@ -322,6 +348,8 @@ class ErrorHandler:
         return {
             "source_type": self.source_type,
             "error_counts": self.error_counts,
-            "last_error_time": {k: v.isoformat() for k, v in self.last_error_time.items()},
+            "last_error_time": {
+                k: v.isoformat() for k, v in self.last_error_time.items()
+            },
             "backoff_index": self.backoff_index,
         }

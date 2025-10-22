@@ -164,4 +164,6 @@ def get_currency_symbol(currency: str) -> str:
         Currency.AZN: "₼",
     }
 
-    return symbols.get(currency, currency)  # Return the currency code if no symbol found
+    return symbols.get(
+        currency, currency
+    )  # Return the currency code if no symbol found

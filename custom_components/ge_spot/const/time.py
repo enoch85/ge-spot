@@ -81,12 +81,16 @@ class TimeInterval:
     @staticmethod
     def get_intervals_per_day_dst_spring() -> int:
         """Get intervals for DST spring forward day (lose 1 hour)."""
-        return TimeInterval.get_intervals_per_day() - TimeInterval.get_intervals_per_hour()
+        return (
+            TimeInterval.get_intervals_per_day() - TimeInterval.get_intervals_per_hour()
+        )
 
     @staticmethod
     def get_intervals_per_day_dst_fall() -> int:
         """Get intervals for DST fall back day (gain 1 hour)."""
-        return TimeInterval.get_intervals_per_day() + TimeInterval.get_intervals_per_hour()
+        return (
+            TimeInterval.get_intervals_per_day() + TimeInterval.get_intervals_per_hour()
+        )
 
 
 class TimeFormat:
@@ -106,7 +110,9 @@ class PeriodType:
     TOMORROW = "tomorrow"
     OTHER = "other"
 
-    MIN_VALID_INTERVALS = 80  # Minimum intervals required for valid data (80 of 96 = 83%)
+    MIN_VALID_INTERVALS = (
+        80  # Minimum intervals required for valid data (80 of 96 = 83%)
+    )
 
 
 class DSTTransitionType:
@@ -120,7 +126,9 @@ class TimezoneConstants:
     """Timezone-related constants."""
 
     # Default fallback timezone
-    DEFAULT_FALLBACK = "INVALID_TIMEZONE"  # Use an invalid value to force explicit error
+    DEFAULT_FALLBACK = (
+        "INVALID_TIMEZONE"  # Use an invalid value to force explicit error
+    )
 
     # API metadata keys that might contain timezone information
     METADATA_KEYS = ["timezone", "time_zone", "api_timezone", "timeZone"]

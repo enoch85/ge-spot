@@ -2,8 +2,10 @@
 Quick validation test for parser functionality after 15-min migration.
 Tests that parsers return correct data structures and keys.
 """
+
 import sys
 from datetime import datetime, timezone
+
 
 def test_parsers():
     """Test all parsers return correct keys and structure."""
@@ -35,6 +37,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ ENTSOE parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -68,6 +71,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ ComEd parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -83,8 +87,16 @@ def test_parsers():
         # Provide realistic data structure
         mock_data = {
             "ELEC_NEM_SUMMARY": [
-                {"REGIONID": "NSW1", "PRICE": 100.0, "SETTLEMENTDATE": "2025-10-01T00:00:00+00:00"},
-                {"REGIONID": "NSW1", "PRICE": 102.0, "SETTLEMENTDATE": "2025-10-01T00:05:00+00:00"},
+                {
+                    "REGIONID": "NSW1",
+                    "PRICE": 100.0,
+                    "SETTLEMENTDATE": "2025-10-01T00:00:00+00:00",
+                },
+                {
+                    "REGIONID": "NSW1",
+                    "PRICE": 102.0,
+                    "SETTLEMENTDATE": "2025-10-01T00:05:00+00:00",
+                },
             ]
         }
 
@@ -101,6 +113,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ AEMO parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -125,6 +138,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ NordPool parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -133,7 +147,9 @@ def test_parsers():
     print("TEST 5: Energy-Charts Parser Structure")
     print("-" * 80)
     try:
-        from custom_components.ge_spot.api.parsers.energy_charts_parser import EnergyChartsParser
+        from custom_components.ge_spot.api.parsers.energy_charts_parser import (
+            EnergyChartsParser,
+        )
 
         parser = EnergyChartsParser()
 
@@ -149,6 +165,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ Energy-Charts parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -166,6 +183,7 @@ def test_parsers():
     print()
 
     return True
+
 
 if __name__ == "__main__":
     success = test_parsers()

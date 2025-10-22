@@ -67,7 +67,9 @@ class Errors:
 
     # Source availability errors (v1.4.0+)
     NO_SOURCES_CONFIGURED = "no_sources_configured"  # Permanent: area not supported
-    ALL_SOURCES_DISABLED = "all_sources_disabled"  # Temporary: all failed, waiting health check
+    ALL_SOURCES_DISABLED = (
+        "all_sources_disabled"  # Temporary: all failed, waiting health check
+    )
     INVALID_AREA_CODE = "invalid_area_code"  # Permanent: invalid area in config
 
     # Validation errors (v1.4.0+)

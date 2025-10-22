@@ -18,7 +18,9 @@ _LOGGER = logging.getLogger(__name__)
 class TimestampParser:
     """Parser for timestamps with timezone handling."""
 
-    def parse(self, timestamp_str: Union[str, datetime], source_timezone: str) -> datetime:
+    def parse(
+        self, timestamp_str: Union[str, datetime], source_timezone: str
+    ) -> datetime:
         """Parse timestamp with explicit source timezone."""
         # Validate source_timezone
         if not source_timezone or source_timezone == TimezoneConstants.DEFAULT_FALLBACK:
@@ -34,9 +36,7 @@ class TimestampParser:
             source_tz = get_timezone_object(source_tz_str)
 
             if not source_tz:
-                error_msg = (
-                    f"Invalid source timezone: {source_timezone}, cannot find timezone object"
-                )
+                error_msg = f"Invalid source timezone: {source_timezone}, cannot find timezone object"
                 _LOGGER.error(error_msg)
                 raise ValueError(error_msg)
 
@@ -45,7 +45,9 @@ class TimestampParser:
             dt = timestamp_str
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=source_tz)
-                _LOGGER.debug(f"Attached source timezone {source_timezone} to naive datetime {dt}")
+                _LOGGER.debug(
+                    f"Attached source timezone {source_timezone} to naive datetime {dt}"
+                )
             return dt
 
         # Ensure timestamp_str is actually a string
@@ -85,7 +87,9 @@ class TimestampParser:
                 if "." in timestamp_str:
                     # Strip milliseconds for consistent parsing
                     parts = timestamp_str.split(".")
-                    timestamp_str = parts[0] + ("Z" if timestamp_str.endswith("Z") else "")
+                    timestamp_str = parts[0] + (
+                        "Z" if timestamp_str.endswith("Z") else ""
+                    )
 
             # Handle Energi Data specific format (often uses local Danish time)
             if source_timezone == Source.ENERGI_DATA_SERVICE:
@@ -117,7 +121,9 @@ class TimestampParser:
             if source_timezone == Source.NORDPOOL:
                 if "T" in timestamp_str:
                     if timestamp_str.endswith("Z"):
-                        dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                        dt = datetime.fromisoformat(
+                            timestamp_str.replace("Z", "+00:00")
+                        )
                         # Convert to source timezone if it's not UTC
                         if str(source_tz) != "UTC":
                             dt = dt.astimezone(source_tz)
@@ -143,7 +149,11 @@ class TimestampParser:
                     if str(source_tz) != "UTC":
                         dt = dt.astimezone(source_tz)
                     return dt
-                elif "+" in timestamp_str or "-" in timestamp_str and "T" in timestamp_str:
+                elif (
+                    "+" in timestamp_str
+                    or "-" in timestamp_str
+                    and "T" in timestamp_str
+                ):
                     # ISO with timezone offset
                     dt = datetime.fromisoformat(timestamp_str)
                     # Convert to source timezone if needed
@@ -167,7 +177,9 @@ class TimestampParser:
         if dt:
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=source_tz)
-                _LOGGER.debug(f"Attached source timezone {source_timezone} to parsed datetime {dt}")
+                _LOGGER.debug(
+                    f"Attached source timezone {source_timezone} to parsed datetime {dt}"
+                )
             elif dt.tzinfo != source_tz:
                 # Convert to the expected source timezone
                 dt = dt.astimezone(source_tz)
@@ -208,5 +220,7 @@ class TimestampParser:
         try:
             return self.parse(timestamp_str, source_timezone)
         except Exception as e:
-            _LOGGER.error(f"Failed to parse timestamp {timestamp_str} with {source_timezone}: {e}")
+            _LOGGER.error(
+                f"Failed to parse timestamp {timestamp_str} with {source_timezone}: {e}"
+            )
             return None

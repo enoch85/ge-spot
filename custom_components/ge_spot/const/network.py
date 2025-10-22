@@ -30,7 +30,9 @@ class Network:
         MISSING_HOURS_RETRY_INTERVAL_MINUTES = (
             5  # Minimum time between attempts to fill missing hours
         )
-        GRACE_PERIOD_MINUTES = 5  # Grace period after reload/startup for lenient validation
+        GRACE_PERIOD_MINUTES = (
+            5  # Grace period after reload/startup for lenient validation
+        )
 
         # Time conversion constants
         SECONDS_PER_MINUTE = 60  # Seconds in a minute (for time calculations)
@@ -49,9 +51,7 @@ class Network:
         DATA_SAFETY_BUFFER_INTERVALS = (
             8  # Fetch when we have less than 8 intervals remaining (~2 hours)
         )
-        REQUIRED_TOMORROW_INTERVALS = (
-            76  # Require at least 76 intervals (~80% of 96) to consider tomorrow data "complete"
-        )
+        REQUIRED_TOMORROW_INTERVALS = 76  # Require at least 76 intervals (~80% of 96) to consider tomorrow data "complete"
 
     class URLs:
         """Base URLs for various APIs."""

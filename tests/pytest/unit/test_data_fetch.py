@@ -13,18 +13,27 @@ from custom_components.ge_spot.api.base.base_price_api import BasePriceAPI
 
 # --- Mocks ---
 
+
 class MockParser:
     """Mock parser that returns properly formatted price data."""
+
     def parse(self, raw_data):
         # Check if raw data has a marker to return specific parsed data
         if raw_data.get("data") == "raw_success":
             return {
-                "today_interval_prices": {"2024-01-01T10:00:00+00:00": 10.0, "2024-01-01T11:00:00+00:00": 11.0},
+                "today_interval_prices": {
+                    "2024-01-01T10:00:00+00:00": 10.0,
+                    "2024-01-01T11:00:00+00:00": 11.0,
+                },
                 "currency": "EUR",
-                "api_timezone": "UTC"
+                "api_timezone": "UTC",
             }
         elif raw_data.get("data") == "raw_empty":
-            return {"today_interval_prices": {}, "currency": "EUR", "api_timezone": "UTC"}
+            return {
+                "today_interval_prices": {},
+                "currency": "EUR",
+                "api_timezone": "UTC",
+            }
         elif raw_data.get("data") == "raw_partial":
             return {
                 "today_interval_prices": {
@@ -32,119 +41,181 @@ class MockParser:
                     "2024-01-01T11:00:00+00:00": 11.0,
                 },
                 "currency": "EUR",
-                "api_timezone": "UTC"
+                "api_timezone": "UTC",
             }
         # Default: return the raw data as-is
         return raw_data
 
+
 class MockSuccessfulAPI(BasePriceAPI):
     """Mock API that successfully returns price data."""
+
     def __init__(self, *args, **kwargs):
         tz_service = TimezoneService()
         super().__init__(timezone_service=tz_service)
+
     def get_parser_for_area(self, area):
         return MockParser()
-    def _get_source_type(self): return "mock_success"
-    def _get_base_url(self): return "http://success.test"
-    async def fetch_raw_data(self, *args, **kwargs): return {"data": "raw_success"}
+
+    def _get_source_type(self):
+        return "mock_success"
+
+    def _get_base_url(self):
+        return "http://success.test"
+
+    async def fetch_raw_data(self, *args, **kwargs):
+        return {"data": "raw_success"}
+
     async def parse_raw_data(self, *args, **kwargs):
         return {
             "today_interval_prices": {"2024-01-01T10:00:00+00:00": 10.0},
             "currency": "EUR",
-            "api_timezone": "UTC"
+            "api_timezone": "UTC",
         }
+
     # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
     async def fetch_day_ahead_prices(self, area=None, **kwargs):
         # Pass the correct arguments to the super method
         return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
+
 class MockFailedAPI(BasePriceAPI):
     """Mock API that fails with a connection error."""
+
     def __init__(self, *args, **kwargs):
         tz_service = TimezoneService()
         super().__init__(timezone_service=tz_service)
+
     def get_parser_for_area(self, area):
         return MockParser()
-    def _get_source_type(self): return "mock_fail"
-    def _get_base_url(self): return "http://fail.test"
+
+    def _get_source_type(self):
+        return "mock_fail"
+
+    def _get_base_url(self):
+        return "http://fail.test"
+
     async def fetch_raw_data(self, *args, **kwargs):
         raise ConnectionError("Mock API unavailable")
+
     async def parse_raw_data(self, *args, **kwargs):
         # This shouldn't be reached if fetch fails
         return {}
+
     # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
     async def fetch_day_ahead_prices(self, area=None, **kwargs):
         # This will raise ConnectionError from fetch_raw_data
         return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
+
 class MockEmptyAPI(BasePriceAPI):
     """Mock API that returns no price data (empty interval_prices)."""
+
     def __init__(self, *args, **kwargs):
         tz_service = TimezoneService()
         super().__init__(timezone_service=tz_service)
+
     def get_parser_for_area(self, area):
         return MockParser()
-    def _get_source_type(self): return "mock_empty"
-    def _get_base_url(self): return "http://empty.test"
-    async def fetch_raw_data(self, *args, **kwargs): return {"data": "raw_empty"}
+
+    def _get_source_type(self):
+        return "mock_empty"
+
+    def _get_base_url(self):
+        return "http://empty.test"
+
+    async def fetch_raw_data(self, *args, **kwargs):
+        return {"data": "raw_empty"}
+
     async def parse_raw_data(self, *args, **kwargs):
         # Simulate parser returning no valid prices
         return {"today_interval_prices": {}, "currency": "EUR", "api_timezone": "UTC"}
+
     # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
     async def fetch_day_ahead_prices(self, area=None, **kwargs):
         # Pass the correct arguments to the super method
         return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
+
 class MockTimeoutAPI(BasePriceAPI):
     """Mock API that times out after a delay."""
+
     def __init__(self, *args, **kwargs):
         tz_service = TimezoneService()
         super().__init__(timezone_service=tz_service)
+
     def get_parser_for_area(self, area):
         return MockParser()
-    def _get_source_type(self): return "mock_timeout"
-    def _get_base_url(self): return "http://timeout.test"
+
+    def _get_source_type(self):
+        return "mock_timeout"
+
+    def _get_base_url(self):
+        return "http://timeout.test"
+
     async def fetch_raw_data(self, *args, **kwargs):
         # Simulate a timeout
         raise TimeoutError("Mock API timed out")
+
     async def parse_raw_data(self, *args, **kwargs):
         # This shouldn't be reached if fetch times out
         return {}
+
     # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
     async def fetch_day_ahead_prices(self, area=None, **kwargs):
         # This will raise TimeoutError from fetch_raw_data
         return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
+
 class MockErrorAPI(BasePriceAPI):
     """Mock API that returns a server error."""
+
     def __init__(self, *args, **kwargs):
         tz_service = TimezoneService()
         super().__init__(timezone_service=tz_service)
+
     def get_parser_for_area(self, area):
         return MockParser()
-    def _get_source_type(self): return "mock_error"
-    def _get_base_url(self): return "http://error.test"
+
+    def _get_source_type(self):
+        return "mock_error"
+
+    def _get_base_url(self):
+        return "http://error.test"
+
     async def fetch_raw_data(self, *args, **kwargs):
         # Simulate a server error response
         raise Exception("Mock API server error (500)")
+
     async def parse_raw_data(self, *args, **kwargs):
         # This shouldn't be reached if fetch fails
         return {}
+
     # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
     async def fetch_day_ahead_prices(self, area=None, **kwargs):
         # This will raise Exception from fetch_raw_data
         return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
+
 class MockPartialDataAPI(BasePriceAPI):
     """Mock API that returns incomplete data (missing some hours)."""
+
     def __init__(self, *args, **kwargs):
         tz_service = TimezoneService()
         super().__init__(timezone_service=tz_service)
+
     def get_parser_for_area(self, area):
         return MockParser()
-    def _get_source_type(self): return "mock_partial"
-    def _get_base_url(self): return "http://partial.test"
-    async def fetch_raw_data(self, *args, **kwargs): return {"data": "raw_partial"}
+
+    def _get_source_type(self):
+        return "mock_partial"
+
+    def _get_base_url(self):
+        return "http://partial.test"
+
+    async def fetch_raw_data(self, *args, **kwargs):
+        return {"data": "raw_partial"}
+
     async def parse_raw_data(self, *args, **kwargs):
         # Return only a few hours instead of a full day
         return {
@@ -154,21 +225,25 @@ class MockPartialDataAPI(BasePriceAPI):
                 # Missing the rest of the hours
             },
             "currency": "EUR",
-            "api_timezone": "UTC"
+            "api_timezone": "UTC",
         }
+
     # Explicitly implement fetch_day_ahead_prices to match BasePriceAPI's signature
     async def fetch_day_ahead_prices(self, area=None, **kwargs):
         # Pass the correct arguments to the super method
         return await super().fetch_day_ahead_prices(area=area, **kwargs)
 
+
 @pytest.fixture
 def price_data_fetcher():
     """Provides a PriceDataFetcher instance with a clean cache for each test."""
     fetcher = PriceDataFetcher()
-    fetcher.cache = {} # Ensure clean cache for each test
+    fetcher.cache = {}  # Ensure clean cache for each test
     return fetcher
 
+
 # --- Test Cases ---
+
 
 @pytest.mark.asyncio
 async def test_fetch_with_fallback_primary_success(price_data_fetcher):
@@ -179,14 +254,25 @@ async def test_fetch_with_fallback_primary_success(price_data_fetcher):
 
     # Verify the returned data structure
     assert result is not None, "Result should not be None when primary source succeeds"
-    assert result["source"] == "mock_success", f"Expected source 'mock_success', got '{result.get('source')}'"
+    assert (
+        result["source"] == "mock_success"
+    ), f"Expected source 'mock_success', got '{result.get('source')}'"
     assert "today_interval_prices" in result, "Result should include 'interval_prices'"
-    assert len(result["today_interval_prices"]) > 0, "Result should have price data when source succeeds"
-    assert result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 10.0, "Price value should match expected"
+    assert (
+        len(result["today_interval_prices"]) > 0
+    ), "Result should have price data when source succeeds"
+    assert (
+        result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 10.0
+    ), "Price value should match expected"
     assert "attempted_sources" in result, "Result should track attempted_sources"
-    assert result["attempted_sources"] == ["Source_0"], f"Only primary source (Source_0) should be attempted, got {result.get('attempted_sources')}"
+    assert result["attempted_sources"] == [
+        "Source_0"
+    ], f"Only primary source (Source_0) should be attempted, got {result.get('attempted_sources')}"
     assert "fallback_sources" in result, "Result should include fallback_sources field"
-    assert len(result["fallback_sources"]) == 0, f"No fallbacks should be used when primary succeeds, got {result.get('fallback_sources')}"
+    assert (
+        len(result["fallback_sources"]) == 0
+    ), f"No fallbacks should be used when primary succeeds, got {result.get('fallback_sources')}"
+
 
 @pytest.mark.asyncio
 async def test_fetch_with_fallback_primary_fails_secondary_succeeds(price_data_fetcher):
@@ -197,22 +283,39 @@ async def test_fetch_with_fallback_primary_fails_secondary_succeeds(price_data_f
 
     # Verify result structure and values
     assert result is not None, "Result should not be None when fallback succeeds"
-    assert result["source"] == "mock_success", f"Expected source 'mock_success', got '{result.get('source')}'"
+    assert (
+        result["source"] == "mock_success"
+    ), f"Expected source 'mock_success', got '{result.get('source')}'"
     assert "today_interval_prices" in result, "Result should include 'interval_prices'"
-    assert len(result["today_interval_prices"]) > 0, "Result should have price data from fallback source"
-    assert result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 10.0, "Price value from fallback should match expected"
+    assert (
+        len(result["today_interval_prices"]) > 0
+    ), "Result should have price data from fallback source"
+    assert (
+        result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 10.0
+    ), "Price value from fallback should match expected"
 
     # Check fallback metadata - critical for determining if fallback was used correctly
     assert "attempted_sources" in result, "Result should track attempted_sources"
-    assert "Source_0" in result["attempted_sources"], "Primary source should be in attempted_sources"
-    assert "Source_1" in result["attempted_sources"], "Secondary source should be in attempted_sources"
-    assert len(result["attempted_sources"]) == 2, f"Both sources should be attempted, got {len(result['attempted_sources'])}"
+    assert (
+        "Source_0" in result["attempted_sources"]
+    ), "Primary source should be in attempted_sources"
+    assert (
+        "Source_1" in result["attempted_sources"]
+    ), "Secondary source should be in attempted_sources"
+    assert (
+        len(result["attempted_sources"]) == 2
+    ), f"Both sources should be attempted, got {len(result['attempted_sources'])}"
 
     assert "fallback_sources" in result, "Result should include fallback_sources field"
     # Note: The implementation includes both sources in fallback_sources even though only the primary failed
     # This is acceptable behavior as it tracks all sources in the fallback chain
-    assert "Source_0" in result["fallback_sources"], "Failed primary source should be in fallback_sources"
-    assert len(result["fallback_sources"]) >= 1, f"At least the primary source should be in fallback_sources, got {len(result['fallback_sources'])}"
+    assert (
+        "Source_0" in result["fallback_sources"]
+    ), "Failed primary source should be in fallback_sources"
+    assert (
+        len(result["fallback_sources"]) >= 1
+    ), f"At least the primary source should be in fallback_sources, got {len(result['fallback_sources'])}"
+
 
 @pytest.mark.asyncio
 async def test_fetch_with_fallback_all_fail_no_cache(price_data_fetcher):
@@ -223,23 +326,40 @@ async def test_fetch_with_fallback_all_fail_no_cache(price_data_fetcher):
 
     # The updated implementation should return a standardized empty result instead of None
     assert result is not None, "Result should not be None even when all sources fail"
-    assert "today_interval_prices" in result, "Result should include interval_prices field"
-    assert isinstance(result["today_interval_prices"], dict), f"interval_prices should be a dictionary, got {type(result.get('interval_prices'))}"
-    assert len(result["today_interval_prices"]) == 0, f"Expected empty interval_prices, got {len(result.get('interval_prices', {}))}"
+    assert (
+        "today_interval_prices" in result
+    ), "Result should include interval_prices field"
+    assert isinstance(
+        result["today_interval_prices"], dict
+    ), f"interval_prices should be a dictionary, got {type(result.get('interval_prices'))}"
+    assert (
+        len(result["today_interval_prices"]) == 0
+    ), f"Expected empty interval_prices, got {len(result.get('interval_prices', {}))}"
 
     # Area should be preserved
     assert "area" in result, "Result should include area field"
-    assert result["area"] == "TEST_AREA", f"Area should match requested area, got {result.get('area')}"
+    assert (
+        result["area"] == "TEST_AREA"
+    ), f"Area should match requested area, got {result.get('area')}"
 
     # All sources should be marked as attempted and failed
     assert "attempted_sources" in result, "Result should track attempted_sources"
-    assert result["attempted_sources"] == ["Source_0", "Source_1", "Source_2", "Source_3"], \
-           f"All sources should be in attempted_sources, got {result.get('attempted_sources')}"
+    assert result["attempted_sources"] == [
+        "Source_0",
+        "Source_1",
+        "Source_2",
+        "Source_3",
+    ], f"All sources should be in attempted_sources, got {result.get('attempted_sources')}"
 
     assert "fallback_sources" in result, "Result should include fallback_sources field"
-    assert len(result["fallback_sources"]) == 4, f"All sources should be in fallback_sources, got {len(result.get('fallback_sources', []))}"
+    assert (
+        len(result["fallback_sources"]) == 4
+    ), f"All sources should be in fallback_sources, got {len(result.get('fallback_sources', []))}"
     for i in range(4):
-        assert f"Source_{i}" in result["fallback_sources"], f"Source_{i} should be in fallback_sources"
+        assert (
+            f"Source_{i}" in result["fallback_sources"]
+        ), f"Source_{i} should be in fallback_sources"
+
 
 @pytest.mark.asyncio
 async def test_fetch_with_fallback_all_fail_cache_hit(price_data_fetcher):
@@ -255,25 +375,36 @@ async def test_fetch_with_fallback_all_fail_cache_hit(price_data_fetcher):
         "today_interval_prices": {"2024-01-01T10:00:00+00:00": 5.0},
         "currency": currency,
         "api_timezone": "UTC",
-        "area": area
+        "area": area,
     }
 
     # Pre-populate cache with recent timestamp
     price_data_fetcher.cache[cache_key] = {
         "data": cached_data,
         "timestamp": time.time() - 100,  # 100 seconds old (within default cache expiry)
-        "source": "cached_source"
+        "source": "cached_source",
     }
 
     result = await price_data_fetcher.fetch_with_fallback(sources, area, currency)
 
     # Result should be the cached data
     assert result is not None, "Result should not be None when cache is available"
-    assert result == cached_data, "Result should match cached data when all sources fail and cache is valid"
-    assert result["source"] == "cached_source", f"Source should be cached_source, got {result.get('source')}"
-    assert "today_interval_prices" in result, "Result should include interval_prices from cache"
-    assert len(result["today_interval_prices"]) > 0, "Cached interval_prices should not be empty"
-    assert result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 5.0, "Price value from cache should match expected"
+    assert (
+        result == cached_data
+    ), "Result should match cached data when all sources fail and cache is valid"
+    assert (
+        result["source"] == "cached_source"
+    ), f"Source should be cached_source, got {result.get('source')}"
+    assert (
+        "today_interval_prices" in result
+    ), "Result should include interval_prices from cache"
+    assert (
+        len(result["today_interval_prices"]) > 0
+    ), "Cached interval_prices should not be empty"
+    assert (
+        result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 5.0
+    ), "Price value from cache should match expected"
+
 
 @pytest.mark.asyncio
 async def test_fetch_with_fallback_all_fail_cache_expired(price_data_fetcher):
@@ -289,33 +420,47 @@ async def test_fetch_with_fallback_all_fail_cache_expired(price_data_fetcher):
         "today_interval_prices": {"2024-01-01T10:00:00+00:00": 5.0},
         "currency": currency,
         "api_timezone": "UTC",
-        "area": area
+        "area": area,
     }
 
     # Pre-populate cache with old timestamp that exceeds default expiry
     price_data_fetcher.cache[cache_key] = {
         "data": cached_data,
         "timestamp": time.time() - (7 * 60 * 60),  # 7 hours old (> default 6h expiry)
-        "source": "cached_source"
+        "source": "cached_source",
     }
 
     result = await price_data_fetcher.fetch_with_fallback(sources, area, currency)
 
     # Result should be standardized empty result, NOT the expired cached data
     assert result is not None, "Result should not be None when all sources fail"
-    assert result["source"] != "cached_source", "Result should not use expired cache data"
-    assert "today_interval_prices" in result, "Result should include interval_prices field"
-    assert len(result["today_interval_prices"]) == 0, f"interval_prices should be empty when all sources fail and cache expired, got {len(result.get('interval_prices', {}))} entries"
+    assert (
+        result["source"] != "cached_source"
+    ), "Result should not use expired cache data"
+    assert (
+        "today_interval_prices" in result
+    ), "Result should include interval_prices field"
+    assert (
+        len(result["today_interval_prices"]) == 0
+    ), f"interval_prices should be empty when all sources fail and cache expired, got {len(result.get('interval_prices', {}))} entries"
 
     # Area should be preserved
     assert "area" in result, "Result should include area field"
-    assert result["area"] == area, f"Area should match requested area, got {result.get('area')}"
+    assert (
+        result["area"] == area
+    ), f"Area should match requested area, got {result.get('area')}"
 
     # All sources should be marked as attempted and failed
     assert "attempted_sources" in result, "Result should track attempted_sources"
-    assert result["attempted_sources"] == ["Source_0", "Source_1"], f"All sources should be in attempted_sources, got {result.get('attempted_sources')}"
+    assert result["attempted_sources"] == [
+        "Source_0",
+        "Source_1",
+    ], f"All sources should be in attempted_sources, got {result.get('attempted_sources')}"
     assert "fallback_sources" in result, "Result should include fallback_sources field"
-    assert all(source in result["fallback_sources"] for source in ["Source_0", "Source_1"]), "All sources should be in fallback_sources"
+    assert all(
+        source in result["fallback_sources"] for source in ["Source_0", "Source_1"]
+    ), "All sources should be in fallback_sources"
+
 
 @pytest.mark.asyncio
 async def test_fetch_with_fallback_empty_sources(price_data_fetcher):
@@ -329,16 +474,27 @@ async def test_fetch_with_fallback_empty_sources(price_data_fetcher):
     # Updated implementation should return a standardized empty result rather than None
     if result is None:
         # This is acceptable if the implementation returns None for empty sources
-        assert result is None, "Result should be None when called with empty sources list"
+        assert (
+            result is None
+        ), "Result should be None when called with empty sources list"
     else:
         # Or it should return a standardized empty result with error information
-        assert "today_interval_prices" in result, "Result should include interval_prices field"
-        assert len(result["today_interval_prices"]) == 0, "interval_prices should be empty when called with empty sources list"
+        assert (
+            "today_interval_prices" in result
+        ), "Result should include interval_prices field"
+        assert (
+            len(result["today_interval_prices"]) == 0
+        ), "interval_prices should be empty when called with empty sources list"
         assert "area" in result, "Result should include area field"
-        assert result["area"] == area, f"Area should match requested area, got {result.get('area')}"
+        assert (
+            result["area"] == area
+        ), f"Area should match requested area, got {result.get('area')}"
         # The attempted_sources field may not exist if no sources were provided
         if "attempted_sources" in result:
-            assert len(result["attempted_sources"]) == 0, "attempted_sources should be empty when no sources provided"
+            assert (
+                len(result["attempted_sources"]) == 0
+            ), "attempted_sources should be empty when no sources provided"
+
 
 @pytest.mark.asyncio
 async def test_fetch_with_fallback_partial_data(price_data_fetcher):
@@ -354,14 +510,25 @@ async def test_fetch_with_fallback_partial_data(price_data_fetcher):
 
     # If partial data is accepted (which is reasonable):
     if result["source"] == "mock_partial":
-        assert len(result["today_interval_prices"]) == 2, f"Should have 2 hours from partial data, got {len(result['interval_prices'])}"
-        assert result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 10.0, "Price value should match partial data"
-        assert result["today_interval_prices"]["2024-01-01T11:00:00+00:00"] == 11.0, "Price value should match partial data"
+        assert (
+            len(result["today_interval_prices"]) == 2
+        ), f"Should have 2 hours from partial data, got {len(result['interval_prices'])}"
+        assert (
+            result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 10.0
+        ), "Price value should match partial data"
+        assert (
+            result["today_interval_prices"]["2024-01-01T11:00:00+00:00"] == 11.0
+        ), "Price value should match partial data"
 
     # If implementation prefers complete data:
     elif result["source"] == "mock_success":
-        assert len(result["today_interval_prices"]) == 2, f"Should have 2 hours from success data, got {len(result['interval_prices'])}"
-        assert result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 10.0, "Price value should match complete data"
+        assert (
+            len(result["today_interval_prices"]) == 2
+        ), f"Should have 2 hours from success data, got {len(result['interval_prices'])}"
+        assert (
+            result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 10.0
+        ), "Price value should match complete data"
+
 
 @pytest.mark.asyncio
 async def test_cache_behavior_with_expiry_times(price_data_fetcher):
@@ -376,7 +543,7 @@ async def test_cache_behavior_with_expiry_times(price_data_fetcher):
         "today_interval_prices": {"2024-01-01T10:00:00+00:00": 5.0},
         "currency": currency,
         "api_timezone": "UTC",
-        "area": area
+        "area": area,
     }
 
     # Test with cache just at expiry threshold
@@ -387,7 +554,7 @@ async def test_cache_behavior_with_expiry_times(price_data_fetcher):
     price_data_fetcher.cache[cache_key] = {
         "data": cached_data,
         "timestamp": cache_timestamp,
-        "source": "cached_source"
+        "source": "cached_source",
     }
 
     # Test with sources that will fail
@@ -395,17 +562,26 @@ async def test_cache_behavior_with_expiry_times(price_data_fetcher):
 
     # Custom cache expiry should be used if provided
     result_custom_expiry = await price_data_fetcher.fetch_with_fallback(
-        sources, area, currency, cache_expiry_hours=12  # Longer than our 6-hour old cache
+        sources,
+        area,
+        currency,
+        cache_expiry_hours=12,  # Longer than our 6-hour old cache
     )
 
     # With extended expiry, should return cached data
-    assert result_custom_expiry is not None, "Result should not be None with custom cache expiry"
+    assert (
+        result_custom_expiry is not None
+    ), "Result should not be None with custom cache expiry"
     if result_custom_expiry.get("source") == "cached_source":
         # Cache was used (expected behavior with extended expiry)
-        assert result_custom_expiry == cached_data, "Result should match cached data with extended expiry"
+        assert (
+            result_custom_expiry == cached_data
+        ), "Result should match cached data with extended expiry"
     else:
         # If cache wasn't used, result should be empty due to failed sources
-        assert len(result_custom_expiry.get("today_interval_prices", {})) == 0, "Result should have empty interval_prices if cache not used"
+        assert (
+            len(result_custom_expiry.get("today_interval_prices", {})) == 0
+        ), "Result should have empty interval_prices if cache not used"
 
     # Default expiry should be used if not provided
     result_default_expiry = await price_data_fetcher.fetch_with_fallback(
@@ -413,5 +589,7 @@ async def test_cache_behavior_with_expiry_times(price_data_fetcher):
     )
 
     # With default expiry (cache is exactly at threshold), behavior depends on implementation details
-    assert result_default_expiry is not None, "Result should not be None with default cache expiry"
+    assert (
+        result_default_expiry is not None
+    ), "Result should not be None with default cache expiry"
     # Cannot assert exact behavior as it depends on implementation (> vs >=)

@@ -60,7 +60,9 @@ class AmberParser(BasePriceParser):
         if isinstance(raw_data, dict) and "area" in raw_data:
             result["area"] = raw_data["area"]
 
-        _LOGGER.debug(f"Amber parser found {len(result['interval_raw'])} interval prices")
+        _LOGGER.debug(
+            f"Amber parser found {len(result['interval_raw'])} interval prices"
+        )
         return result
 
     def _parse_price_list(self, price_list: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -70,7 +72,9 @@ class AmberParser(BasePriceParser):
             try:
                 # Amber timestamps are usually ISO format UTC
                 timestamp_str = (
-                    entry.get("startTime") or entry.get("nemTime") or entry.get("created_at")
+                    entry.get("startTime")
+                    or entry.get("nemTime")
+                    or entry.get("created_at")
                 )  # Try common timestamp keys
                 if not timestamp_str:
                     _LOGGER.debug(f"Skipping Amber entry, missing timestamp: {entry}")
@@ -93,7 +97,9 @@ class AmberParser(BasePriceParser):
                                 f"Using Amber 'rrp' {price_dollars_mwh} $/MWh, converted to {price_cents} Cents/kWh for {interval_key}"
                             )
                         except (ValueError, TypeError):
-                            _LOGGER.debug(f"Could not parse Amber 'rrp' value: {price_dollars_mwh}")
+                            _LOGGER.debug(
+                                f"Could not parse Amber 'rrp' value: {price_dollars_mwh}"
+                            )
                             continue
                     else:
                         _LOGGER.debug(
@@ -109,7 +115,9 @@ class AmberParser(BasePriceParser):
                     continue
 
                 interval_raw[interval_key] = price  # Store price in Cents/kWh
-                _LOGGER.debug(f"Storing raw Amber price for {interval_key}: {price} Cents/kWh")
+                _LOGGER.debug(
+                    f"Storing raw Amber price for {interval_key}: {price} Cents/kWh"
+                )
 
             except (ValueError, TypeError, KeyError) as e:
                 _LOGGER.warning(f"Failed to parse Amber entry: {entry}. Error: {e}")

@@ -19,7 +19,10 @@ class BasePriceAPI(ABC):
     """Abstract base class for all price APIs."""
 
     def __init__(
-        self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        session=None,
+        timezone_service=None,
     ):
         """Initialize the API.
 
@@ -54,7 +57,9 @@ class BasePriceAPI(ABC):
         pass
 
     @abstractmethod
-    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> List[Dict[str, Any]]:
+    async def fetch_raw_data(
+        self, area: str, session=None, **kwargs
+    ) -> List[Dict[str, Any]]:
         """Fetch raw price data for the given area.
 
         Args:
@@ -77,7 +82,9 @@ class BasePriceAPI(ABC):
                 raise ValueError("timezone_service is not initialized")
             target_timezone = self.timezone_service.ha_timezone
 
-            _LOGGER.debug(f"{self.source_type}: Fetching day-ahead prices for area {area}")
+            _LOGGER.debug(
+                f"{self.source_type}: Fetching day-ahead prices for area {area}"
+            )
 
             # Get source timezone for this area
             source_timezone = self.get_timezone_for_area(area)
@@ -87,7 +94,9 @@ class BasePriceAPI(ABC):
 
             # Remove keys that are passed explicitly to avoid TypeError
             kwargs_filtered = {
-                k: v for k, v in kwargs.items() if k not in ["reference_time", "session"]
+                k: v
+                for k, v in kwargs.items()
+                if k not in ["reference_time", "session"]
             }
 
             raw_data = await self.fetch_raw_data(
@@ -139,7 +148,8 @@ class BasePriceAPI(ABC):
 
         except Exception as e:
             _LOGGER.error(
-                f"Error in fetch_day_ahead_prices for {self.source_type}: {str(e)}", exc_info=True
+                f"Error in fetch_day_ahead_prices for {self.source_type}: {str(e)}",
+                exc_info=True,
             )
             # Return a structured empty dict on error
             # Use const.currencies mapping for area if possible

@@ -56,12 +56,16 @@ class EnergyChartsParser(BasePriceParser):
                 "license_info": "..."
             }
         """
-        _LOGGER.debug(f"[EnergyChartsParser] Starting parse. Input data keys: {list(data.keys())}")
+        _LOGGER.debug(
+            f"[EnergyChartsParser] Starting parse. Input data keys: {list(data.keys())}"
+        )
 
         # Extract the actual API response
         raw_api_response = data.get("raw_data")
         if not raw_api_response or not isinstance(raw_api_response, dict):
-            _LOGGER.warning("[EnergyChartsParser] 'raw_data' key missing or not a dictionary")
+            _LOGGER.warning(
+                "[EnergyChartsParser] 'raw_data' key missing or not a dictionary"
+            )
             return self._create_empty_result(data)
 
         # Extract metadata
@@ -90,7 +94,9 @@ class EnergyChartsParser(BasePriceParser):
             )
             return self._create_empty_result(data, source_timezone, source_currency)
 
-        _LOGGER.debug(f"[EnergyChartsParser] Processing {len(unix_seconds)} data points")
+        _LOGGER.debug(
+            f"[EnergyChartsParser] Processing {len(unix_seconds)} data points"
+        )
 
         # Build interval_raw dictionary
         interval_raw = {}
@@ -178,13 +184,17 @@ class EnergyChartsParser(BasePriceParser):
         required_fields = ["interval_raw", "currency", "timezone", "source_unit"]
         for field in required_fields:
             if field not in data or not data[field]:
-                _LOGGER.warning(f"[{self.__class__.__name__}] Missing or invalid '{field}'")
+                _LOGGER.warning(
+                    f"[{self.__class__.__name__}] Missing or invalid '{field}'"
+                )
                 return False
 
         # Validate interval_raw structure
         interval_raw = data.get("interval_raw", {})
         if not isinstance(interval_raw, dict):
-            _LOGGER.warning(f"[{self.__class__.__name__}] 'interval_raw' is not a dictionary")
+            _LOGGER.warning(
+                f"[{self.__class__.__name__}] 'interval_raw' is not a dictionary"
+            )
             return False
 
         # Validate timestamps and prices
@@ -193,12 +203,16 @@ class EnergyChartsParser(BasePriceParser):
                 # Validate ISO timestamp format
                 datetime.fromisoformat(key.replace("Z", "+00:00"))
             except ValueError:
-                _LOGGER.warning(f"[{self.__class__.__name__}] Invalid timestamp key '{key}'")
+                _LOGGER.warning(
+                    f"[{self.__class__.__name__}] Invalid timestamp key '{key}'"
+                )
                 return False
 
             # Validate price is numeric
             if not isinstance(value, (float, int)):
-                _LOGGER.warning(f"[{self.__class__.__name__}] Non-numeric price '{value}'")
+                _LOGGER.warning(
+                    f"[{self.__class__.__name__}] Non-numeric price '{value}'"
+                )
                 return False
 
         _LOGGER.debug(f"[{self.__class__.__name__}] Validation successful")

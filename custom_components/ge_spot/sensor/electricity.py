@@ -22,6 +22,8 @@ from .price import (
     PricePercentSensor,
     TomorrowAveragePriceSensor,
     TomorrowExtremaPriceSensor,
+    HourlyAverageSensor,
+    TomorrowHourlyAverageSensor,
 )
 
 from ..const.attributes import Attributes
@@ -75,7 +77,9 @@ async def async_setup_entry(
     # Get specific settings used by some sensors directly (already present)
     vat = options.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
     include_vat = options.get(Config.INCLUDE_VAT, False)
-    price_in_cents = display_unit_setting == DisplayUnit.CENTS  # Use resolved display_unit_setting
+    price_in_cents = (
+        display_unit_setting == DisplayUnit.CENTS
+    )  # Use resolved display_unit_setting
 
     # Create sensor entities (passing the populated config_data)
 
@@ -200,6 +204,31 @@ async def async_setup_entry(
         )
     )
     # --- End Tomorrow Sensors ---
+
+    # --- Add Hourly Average Sensors ---
+
+    # Hourly Average Price sensor (today)
+    entities.append(
+        HourlyAverageSensor(
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
+        )
+    )
+
+    # Tomorrow Hourly Average Price sensor
+    entities.append(
+        TomorrowHourlyAverageSensor(
+            coordinator,
+            config_data,
+            "tomorrow_hourly_average_price",
+            "Tomorrow Hourly Average Price",
+            day_offset=1,
+        )
+    )
+    # --- End Hourly Average Sensors ---
 
     # Add all entities
     async_add_entities(entities)

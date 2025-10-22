@@ -14,4 +14,13 @@ class SensorType:
     TOMORROW_PEAK = "tomorrow_peak_price"
     TOMORROW_OFF_PEAK = "tomorrow_off_peak_price"
 
-    ALL = [CURRENT, NEXT, DAY_AVG, PEAK, OFF_PEAK, TOMORROW_AVG, TOMORROW_PEAK, TOMORROW_OFF_PEAK]
+    ALL = [
+        CURRENT,
+        NEXT,
+        DAY_AVG,
+        PEAK,
+        OFF_PEAK,
+        TOMORROW_AVG,
+        TOMORROW_PEAK,
+        TOMORROW_OFF_PEAK,
+    ]

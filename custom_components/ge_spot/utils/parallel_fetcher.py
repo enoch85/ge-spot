@@ -18,7 +18,9 @@ class SourcePriorityFetcher:
     """Fetch data from multiple sources in priority order or parallel."""
 
     def __init__(
-        self, hass: Optional[HomeAssistant] = None, config: Optional[Dict[str, Any]] = None
+        self,
+        hass: Optional[HomeAssistant] = None,
+        config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the fetcher.
 
@@ -30,7 +32,9 @@ class SourcePriorityFetcher:
         self.config = config or {}
 
         # Configuration
-        self.parallel_fetch = self.config.get(Config.PARALLEL_FETCH, Defaults.PARALLEL_FETCH)
+        self.parallel_fetch = self.config.get(
+            Config.PARALLEL_FETCH, Defaults.PARALLEL_FETCH
+        )
         self.timeout = self.config.get(
             Config.PARALLEL_FETCH_TIMEOUT, Defaults.PARALLEL_FETCH_TIMEOUT
         )
@@ -101,7 +105,9 @@ class SourcePriorityFetcher:
 
         # Update stats
         for source in sources:
-            self._stats["sources_tried"][source] = self._stats["sources_tried"].get(source, 0) + 1
+            self._stats["sources_tried"][source] = (
+                self._stats["sources_tried"].get(source, 0) + 1
+            )
 
         if not sources:
             _LOGGER.warning("No valid sources to fetch from")
@@ -121,7 +127,9 @@ class SourcePriorityFetcher:
             self._stats["sequential_fetches"] += 1
 
             # Fetch sequentially in priority order
-            return await self._fetch_sequential(fetch_functions, sources, kwargs_by_source, timeout)
+            return await self._fetch_sequential(
+                fetch_functions, sources, kwargs_by_source, timeout
+            )
 
     async def _fetch_sequential(
         self,

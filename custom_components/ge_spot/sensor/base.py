@@ -25,7 +25,9 @@ _LOGGER = logging.getLogger(__name__)
 class BaseElectricityPriceSensor(SensorEntity):
     """Base sensor for electricity prices."""
 
-    _attr_state_class = None  # Prices are instantaneous, not totals. History still recorded.
+    _attr_state_class = (
+        None  # Prices are instantaneous, not totals. History still recorded.
+    )
     _attr_device_class = SensorDeviceClass.MONETARY
 
     # Exclude large interval price arrays from database to prevent bloat
@@ -72,7 +74,9 @@ class BaseElectricityPriceSensor(SensorEntity):
             self._attr_unique_id = f"gespot_{sensor_type}_{area_lower}"
         else:
             # Log an error and potentially set default/invalid values or raise to prevent setup
-            _LOGGER.error("Area is not configured or is None. Cannot create sensor entity.")
+            _LOGGER.error(
+                "Area is not configured or is None. Cannot create sensor entity."
+            )
             # Option 1: Set dummy values (might hide the config issue)
             # self.entity_id = f"sensor.gespot_{sensor_type.lower()}_invalid_area"
             # self._attr_name = f"GE-Spot {name_suffix} (Invalid Area)"
@@ -92,7 +96,9 @@ class BaseElectricityPriceSensor(SensorEntity):
     @property
     def available(self):
         """Return if entity is available."""
-        return self.coordinator.last_update_success and self.coordinator.data is not None
+        return (
+            self.coordinator.last_update_success and self.coordinator.data is not None
+        )
 
     @property
     def extra_state_attributes(self):
@@ -165,13 +171,21 @@ class BaseElectricityPriceSensor(SensorEntity):
                 data_validity_info = {}
 
                 if validity_dict.get("data_valid_until"):
-                    data_validity_info["data_valid_until"] = validity_dict["data_valid_until"]
+                    data_validity_info["data_valid_until"] = validity_dict[
+                        "data_valid_until"
+                    ]
 
                 if validity_dict.get("last_valid_interval"):
-                    data_validity_info["last_valid_interval"] = validity_dict["last_valid_interval"]
+                    data_validity_info["last_valid_interval"] = validity_dict[
+                        "last_valid_interval"
+                    ]
 
-                data_validity_info["interval_count"] = validity_dict.get("interval_count", 0)
-                data_validity_info["today_intervals"] = validity_dict.get("today_interval_count", 0)
+                data_validity_info["interval_count"] = validity_dict.get(
+                    "interval_count", 0
+                )
+                data_validity_info["today_intervals"] = validity_dict.get(
+                    "today_interval_count", 0
+                )
                 data_validity_info["tomorrow_intervals"] = validity_dict.get(
                     "tomorrow_interval_count", 0
                 )
@@ -197,7 +211,10 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Add error information if present (for diagnostics)
         if "error" in self.coordinator.data and self.coordinator.data["error"]:
             error_info = {"message": self.coordinator.data["error"]}
-            if "error_code" in self.coordinator.data and self.coordinator.data["error_code"]:
+            if (
+                "error_code" in self.coordinator.data
+                and self.coordinator.data["error_code"]
+            ):
                 error_info["code"] = self.coordinator.data["error_code"]
                 attrs["error"] = error_info
 
@@ -297,7 +314,9 @@ class BaseElectricityPriceSensor(SensorEntity):
 
     async def async_added_to_hass(self):
         """When entity is added to hass."""
-        self.async_on_remove(self.coordinator.async_add_listener(self.async_write_ha_state))
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
 
     async def async_update(self):
         """Update the entity."""

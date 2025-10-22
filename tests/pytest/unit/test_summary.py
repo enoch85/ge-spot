@@ -13,25 +13,34 @@ from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 # Add the parent directory to Python path so we can import the custom_components
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Run GE-Spot integration tests")
-    parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-                        default="INFO", help="Set logging level")
-    parser.add_argument("--tests", nargs="+",
-                        choices=["unified", "adapter", "api", "import", "date_range", "all"],
-                        default=["all"], help="Specific tests to run")
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="INFO",
+        help="Set logging level",
+    )
+    parser.add_argument(
+        "--tests",
+        nargs="+",
+        choices=["unified", "adapter", "api", "import", "date_range", "all"],
+        default=["all"],
+        help="Specific tests to run",
+    )
     parser.add_argument("--apis", nargs="+", help="Specific APIs to test")
     parser.add_argument("--regions", nargs="+", help="Specific regions to test")
     return parser.parse_args()
+
 
 def setup_logging(level):
     """Set up logging with the specified level."""
@@ -40,11 +49,13 @@ def setup_logging(level):
         raise ValueError(f"Invalid log level: {level}")
     logging.getLogger().setLevel(numeric_level)
 
+
 def run_test(test_script, description):
     """Run a test script and return the result."""
     print(f"\nRunning {description}...")
     result = os.system(f"python {test_script}")
     return result == 0  # True if test passed (exit code 0)
+
 
 def run_unified_tests():
     """Run unified price manager tests by importing test cases from test_unified_price_manager."""
@@ -52,7 +63,9 @@ def run_unified_tests():
 
     # Create a test suite with the unified price manager tests
     suite = unittest.TestSuite()
-    for test_method in [method for method in dir(TestUnifiedPriceManager) if method.startswith('test_')]:
+    for test_method in [
+        method for method in dir(TestUnifiedPriceManager) if method.startswith("test_")
+    ]:
         suite.addTest(TestUnifiedPriceManager(test_method))
 
     # Run the tests
@@ -60,11 +73,14 @@ def run_unified_tests():
     result = runner.run(suite)
     return result.wasSuccessful()
 
+
 def run_adapter_tests():
     """Run adapter tests by importing test cases from test_tomorrow_data_manager."""
     # from scripts.tests.test_tomorrow_data_manager import test_tomorrow_data_manager # Commented out - incorrect path/structure
-    logger.warning("Adapter tests are currently skipped in test_summary.py due to refactoring.")
-    return True # Temporarily mark as passed
+    logger.warning(
+        "Adapter tests are currently skipped in test_summary.py due to refactoring."
+    )
+    return True  # Temporarily mark as passed
 
     # # Create a test suite with the adapter tests
     # suite = unittest.TestSuite()
@@ -75,6 +91,7 @@ def run_adapter_tests():
     # runner = unittest.TextTestRunner(verbosity=2)
     # result = runner.run(suite)
     # return result.wasSuccessful()
+
 
 def run_tests(args):
     """Run all specified tests and print a summary."""
@@ -122,10 +139,7 @@ def run_tests(args):
 
     # Run import tests
     if run_all or "import" in args.tests:
-        results["Import"] = run_test(
-            "scripts/tests/test_import.py",
-            "Import tests"
-        )
+        results["Import"] = run_test("scripts/tests/test_import.py", "Import tests")
 
     # Run date range tests
     if run_all or "date_range" in args.tests:
@@ -161,7 +175,8 @@ def run_tests(args):
     print("IMPLEMENTED FIXES")
     print("=" * 80)
 
-    print("""
+    print(
+        """
 1. Test Framework Updates:
    - Unified today and tomorrow data manager tests into a single UnifiedPriceManager test class
    - Fixed imports by using the current architecture instead of deprecated modules
@@ -176,10 +191,12 @@ def run_tests(args):
    - Fixed ElectricityPriceAdapter tests for timestamp format compatibility
    - Updated method calls to match current API (has_tomorrow_prices instead of is_tomorrow_valid)
    - Added support for ISO format dates in hourly prices
-    """)
+    """
+    )
 
     # Return overall status
     return all(results.values())
+
 
 if __name__ == "__main__":
     args = parse_args()

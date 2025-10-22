@@ -41,7 +41,9 @@ class EntsoeParser(BasePriceParser):
         }
 
         xml_to_parse: List[str] = []
-        original_input_for_metadata = data  # Keep original input for metadata if no XML is parsed
+        original_input_for_metadata = (
+            data  # Keep original input for metadata if no XML is parsed
+        )
 
         if isinstance(data, str):  # Single XML string
             _LOGGER.debug("ENTSOE Parser: Processing single XML string.")
@@ -49,10 +51,14 @@ class EntsoeParser(BasePriceParser):
         elif isinstance(data, list) and all(
             isinstance(item, str) for item in data
         ):  # List of XML strings
-            _LOGGER.debug(f"ENTSOE Parser: Processing list of {len(data)} XML responses.")
+            _LOGGER.debug(
+                f"ENTSOE Parser: Processing list of {len(data)} XML responses."
+            )
             xml_to_parse.extend(data)
         elif isinstance(data, dict):
-            _LOGGER.debug(f"ENTSOE Parser: Processing dict input. Keys: {list(data.keys())}")
+            _LOGGER.debug(
+                f"ENTSOE Parser: Processing dict input. Keys: {list(data.keys())}"
+            )
             # Check for 'xml_responses' (list of XML strings) - common from FallbackManager
             if "xml_responses" in data and isinstance(data["xml_responses"], list):
                 _LOGGER.debug("ENTSOE Parser: Found 'xml_responses' in dict.")
@@ -84,32 +90,47 @@ class EntsoeParser(BasePriceParser):
             _LOGGER.warning("ENTSOE Parser: No XML data found to parse.")
             # result["interval_raw"] will be empty, which DataProcessor should handle
         else:
-            _LOGGER.debug(f"ENTSOE Parser: Parsing {len(xml_to_parse)} XML document(s).")
+            _LOGGER.debug(
+                f"ENTSOE Parser: Parsing {len(xml_to_parse)} XML document(s)."
+            )
             for i, xml_doc_str in enumerate(xml_to_parse):
                 try:
                     # _parse_xml is expected to return:
                     # {"today_interval_prices": {"YYYY-MM-DDTHH:MM:SS+ZZ:ZZ": price, ...}, "currency": "EUR", "timezone": "Etc/UTC"}
                     parsed_single_xml = self._parse_xml(xml_doc_str)
                     if parsed_single_xml.get("today_interval_prices"):
-                        all_interval_prices.update(parsed_single_xml["today_interval_prices"])
+                        all_interval_prices.update(
+                            parsed_single_xml["today_interval_prices"]
+                        )
                         _LOGGER.debug(
                             f"ENTSOE Parser: XML #{i+1} parsed, {len(parsed_single_xml['today_interval_prices'])} price points added."
                         )
-                        if parsed_single_xml.get("currency") and not aggregated_currency:
+                        if (
+                            parsed_single_xml.get("currency")
+                            and not aggregated_currency
+                        ):
                             aggregated_currency = parsed_single_xml["currency"]
-                        if parsed_single_xml.get("timezone") and not aggregated_timezone:
+                        if (
+                            parsed_single_xml.get("timezone")
+                            and not aggregated_timezone
+                        ):
                             aggregated_timezone = parsed_single_xml["timezone"]
                     else:
-                        _LOGGER.debug(f"ENTSOE Parser: XML #{i+1} yielded no price points.")
+                        _LOGGER.debug(
+                            f"ENTSOE Parser: XML #{i+1} yielded no price points."
+                        )
                 except Exception as e:
                     _LOGGER.error(
-                        f"ENTSOE Parser: Failed to parse XML document #{i+1}: {e}", exc_info=True
+                        f"ENTSOE Parser: Failed to parse XML document #{i+1}: {e}",
+                        exc_info=True,
                     )
 
         result["interval_raw"] = all_interval_prices
         if aggregated_currency:
             result["currency"] = aggregated_currency
-        if aggregated_timezone:  # Use timezone from XML if found (should be UTC for ENTSO-E)
+        if (
+            aggregated_timezone
+        ):  # Use timezone from XML if found (should be UTC for ENTSO-E)
             result["timezone"] = aggregated_timezone
 
         # Metadata Extraction
@@ -118,7 +139,9 @@ class EntsoeParser(BasePriceParser):
         metadata_source_for_extraction = None
         if xml_to_parse:
             metadata_source_for_extraction = xml_to_parse[0]
-        elif isinstance(original_input_for_metadata, dict):  # If input was a dict and no XML found
+        elif isinstance(
+            original_input_for_metadata, dict
+        ):  # If input was a dict and no XML found
             metadata_source_for_extraction = original_input_for_metadata
 
         if metadata_source_for_extraction is not None:
@@ -129,7 +152,9 @@ class EntsoeParser(BasePriceParser):
         # Current/Next interval prices (BasePriceParser methods expect UTC ISO keys if tz_service is UTC)
         # Since ENTSO-E interval_raw keys are UTC ISO, this should work correctly.
         result["current_price"] = self._get_current_price(result["interval_raw"])
-        result["next_interval_price"] = self._get_next_interval_price(result["interval_raw"])
+        result["next_interval_price"] = self._get_next_interval_price(
+            result["interval_raw"]
+        )
 
         _LOGGER.debug(
             f"ENTSOE Parser: Final aggregated interval_raw size: {len(all_interval_prices)}"
@@ -266,7 +291,9 @@ class EntsoeParser(BasePriceParser):
             _LOGGER.debug(f"_parse_xml: Found {len(time_series)} TimeSeries elements")
 
             if not time_series:
-                _LOGGER.warning("_parse_xml: No TimeSeries elements found in ENTSO-E response")
+                _LOGGER.warning(
+                    "_parse_xml: No TimeSeries elements found in ENTSO-E response"
+                )
                 return result
 
             selected_ts = self._select_best_time_series(time_series)
@@ -288,7 +315,9 @@ class EntsoeParser(BasePriceParser):
 
             period = selected_ts.find(".//ns:Period", ns)
             if period is None:
-                _LOGGER.warning("_parse_xml: No Period element found in selected TimeSeries")
+                _LOGGER.warning(
+                    "_parse_xml: No Period element found in selected TimeSeries"
+                )
                 return result
 
             start_str_elem = period.find(".//ns:timeInterval/ns:start", ns)
@@ -338,7 +367,9 @@ class EntsoeParser(BasePriceParser):
                             pos = int(position_elem.text)
                             price_val = float(price_elem.text)
 
-                            point_time = start_time + timedelta(hours=(pos - 1) * interval_hours)
+                            point_time = start_time + timedelta(
+                                hours=(pos - 1) * interval_hours
+                            )
 
                             # Accept all interval times (15-min, 30-min, hourly)
                             interval_key = point_time.isoformat()
@@ -354,17 +385,27 @@ class EntsoeParser(BasePriceParser):
                                 f"_parse_xml: Failed to parse point {position_elem.text}: {e}"
                             )
                     else:
-                        _LOGGER.debug(f"_parse_xml: Skipping point with missing position or price")
+                        _LOGGER.debug(
+                            f"_parse_xml: Skipping point with missing position or price"
+                        )
 
-                _LOGGER.debug(f"_parse_xml: Added {points_added} points to interval_prices")
+                _LOGGER.debug(
+                    f"_parse_xml: Added {points_added} points to interval_prices"
+                )
 
             except (ValueError, TypeError) as e:
-                _LOGGER.error(f"_parse_xml: Failed to parse time information: {e}", exc_info=True)
+                _LOGGER.error(
+                    f"_parse_xml: Failed to parse time information: {e}", exc_info=True
+                )
 
         except ET.ParseError as e:
-            _LOGGER.error(f"_parse_xml: Failed to parse XML structure: {e}", exc_info=True)
+            _LOGGER.error(
+                f"_parse_xml: Failed to parse XML structure: {e}", exc_info=True
+            )
         except Exception as e:
-            _LOGGER.error(f"_parse_xml: Unexpected error during XML parsing: {e}", exc_info=True)
+            _LOGGER.error(
+                f"_parse_xml: Unexpected error during XML parsing: {e}", exc_info=True
+            )
 
         _LOGGER.debug(
             f"_parse_xml: Finished parsing. Returning {len(result['today_interval_prices'])} prices."
@@ -381,7 +422,10 @@ class EntsoeParser(BasePriceParser):
                 time_series = root.findall(".//ns:TimeSeries", ns)
                 for ts in time_series:
                     business_type = ts.find(".//ns:businessType", ns)
-                    if business_type is None or business_type.text not in ["A62", "A44"]:
+                    if business_type is None or business_type.text not in [
+                        "A62",
+                        "A44",
+                    ]:
                         continue
 
                     period = ts.find(".//ns:Period", ns)
@@ -393,7 +437,9 @@ class EntsoeParser(BasePriceParser):
                         continue
 
                     try:
-                        start_time = datetime.fromisoformat(start_str.text.replace("Z", "+00:00"))
+                        start_time = datetime.fromisoformat(
+                            start_str.text.replace("Z", "+00:00")
+                        )
                         resolution_elem = period.find(".//ns:resolution", ns)
                         interval_hours = 1  # Default to hourly
 
@@ -435,7 +481,9 @@ class EntsoeParser(BasePriceParser):
         """Get the current interval's price from the interval_raw data."""
         return super()._get_current_price(interval_raw)
 
-    def _get_next_interval_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
+    def _get_next_interval_price(
+        self, interval_raw: Dict[str, float]
+    ) -> Optional[float]:
         """Get the next interval's price from the interval_raw data."""
         if not interval_raw:
             return None
@@ -449,7 +497,9 @@ class EntsoeParser(BasePriceParser):
 
         return interval_raw.get(next_interval_key)
 
-    def _calculate_day_average(self, interval_prices: Dict[str, float]) -> Optional[float]:
+    def _calculate_day_average(
+        self, interval_prices: Dict[str, float]
+    ) -> Optional[float]:
         """Calculate day average price.
 
         Args:

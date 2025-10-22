@@ -40,7 +40,9 @@ class TimezoneService:
 
         # Always store system timezone for reference
         self.system_timezone = (
-            dt_util.get_time_zone(hass.config.time_zone) if hass else dt_util.DEFAULT_TIME_ZONE
+            dt_util.get_time_zone(hass.config.time_zone)
+            if hass
+            else dt_util.DEFAULT_TIME_ZONE
         )
 
         # Get area timezone if available
@@ -65,18 +67,27 @@ class TimezoneService:
         )
 
         # Determine the effective target timezone based on the reference
-        if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
+        if (
+            self.timezone_reference == TimezoneReference.LOCAL_AREA
+            and self.area_timezone
+        ):
             self.target_timezone = self.area_timezone
-            _LOGGER.debug(f"Effective target timezone set to AREA timezone: {self.target_timezone}")
+            _LOGGER.debug(
+                f"Effective target timezone set to AREA timezone: {self.target_timezone}"
+            )
         else:
             self.target_timezone = self.ha_timezone  # Default to HA timezone
-            _LOGGER.debug(f"Effective target timezone set to HA timezone: {self.target_timezone}")
+            _LOGGER.debug(
+                f"Effective target timezone set to HA timezone: {self.target_timezone}"
+            )
 
         # Initialize component classes
         self.parser = TimestampParser()
         # Pass self (the TimezoneService instance) to the converter
         self.converter = TimezoneConverter(self)
-        self.dst_handler = DSTHandler(self.target_timezone)  # Use target_timezone for DST handler
+        self.dst_handler = DSTHandler(
+            self.target_timezone
+        )  # Use target_timezone for DST handler
 
         # Determine which timezone to use for interval calculation based on the timezone reference
         # IntervalCalculator needs the reference mode to decide internally
@@ -94,7 +105,9 @@ class TimezoneService:
             + f"Reference Mode: {self.timezone_reference}"
         )
 
-    def extract_source_timezone(self, api_data: Dict[str, Any], source_type: str) -> str:
+    def extract_source_timezone(
+        self, api_data: Dict[str, Any], source_type: str
+    ) -> str:
         """Extract timezone from API data or fall back to constants.
 
         Args:
@@ -188,10 +201,14 @@ class TimezoneService:
 
         for timestamp_str, price in interval_prices.items():
             try:
-                aware_dt = self._parse_timestamp(timestamp_str, source_hint=source_tz_str)
+                aware_dt = self._parse_timestamp(
+                    timestamp_str, source_hint=source_tz_str
+                )
 
                 if aware_dt is None:
-                    _LOGGER.warning("Could not parse timestamp '%s', skipping.", timestamp_str)
+                    _LOGGER.warning(
+                        "Could not parse timestamp '%s', skipping.", timestamp_str
+                    )
                     continue
 
                 target_dt = aware_dt.astimezone(self.target_timezone)
@@ -250,7 +267,9 @@ class TimezoneService:
                     # Localize naive timestamp with hint
                     dt = dt.replace(tzinfo=source_tz)
                     _LOGGER.debug(
-                        "Localized naive timestamp '%s' using hint '%s'", timestamp_str, source_hint
+                        "Localized naive timestamp '%s' using hint '%s'",
+                        timestamp_str,
+                        source_hint,
                     )
                 else:
                     # No hint provided for naive timestamp - assume UTC as last resort
@@ -269,7 +288,9 @@ class TimezoneService:
             # Consider adding handling for other potential formats if needed
             return None
         except Exception as e:
-            _LOGGER.error("Unexpected error parsing timestamp '%s': %s", timestamp_str, e)
+            _LOGGER.error(
+                "Unexpected error parsing timestamp '%s': %s", timestamp_str, e
+            )
             return None
 
     def get_current_interval_key(self):
@@ -282,15 +303,24 @@ class TimezoneService:
         # Fix typo: now_tc -> now_utc
         _LOGGER.debug(
             f"Current time - UTC: {now_utc.strftime('%H:%M:%S')}, HA: {now_ha.strftime('%H:%M:%S')}"
-            + (f", Area ({self.area}): {now_area.strftime('%H:%M:%S')}" if now_area else "")
+            + (
+                f", Area ({self.area}): {now_area.strftime('%H:%M:%S')}"
+                if now_area
+                else ""
+            )
         )
 
         interval_key = self.interval_calculator.get_current_interval_key()
 
         # Log which timezone is being used based on the timezone reference setting
-        if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
+        if (
+            self.timezone_reference == TimezoneReference.LOCAL_AREA
+            and self.area_timezone
+        ):
             used_tz = self.area_timezone
-            _LOGGER.debug(f"Using area timezone {used_tz} for interval key (Local Area Time mode)")
+            _LOGGER.debug(
+                f"Using area timezone {used_tz} for interval key (Local Area Time mode)"
+            )
         else:
             used_tz = self.ha_timezone
             _LOGGER.debug(

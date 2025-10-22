@@ -106,7 +106,9 @@ def generate_date_ranges(
         date_ranges = adjusted_ranges
 
     # Log the generated ranges
-    _LOGGER.debug(f"Generated {len(date_ranges)} date ranges for {source_type or 'generic'} source")
+    _LOGGER.debug(
+        f"Generated {len(date_ranges)} date ranges for {source_type or 'generic'} source"
+    )
     for i, (start, end) in enumerate(date_ranges):
         _LOGGER.debug(f"Range {i+1}: {start.isoformat()} to {end.isoformat()}")
 

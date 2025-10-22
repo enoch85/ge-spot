@@ -67,7 +67,9 @@ class DataValidity:
 
         # Simple: remaining seconds / interval seconds
         remaining_seconds = (self.data_valid_until - now).total_seconds()
-        remaining_intervals = int(remaining_seconds / TimeInterval.get_interval_seconds())
+        remaining_intervals = int(
+            remaining_seconds / TimeInterval.get_interval_seconds()
+        )
 
         return max(0, remaining_intervals)
 
@@ -91,7 +93,9 @@ class DataValidity:
         """
         return {
             "last_valid_interval": (
-                self.last_valid_interval.isoformat() if self.last_valid_interval else None
+                self.last_valid_interval.isoformat()
+                if self.last_valid_interval
+                else None
             ),
             "data_valid_until": (
                 self.data_valid_until.isoformat() if self.data_valid_until else None
@@ -180,12 +184,15 @@ def calculate_data_validity(
     # Count intervals
     validity.today_interval_count = len(interval_prices)
     validity.tomorrow_interval_count = len(tomorrow_interval_prices)
-    validity.interval_count = validity.today_interval_count + validity.tomorrow_interval_count
+    validity.interval_count = (
+        validity.today_interval_count + validity.tomorrow_interval_count
+    )
 
     # Check if we have current interval in today's prices OR tomorrow's prices
     # (late evening, tomorrow might already be available)
     validity.has_current_interval = (
-        current_interval_key in interval_prices or current_interval_key in tomorrow_interval_prices
+        current_interval_key in interval_prices
+        or current_interval_key in tomorrow_interval_prices
     )
 
     # Find the last valid interval timestamp
@@ -196,7 +203,9 @@ def calculate_data_validity(
     if target_timezone:
         try:
             tz = ZoneInfo(target_timezone)
-            _LOGGER.debug(f"Using target timezone for validity calculation: {target_timezone}")
+            _LOGGER.debug(
+                f"Using target timezone for validity calculation: {target_timezone}"
+            )
             # Get today's date in the TARGET timezone, not from 'now' which might be in a different TZ
             now_in_target_tz = now.astimezone(tz)
             today_date = now_in_target_tz.date()
@@ -268,7 +277,8 @@ def calculate_data_validity(
             end_of_today = dt_util.as_local(end_of_today)
 
         validity.has_minimum_data = (
-            validity.has_current_interval and validity.last_valid_interval >= end_of_today
+            validity.has_current_interval
+            and validity.last_valid_interval >= end_of_today
         )
     else:
         _LOGGER.warning("No valid intervals found in price data")

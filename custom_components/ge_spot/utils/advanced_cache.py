@@ -19,7 +19,9 @@ _LOGGER = logging.getLogger(__name__)
 class CacheEntry:
     """Cache entry with TTL and metadata."""
 
-    def __init__(self, data: Any, ttl: int = 3600, metadata: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, data: Any, ttl: int = 3600, metadata: Optional[Dict[str, Any]] = None
+    ):
         """Initialize a cache entry.
 
         Args:
@@ -98,7 +100,9 @@ class AdvancedCache:
     """Advanced cache with TTL, persistence, and memory optimization."""
 
     def __init__(
-        self, hass: Optional[HomeAssistant] = None, config: Optional[Dict[str, Any]] = None
+        self,
+        hass: Optional[HomeAssistant] = None,
+        config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize the cache.
 
@@ -110,9 +114,13 @@ class AdvancedCache:
         self.config = config or {}
 
         # Configuration
-        self.max_entries = self.config.get(Config.CACHE_MAX_ENTRIES, Defaults.CACHE_MAX_ENTRIES)
+        self.max_entries = self.config.get(
+            Config.CACHE_MAX_ENTRIES, Defaults.CACHE_MAX_ENTRIES
+        )
         self.default_ttl = self.config.get(Config.CACHE_TTL, Defaults.CACHE_TTL)
-        self.persist_cache = self.config.get(Config.PERSIST_CACHE, Defaults.PERSIST_CACHE)
+        self.persist_cache = self.config.get(
+            Config.PERSIST_CACHE, Defaults.PERSIST_CACHE
+        )
         self.cache_dir = self.config.get(Config.CACHE_DIR, Defaults.CACHE_DIR)
 
         # Cache storage
@@ -239,7 +247,9 @@ class AdvancedCache:
         # If still too many entries, remove least recently used
         if len(self._cache) > self.max_entries:
             # Sort by last accessed time
-            sorted_keys = sorted(self._cache.keys(), key=lambda k: self._cache[k].last_accessed)
+            sorted_keys = sorted(
+                self._cache.keys(), key=lambda k: self._cache[k].last_accessed
+            )
 
             # Remove oldest entries
             to_remove = len(self._cache) - self.max_entries

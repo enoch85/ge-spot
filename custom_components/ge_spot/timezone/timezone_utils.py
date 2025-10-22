@@ -37,7 +37,9 @@ def get_timezone_by_name(timezone_name: str) -> str:
         return iana_name
 
     # Fallback
-    _LOGGER.warning("Could not resolve timezone for name: %s, using default", timezone_name)
+    _LOGGER.warning(
+        "Could not resolve timezone for name: %s, using default", timezone_name
+    )
     return TimezoneConstants.DEFAULT_FALLBACK
 
 
@@ -116,7 +118,9 @@ def get_timezone_object(timezone_id: str) -> tzinfo:
 
 
 def convert_datetime(
-    dt: datetime, target_tz: Union[str, tzinfo], source_tz: Optional[Union[str, tzinfo]] = None
+    dt: datetime,
+    target_tz: Union[str, tzinfo],
+    source_tz: Optional[Union[str, tzinfo]] = None,
 ) -> datetime:
     """Convert datetime between timezones.
 
@@ -190,7 +194,9 @@ def localize_datetime(dt: datetime, timezone_id: str) -> datetime:
     return dt.replace(tzinfo=tz)
 
 
-def normalize_hour_value(hour: int, base_date: datetime.date) -> tuple[int, datetime.date]:
+def normalize_hour_value(
+    hour: int, base_date: datetime.date
+) -> tuple[int, datetime.date]:
     """Normalize hour values that may be outside the 0-23 range.
 
     This handles special cases like 24:00 (midnight of next day),

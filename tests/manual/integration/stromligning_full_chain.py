@@ -30,46 +30,57 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Add the root directory to the path so we can import the component modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 from custom_components.ge_spot.api.stromligning import StromligningAPI
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
+
 # Import Config constant
 from custom_components.ge_spot.const.config import Config
 
 # Danish price areas
-DANISH_AREAS = ['DK1', 'DK2']
+DANISH_AREAS = ["DK1", "DK2"]
+
 
 async def main():
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Test Strømlikning API integration')
-    parser.add_argument('area', nargs='?', default='DK1',
-                        choices=DANISH_AREAS,
-                        help='Area code (DK1, DK2)')
+    parser = argparse.ArgumentParser(description="Test Strømlikning API integration")
+    parser.add_argument(
+        "area",
+        nargs="?",
+        default="DK1",
+        choices=DANISH_AREAS,
+        help="Area code (DK1, DK2)",
+    )
     # Add supplier argument
-    parser.add_argument('--supplier', required=True,
-                        help='Supplier name (e.g. EWII, AndelEnergi)')
+    parser.add_argument(
+        "--supplier", required=True, help="Supplier name (e.g. EWII, AndelEnergi)"
+    )
     args = parser.parse_args()
 
     area = args.area
-    supplier = args.supplier # Get supplier from args
+    supplier = args.supplier  # Get supplier from args
 
-    logger.info(f"\n===== Strømlikning API Full Chain Test for {area} with Supplier {supplier} =====\n")
+    logger.info(
+        f"\n===== Strømlikning API Full Chain Test for {area} with Supplier {supplier} =====\n"
+    )
 
     # Create config dictionary using the correct constant
-    config = {
-        Config.CONF_STROMLIGNING_SUPPLIER: supplier
-    }
+    config = {Config.CONF_STROMLIGNING_SUPPLIER: supplier}
 
     # Initialize the API client with config
     api = StromligningAPI(config=config)
 
     try:
         # Step 1: Fetch raw data
-        logger.info(f"Fetching Strømlikning data for area: {area}, supplier: {supplier}")
+        logger.info(
+            f"Fetching Strømlikning data for area: {area}, supplier: {supplier}"
+        )
         # Pass config to fetch_raw_data if needed by underlying methods (though __init__ should handle it now)
         raw_data = await api.fetch_raw_data(area=area)
-        logger.debug(f"[Stromligning RAW DATA - {area}] Full raw_data object: {json.dumps(raw_data, indent=2)}")  # Log the raw data structure
+        logger.debug(
+            f"[Stromligning RAW DATA - {area}] Full raw_data object: {json.dumps(raw_data, indent=2)}"
+        )  # Log the raw data structure
 
         if not raw_data:
             logger.error("Error: Failed to fetch data from Strømlikning API")
@@ -110,7 +121,9 @@ async def main():
         logger.info(f"Found {len(interval_prices)} interval prices")
 
         # Step 3: Currency conversion (DKK -> EUR)
-        logger.info(f"\nConverting prices from {parsed_data.get('currency', Currency.DKK)} to {Currency.EUR}...")
+        logger.info(
+            f"\nConverting prices from {parsed_data.get('currency', Currency.DKK)} to {Currency.EUR}..."
+        )
         exchange_service = ExchangeRateService()
         await exchange_service.get_rates(force_refresh=True)
 
@@ -119,9 +132,7 @@ async def main():
         for ts, price in interval_prices.items():  # Changed from hourly_prices
             # Convert from DKK to EUR
             price_eur = await exchange_service.convert(
-                price,
-                parsed_data.get("currency", Currency.DKK),
-                Currency.EUR
+                price, parsed_data.get("currency", Currency.DKK), Currency.EUR
             )
             # Convert from MWh to kWh
             price_eur_kwh = price_eur / 1000
@@ -129,26 +140,28 @@ async def main():
 
         # Step 4: Display results
         logger.info("\nPrice Information:")
-        logger.info(f"Original Currency: {parsed_data.get('currency', Currency.DKK)}/MWh")
+        logger.info(
+            f"Original Currency: {parsed_data.get('currency', Currency.DKK)}/MWh"
+        )
         logger.info(f"Converted Currency: {Currency.EUR}/kWh")
 
         # Group prices by date
-        dk_tz = pytz.timezone('Europe/Copenhagen')
+        dk_tz = pytz.timezone("Europe/Copenhagen")
         prices_by_date = {}
 
         for ts, price in interval_prices.items():
             try:
                 # Parse the timestamp and convert to local timezone
-                dt = datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone(dk_tz)
-                date_str = dt.strftime('%Y-%m-%d')
-                hour_str = dt.strftime('%H:%M')
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(dk_tz)
+                date_str = dt.strftime("%Y-%m-%d")
+                hour_str = dt.strftime("%H:%M")
 
                 if date_str not in prices_by_date:
                     prices_by_date[date_str] = {}
 
                 prices_by_date[date_str][hour_str] = {
-                    'original': price,
-                    'converted': converted_prices.get(ts)
+                    "original": price,
+                    "converted": converted_prices.get(ts),
                 }
             except ValueError as e:
                 logger.warning(f"Could not parse timestamp: {ts}, error: {e}")
@@ -161,11 +174,13 @@ async def main():
             logger.info("-" * 40)
 
             for hour, prices in sorted(hours.items()):
-                logger.info(f"{hour:<10} {prices['original']:<15.4f} {prices['converted']:<15.6f}")
+                logger.info(
+                    f"{hour:<10} {prices['original']:<15.4f} {prices['converted']:<15.6f}"
+                )
 
         # Validate that we have data for today and tomorrow
-        today = datetime.now(dk_tz).strftime('%Y-%m-%d')
-        tomorrow = (datetime.now(dk_tz) + timedelta(days=1)).strftime('%Y-%m-%d')
+        today = datetime.now(dk_tz).strftime("%Y-%m-%d")
+        tomorrow = (datetime.now(dk_tz) + timedelta(days=1)).strftime("%Y-%m-%d")
 
         # Check today's data
         if today in prices_by_date:
@@ -175,35 +190,55 @@ async def main():
             if len(today_prices) >= 96:
                 logger.info("✓ Complete set of 96 15-minute interval prices for today")
             elif len(today_prices) >= 90:
-                logger.info(f"✓ Nearly complete data: Found {len(today_prices)} 15-minute intervals (expected 96)")
+                logger.info(
+                    f"✓ Nearly complete data: Found {len(today_prices)} 15-minute intervals (expected 96)"
+                )
             else:
-                logger.warning(f"⚠ Incomplete data: Found only {len(today_prices)} 15-minute intervals for today (expected 96)")
+                logger.warning(
+                    f"⚠ Incomplete data: Found only {len(today_prices)} 15-minute intervals for today (expected 96)"
+                )
         else:
             logger.warning(f"\nWarning: No prices found for today ({today})")
 
         # Check tomorrow's data - be more lenient as tomorrow's data may not be available yet
         now_local = datetime.now(dk_tz)
-        expect_tomorrow_data = now_local.hour >= 13  # Usually publishes next day prices at ~13:00 CET
+        expect_tomorrow_data = (
+            now_local.hour >= 13
+        )  # Usually publishes next day prices at ~13:00 CET
 
         if tomorrow in prices_by_date:
             tomorrow_prices = prices_by_date[tomorrow]
-            logger.info(f"\nFound {len(tomorrow_prices)} price points for tomorrow ({tomorrow})")
+            logger.info(
+                f"\nFound {len(tomorrow_prices)} price points for tomorrow ({tomorrow})"
+            )
 
             if len(tomorrow_prices) >= 96:
-                logger.info("✓ Complete set of 96 15-minute interval prices for tomorrow")
+                logger.info(
+                    "✓ Complete set of 96 15-minute interval prices for tomorrow"
+                )
             elif len(tomorrow_prices) >= 90:
-                logger.info(f"✓ Nearly complete data: Found {len(tomorrow_prices)} 15-minute intervals (expected 96)")
+                logger.info(
+                    f"✓ Nearly complete data: Found {len(tomorrow_prices)} 15-minute intervals (expected 96)"
+                )
             else:
-                logger.warning(f"⚠ Incomplete data: Found only {len(tomorrow_prices)} 15-minute intervals for tomorrow (expected 96)")
+                logger.warning(
+                    f"⚠ Incomplete data: Found only {len(tomorrow_prices)} 15-minute intervals for tomorrow (expected 96)"
+                )
         elif expect_tomorrow_data:
-            logger.warning(f"\nWarning: No prices found for tomorrow ({tomorrow}) even though it's expected")
+            logger.warning(
+                f"\nWarning: No prices found for tomorrow ({tomorrow}) even though it's expected"
+            )
         else:
-            logger.info(f"\nNote: No prices found for tomorrow ({tomorrow}), but that's expected before 13:00 local time")
+            logger.info(
+                f"\nNote: No prices found for tomorrow ({tomorrow}), but that's expected before 13:00 local time"
+            )
 
         # Check if we have price components (Strømlikning specific)
         if parsed_data.get("price_components"):
             logger.info("\nPrice Components Found:")
-            for component_name, value in parsed_data.get("price_components", {}).items():
+            for component_name, value in parsed_data.get(
+                "price_components", {}
+            ).items():
                 logger.info(f"- {component_name}: {value}")
 
         # Final validation - check if we have enough data overall to consider the test successful
@@ -212,14 +247,18 @@ async def main():
             logger.info("\nTest completed successfully!")
             return 0
         else:
-            logger.error(f"\nTest failed: Insufficient price data. Found only {total_prices} prices (expected at least 22)")
+            logger.error(
+                f"\nTest failed: Insufficient price data. Found only {total_prices} prices (expected at least 22)"
+            )
             return 1
 
     except Exception as e:
         logger.error(f"Error during test: {e}", exc_info=True)
         import traceback
+
         traceback.print_exc()
         return 1
+
 
 if __name__ == "__main__":
     logger.info("Starting Strømlikning API full chain test...")

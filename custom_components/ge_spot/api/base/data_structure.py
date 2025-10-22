@@ -77,7 +77,9 @@ class StandardizedPriceData:
     vat_included: bool = False
     raw_data: Any = None  # Original API response
     has_tomorrow_prices: bool = False  # Whether we have complete data for tomorrow
-    tomorrow_prices_expected: bool = False  # Whether tomorrow's prices are expected to be available
+    tomorrow_prices_expected: bool = (
+        False  # Whether tomorrow's prices are expected to be available
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary format.
@@ -131,7 +133,9 @@ class StandardizedPriceData:
         return result
 
     @classmethod
-    def create_empty(cls, source: str, area: str, currency: str) -> "StandardizedPriceData":
+    def create_empty(
+        cls, source: str, area: str, currency: str
+    ) -> "StandardizedPriceData":
         """Create an empty price data object.
 
         Args:
@@ -143,7 +147,10 @@ class StandardizedPriceData:
             Empty StandardizedPriceData object
         """
         return cls(
-            source=source, area=area, currency=currency, fetched_at=datetime.now().isoformat()
+            source=source,
+            area=area,
+            currency=currency,
+            fetched_at=datetime.now().isoformat(),
         )
 
 

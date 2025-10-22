@@ -26,13 +26,17 @@ async def ensure_session(api_obj):
     """Ensure that an API object has an aiohttp session."""
     try:
         if api_obj.session is None or api_obj.session.closed:
-            _LOGGER.debug(f"Creating new aiohttp session for {api_obj.__class__.__name__}")
+            _LOGGER.debug(
+                f"Creating new aiohttp session for {api_obj.__class__.__name__}"
+            )
             api_obj.session = aiohttp.ClientSession()
             api_obj._owns_session = True
             # Register the session for potential cleanup
             _SESSION_REGISTRY.add(api_obj.session)
     except Exception as e:
-        _LOGGER.error(f"Error creating session in {api_obj.__class__.__name__}: {str(e)}")
+        _LOGGER.error(
+            f"Error creating session in {api_obj.__class__.__name__}: {str(e)}"
+        )
 
 
 async def close_session(api_obj):
@@ -48,7 +52,9 @@ async def close_session(api_obj):
             api_obj._owns_session = False
 
 
-async def fetch_with_retry(api_obj, url, params=None, headers=None, timeout=30, max_retries=3):
+async def fetch_with_retry(
+    api_obj, url, params=None, headers=None, timeout=30, max_retries=3
+):
     """Fetch data from URL with retry mechanism."""
     await ensure_session(api_obj)
 
@@ -81,7 +87,9 @@ async def fetch_with_retry(api_obj, url, params=None, headers=None, timeout=30, 
                     ):  # Don't log 404 body as it's usually large error pages
                         try:
                             error_text = await response.text()
-                            _LOGGER.debug(f"Error response (first 500 chars): {error_text[:500]}")
+                            _LOGGER.debug(
+                                f"Error response (first 500 chars): {error_text[:500]}"
+                            )
                         except:
                             _LOGGER.debug("Could not read error response body")
 
@@ -100,7 +108,9 @@ async def fetch_with_retry(api_obj, url, params=None, headers=None, timeout=30, 
 
                 # Only log a snippet to avoid overwhelming logs
                 if len(response_text) > 1000:
-                    _LOGGER.debug(f"Raw API response (first 1000 chars): {response_text[:1000]}...")
+                    _LOGGER.debug(
+                        f"Raw API response (first 1000 chars): {response_text[:1000]}..."
+                    )
                 else:
                     _LOGGER.debug(f"Raw API response: {response_text}")
 
@@ -117,7 +127,9 @@ async def fetch_with_retry(api_obj, url, params=None, headers=None, timeout=30, 
                     return response_text
 
         except asyncio.TimeoutError:
-            _LOGGER.error(f"Timeout fetching from URL (attempt {attempt+1}/{max_retries})")
+            _LOGGER.error(
+                f"Timeout fetching from URL (attempt {attempt+1}/{max_retries})"
+            )
             if attempt < max_retries - 1:
                 retry_delay = 2**attempt  # Exponential backoff
                 await asyncio.sleep(retry_delay)

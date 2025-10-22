@@ -109,7 +109,9 @@ class TimezoneConverter:
 
                 # Handle potential DST fallback duplicates
                 if target_key in normalized_prices:
-                    _LOGGER.debug(f"Duplicate interval found: {target_key} - handling DST fallback")
+                    _LOGGER.debug(
+                        f"Duplicate interval found: {target_key} - handling DST fallback"
+                    )
                     # In case of DST fallback, use the second occurrence
                     # This aligns with how most energy markets handle the extra hour
 

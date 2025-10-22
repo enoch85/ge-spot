@@ -8,8 +8,7 @@ class Defaults:
     """Default configuration values."""
 
     NAME = "Electricity Price"
-    VAT = 0.0
-    VAT_RATE = 0  # Default VAT rate in percentage
+    VAT = 0.0  # Default VAT rate as decimal (0.25 = 25%)
     INCLUDE_VAT = False  # Whether to include VAT by default
     ADDITIONAL_TARIFF = 0.0  # Default additional tariff (transfer fees, etc.) per kWh
     ENERGY_TAX = 0.0  # Default energy tax per kWh (applied before VAT)
@@ -23,7 +22,9 @@ class Defaults:
     CACHE_TTL = (
         60 * 24 * 3
     )  # minutes (3 days = 4320 minutes) - Electricity prices valid for 24-72 hours
-    CACHE_MAX_ENTRIES = 3500  # Max cache entries (3 days × 24h × 4 intervals × ~12 areas = ~3500)
+    CACHE_MAX_ENTRIES = (
+        3500  # Max cache entries (3 days × 24h × 4 intervals × ~12 areas = ~3500)
+    )
     # Disk persistence disabled by default to avoid blocking I/O warnings in HA event loop
     # Cache remains in-memory only (cleared on reload). Can be enabled via config if needed.
     # See: https://developers.home-assistant.io/docs/asyncio_blocking_operations/#open

@@ -166,7 +166,9 @@ class CurrencyConverter:
                     e,
                     exc_info=True,
                 )
-                converted_prices[interval_key] = None  # Mark as None on conversion error
+                converted_prices[interval_key] = (
+                    None  # Mark as None on conversion error
+                )
 
         _LOGGER.debug(
             "Conversion complete. Example converted price for first interval: %s",

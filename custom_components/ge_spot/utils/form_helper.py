@@ -24,7 +24,9 @@ class FormHelper:
             A TextSelector for API keys
         """
         return selector.TextSelector(
-            selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT, autocomplete="off")
+            selector.TextSelectorConfig(
+                type=selector.TextSelectorType.TEXT, autocomplete="off"
+            )
         )
 
     @staticmethod
@@ -58,7 +60,8 @@ class FormHelper:
         return selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
-                    {"value": key, "label": value} for key, value in DisplayUnit.OPTIONS.items()
+                    {"value": key, "label": value}
+                    for key, value in DisplayUnit.OPTIONS.items()
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )

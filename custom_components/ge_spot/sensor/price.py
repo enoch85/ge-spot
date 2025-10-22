@@ -94,7 +94,13 @@ class ExtremaPriceSensor(PriceValueSensor):
     """Base class for min/max price sensors."""
 
     def __init__(
-        self, coordinator, config_data, sensor_type, name_suffix, day_offset=0, extrema_type="min"
+        self,
+        coordinator,
+        config_data,
+        sensor_type,
+        name_suffix,
+        day_offset=0,
+        extrema_type="min",
     ):
         """Initialize the extrema price sensor."""
         self._day_offset = day_offset
@@ -138,7 +144,9 @@ class ExtremaPriceSensor(PriceValueSensor):
                     try:
                         dt = datetime.fromisoformat(timestamp)
                         # Use HA's datetime format
-                        formatted_time = dt_util.as_local(dt).isoformat(timespec="minutes")
+                        formatted_time = dt_util.as_local(dt).isoformat(
+                            timespec="minutes"
+                        )
                         return {"timestamp": formatted_time, "value": price_value}
                     except (ValueError, TypeError):
                         return {"timestamp": timestamp, "value": price_value}
@@ -147,7 +155,12 @@ class ExtremaPriceSensor(PriceValueSensor):
 
         # Initialize parent class
         super().__init__(
-            coordinator, config_data, sensor_type, name_suffix, extract_value, get_timestamp
+            coordinator,
+            config_data,
+            sensor_type,
+            name_suffix,
+            extract_value,
+            get_timestamp,
         )
 
 
@@ -222,7 +235,9 @@ class PriceDifferenceSensor(PriceValueSensor):
     device_class = SensorDeviceClass.MONETARY
     state_class = None
 
-    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value1_key, value2_key):
+    def __init__(
+        self, coordinator, config_data, sensor_type, name_suffix, value1_key, value2_key
+    ):
         """Initialize the price difference sensor."""
 
         # Create value extraction function
@@ -242,7 +257,9 @@ class PriceDifferenceSensor(PriceValueSensor):
             if value2_key == "average":
                 # Get from statistics
                 stats = data.get("statistics", {})
-                value2 = stats.get("avg")  # Fixed: use 'avg' to match PriceStatistics dataclass
+                value2 = stats.get(
+                    "avg"
+                )  # Fixed: use 'avg' to match PriceStatistics dataclass
                 _LOGGER.debug(
                     f"PriceDifferenceSensor {self.entity_id}: Reading average from statistics: {value2}"
                 )
@@ -284,7 +301,13 @@ class PricePercentSensor(PriceValueSensor):
     state_class = None
 
     def __init__(
-        self, coordinator, config_data, sensor_type, name_suffix, value_key, reference_key
+        self,
+        coordinator,
+        config_data,
+        sensor_type,
+        name_suffix,
+        value_key,
+        reference_key,
     ):
         """Initialize the price percentage sensor."""
 
@@ -303,7 +326,9 @@ class PricePercentSensor(PriceValueSensor):
             if reference_key == "average":
                 # Get from statistics
                 stats = data.get("statistics", {})
-                reference = stats.get("avg")  # Fixed: use 'avg' to match PriceStatistics dataclass
+                reference = stats.get(
+                    "avg"
+                )  # Fixed: use 'avg' to match PriceStatistics dataclass
                 _LOGGER.debug(
                     f"PricePercentSensor {self.entity_id}: Reading average from statistics: {reference}"
                 )
@@ -341,3 +366,151 @@ class PricePercentSensor(PriceValueSensor):
     def native_unit_of_measurement(self):
         """Return the unit of measurement."""
         return "%"
+
+
+class HourlyAverageSensor(PriceValueSensor):
+    """Sensor that calculates hourly average prices from 15-minute intervals."""
+
+    device_class = SensorDeviceClass.MONETARY
+    state_class = None
+
+    def __init__(
+        self, coordinator, config_data, sensor_type, name_suffix, day_offset=0
+    ):
+        """Initialize the hourly average price sensor.
+
+        Args:
+            coordinator: Data coordinator
+            config_data: Configuration data
+            sensor_type: Type identifier for the sensor
+            name_suffix: Display name suffix
+            day_offset: 0 for today, 1 for tomorrow
+        """
+        self._day_offset = day_offset
+
+        # Create value extraction function
+        def extract_value(data):
+            """Extract current hour's average price."""
+            hourly_prices = self._calculate_hourly_averages(data)
+            if not hourly_prices:
+                return None
+
+            # Get current hour (or first hour of tomorrow for tomorrow sensor)
+            if self._day_offset == 0:
+                # For today: get current hour
+                now = dt_util.now()
+                current_hour = f"{now.hour:02d}:00"
+                return hourly_prices.get(current_hour)
+            else:
+                # For tomorrow: return first hour's average
+                sorted_hours = sorted(hourly_prices.keys())
+                if sorted_hours:
+                    return hourly_prices[sorted_hours[0]]
+                return None
+
+        # Create additional attributes function
+        def get_hourly_attrs(data):
+            """Get hourly price attributes."""
+            hourly_prices = self._calculate_hourly_averages(data)
+            if not hourly_prices:
+                return {}
+
+            # Get target timezone
+            target_tz = dt_util.get_default_time_zone()
+
+            # Convert to list format with datetime objects
+            from datetime import timedelta
+
+            now = dt_util.now().astimezone(target_tz)
+            if self._day_offset == 0:
+                base_date = now.date()
+            else:
+                base_date = (now + timedelta(days=1)).date()
+
+            hourly_list = []
+            for hhmm_key in sorted(hourly_prices.keys()):
+                try:
+                    hour = int(hhmm_key.split(":")[0])
+                    dt_obj = datetime(
+                        base_date.year,
+                        base_date.month,
+                        base_date.day,
+                        hour,
+                        0,
+                        0,
+                        tzinfo=target_tz,
+                    )
+                    price = hourly_prices[hhmm_key]
+                    hourly_list.append(
+                        {
+                            "time": dt_obj,
+                            "value": round(float(price), 4),
+                        }
+                    )
+                except (ValueError, AttributeError) as e:
+                    _LOGGER.warning(
+                        f"Failed to convert hourly interval {hhmm_key}: {e}"
+                    )
+                    continue
+
+            return {"hourly_prices": hourly_list}
+
+        # Initialize parent class
+        super().__init__(
+            coordinator,
+            config_data,
+            sensor_type,
+            name_suffix,
+            extract_value,
+            get_hourly_attrs,
+        )
+
+    def _calculate_hourly_averages(self, data: Dict[str, Any]) -> Dict[str, float]:
+        """Calculate hourly averages from 15-minute interval prices.
+
+        Args:
+            data: Coordinator data containing interval prices
+
+        Returns:
+            Dictionary mapping hour (HH:00) to average price
+        """
+        # Get the appropriate interval prices based on day offset
+        if self._day_offset == 0:
+            interval_prices = data.get("today_interval_prices", {})
+        else:
+            interval_prices = data.get("tomorrow_interval_prices", {})
+
+        if not interval_prices:
+            return {}
+
+        # Group intervals by hour and calculate averages
+        hourly_data = {}
+        for interval_key, price in interval_prices.items():
+            try:
+                # Extract hour from HH:MM format
+                hour = interval_key.split(":")[0]
+                hour_key = f"{hour}:00"
+
+                # Initialize list for this hour if needed
+                if hour_key not in hourly_data:
+                    hourly_data[hour_key] = []
+
+                # Add price to this hour's list
+                hourly_data[hour_key].append(float(price))
+            except (ValueError, AttributeError) as e:
+                _LOGGER.warning(f"Failed to process interval {interval_key}: {e}")
+                continue
+
+        # Calculate averages
+        hourly_averages = {}
+        for hour_key, prices in hourly_data.items():
+            if prices:
+                hourly_averages[hour_key] = sum(prices) / len(prices)
+
+        return hourly_averages
+
+
+class TomorrowHourlyAverageSensor(TomorrowSensorMixin, HourlyAverageSensor):
+    """Hourly average price sensor for tomorrow with proper availability."""
+
+    pass

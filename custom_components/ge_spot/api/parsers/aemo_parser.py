@@ -52,7 +52,9 @@ class AemoParser(BasePriceParser):
         Returns:
             Dict with interval_raw (ISO timestamps), currency, timezone, source, etc.
         """
-        _LOGGER.debug(f"[AemoParser] Starting parse. Input data keys: {list(data.keys())}")
+        _LOGGER.debug(
+            f"[AemoParser] Starting parse. Input data keys: {list(data.keys())}"
+        )
 
         # Extract the CSV content from raw_data
         csv_content = data.get("csv_content")
@@ -81,7 +83,9 @@ class AemoParser(BasePriceParser):
                 _LOGGER.warning(f"[AemoParser] No price data found for {area}")
                 return self._create_empty_result(data, source_timezone, source_currency)
 
-            _LOGGER.debug(f"[AemoParser] Parsed {len(prices_30min)} 30-minute trading intervals")
+            _LOGGER.debug(
+                f"[AemoParser] Parsed {len(prices_30min)} 30-minute trading intervals"
+            )
 
             # Convert to interval_raw format (ISO timestamps)
             interval_raw = {}
@@ -110,7 +114,9 @@ class AemoParser(BasePriceParser):
                 source_prices=interval_raw,
                 source_interval_minutes=30,  # AEMO uses 30-min trading intervals
             )
-            _LOGGER.debug(f"[AemoParser] After expansion: {len(interval_raw)} 15-minute intervals")
+            _LOGGER.debug(
+                f"[AemoParser] After expansion: {len(interval_raw)} 15-minute intervals"
+            )
 
             # Construct result
             result = {
@@ -134,7 +140,9 @@ class AemoParser(BasePriceParser):
             _LOGGER.error(f"[AemoParser] Error parsing NEMWEB CSV: {e}", exc_info=True)
             return self._create_empty_result(data, source_timezone, source_currency)
 
-    def _parse_predispatch_csv(self, csv_content: str, target_region: str) -> List[Dict[str, Any]]:
+    def _parse_predispatch_csv(
+        self, csv_content: str, target_region: str
+    ) -> List[Dict[str, Any]]:
         """Parse AEMO NEMWEB Pre-dispatch CSV format.
 
         AEMO CSV format uses line type indicators:

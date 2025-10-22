@@ -20,18 +20,21 @@ import sys
 import logging
 
 # Add the project root to the path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+)
 
 from custom_components.ge_spot.api.entsoe import EntsoeAPI
 from custom_components.ge_spot.const.areas import AreaMapping
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
+
 
 async def main():
     # Get API key from environment variable or prompt
-    api_key = os.environ.get('ENTSOE_API_KEY')
+    api_key = os.environ.get("ENTSOE_API_KEY")
     if not api_key:
         api_key = input("Enter your ENTSOE API key: ")
         if not api_key:
@@ -55,22 +58,22 @@ async def main():
         # Fetch raw data
         logger.info("Fetching data from ENTSOE API...")
         raw_data = await api.fetch_raw_data(entsoe_code)
-        
+
         # Check if fetch failed (returns None or error dict)
         if raw_data is None:
             logger.error("ENTSOE API returned None (fetch failed)")
             return 1
-        
+
         if isinstance(raw_data, dict) and "error" in raw_data:
             logger.error(f"ENTSOE API returned error: {raw_data.get('error')}")
             return 1
-        
+
         if not isinstance(raw_data, dict):
             logger.error(f"ENTSOE API returned unexpected type: {type(raw_data)}")
             return 1
-            
+
         logger.info("Successfully fetched raw data")
-        
+
         # Parse data using the parser directly
         logger.info("Parsing raw data...")
         parsed_data = api.parser.parse(raw_data)
@@ -95,7 +98,7 @@ async def main():
         interval_raw = parsed_data.get("interval_raw", {})
         for timestamp, price in sorted(interval_raw.items())[:20]:  # Show first 20
             logger.info(f"{timestamp:<25} | {price:<10.5f}")
-        
+
         total_intervals = len(interval_raw)
         logger.info(f"\n... (showing 20 of {total_intervals} total intervals)")
 
@@ -105,6 +108,7 @@ async def main():
     except Exception as e:
         logger.error(f"Error: {str(e)}")
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(asyncio.run(main()))

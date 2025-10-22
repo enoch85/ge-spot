@@ -31,7 +31,9 @@ class GSpotOptionsFlow(OptionsFlow):
         self._errors = {}
 
         try:
-            self._supported_sources = get_sources_for_region(self._area) if self._area else []
+            self._supported_sources = (
+                get_sources_for_region(self._area) if self._area else []
+            )
         except Exception as e:
             _LOGGER.error(f"Error getting sources for {self._area}: {e}")
             self._supported_sources = []
@@ -58,7 +60,9 @@ class GSpotOptionsFlow(OptionsFlow):
                         # Only validate and save if key has changed
                         if api_key != self._data.get(Config.API_KEY, ""):
                             # Validate key directly using entsoe module
-                            valid_key = await entsoe.validate_api_key(api_key, self._area)
+                            valid_key = await entsoe.validate_api_key(
+                                api_key, self._area
+                            )
 
                             if valid_key:
                                 # Update self._data so subsequent updates see it
@@ -74,7 +78,9 @@ class GSpotOptionsFlow(OptionsFlow):
                                 updated_data = dict(self._data)
                                 updated_data[Config.API_KEY] = api_key
                                 self.hass.config_entries.async_update_entry(
-                                    self.hass.config_entries.async_get_entry(self.entry_id),
+                                    self.hass.config_entries.async_get_entry(
+                                        self.entry_id
+                                    ),
                                     data=updated_data,
                                 )
 
@@ -114,7 +120,9 @@ class GSpotOptionsFlow(OptionsFlow):
                 data_changed = False
 
                 if Config.SOURCE_PRIORITY in user_input:
-                    updated_data[Config.SOURCE_PRIORITY] = user_input[Config.SOURCE_PRIORITY]
+                    updated_data[Config.SOURCE_PRIORITY] = user_input[
+                        Config.SOURCE_PRIORITY
+                    ]
                     user_input.pop(Config.SOURCE_PRIORITY)
                     data_changed = True
 
@@ -122,7 +130,9 @@ class GSpotOptionsFlow(OptionsFlow):
                     _LOGGER.debug(
                         f"Saving timezone reference setting: {user_input[Config.TIMEZONE_REFERENCE]}"
                     )
-                    updated_data[Config.TIMEZONE_REFERENCE] = user_input[Config.TIMEZONE_REFERENCE]
+                    updated_data[Config.TIMEZONE_REFERENCE] = user_input[
+                        Config.TIMEZONE_REFERENCE
+                    ]
                     # Keep in options as well
                     data_changed = True
 
@@ -230,7 +240,8 @@ class GSpotOptionsFlow(OptionsFlow):
                             vol.Coerce(float), vol.Range(min=0, max=100)
                         ),
                         vol.Optional(
-                            Config.TIMEZONE_REFERENCE, default=Defaults.TIMEZONE_REFERENCE
+                            Config.TIMEZONE_REFERENCE,
+                            default=Defaults.TIMEZONE_REFERENCE,
                         ): vol.In(
                             {
                                 TimezoneReference.HOME_ASSISTANT: TimezoneReference.OPTIONS[

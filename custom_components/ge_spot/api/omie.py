@@ -85,17 +85,23 @@ class OmieAPI(BasePriceAPI):
         if (
             not response_text
             or isinstance(response_text, str)
-            and ("<html" in response_text.lower() or "<!doctype" in response_text.lower())
+            and (
+                "<html" in response_text.lower() or "<!doctype" in response_text.lower()
+            )
         ):
             _LOGGER.debug(
                 f"[OmieAPI] No valid data or HTML response from OMIE for {day}_{month}_{year}."
             )
             return None
 
-        _LOGGER.info(f"[OmieAPI] Successfully fetched OMIE data for {day}_{month}_{year}")
+        _LOGGER.info(
+            f"[OmieAPI] Successfully fetched OMIE data for {day}_{month}_{year}"
+        )
         return response_text
 
-    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Optional[Dict[str, Any]]:
+    async def fetch_raw_data(
+        self, area: str, session=None, **kwargs
+    ) -> Optional[Dict[str, Any]]:
         """Fetch raw price data for the given area using ErrorHandler."""
         if not self.area:
             self.area = area
@@ -108,7 +114,11 @@ class OmieAPI(BasePriceAPI):
                 area=area,
                 reference_time=kwargs.get("reference_time"),
             )
-            if not data or not isinstance(data, dict) or not data.get("raw_data", {}).get("today"):
+            if (
+                not data
+                or not isinstance(data, dict)
+                or not data.get("raw_data", {}).get("today")
+            ):
                 _LOGGER.error(
                     f"OMIE API fetch ultimately failed for area {area} after retries or returned invalid data."
                 )

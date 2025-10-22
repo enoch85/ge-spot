@@ -27,7 +27,9 @@ def get_user_schema(available_regions):
                 selector.SelectSelectorConfig(
                     options=[
                         {"value": area, "label": name}
-                        for area, name in sorted(available_regions.items(), key=lambda x: x[1])
+                        for area, name in sorted(
+                            available_regions.items(), key=lambda x: x[1]
+                        )
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
@@ -59,10 +61,13 @@ def get_source_priority_schema(supported_sources):
                 vol.Range(min=0.0, max=100.0),
             ),
             # Make DISPLAY_UNIT required
-            vol.Required(Config.DISPLAY_UNIT, default=DisplayUnit.DECIMAL): selector.SelectSelector(
+            vol.Required(
+                Config.DISPLAY_UNIT, default=DisplayUnit.DECIMAL
+            ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
-                        {"value": key, "label": value} for key, value in DisplayUnit.OPTIONS.items()
+                        {"value": key, "label": value}
+                        for key, value in DisplayUnit.OPTIONS.items()
                     ],
                     mode=selector.SelectSelectorMode.LIST,
                 )
@@ -90,7 +95,9 @@ def get_api_keys_schema(area, existing_api_key=None):
     if has_existing:
         # If we have an existing key, make it optional
         field = vol.Optional(
-            f"{Source.ENTSOE}_api_key", description=description, default=existing_api_key
+            f"{Source.ENTSOE}_api_key",
+            description=description,
+            default=existing_api_key,
         )
     else:
         # For new setups, make it required
@@ -124,7 +131,7 @@ def get_options_schema(defaults, supported_sources, area):
     # Final Price = (Spot Price + Additional Tariff + Energy Tax) × (1 + VAT%)
     # VAT is applied to the total of all costs, as per standard EU practice.
     schema = {
-        vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0) * 100): vol.All(
+        vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0)): vol.All(
             vol.Coerce(float),
             vol.Range(min=0.0, max=100.0),
         ),
@@ -153,11 +160,13 @@ def get_options_schema(defaults, supported_sources, area):
             )
         ),
         vol.Optional(
-            Config.DISPLAY_UNIT, default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
+            Config.DISPLAY_UNIT,
+            default=defaults.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT),
         ): selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
-                    {"value": key, "label": value} for key, value in DisplayUnit.OPTIONS.items()
+                    {"value": key, "label": value}
+                    for key, value in DisplayUnit.OPTIONS.items()
                 ],
                 mode=selector.SelectSelectorMode.LIST,
             )
@@ -214,7 +223,9 @@ def get_options_schema(defaults, supported_sources, area):
                 Config.CONF_STROMLIGNING_SUPPLIER,
                 default=defaults.get(Config.CONF_STROMLIGNING_SUPPLIER, ""),
             )
-        ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
+        ] = selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
+        )
 
     # Add Clear Cache button
     schema[vol.Optional("clear_cache", default=False)] = selector.BooleanSelector(
@@ -228,13 +239,14 @@ def get_default_values(options, data):
     """Get default values from options and data."""
     try:
         defaults = {}
-        # VAT - convert from decimal to percentage
+        # VAT - convert from decimal to percentage for display
         vat_decimal = options.get(Config.VAT, data.get(Config.VAT, Defaults.VAT))
-        defaults[Config.VAT] = vat_decimal
+        defaults[Config.VAT] = vat_decimal * 100  # Convert to percentage for UI display
 
         # Additional tariff
         defaults[Config.ADDITIONAL_TARIFF] = options.get(
-            Config.ADDITIONAL_TARIFF, data.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF)
+            Config.ADDITIONAL_TARIFF,
+            data.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF),
         )
 
         # Energy tax
@@ -261,7 +273,9 @@ def get_default_values(options, data):
 
         # API key (if present)
         if Config.API_KEY in options or Config.API_KEY in data:
-            defaults[Config.API_KEY] = options.get(Config.API_KEY, data.get(Config.API_KEY, ""))
+            defaults[Config.API_KEY] = options.get(
+                Config.API_KEY, data.get(Config.API_KEY, "")
+            )
 
         # Stromligning Supplier (from data, not options)
         if Config.CONF_STROMLIGNING_SUPPLIER in data:

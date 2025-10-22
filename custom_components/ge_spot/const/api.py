@@ -48,10 +48,14 @@ class Aemo:
     REGIONS = ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
 
     # AEMO Visualization API (real-time current price only)
-    SUMMARY_URL = "https://visualisations.aemo.com.au/aemo/apps/api/report/ELEC_NEM_SUMMARY"
+    SUMMARY_URL = (
+        "https://visualisations.aemo.com.au/aemo/apps/api/report/ELEC_NEM_SUMMARY"
+    )
 
     # NEMWEB Pre-dispatch Reports (forecast data with 40+ hour horizon)
-    NEMWEB_PREDISPATCH_URL = "http://www.nemweb.com.au/Reports/Current/PredispatchIS_Reports/"
+    NEMWEB_PREDISPATCH_URL = (
+        "http://www.nemweb.com.au/Reports/Current/PredispatchIS_Reports/"
+    )
 
     # NEMWEB file patterns
     PREDISPATCH_FILE_PATTERN = r"PUBLIC_PREDISPATCHIS_(\d{12})_\d{14}\.zip"
@@ -87,7 +91,10 @@ class ComEd:
     AREAS = ["5minutefeed", "currenthouraverage"]
 
     # Endpoint mapping
-    ENDPOINTS = {"5minutefeed": "5minutefeed", "currenthouraverage": "currenthouraverage"}
+    ENDPOINTS = {
+        "5minutefeed": "5minutefeed",
+        "currenthouraverage": "currenthouraverage",
+    }
 
     # Base URL
     BASE_URL = "https://hourlypricing.comed.com/api"

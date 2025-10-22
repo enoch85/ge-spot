@@ -26,7 +26,10 @@ class NordpoolAPI(BasePriceAPI):
     """Nordpool API implementation."""
 
     def __init__(
-        self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        session=None,
+        timezone_service=None,
     ):
         """Initialize the API.
 
@@ -76,7 +79,11 @@ class NordpoolAPI(BasePriceAPI):
                 reference_time=kwargs.get("reference_time"),
             )
             # Check if 'today' data exists within 'raw_data'
-            if not data or not isinstance(data, dict) or not data.get("raw_data", {}).get("today"):
+            if (
+                not data
+                or not isinstance(data, dict)
+                or not data.get("raw_data", {}).get("today")
+            ):
                 _LOGGER.error(
                     f"Nordpool API returned empty or invalid data for area {area}: {data}"
                 )
@@ -107,7 +114,9 @@ class NordpoolAPI(BasePriceAPI):
         # Map from area code to delivery area
         delivery_area = AreaMapping.NORDPOOL_DELIVERY.get(area, area)
 
-        _LOGGER.debug(f"Fetching Nordpool data for area: {area}, delivery area: {delivery_area}")
+        _LOGGER.debug(
+            f"Fetching Nordpool data for area: {area}, delivery area: {delivery_area}"
+        )
 
         # Generate date ranges to try
         # For Nordpool, we need to handle today and tomorrow separately
@@ -142,7 +151,9 @@ class NordpoolAPI(BasePriceAPI):
 
         if should_fetch_tomorrow:
             # Always compute tomorrow as reference_time + 1 day
-            tomorrow = (reference_time + timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
+            tomorrow = (reference_time + timedelta(days=1)).strftime(
+                TimeFormat.DATE_ONLY
+            )
             params_tomorrow = {
                 "currency": Currency.EUR,
                 "date": tomorrow,
@@ -170,7 +181,9 @@ class NordpoolAPI(BasePriceAPI):
             # If it's past the failure check time and tomorrow's data is still not available,
             # treat this fetch attempt as a failure to trigger fallback.
             # However, if we got HTTP 204, this is "data not ready" not "API failed"
-            if now_cet.hour >= failure_check_hour_cet and not is_data_available(tomorrow_data):
+            if now_cet.hour >= failure_check_hour_cet and not is_data_available(
+                tomorrow_data
+            ):
                 # Check if it's a "not ready yet" (204) vs actual failure
                 if (
                     tomorrow_data

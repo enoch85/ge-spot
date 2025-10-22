@@ -25,7 +25,9 @@ class TimezoneProvider:
         self.config = config or {}
 
         # Configuration
-        self.local_timezone = self.config.get(Config.LOCAL_TIMEZONE, Defaults.LOCAL_TIMEZONE)
+        self.local_timezone = self.config.get(
+            Config.LOCAL_TIMEZONE, Defaults.LOCAL_TIMEZONE
+        )
 
         # Cache for timezone objects
         self._timezone_cache: Dict[str, tzinfo] = {}
@@ -79,7 +81,9 @@ class TimezoneProvider:
         # Get timezone object
         return self.get_timezone(timezone_id) or zoneinfo.ZoneInfo("UTC")
 
-    def localize_datetime(self, dt: datetime, timezone_id: Optional[str] = None) -> datetime:
+    def localize_datetime(
+        self, dt: datetime, timezone_id: Optional[str] = None
+    ) -> datetime:
         """Localize a datetime to a timezone.
 
         Args:
@@ -90,7 +94,9 @@ class TimezoneProvider:
             Localized datetime
         """
         # Get timezone
-        tz = self.get_timezone(timezone_id) if timezone_id else self.get_local_timezone()
+        tz = (
+            self.get_timezone(timezone_id) if timezone_id else self.get_local_timezone()
+        )
 
         # Check if datetime is already localized
         if dt.tzinfo is not None:
@@ -212,7 +218,11 @@ class TimezoneProvider:
                 dt = datetime.strptime(datetime_str, fmt)
 
                 # Localize to specified timezone or local timezone
-                tz = self.get_timezone(timezone_id) if timezone_id else self.get_local_timezone()
+                tz = (
+                    self.get_timezone(timezone_id)
+                    if timezone_id
+                    else self.get_local_timezone()
+                )
                 dt = dt.replace(tzinfo=tz)
 
                 return dt
@@ -239,7 +249,11 @@ class TimezoneProvider:
                 dt = datetime(year, month, day, hour, minute, second)
 
                 # Localize to specified timezone or local timezone
-                tz = self.get_timezone(timezone_id) if timezone_id else self.get_local_timezone()
+                tz = (
+                    self.get_timezone(timezone_id)
+                    if timezone_id
+                    else self.get_local_timezone()
+                )
                 dt = dt.replace(tzinfo=tz)
 
                 return dt
@@ -259,7 +273,9 @@ class TimezoneProvider:
             Start of current hour
         """
         # Get timezone
-        tz = self.get_timezone(timezone_id) if timezone_id else self.get_local_timezone()
+        tz = (
+            self.get_timezone(timezone_id) if timezone_id else self.get_local_timezone()
+        )
 
         # Get current time in timezone
         now = datetime.now(tz)
@@ -320,7 +336,8 @@ class TimezoneProvider:
         interval_minutes = TimeInterval.get_interval_minutes()
         intervals_per_day = TimeInterval.get_intervals_per_day()
         return [
-            day_start + timedelta(minutes=i * interval_minutes) for i in range(intervals_per_day)
+            day_start + timedelta(minutes=i * interval_minutes)
+            for i in range(intervals_per_day)
         ]
 
     def is_dst_transition_day(self, dt: datetime) -> bool:

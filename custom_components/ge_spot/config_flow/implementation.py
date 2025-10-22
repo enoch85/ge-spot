@@ -47,7 +47,9 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
         self._supported_sources = []
         self._errors = {}
         self._requires_api_key = False  # Track if API key is needed
-        self._requires_stromligning_config = False  # Track if Stromligning config is needed
+        self._requires_stromligning_config = (
+            False  # Track if Stromligning config is needed
+        )
 
     async def async_step_user(self, user_input=None) -> FlowResult:
         """Handle a flow initialized by the user."""
@@ -66,7 +68,9 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 # Get list of sources that support this area
                 try:
                     self._supported_sources = get_sources_for_region(area)
-                    _LOGGER.info(f"Supported sources for {area}: {self._supported_sources}")
+                    _LOGGER.info(
+                        f"Supported sources for {area}: {self._supported_sources}"
+                    )
                 except Exception as e:
                     _LOGGER.error(f"Error getting sources for {area}: {e}")
                     self._errors[Config.AREA] = "error_sources_for_region"
@@ -136,7 +140,9 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                         self._data[key] = value
 
                 # Log the display unit being saved
-                _LOGGER.debug(f"Saving display_unit: {self._data.get(Config.DISPLAY_UNIT)}")
+                _LOGGER.debug(
+                    f"Saving display_unit: {self._data.get(Config.DISPLAY_UNIT)}"
+                )
 
                 selected_sources = self._data.get(Config.SOURCE_PRIORITY, [])
 
@@ -146,7 +152,9 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._requires_api_key = Source.ENTSOE in selected_sources
 
                 # Check if Stromligning requires config
-                self._requires_stromligning_config = Source.STROMLIGNING in selected_sources
+                self._requires_stromligning_config = (
+                    Source.STROMLIGNING in selected_sources
+                )
 
                 # Determine next step
                 if self._requires_api_key:
@@ -223,7 +231,9 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                     return self._create_entry()
                 else:
                     # Handle case where supplier ID is required but not provided
-                    self._errors[Config.CONF_STROMLIGNING_SUPPLIER] = "supplier_id_required"
+                    self._errors[Config.CONF_STROMLIGNING_SUPPLIER] = (
+                        "supplier_id_required"
+                    )
                     return await self._show_stromligning_config_form()
 
             except Exception as e:
@@ -256,7 +266,10 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Ensure that any supplier_id settings are properly saved
         # This is crucial for Stromligning operation
-        if self._requires_stromligning_config and Config.CONF_STROMLIGNING_SUPPLIER in self._data:
+        if (
+            self._requires_stromligning_config
+            and Config.CONF_STROMLIGNING_SUPPLIER in self._data
+        ):
             _LOGGER.debug(
                 f"Saving Stromligning supplier ID: {self._data[Config.CONF_STROMLIGNING_SUPPLIER]}"
             )

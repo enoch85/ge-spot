@@ -32,12 +32,16 @@ class NordpoolParser(BasePriceParser):
         which includes keys like 'interval_raw', 'timezone', 'currency', 'raw_data', etc.
         The actual Nordpool JSON response is expected under the 'raw_data' key.
         """
-        _LOGGER.debug(f"[NordpoolParser] Starting parse. Input data keys: {list(data.keys())}")
+        _LOGGER.debug(
+            f"[NordpoolParser] Starting parse. Input data keys: {list(data.keys())}"
+        )
 
         # The actual Nordpool JSON response is nested under 'raw_data'
         raw_api_response = data.get("raw_data")
         if not raw_api_response or not isinstance(raw_api_response, dict):
-            _LOGGER.warning("[NordpoolParser] 'raw_data' key missing or not a dictionary in input.")
+            _LOGGER.warning(
+                "[NordpoolParser] 'raw_data' key missing or not a dictionary in input."
+            )
             return self._create_empty_result(data)
 
         # Extract metadata provided by the API adapter
@@ -58,7 +62,9 @@ class NordpoolParser(BasePriceParser):
             days_to_process.append(raw_api_response["tomorrow"])
 
         # If not today/tomorrow structure, maybe it's the direct list structure?
-        if not days_to_process and isinstance(raw_api_response.get("multiAreaEntries"), list):
+        if not days_to_process and isinstance(
+            raw_api_response.get("multiAreaEntries"), list
+        ):
             days_to_process.append(raw_api_response)
 
         if not days_to_process:
@@ -67,7 +73,9 @@ class NordpoolParser(BasePriceParser):
             )
             return self._create_empty_result(data, source_timezone, source_currency)
 
-        _LOGGER.debug(f"[NordpoolParser] Processing {len(days_to_process)} day(s) of data")
+        _LOGGER.debug(
+            f"[NordpoolParser] Processing {len(days_to_process)} day(s) of data"
+        )
 
         for i, day_data in enumerate(days_to_process):
             multi_area_entries = day_data.get("multiAreaEntries")
@@ -121,13 +129,18 @@ class NordpoolParser(BasePriceParser):
 
         # Validate the result before returning
         if not self.validate(result):
-            _LOGGER.warning(f"[NordpoolParser] Validation failed for parsed data. Result: {result}")
+            _LOGGER.warning(
+                f"[NordpoolParser] Validation failed for parsed data. Result: {result}"
+            )
             return self._create_empty_result(data, source_timezone, source_currency)
 
         return result
 
     def _create_empty_result(
-        self, original_data: Dict[str, Any], timezone: str = "UTC", currency: str = Currency.EUR
+        self,
+        original_data: Dict[str, Any],
+        timezone: str = "UTC",
+        currency: str = Currency.EUR,
     ) -> Dict[str, Any]:
         """Helper to create a standard empty result structure."""
         return {
@@ -144,7 +157,9 @@ class NordpoolParser(BasePriceParser):
         parsed_data = self.parse({"raw_data": data, "area": area})  # Simulate input
         return parsed_data.get("interval_raw", {})
 
-    def parse_tomorrow_prices(self, data: Dict[str, Any], area: str) -> Dict[str, float]:
+    def parse_tomorrow_prices(
+        self, data: Dict[str, Any], area: str
+    ) -> Dict[str, float]:
         """Parse tomorrow's interval prices from Nordpool data."""
         _LOGGER.warning("[NordpoolParser] parse_tomorrow_prices might be outdated.")
         parsed_data = self.parse({"raw_data": data, "area": area})  # Simulate input
@@ -153,7 +168,9 @@ class NordpoolParser(BasePriceParser):
     def validate(self, data: Dict[str, Any]) -> bool:
         """Validate the structure and content of the parsed data."""
         # Add detailed log
-        _LOGGER.debug(f"[{self.__class__.__name__}] Starting validation for data: {data}")
+        _LOGGER.debug(
+            f"[{self.__class__.__name__}] Starting validation for data: {data}"
+        )
 
         if not isinstance(data, dict):
             _LOGGER.warning(
@@ -175,7 +192,9 @@ class NordpoolParser(BasePriceParser):
                 f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'timezone'"
             )
             return False
-        if "source_unit" not in data or not data["source_unit"]:  # Added validation for source_unit
+        if (
+            "source_unit" not in data or not data["source_unit"]
+        ):  # Added validation for source_unit
             _LOGGER.warning(
                 f"[{self.__class__.__name__}] Validation failed: Missing or invalid 'source_unit'"
             )
@@ -201,5 +220,7 @@ class NordpoolParser(BasePriceParser):
                     f"[{self.__class__.__name__}] Validation failed: Non-numeric price value '{value}' for key '{key}' in 'interval_raw'"
                 )
                 return False
-        _LOGGER.debug(f"[{self.__class__.__name__}] Validation successful.")  # Add success log
+        _LOGGER.debug(
+            f"[{self.__class__.__name__}] Validation successful."
+        )  # Add success log
         return True
