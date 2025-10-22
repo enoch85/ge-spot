@@ -89,13 +89,13 @@ def test_parsers():
 I,PREDISPATCH,REGION_PRICES,1,PREDISPATCH_RUN_DATETIME,REGIONID,PERIODID,INTERVENTION,DATETIME,RRP,EEP,RAISE6SECRRP
 D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,1,0,2025/10/01 00:00:00,100.0,100.0,0.0
 D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,2,0,2025/10/01 00:30:00,102.0,102.0,0.0"""
-        
+
         mock_data = {
             "csv_content": csv_content,
             "area": "NSW1",
             "timezone": "Australia/Sydney",
             "currency": "AUD",
-            "raw_data": {}
+            "raw_data": {},
         }
 
         result = parser.parse(mock_data)
@@ -106,7 +106,9 @@ D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,2,0,2025/10/01 00:30:00,1
         assert isinstance(result["interval_raw"], dict), "interval_raw should be dict"
 
         print(f"✅ AEMO parser returns correct keys: {list(result.keys())}")
-        print(f"✅ Parsed {len(result['interval_raw'])} intervals (2 x 30-min expanded to 4 x 15-min)")
+        print(
+            f"✅ Parsed {len(result['interval_raw'])} intervals (2 x 30-min expanded to 4 x 15-min)"
+        )
 
     except Exception as e:
         print(f"❌ AEMO parser test failed: {e}")

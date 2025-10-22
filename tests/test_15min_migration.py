@@ -300,13 +300,13 @@ try:
 I,PREDISPATCH,REGION_PRICES,1,PREDISPATCH_RUN_DATETIME,REGIONID,PERIODID,INTERVENTION,DATETIME,RRP,EEP,RAISE6SECRRP
 D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,1,0,2025/10/01 00:00:00,100.0,100.0,0.0
 D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,2,0,2025/10/01 00:30:00,104.0,104.0,0.0"""
-    
+
     mock_data = {
         "csv_content": csv_content,
         "area": "NSW1",
         "timezone": "Australia/Sydney",
         "currency": "AUD",
-        "raw_data": {}
+        "raw_data": {},
     }
 
     result = parser.parse(mock_data)
