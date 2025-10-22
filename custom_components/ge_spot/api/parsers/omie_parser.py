@@ -1,6 +1,7 @@
 """Parser for OMIE API responses."""
 
 import logging
+import json
 from io import StringIO
 from datetime import datetime, timezone
 from typing import Dict, Any
