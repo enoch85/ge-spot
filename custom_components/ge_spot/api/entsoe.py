@@ -118,6 +118,11 @@ class EntsoeAPI(BasePriceAPI):
             )
             raise ValueError(f"No API key provided for {self.source_type}")
 
+        # Map area code to ENTSO-E area code
+        entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area.upper())
+        if not entsoe_area:
+            raise ValueError(f"Area '{area}' not supported for ENTSO-E")
+
         # Use the provided reference time or current UTC time
         if reference_time is None:
             reference_time = datetime.now(timezone.utc)
@@ -128,7 +133,7 @@ class EntsoeAPI(BasePriceAPI):
         # Check if we need to fetch yesterday's data due to timezone offset
         # ENTSO-E returns data in UTC, but areas may be in different timezones
         extended_ranges = self.needs_extended_date_range("UTC", reference_time)
-        
+
         _LOGGER.debug(
             f"ENTSO-E timezone check for {area}: need_yesterday={extended_ranges['need_yesterday']}, "
             f"need_tomorrow={extended_ranges['need_tomorrow']}"
@@ -174,12 +179,19 @@ class EntsoeAPI(BasePriceAPI):
                     timeout=Network.Defaults.HTTP_TIMEOUT,
                 )
 
-                if isinstance(response, str) and "Publication_MarketDocument" in response:
+                if (
+                    isinstance(response, str)
+                    and "Publication_MarketDocument" in response
+                ):
                     yesterday_xml_responses.append(response)
-                    _LOGGER.info(f"Successfully fetched yesterday's ENTSO-E data for {area}")
+                    _LOGGER.info(
+                        f"Successfully fetched yesterday's ENTSO-E data for {area}"
+                    )
                 elif isinstance(response, dict) and not response.get("error"):
                     yesterday_xml_responses.append(response)
-                    _LOGGER.info(f"Successfully fetched yesterday's ENTSO-E dict data for {area}")
+                    _LOGGER.info(
+                        f"Successfully fetched yesterday's ENTSO-E dict data for {area}"
+                    )
             except Exception as e:
                 _LOGGER.warning(f"Failed to fetch yesterday's data (non-critical): {e}")
 

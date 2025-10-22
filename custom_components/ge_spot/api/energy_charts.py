@@ -107,8 +107,10 @@ class EnergyChartsAPI(BasePriceAPI):
 
         # Check if we need to fetch yesterday's data due to timezone offset
         # Energy-Charts returns data in Europe/Berlin timezone
-        extended_ranges = self.needs_extended_date_range("Europe/Berlin", reference_time)
-        
+        extended_ranges = self.needs_extended_date_range(
+            "Europe/Berlin", reference_time
+        )
+
         _LOGGER.debug(
             f"Energy-Charts timezone check for {area}: need_yesterday={extended_ranges['need_yesterday']}, "
             f"need_tomorrow={extended_ranges['need_tomorrow']}"
@@ -118,14 +120,24 @@ class EnergyChartsAPI(BasePriceAPI):
         yesterday_response = None
         if extended_ranges["need_yesterday"]:
             yesterday_date = (reference_time - timedelta(days=1)).strftime("%Y-%m-%d")
-            yesterday_params = {"bzn": bzn, "start": yesterday_date, "end": yesterday_date}
-            
+            yesterday_params = {
+                "bzn": bzn,
+                "start": yesterday_date,
+                "end": yesterday_date,
+            }
+
             _LOGGER.debug(f"Energy-Charts fetching yesterday's data: {yesterday_date}")
-            
+
             try:
-                yesterday_response = await client.fetch(f"{self.base_url}/price", params=yesterday_params)
-                if isinstance(yesterday_response, dict) and not yesterday_response.get("error"):
-                    _LOGGER.info(f"Successfully fetched yesterday's Energy-Charts data for {area}")
+                yesterday_response = await client.fetch(
+                    f"{self.base_url}/price", params=yesterday_params
+                )
+                if isinstance(yesterday_response, dict) and not yesterday_response.get(
+                    "error"
+                ):
+                    _LOGGER.info(
+                        f"Successfully fetched yesterday's Energy-Charts data for {area}"
+                    )
                 else:
                     yesterday_response = None
             except Exception as e:
@@ -185,11 +197,11 @@ class EnergyChartsAPI(BasePriceAPI):
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
                 "license_info": response.get("license_info", ""),
             }
-            
+
             # Add yesterday's data if fetched (for timezone offset handling)
             if yesterday_response:
                 result["raw_data"]["yesterday"] = yesterday_response
-            
+
             return result
 
         except Exception as e:

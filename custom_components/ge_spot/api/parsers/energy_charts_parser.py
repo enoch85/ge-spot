@@ -82,11 +82,15 @@ class EnergyChartsParser(BasePriceParser):
         # Process yesterday/today/tomorrow structure (for timezone offset handling)
         all_unix_seconds = []
         all_prices = []
-        
+
         # Check if raw_data has yesterday/today/tomorrow structure
-        if "today" in raw_api_response or "yesterday" in raw_api_response or "tomorrow" in raw_api_response:
+        if (
+            "today" in raw_api_response
+            or "yesterday" in raw_api_response
+            or "tomorrow" in raw_api_response
+        ):
             _LOGGER.debug("[EnergyChartsParser] Processing multi-day structure")
-            
+
             # Process yesterday, today, tomorrow in order
             for day_key in ["yesterday", "today", "tomorrow"]:
                 if day_key in raw_api_response:
@@ -95,10 +99,12 @@ class EnergyChartsParser(BasePriceParser):
                         unix_secs = day_data.get("unix_seconds", [])
                         day_prices = day_data.get("price", [])
                         if unix_secs and day_prices:
-                            _LOGGER.debug(f"[EnergyChartsParser] Adding {len(unix_secs)} points from {day_key}")
+                            _LOGGER.debug(
+                                f"[EnergyChartsParser] Adding {len(unix_secs)} points from {day_key}"
+                            )
                             all_unix_seconds.extend(unix_secs)
                             all_prices.extend(day_prices)
-            
+
             unix_seconds = all_unix_seconds
             prices = all_prices
         else:

@@ -139,8 +139,10 @@ class OmieAPI(BasePriceAPI):
 
         # Check if we need to fetch yesterday's data due to timezone offset
         # OMIE returns data in Europe/Madrid timezone
-        extended_ranges = self.needs_extended_date_range("Europe/Madrid", reference_time)
-        
+        extended_ranges = self.needs_extended_date_range(
+            "Europe/Madrid", reference_time
+        )
+
         _LOGGER.debug(
             f"OMIE timezone check for {area}: need_yesterday={extended_ranges['need_yesterday']}, "
             f"need_tomorrow={extended_ranges['need_tomorrow']}"
@@ -153,7 +155,9 @@ class OmieAPI(BasePriceAPI):
         # Fetch yesterday's data if needed for timezone offset
         raw_yesterday = None
         if extended_ranges["need_yesterday"]:
-            _LOGGER.debug(f"[OMIE API] Fetching yesterday's data for timezone offset: {yesterday_date}")
+            _LOGGER.debug(
+                f"[OMIE API] Fetching yesterday's data for timezone offset: {yesterday_date}"
+            )
             raw_yesterday = await self._fetch_omie_file(client, yesterday_date)
             if raw_yesterday:
                 _LOGGER.info(f"Successfully fetched yesterday's OMIE data for {area}")
@@ -202,7 +206,7 @@ class OmieAPI(BasePriceAPI):
             "today": raw_today,
             "tomorrow": raw_tomorrow,
         }
-        
+
         # Add yesterday's data if fetched (for timezone offset handling)
         if raw_yesterday:
             raw_data_payload["yesterday"] = raw_yesterday

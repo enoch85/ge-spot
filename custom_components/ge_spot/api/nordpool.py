@@ -123,11 +123,13 @@ class NordpoolAPI(BasePriceAPI):
 
         # Check if we need extended date ranges due to timezone offset
         extended_ranges = self.needs_extended_date_range("Europe/Oslo", reference_time)
-        
+
         # Fetch yesterday's data if needed
         yesterday_data = None
         if extended_ranges["need_yesterday"]:
-            yesterday = (reference_time - timedelta(days=1)).strftime(TimeFormat.DATE_ONLY)
+            yesterday = (reference_time - timedelta(days=1)).strftime(
+                TimeFormat.DATE_ONLY
+            )
             params_yesterday = {
                 "currency": Currency.EUR,
                 "date": yesterday,
@@ -135,8 +137,10 @@ class NordpoolAPI(BasePriceAPI):
                 "deliveryArea": delivery_area,
             }
             yesterday_data = await client.fetch(self.base_url, params=params_yesterday)
-            _LOGGER.debug(f"Fetched yesterday's data ({yesterday}) for timezone offset handling")
-        
+            _LOGGER.debug(
+                f"Fetched yesterday's data ({yesterday}) for timezone offset handling"
+            )
+
         # Fetch today's data (first range is today to tomorrow)
         today_start, today_end = date_ranges[0]
         today = today_start.strftime(TimeFormat.DATE_ONLY)
