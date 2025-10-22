@@ -2,7 +2,7 @@
 
 import logging
 from typing import Any, Dict, Optional, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.util import dt as dt_util
@@ -374,6 +374,14 @@ class HourlyAverageSensor(PriceValueSensor):
     device_class = SensorDeviceClass.MONETARY
     state_class = None
 
+    # Override to exclude hourly price arrays from database (like interval prices)
+    _unrecorded_attributes = frozenset(
+        {
+            "today_hourly_prices",
+            "tomorrow_hourly_prices",
+        }
+    )
+
     def __init__(
         self, coordinator, config_data, sensor_type, name_suffix, day_offset=0
     ):
@@ -408,52 +416,10 @@ class HourlyAverageSensor(PriceValueSensor):
                     return hourly_prices[sorted_hours[0]]
                 return None
 
-        # Create additional attributes function
+        # Create additional attributes function (not used, we override extra_state_attributes)
         def get_hourly_attrs(data):
             """Get hourly price attributes."""
-            hourly_prices = self._calculate_hourly_averages(data)
-            if not hourly_prices:
-                return {}
-
-            # Get target timezone
-            target_tz = dt_util.get_default_time_zone()
-
-            # Convert to list format with datetime objects
-            from datetime import timedelta
-
-            now = dt_util.now().astimezone(target_tz)
-            if self._day_offset == 0:
-                base_date = now.date()
-            else:
-                base_date = (now + timedelta(days=1)).date()
-
-            hourly_list = []
-            for hhmm_key in sorted(hourly_prices.keys()):
-                try:
-                    hour = int(hhmm_key.split(":")[0])
-                    dt_obj = datetime(
-                        base_date.year,
-                        base_date.month,
-                        base_date.day,
-                        hour,
-                        0,
-                        0,
-                        tzinfo=target_tz,
-                    )
-                    price = hourly_prices[hhmm_key]
-                    hourly_list.append(
-                        {
-                            "time": dt_obj,
-                            "value": round(float(price), 4),
-                        }
-                    )
-                except (ValueError, AttributeError) as e:
-                    _LOGGER.warning(
-                        f"Failed to convert hourly interval {hhmm_key}: {e}"
-                    )
-                    continue
-
-            return {"hourly_prices": hourly_list}
+            return {}
 
         # Initialize parent class
         super().__init__(
@@ -508,6 +474,134 @@ class HourlyAverageSensor(PriceValueSensor):
                 hourly_averages[hour_key] = sum(prices) / len(prices)
 
         return hourly_averages
+
+    def _convert_hourly_to_list(
+        self, hourly_prices: Dict[str, float], base_date
+    ) -> list:
+        """Convert hourly prices dict to list format with datetime objects.
+
+        Args:
+            hourly_prices: Dictionary mapping hour (HH:00) to price
+            base_date: Date to use for datetime objects
+
+        Returns:
+            List of dicts with 'time' (datetime) and 'value' (float) keys
+        """
+        # Get target timezone
+        target_tz = dt_util.get_default_time_zone()
+
+        hourly_list = []
+        for hhmm_key in sorted(hourly_prices.keys()):
+            try:
+                hour = int(hhmm_key.split(":")[0])
+                dt_obj = datetime(
+                    base_date.year,
+                    base_date.month,
+                    base_date.day,
+                    hour,
+                    0,
+                    0,
+                    tzinfo=target_tz,
+                )
+                price = hourly_prices[hhmm_key]
+                hourly_list.append(
+                    {
+                        "time": dt_obj,
+                        "value": round(float(price), 4),
+                    }
+                )
+            except (ValueError, AttributeError) as e:
+                _LOGGER.warning(f"Failed to convert hourly interval {hhmm_key}: {e}")
+                continue
+
+        return hourly_list
+
+    @property
+    def extra_state_attributes(self):
+        """Return hourly price attributes instead of interval prices."""
+        # Get base attributes from parent (but we'll override the interval prices)
+        attrs = super().extra_state_attributes
+
+        if not self.coordinator.data:
+            return attrs
+
+        # Get target timezone for datetime conversion
+        target_tz = dt_util.get_default_time_zone()
+        now = dt_util.now().astimezone(target_tz)
+
+        # Calculate hourly averages for today and tomorrow
+        today_hourly = {}
+        tomorrow_hourly = {}
+
+        # Get interval prices from coordinator data
+        today_intervals = self.coordinator.data.get("today_interval_prices", {})
+        tomorrow_intervals = self.coordinator.data.get("tomorrow_interval_prices", {})
+
+        # Calculate hourly averages for today
+        if today_intervals:
+            hourly_data = {}
+            for interval_key, price in today_intervals.items():
+                try:
+                    hour = interval_key.split(":")[0]
+                    hour_key = f"{hour}:00"
+                    if hour_key not in hourly_data:
+                        hourly_data[hour_key] = []
+                    hourly_data[hour_key].append(float(price))
+                except (ValueError, AttributeError):
+                    continue
+
+            for hour_key, prices in hourly_data.items():
+                if prices:
+                    today_hourly[hour_key] = sum(prices) / len(prices)
+
+        # Calculate hourly averages for tomorrow
+        if tomorrow_intervals:
+            hourly_data = {}
+            for interval_key, price in tomorrow_intervals.items():
+                try:
+                    hour = interval_key.split(":")[0]
+                    hour_key = f"{hour}:00"
+                    if hour_key not in hourly_data:
+                        hourly_data[hour_key] = []
+                    hourly_data[hour_key].append(float(price))
+                except (ValueError, AttributeError):
+                    continue
+
+            for hour_key, prices in hourly_data.items():
+                if prices:
+                    tomorrow_hourly[hour_key] = sum(prices) / len(prices)
+
+        # Convert to list format with datetime objects
+        today_date = now.date()
+        tomorrow_date = (now + timedelta(days=1)).date()
+
+        attrs["today_hourly_prices"] = self._convert_hourly_to_list(
+            today_hourly, today_date
+        )
+        attrs["tomorrow_hourly_prices"] = self._convert_hourly_to_list(
+            tomorrow_hourly, tomorrow_date
+        )
+
+        # Add statistics for today's hourly prices
+        if today_hourly:
+            values = list(today_hourly.values())
+            attrs["today_min_price"] = round(min(values), 5)
+            attrs["today_max_price"] = round(max(values), 5)
+            attrs["today_avg_price"] = round(sum(values) / len(values), 5)
+
+        # Add statistics for tomorrow's hourly prices
+        if tomorrow_hourly:
+            values = list(tomorrow_hourly.values())
+            attrs["tomorrow_min_price"] = round(min(values), 5)
+            attrs["tomorrow_max_price"] = round(max(values), 5)
+            attrs["tomorrow_avg_price"] = round(sum(values) / len(values), 5)
+
+        # Remove the 15-minute interval prices from attributes for hourly sensors
+        # These sensors focus on hourly data, not interval data
+        attrs.pop("today_interval_prices", None)
+        attrs.pop("tomorrow_interval_prices", None)
+
+        return attrs
 
 
 class TomorrowHourlyAverageSensor(TomorrowSensorMixin, HourlyAverageSensor):
