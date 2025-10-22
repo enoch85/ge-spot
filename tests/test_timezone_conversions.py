@@ -9,7 +9,7 @@ Tests all timezone operations to ensure 100% correctness:
 """
 
 from datetime import datetime, timezone, timedelta
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import pytest
 
 
@@ -159,9 +159,8 @@ class TestBackwardConversions:
             assert (
                 local_dt.minute == expected_min
             ), f"{tz_name}: Expected minute {expected_min}, got {local_dt.minute}"
-            assert (
-                local_dt.strftime("%z") == expected_offset
-            ), f"{tz_name}: Expected offset {expected_offset}, got {local_dt.strftime('%z')}"
+            msg = f"{tz_name}: Expected offset {expected_offset}"
+            assert local_dt.strftime("%z") == expected_offset, msg
 
 
 class TestRoundTripConversions:
@@ -210,7 +209,8 @@ class TestDSTTransitions:
         # Before transition: March 30, 2025 01:00 CET (UTC+1)
         before = datetime(2025, 3, 30, 1, 0, 0, tzinfo=copenhagen_tz)
 
-        # After transition: March 30, 2025 03:00 CEST (UTC+2) - clocks jump from 2:00 to 3:00
+        # After transition: March 30, 2025 03:00 CEST (UTC+2)
+        # Clocks jump from 2:00 to 3:00
         after = datetime(2025, 3, 30, 3, 0, 0, tzinfo=copenhagen_tz)
 
         # Convert to UTC
@@ -226,7 +226,7 @@ class TestDSTTransitions:
         assert after.strftime("%z") == "+0200"
 
     def test_fall_back_copenhagen(self):
-        """Test fall DST transition (last Sunday of October 2025 - October 26)."""
+        """Test fall DST transition (October 26, 2025)."""
         copenhagen_tz = ZoneInfo("Europe/Copenhagen")
 
         # Before transition: October 26, 2025 01:00 CEST (UTC+2)
@@ -234,9 +234,6 @@ class TestDSTTransitions:
 
         # After transition: October 26, 2025 03:00 CET (UTC+1)
         after = datetime(2025, 10, 26, 3, 0, 0, tzinfo=copenhagen_tz)
-
-        before_utc = before.astimezone(timezone.utc)
-        after_utc = after.astimezone(timezone.utc)
 
         # Verify offset changed
         assert before.strftime("%z") == "+0200"
@@ -380,15 +377,11 @@ class TestErrorHandling:
 
     def test_invalid_timezone_name(self):
         """Test handling of invalid timezone names."""
-        from zoneinfo import ZoneInfoNotFoundError
-
         with pytest.raises(ZoneInfoNotFoundError):
             ZoneInfo("Invalid/Timezone")
 
     def test_invalid_timezone_with_naive_timestamp(self):
         """Test that invalid timezone with naive timestamp is handled."""
-        from zoneinfo import ZoneInfoNotFoundError
-
         naive_dt = datetime(2025, 10, 12, 13, 0, 0)
 
         # This should raise an error
@@ -433,7 +426,7 @@ class TestEnergiDataParserScenario:
 
         # Verify all keys have timezone
         assert len(interval_prices_iso) == 3
-        assert all("+00:00" in k for k in interval_prices_iso.keys())
+        assert all("+00:00" in k for k in interval_prices_iso)
 
         # Verify specific conversions
         expected_keys = [
