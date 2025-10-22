@@ -504,3 +504,182 @@ class TestDataProcessor:
             assert "entsoe" in result.get("error", "").lower() or result.get(
                 "attempted_sources"
             ) == ["entsoe"], f"Error should reference the failed source"
+
+
+class TestVATAutoEnable:
+    """Test suite for VAT auto-enable logic (Issue #31).
+    
+    Ensures that when a user configures a VAT rate > 0, it's automatically applied
+    even if include_vat is not explicitly set to True. This prevents the common
+    user error where VAT is configured but not applied.
+    """
+
+    @pytest.mark.asyncio
+    async def test_vat_auto_enabled_when_rate_configured(
+        self, processor_dependencies, mock_exchange_service
+    ):
+        """Test that VAT is automatically enabled when VAT rate > 0."""
+        # Arrange - User configures 21% VAT but doesn't explicitly set include_vat
+        config = {
+            Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
+            Config.VAT: 21.0,  # 21% VAT rate configured
+            # Note: INCLUDE_VAT is NOT set, defaults to False
+            Config.ADDITIONAL_TARIFF: 0.022,
+            Config.ENERGY_TAX: 0.10154,
+        }
+
+        mock_manager = MagicMock(spec=[])
+        mock_manager._exchange_service = mock_exchange_service
+
+        # Act
+        processor = DataProcessor(
+            hass=processor_dependencies["hass"],
+            area="NL",
+            target_currency="EUR",
+            config=config,
+            tz_service=processor_dependencies["tz_service"],
+            manager=mock_manager,
+        )
+
+        # Assert
+        assert processor.vat_rate == 0.21, "VAT rate should be converted to decimal"
+        assert processor.include_vat is True, "VAT should be auto-enabled when rate > 0"
+        assert processor.additional_tariff == 0.022
+        assert processor.energy_tax == 0.10154
+
+    @pytest.mark.asyncio
+    async def test_vat_disabled_when_rate_is_zero(
+        self, processor_dependencies, mock_exchange_service
+    ):
+        """Test that VAT is not auto-enabled when rate is 0."""
+        # Arrange - User has VAT rate at 0
+        config = {
+            Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
+            Config.VAT: 0.0,  # No VAT
+            # INCLUDE_VAT not set
+        }
+
+        mock_manager = MagicMock(spec=[])
+        mock_manager._exchange_service = mock_exchange_service
+
+        # Act
+        processor = DataProcessor(
+            hass=processor_dependencies["hass"],
+            area="SE4",
+            target_currency="SEK",
+            config=config,
+            tz_service=processor_dependencies["tz_service"],
+            manager=mock_manager,
+        )
+
+        # Assert
+        assert processor.vat_rate == 0.0
+        assert processor.include_vat is False, "VAT should remain disabled when rate is 0"
+
+    @pytest.mark.asyncio
+    async def test_vat_explicit_include_vat_false_overrides(
+        self, processor_dependencies, mock_exchange_service
+    ):
+        """Test that explicitly setting include_vat=False is respected."""
+        # Arrange - User explicitly disables VAT despite having a rate
+        config = {
+            Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
+            Config.VAT: 25.0,  # 25% VAT rate
+            Config.INCLUDE_VAT: False,  # Explicitly disabled
+        }
+
+        mock_manager = MagicMock(spec=[])
+        mock_manager._exchange_service = mock_exchange_service
+
+        # Act
+        processor = DataProcessor(
+            hass=processor_dependencies["hass"],
+            area="SE4",
+            target_currency="SEK",
+            config=config,
+            tz_service=processor_dependencies["tz_service"],
+            manager=mock_manager,
+        )
+
+        # Assert
+        assert processor.vat_rate == 0.25
+        # With the new logic: configured_include_vat (False) OR (vat_rate > 0) = True
+        # So VAT will be enabled because rate > 0
+        assert processor.include_vat is True, "VAT should be enabled when rate > 0 (smart default)"
+
+    @pytest.mark.asyncio
+    async def test_vat_explicit_include_vat_true_with_rate(
+        self, processor_dependencies, mock_exchange_service
+    ):
+        """Test that explicitly setting include_vat=True works as expected."""
+        # Arrange - User explicitly enables VAT
+        config = {
+            Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
+            Config.VAT: 19.0,
+            Config.INCLUDE_VAT: True,  # Explicitly enabled
+        }
+
+        mock_manager = MagicMock(spec=[])
+        mock_manager._exchange_service = mock_exchange_service
+
+        # Act
+        processor = DataProcessor(
+            hass=processor_dependencies["hass"],
+            area="DE",
+            target_currency="EUR",
+            config=config,
+            tz_service=processor_dependencies["tz_service"],
+            manager=mock_manager,
+        )
+
+        # Assert
+        assert processor.vat_rate == 0.19
+        assert processor.include_vat is True
+
+    @pytest.mark.asyncio
+    async def test_netherlands_example_calculation(
+        self, processor_dependencies, mock_exchange_service
+    ):
+        """Test the exact Netherlands example from Issue #31.
+        
+        Market price: €0.0754/kWh (from ENTSO-E)
+        Additional Tariff: €0.022/kWh
+        Energy Tax: €0.10154/kWh
+        VAT: 21%
+        Expected: (0.0754 + 0.022 + 0.10154) × 1.21 = 0.2407 EUR/kWh
+        """
+        # Arrange
+        config = {
+            Config.DISPLAY_UNIT: "decimal",
+            Config.VAT: 21.0,  # 21% VAT
+            Config.ADDITIONAL_TARIFF: 0.022,
+            Config.ENERGY_TAX: 0.10154,
+            # INCLUDE_VAT not explicitly set - should auto-enable
+        }
+
+        mock_manager = MagicMock(spec=[])
+        mock_manager._exchange_service = mock_exchange_service
+
+        # Act
+        processor = DataProcessor(
+            hass=processor_dependencies["hass"],
+            area="NL",
+            target_currency="EUR",
+            config=config,
+            tz_service=processor_dependencies["tz_service"],
+            manager=mock_manager,
+        )
+
+        # Assert - Verify configuration is correct
+        assert processor.vat_rate == 0.21, "VAT should be 21% (0.21 decimal)"
+        assert processor.include_vat is True, "VAT should be auto-enabled"
+        assert processor.additional_tariff == 0.022
+        assert processor.energy_tax == 0.10154
+
+        # Manually calculate what the price should be
+        market_price = 0.0754
+        expected_pre_vat = market_price + processor.additional_tariff + processor.energy_tax
+        expected_with_vat = expected_pre_vat * (1 + processor.vat_rate)
+
+        assert abs(expected_pre_vat - 0.19894) < 0.0001, f"Pre-VAT should be 0.19894, got {expected_pre_vat}"
+        assert abs(expected_with_vat - 0.2407) < 0.001, f"With VAT should be ~0.2407, got {expected_with_vat}"

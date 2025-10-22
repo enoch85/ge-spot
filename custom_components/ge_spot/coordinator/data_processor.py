@@ -89,13 +89,25 @@ class DataProcessor:
 
         # Extract config settings needed for processing
         self.vat_rate = config.get(Config.VAT, Defaults.VAT_RATE) / 100  # Convert % to rate
-        self.include_vat = config.get(Config.INCLUDE_VAT, Defaults.INCLUDE_VAT)
+        # Smart VAT inclusion: if VAT rate is configured (> 0), automatically apply it
+        # This makes the behavior intuitive - configuring a VAT rate implies you want it applied
+        configured_include_vat = config.get(Config.INCLUDE_VAT, Defaults.INCLUDE_VAT)
+        self.include_vat = configured_include_vat or (self.vat_rate > 0)
         self.additional_tariff = config.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF)
         self.energy_tax = config.get(Config.ENERGY_TAX, Defaults.ENERGY_TAX)
         self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         self.use_subunit = self.display_unit == DisplayUnit.CENTS
         # Use Defaults.PRECISION instead of DEFAULT_PRICE_PRECISION
         self.precision = config.get(Config.PRECISION, Defaults.PRECISION)
+
+        # Log VAT configuration for transparency
+        if self.include_vat:
+            _LOGGER.debug(
+                f"[{area}] VAT will be applied: {self.vat_rate * 100:.1f}% "
+                f"(auto-enabled: {not configured_include_vat and self.vat_rate > 0})"
+            )
+        else:
+            _LOGGER.debug(f"[{area}] VAT disabled (rate: {self.vat_rate * 100:.1f}%)")
 
         # Instantiate converters
         self._tz_converter = TimezoneConverter(tz_service)
