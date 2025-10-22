@@ -13,6 +13,7 @@ Home Assistant custom integration providing 15-minute electricity spot prices ac
 7. **Keep it simple** - Clean code over complexity, cleanup as you go
 8. **Ask before acting** - When uncertain, clarify first
 9. **No analysis/summary files in git** - All `*ANALYSIS*.md`, `*SUMMARY*.md` files stay untracked
+10. **Format with black** - Run `black` on all Python code before committing. Consistent formatting is mandatory.
 
 ## Architecture
 
