@@ -6,6 +6,7 @@ import voluptuous as vol
 
 from homeassistant.helpers import selector
 
+from ..const.areas import AreaMapping
 from ..const.config import Config
 from ..const.defaults import Defaults
 from ..const.sources import Source

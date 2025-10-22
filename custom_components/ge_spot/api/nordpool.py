@@ -39,7 +39,7 @@ class NordpoolAPI(BasePriceAPI):
         """
         super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
-        self.parser = NordpoolParser()
+        self.parser = NordpoolParser(timezone_service=timezone_service)
 
     def _get_source_type(self) -> str:
         """Get the source type identifier.
