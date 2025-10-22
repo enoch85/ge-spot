@@ -88,12 +88,15 @@ class DataProcessor:
         self._exchange_service: Optional[ExchangeRateService] = None
 
         # Extract config settings needed for processing
-        self.vat_rate = config.get(Config.VAT, Defaults.VAT_RATE) / 100  # Convert % to rate
+        # VAT is already stored as a decimal rate (e.g., 0.25 for 25%), not as a percentage
+        self.vat_rate = config.get(Config.VAT, Defaults.VAT)
         # Smart VAT inclusion: if VAT rate is configured (> 0), automatically apply it
         # This makes the behavior intuitive - configuring a VAT rate implies you want it applied
         configured_include_vat = config.get(Config.INCLUDE_VAT, Defaults.INCLUDE_VAT)
         self.include_vat = configured_include_vat or (self.vat_rate > 0)
-        self.additional_tariff = config.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF)
+        self.additional_tariff = config.get(
+            Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF
+        )
         self.energy_tax = config.get(Config.ENERGY_TAX, Defaults.ENERGY_TAX)
         self.display_unit = config.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         self.use_subunit = self.display_unit == DisplayUnit.CENTS
@@ -133,7 +136,9 @@ class DataProcessor:
                 self._exchange_service = self._manager._exchange_service
             else:
                 _LOGGER.error("Exchange service not available in DataProcessor")
-                raise RuntimeError("Exchange service could not be initialized or retrieved.")
+                raise RuntimeError(
+                    "Exchange service could not be initialized or retrieved."
+                )
 
         # Instantiate CurrencyConverter once exchange service is ready
         if self._currency_converter is None and self._exchange_service is not None:
@@ -166,17 +171,23 @@ class DataProcessor:
         parser_current_price: Optional[float] = None
         parser_next_price: Optional[float] = None
         raw_api_data_for_result = (
-            data.get("raw_data") or data.get("xml_responses") or data.get("dict_response")
+            data.get("raw_data")
+            or data.get("xml_responses")
+            or data.get("dict_response")
         )
 
         if not source_name:
             _LOGGER.error(
                 f"Missing 'data_source' or 'source' key in input data for area {self.area}. Cannot determine parser."
             )
-            return self._generate_empty_processed_result(data, error="Missing source identifier")
+            return self._generate_empty_processed_result(
+                data, error="Missing source identifier"
+            )
 
         if is_cached_data:
-            _LOGGER.debug(f"[{self.area}] Processing cached data from source '{source_name}'.")
+            _LOGGER.debug(
+                f"[{self.area}] Processing cached data from source '{source_name}'."
+            )
 
             # Check if we have already-processed price data
             cached_today = data.get("today_interval_prices", {})
@@ -260,7 +271,8 @@ class DataProcessor:
                             f"No parser found for source '{source_name}' in area {self.area} during cached data processing."
                         )
                         return self._generate_empty_processed_result(
-                            data, error=f"No parser for source {source_name} (cache path)"
+                            data,
+                            error=f"No parser for source {source_name} (cache path)",
                         )
                     try:
                         # Pass the entire cached dictionary to the parser.
@@ -276,7 +288,8 @@ class DataProcessor:
                                 f"[{self.area}] Cached data validation failed for source '{source_name}' - treating as invalid cache"
                             )
                             return self._generate_empty_processed_result(
-                                data, error=f"Cached data validation failed: invalid data structure"
+                                data,
+                                error=f"Cached data validation failed: invalid data structure",
                             )
 
                         input_interval_raw = parsed_data.get("interval_raw")
@@ -305,7 +318,9 @@ class DataProcessor:
             )
             parser = self._get_parser(source_name)
             if not parser:
-                _LOGGER.error(f"No parser found for source '{source_name}' in area {self.area}.")
+                _LOGGER.error(
+                    f"No parser found for source '{source_name}' in area {self.area}."
+                )
                 return self._generate_empty_processed_result(
                     data, error=f"No parser for source {source_name}"
                 )
@@ -318,9 +333,9 @@ class DataProcessor:
                 )
 
                 # Validate parsed data (checks structural integrity only)
-                if hasattr(parser, "validate_parsed_data") and not parser.validate_parsed_data(
-                    parsed_data
-                ):
+                if hasattr(
+                    parser, "validate_parsed_data"
+                ) and not parser.validate_parsed_data(parsed_data):
                     # Validation failed - data structure is invalid, trigger fallback to next source
                     _LOGGER.debug(
                         f"[{self.area}] Parsed data validation failed for source '{source_name}' - triggering fallback to next source"
@@ -462,7 +477,9 @@ class DataProcessor:
             "source_currency": input_source_currency,  # Store the actual source currency used
             "target_currency": self.target_currency,
             "source_timezone": input_source_timezone,  # Store the actual source timezone used
-            "target_timezone": str(self._tz_service.target_timezone) if self._tz_service else None,
+            "target_timezone": (
+                str(self._tz_service.target_timezone) if self._tz_service else None
+            ),
             "today_interval_prices": final_today_prices,
             "tomorrow_interval_prices": final_tomorrow_prices,
             "raw_interval_prices_original": input_interval_raw,  # Store the raw prices that went INTO normalization
@@ -517,7 +534,9 @@ class DataProcessor:
                         f"(source: {source_name})"
                     )
                 else:
-                    processed_result["current_price"] = final_today_prices.get(current_interval_key)
+                    processed_result["current_price"] = final_today_prices.get(
+                        current_interval_key
+                    )
 
                 # Use parser-provided next price if available
                 if (
@@ -533,11 +552,16 @@ class DataProcessor:
 
                 # Fallback for interval-based pricing when current interval doesn't exist yet
                 # This handles cases where we have interval data but the current interval is incomplete
-                if processed_result["current_price"] is None and source_name == Source.COMED:
+                if (
+                    processed_result["current_price"] is None
+                    and source_name == Source.COMED
+                ):
                     if final_today_prices:
                         # Get the most recent available price (latest time key)
                         most_recent_key = max(final_today_prices.keys())
-                        processed_result["current_price"] = final_today_prices[most_recent_key]
+                        processed_result["current_price"] = final_today_prices[
+                            most_recent_key
+                        ]
                         _LOGGER.debug(
                             f"[{self.area}] ComEd: Current interval '{current_interval_key}' not available. "
                             f"Using most recent price from interval '{most_recent_key}': {processed_result['current_price']}"
@@ -549,7 +573,9 @@ class DataProcessor:
                 from ..const.time import TimeInterval
 
                 expected_intervals = TimeInterval.get_intervals_per_day()
-                today_complete_enough = len(found_keys) >= math.ceil(expected_intervals * 0.8)
+                today_complete_enough = len(found_keys) >= math.ceil(
+                    expected_intervals * 0.8
+                )
 
                 if today_complete_enough:
                     stats = self._calculate_statistics(final_today_prices, day_offset=0)
@@ -579,10 +605,14 @@ class DataProcessor:
                 from ..const.time import TimeInterval
 
                 expected_intervals = TimeInterval.get_intervals_per_day()
-                tomorrow_complete_enough = len(found_keys) >= math.ceil(expected_intervals * 0.8)
+                tomorrow_complete_enough = len(found_keys) >= math.ceil(
+                    expected_intervals * 0.8
+                )
 
                 if tomorrow_complete_enough:
-                    stats = self._calculate_statistics(final_tomorrow_prices, day_offset=1)
+                    stats = self._calculate_statistics(
+                        final_tomorrow_prices, day_offset=1
+                    )
                     # Mark as complete only if all intervals are present
                     processed_result["tomorrow_statistics"] = stats.to_dict()
                     # Set tomorrow_valid if we have enough data for stats, even if not fully complete
@@ -596,13 +626,17 @@ class DataProcessor:
                     _LOGGER.warning(
                         f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}"
                     )
-                    processed_result["tomorrow_statistics"] = PriceStatistics().to_dict()
+                    processed_result["tomorrow_statistics"] = (
+                        PriceStatistics().to_dict()
+                    )
             else:
                 # No tomorrow prices, ensure stats reflect incompleteness
                 processed_result["tomorrow_statistics"] = PriceStatistics().to_dict()
 
         except Exception as e:
-            _LOGGER.error(f"Error during data processing for area {self.area}: {e}", exc_info=True)
+            _LOGGER.error(
+                f"Error during data processing for area {self.area}: {e}", exc_info=True
+            )
             # Ensure exchange service is ready even on error path
             try:
                 await self._ensure_exchange_service()
@@ -623,7 +657,8 @@ class DataProcessor:
                 f"Source timezone ('source_timezone') is missing in the processed result for area {self.area} after processing. This indicates an issue."
             )
             processed_result["error"] = (
-                processed_result.get("error", "") + " Missing source timezone after processing."
+                processed_result.get("error", "")
+                + " Missing source timezone after processing."
             )
 
         # --- Step 6: Calculate Data Validity ---
@@ -652,7 +687,9 @@ class DataProcessor:
             _LOGGER.info(f"Data validity for {self.area}: {validity}")
 
         except Exception as e:
-            _LOGGER.error(f"Error calculating data validity for {self.area}: {e}", exc_info=True)
+            _LOGGER.error(
+                f"Error calculating data validity for {self.area}: {e}", exc_info=True
+            )
             # Add empty validity on error
             from .data_validity import DataValidity
 
@@ -736,7 +773,8 @@ class DataProcessor:
                 try:
                     hour, minute = map(int, interval_key.split(":"))
                     timestamp_dt = datetime.combine(
-                        target_date, datetime.min.time().replace(hour=hour, minute=minute)
+                        target_date,
+                        datetime.min.time().replace(hour=hour, minute=minute),
                     )
                     # Make it timezone-aware using the HA timezone
                     timestamp_dt = now.replace(
@@ -759,7 +797,8 @@ class DataProcessor:
                 try:
                     hour, minute = map(int, interval_key.split(":"))
                     timestamp_dt = datetime.combine(
-                        target_date, datetime.min.time().replace(hour=hour, minute=minute)
+                        target_date,
+                        datetime.min.time().replace(hour=hour, minute=minute),
                     )
                     # Make it timezone-aware using the HA timezone
                     timestamp_dt = now.replace(

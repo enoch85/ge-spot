@@ -79,7 +79,9 @@ class StromligningAPI(BasePriceAPI):
             raw_api_response = await self._fetch_data(client, area, reference_time)
 
             if not raw_api_response:
-                _LOGGER.warning(f"StromligningAPI._fetch_data returned empty for area {area}")
+                _LOGGER.warning(
+                    f"StromligningAPI._fetch_data returned empty for area {area}"
+                )
                 # Return an empty structure but include essential keys for downstream checks
                 return {
                     "raw_data": None,
@@ -97,7 +99,9 @@ class StromligningAPI(BasePriceAPI):
             # Return the raw data along with necessary metadata for the parser
             return {
                 "raw_data": raw_api_response,  # Pass the actual API response
-                "timezone": self.get_timezone_for_area(area),  # Get timezone based on area
+                "timezone": self.get_timezone_for_area(
+                    area
+                ),  # Get timezone based on area
                 "currency": Currency.DKK,  # Stromligning uses DKK
                 "area": area,
                 "source": self.source_type,
@@ -202,9 +206,13 @@ class StromligningAPI(BasePriceAPI):
             parsed["timezone"] = raw_data.get(
                 "timezone", metadata.get("timezone", "Europe/Copenhagen")
             )
-            parsed["currency"] = raw_data.get("currency", metadata.get("currency", Currency.DKK))
+            parsed["currency"] = raw_data.get(
+                "currency", metadata.get("currency", Currency.DKK)
+            )
             parsed["source_name"] = raw_data.get("source_name", "stromligning")
-            parsed["source_unit"] = raw_data.get("source_unit", "kWh")  # Propagate source unit
+            parsed["source_unit"] = raw_data.get(
+                "source_unit", "kWh"
+            )  # Propagate source unit
             return parsed
         except Exception as e:
             _LOGGER.error(f"Error parsing Stromligning data: {e}", exc_info=True)

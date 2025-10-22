@@ -58,7 +58,9 @@ class TestRateLimiter:
             last_fetched=last_fetched, current_time=current_time, min_interval=15
         )
 
-        assert should_skip is True, "Should skip fetch within same interval if min_interval not met"
+        assert (
+            should_skip is True
+        ), "Should skip fetch within same interval if min_interval not met"
         assert "5.0 minutes ago" in reason
         assert "minimum: 15" in reason
 
@@ -97,7 +99,9 @@ class TestRateLimiter:
     def test_minimum_interval_allows_fetch_after_threshold(self, base_time):
         """Test that fetch is allowed once minimum interval passes."""
         last_fetched = base_time
-        current_time = base_time + timedelta(minutes=16)  # 16 minutes (> 15), also crosses boundary
+        current_time = base_time + timedelta(
+            minutes=16
+        )  # 16 minutes (> 15), also crosses boundary
 
         should_skip, reason = RateLimiter.should_skip_fetch(
             last_fetched=last_fetched, current_time=current_time, min_interval=15
@@ -105,7 +109,10 @@ class TestRateLimiter:
 
         assert should_skip is False
         # Will trigger interval boundary (10:00 to 10:15) before reaching the final check
-        assert "Interval boundary crossed" in reason or "exceeds minimum interval" in reason
+        assert (
+            "Interval boundary crossed" in reason
+            or "exceeds minimum interval" in reason
+        )
 
     # ==========================================
     # Test: Exponential Backoff on Failures
@@ -143,7 +150,9 @@ class TestRateLimiter:
             min_interval=15,
         )
 
-        assert should_skip is True, "Should skip due to 30-min backoff after second failure"
+        assert (
+            should_skip is True
+        ), "Should skip due to 30-min backoff after second failure"
         assert "Backing off after 2 failures" in reason
 
     def test_third_failure_max_backoff(self, base_time):
@@ -160,14 +169,18 @@ class TestRateLimiter:
             min_interval=15,
         )
 
-        assert should_skip is True, "Should skip due to 60-min backoff after third failure"
+        assert (
+            should_skip is True
+        ), "Should skip due to 60-min backoff after third failure"
         assert "Backing off after 3 failures" in reason
 
     def test_backoff_expires_allows_retry(self, base_time):
         """Test that fetch is allowed after backoff period expires."""
         last_fetched = base_time
         last_failure_time = base_time + timedelta(minutes=15)
-        current_time = base_time + timedelta(minutes=31)  # 16 min since failure (> 15 min backoff)
+        current_time = base_time + timedelta(
+            minutes=31
+        )  # 16 min since failure (> 15 min backoff)
 
         should_skip, reason = RateLimiter.should_skip_fetch(
             last_fetched=last_fetched,
@@ -233,10 +246,15 @@ class TestRateLimiter:
         """Test that AEMO source during market hours (7-19) allows fetch."""
         # Set time to 10:00 (within market hours)
         market_time = datetime(2025, 10, 2, 10, 5, 0, tzinfo=timezone.utc)
-        last_fetched = datetime(2025, 10, 2, 10, 0, 0, tzinfo=timezone.utc)  # Just 5 min ago
+        last_fetched = datetime(
+            2025, 10, 2, 10, 0, 0, tzinfo=timezone.utc
+        )  # Just 5 min ago
 
         should_skip, reason = RateLimiter.should_skip_fetch(
-            last_fetched=last_fetched, current_time=market_time, source=Source.AEMO, min_interval=15
+            last_fetched=last_fetched,
+            current_time=market_time,
+            source=Source.AEMO,
+            min_interval=15,
         )
 
         assert should_skip is False, "AEMO during market hours should allow fetch"
@@ -249,10 +267,15 @@ class TestRateLimiter:
         last_fetched = datetime(2025, 10, 2, 20, 0, 0, tzinfo=timezone.utc)  # 5 min ago
 
         should_skip, reason = RateLimiter.should_skip_fetch(
-            last_fetched=last_fetched, current_time=after_hours, source=Source.AEMO, min_interval=15
+            last_fetched=last_fetched,
+            current_time=after_hours,
+            source=Source.AEMO,
+            min_interval=15,
         )
 
-        assert should_skip is True, "AEMO outside market hours should follow normal rules"
+        assert (
+            should_skip is True
+        ), "AEMO outside market hours should follow normal rules"
         assert "5.0 minutes ago" in reason
 
     # ==========================================
@@ -299,7 +322,9 @@ class TestRateLimiter:
     def test_exact_minimum_interval_boundary(self, base_time):
         """Test behavior at exact minimum interval boundary."""
         last_fetched = base_time
-        current_time = base_time + timedelta(minutes=15, microseconds=1)  # Just over 15 min
+        current_time = base_time + timedelta(
+            minutes=15, microseconds=1
+        )  # Just over 15 min
 
         should_skip, reason = RateLimiter.should_skip_fetch(
             last_fetched=last_fetched, current_time=current_time, min_interval=15

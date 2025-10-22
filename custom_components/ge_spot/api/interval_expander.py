@@ -53,12 +53,16 @@ def convert_to_target_intervals(
 
     # Case 1: Source matches target - no conversion needed
     if source_interval_minutes == target_interval_minutes:
-        _LOGGER.debug(f"No conversion needed: source = target = {target_interval_minutes}min")
+        _LOGGER.debug(
+            f"No conversion needed: source = target = {target_interval_minutes}min"
+        )
         return source_prices
 
     # Case 2: Source is coarser (e.g. 60min or 30min) - expand/duplicate
     if source_interval_minutes > target_interval_minutes:
-        return _expand_intervals(source_prices, source_interval_minutes, target_interval_minutes)
+        return _expand_intervals(
+            source_prices, source_interval_minutes, target_interval_minutes
+        )
 
     # Case 3: Source is finer (e.g. 5min) - aggregate/average
     return _aggregate_intervals(source_prices, target_interval_minutes)
@@ -93,12 +97,15 @@ def _expand_intervals(
     return expanded
 
 
-def _aggregate_intervals(fine_prices: Dict[str, float], target_minutes: int) -> Dict[str, float]:
+def _aggregate_intervals(
+    fine_prices: Dict[str, float], target_minutes: int
+) -> Dict[str, float]:
     """Aggregate fine intervals (5min) to coarser intervals (15min) by averaging."""
     interval_groups = defaultdict(list)
 
     _LOGGER.debug(
-        f"Aggregating {len(fine_prices)} fine-grained prices " f"to {target_minutes}-min intervals"
+        f"Aggregating {len(fine_prices)} fine-grained prices "
+        f"to {target_minutes}-min intervals"
     )
 
     for iso_timestamp, price in fine_prices.items():

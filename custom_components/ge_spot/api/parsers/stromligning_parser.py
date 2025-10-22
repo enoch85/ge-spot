@@ -73,18 +73,26 @@ class StromligningParser(BasePriceParser):
                     json_data = json.loads(raw_data["raw_data"])
                     if "prices" in json_data and isinstance(json_data["prices"], list):
                         prices_list = json_data["prices"]
-                        _LOGGER.debug("Using 'prices' list decoded from JSON string in 'raw_data'.")
+                        _LOGGER.debug(
+                            "Using 'prices' list decoded from JSON string in 'raw_data'."
+                        )
                 except json.JSONDecodeError as e:
-                    _LOGGER.warning(f"Failed to parse Stromligning raw data string as JSON: {e}")
+                    _LOGGER.warning(
+                        f"Failed to parse Stromligning raw data string as JSON: {e}"
+                    )
         # Check if the input is a JSON string itself
         elif isinstance(raw_data, str):
             try:
                 json_data = json.loads(raw_data)
                 if "prices" in json_data and isinstance(json_data["prices"], list):
                     prices_list = json_data["prices"]
-                    _LOGGER.debug("Using 'prices' list decoded from direct JSON string input.")
+                    _LOGGER.debug(
+                        "Using 'prices' list decoded from direct JSON string input."
+                    )
             except json.JSONDecodeError as e:
-                _LOGGER.warning(f"Failed to parse Stromligning direct string input as JSON: {e}")
+                _LOGGER.warning(
+                    f"Failed to parse Stromligning direct string input as JSON: {e}"
+                )
 
         # --- Validate extracted prices list ---
         if not prices_list:
@@ -131,7 +139,9 @@ class StromligningParser(BasePriceParser):
                 first_price = data["prices"][0]
 
                 # Check if details are available
-                if "details" in first_price and isinstance(first_price["details"], dict):
+                if "details" in first_price and isinstance(
+                    first_price["details"], dict
+                ):
                     metadata["has_details"] = True
 
                     # Extract component types from details
@@ -175,7 +185,9 @@ class StromligningParser(BasePriceParser):
                     timestamp_str = price_data["date"]
                     try:
                         # ISO format
-                        dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                        dt = datetime.fromisoformat(
+                            timestamp_str.replace("Z", "+00:00")
+                        )
                         # Create ISO formatted timestamp key
                         interval_key = dt.isoformat()
                         price_date = dt.date().isoformat()
@@ -230,10 +242,17 @@ class StromligningParser(BasePriceParser):
                             )
 
                         # Extract price components from details for internal storage/debugging
-                        if "details" in price_data and isinstance(price_data["details"], dict):
+                        if "details" in price_data and isinstance(
+                            price_data["details"], dict
+                        ):
                             self._price_components[interval_key] = {}
-                            for component_name, component_data in price_data["details"].items():
-                                if isinstance(component_data, dict) and "value" in component_data:
+                            for component_name, component_data in price_data[
+                                "details"
+                            ].items():
+                                if (
+                                    isinstance(component_data, dict)
+                                    and "value" in component_data
+                                ):
                                     try:
                                         component_value = float(component_data["value"])
                                         self._price_components[interval_key][
@@ -247,7 +266,10 @@ class StromligningParser(BasePriceParser):
                                 # Handle nested components like transmission
                                 elif isinstance(component_data, dict):
                                     for sub_name, sub_data in component_data.items():
-                                        if isinstance(sub_data, dict) and "value" in sub_data:
+                                        if (
+                                            isinstance(sub_data, dict)
+                                            and "value" in sub_data
+                                        ):
                                             try:
                                                 sub_value = float(sub_data["value"])
                                                 self._price_components[interval_key][
@@ -263,7 +285,8 @@ class StromligningParser(BasePriceParser):
                         )
                 except Exception as e:  # Catch broader errors during item processing
                     _LOGGER.warning(
-                        f"Failed to process price item: {price_data}. Error: {e}", exc_info=True
+                        f"Failed to process price item: {price_data}. Error: {e}",
+                        exc_info=True,
                     )
             else:
                 _LOGGER.debug(f"Skipping invalid price item structure: {price_data}")
@@ -324,7 +347,9 @@ class StromligningParser(BasePriceParser):
 
         return interval_prices.get(current_interval_key)
 
-    def _get_next_interval_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+    def _get_next_interval_price(
+        self, interval_prices: Dict[str, float]
+    ) -> Optional[float]:
         """Get next interval price.
 
         Args:

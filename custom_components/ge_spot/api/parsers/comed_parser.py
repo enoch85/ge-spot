@@ -66,7 +66,9 @@ class ComedParser(BasePriceParser):
             if "interval_raw" in raw_data and isinstance(
                 raw_data["interval_raw"], dict
             ):  # Changed from interval_prices
-                result["interval_raw"] = raw_data["interval_raw"]  # Changed from interval_prices
+                result["interval_raw"] = raw_data[
+                    "interval_raw"
+                ]  # Changed from interval_prices
             elif "raw_data" in raw_data:
                 json_data = self._fix_and_parse_json(raw_data["raw_data"])
                 if json_data:
@@ -99,7 +101,9 @@ class ComedParser(BasePriceParser):
         metadata.update(
             {
                 "currency": Currency.CENTS,  # ComEd API returns prices in cents/kWh, not USD/kWh
-                "timezone": SourceTimezone.API_TIMEZONES.get(Source.COMED, "America/Chicago"),
+                "timezone": SourceTimezone.API_TIMEZONES.get(
+                    Source.COMED, "America/Chicago"
+                ),
                 "area": "5minutefeed",  # Default area
             }
         )
@@ -128,7 +132,9 @@ class ComedParser(BasePriceParser):
         if isinstance(raw_data, dict):
             # If it's a dict with error info from the API client, return empty list
             if "error" in raw_data:
-                _LOGGER.error(f"Error in API response: {raw_data.get('message', 'Unknown error')}")
+                _LOGGER.error(
+                    f"Error in API response: {raw_data.get('message', 'Unknown error')}"
+                )
                 return []
             # If it's a single item, wrap in a list
             return [raw_data]
@@ -163,7 +169,9 @@ class ComedParser(BasePriceParser):
                 _LOGGER.error(f"Failed to parse ComEd data even after fixing: {e}")
                 return []
 
-    def _parse_price_data(self, data: List[Dict], endpoint: str, result: Dict[str, Any]) -> None:
+    def _parse_price_data(
+        self, data: List[Dict], endpoint: str, result: Dict[str, Any]
+    ) -> None:
         """Parse ComEd price data into standardized format.
 
         Args:
@@ -183,7 +191,9 @@ class ComedParser(BasePriceParser):
                     try:
                         # Convert millisUTC to datetime with UTC timezone
                         millis = int(item["millisUTC"])
-                        timestamp = datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
+                        timestamp = datetime.fromtimestamp(
+                            millis / 1000, tz=timezone.utc
+                        )
                         price = float(item["price"])
 
                         # Store with ISO timestamp (5-minute granularity)
@@ -212,7 +222,9 @@ class ComedParser(BasePriceParser):
                     result["current_price"] = current_price
                     if "millisUTC" in data[0]:
                         millis = int(data[0]["millisUTC"])
-                        timestamp = datetime.fromtimestamp(millis / 1000, tz=timezone.utc)
+                        timestamp = datetime.fromtimestamp(
+                            millis / 1000, tz=timezone.utc
+                        )
                     else:
                         timestamp = datetime.now(timezone.utc)
                     hour_dt = timestamp.replace(minute=0, second=0, microsecond=0)

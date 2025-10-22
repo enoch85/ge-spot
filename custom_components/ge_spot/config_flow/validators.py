@@ -28,11 +28,19 @@ async def validate_entsoe_api_key(api_key, area, session=None):
         result = await api._fetch_data()
 
         # Close session if we created one
-        if hasattr(api, "_owns_session") and api._owns_session and hasattr(api, "close"):
+        if (
+            hasattr(api, "_owns_session")
+            and api._owns_session
+            and hasattr(api, "close")
+        ):
             await api.close()
 
         # Check if we got a valid response
-        if result and isinstance(result, str) and "<Publication_MarketDocument" in result:
+        if (
+            result
+            and isinstance(result, str)
+            and "<Publication_MarketDocument" in result
+        ):
             _LOGGER.debug("ENTSO-E API key validation successful")
             return True
         elif isinstance(result, str) and "Not authorized" in result:
@@ -40,7 +48,9 @@ async def validate_entsoe_api_key(api_key, area, session=None):
             return False
         elif isinstance(result, str) and "No matching data found" in result:
             # This is technically a valid API key, even if there's no data
-            _LOGGER.warning("API key is valid but no data available for the specified area")
+            _LOGGER.warning(
+                "API key is valid but no data available for the specified area"
+            )
             return True
         else:
             _LOGGER.error("API key validation failed: No valid data returned")

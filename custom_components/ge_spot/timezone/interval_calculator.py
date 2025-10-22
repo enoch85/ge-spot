@@ -6,7 +6,12 @@ from datetime import datetime, timedelta
 from homeassistant.util import dt as dt_util
 
 from .dst_handler import DSTHandler
-from ..const.time import DSTTransitionType, TimezoneConstants, TimezoneReference, TimeInterval
+from ..const.time import (
+    DSTTransitionType,
+    TimezoneConstants,
+    TimezoneReference,
+    TimeInterval,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -15,7 +20,11 @@ class IntervalCalculator:
     """Calculator for time interval operations."""
 
     def __init__(
-        self, timezone=None, system_timezone=None, area_timezone=None, timezone_reference=None
+        self,
+        timezone=None,
+        system_timezone=None,
+        area_timezone=None,
+        timezone_reference=None,
     ):
         """Initialize with optional timezone."""
         self.timezone = timezone or dt_util.DEFAULT_TIME_ZONE
@@ -81,7 +90,10 @@ class IntervalCalculator:
                 return interval_key
 
         # If area timezone is provided and using Local Area Time mode, use it for determining the current interval
-        elif self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
+        elif (
+            self.timezone_reference == TimezoneReference.LOCAL_AREA
+            and self.area_timezone
+        ):
             # Use astimezone to properly convert the time to the area timezone
             now_display = now.astimezone(self.area_timezone)
             _LOGGER.debug(
@@ -105,13 +117,19 @@ class IntervalCalculator:
         )
 
         # Special handling for fall back transition during the ambiguous hour
-        if is_transition and transition_type == DSTTransitionType.FALL_BACK and now.hour == 2:
+        if (
+            is_transition
+            and transition_type == DSTTransitionType.FALL_BACK
+            and now.hour == 2
+        ):
             # Check if we're in the first or second occurrence of 2:00
             dst_offset = now.dst().total_seconds()
 
             if dst_offset > 0:
                 # First time through 2:00 (still on DST)
-                _LOGGER.debug("Current interval during fall back DST transition: first 02:XX")
+                _LOGGER.debug(
+                    "Current interval during fall back DST transition: first 02:XX"
+                )
                 return f"02:{rounded.minute:02d}"
             else:
                 # Second time through 2:00 (DST ended)
@@ -165,7 +183,10 @@ class IntervalCalculator:
 
         # Special handling for DST transitions
         if is_transition:
-            if transition_type == DSTTransitionType.SPRING_FORWARD and now_display.hour == 1:
+            if (
+                transition_type == DSTTransitionType.SPRING_FORWARD
+                and now_display.hour == 1
+            ):
                 # Check if next interval would fall in the skipped hour (2:XX)
                 if next_interval.hour == 2:
                     # Skip to 3:00
@@ -173,7 +194,9 @@ class IntervalCalculator:
                         "Next interval during spring forward: skipping from 01:XX to 03:00"
                     )
                     return "03:00"
-            elif transition_type == DSTTransitionType.FALL_BACK and now_display.hour == 2:
+            elif (
+                transition_type == DSTTransitionType.FALL_BACK and now_display.hour == 2
+            ):
                 # Check if we're in the first occurrence of 2:XX
                 dst_offset = now.dst().total_seconds()
                 if dst_offset > 0:
@@ -215,7 +238,10 @@ class IntervalCalculator:
         )
 
         # If using Local Area Time mode and area timezone is available
-        if self.timezone_reference == TimezoneReference.LOCAL_AREA and self.area_timezone:
+        if (
+            self.timezone_reference == TimezoneReference.LOCAL_AREA
+            and self.area_timezone
+        ):
             target_dt = dt.astimezone(self.area_timezone)
             _LOGGER.debug(
                 f"IntervalCalculator using area_timezone: target_dt={target_dt}, area_timezone={self.area_timezone}"
@@ -232,6 +258,8 @@ class IntervalCalculator:
 
         # Generate the interval key
         interval_key = f"{rounded.hour:02d}:{rounded.minute:02d}"
-        _LOGGER.debug(f"IntervalCalculator result: interval_key={interval_key}, rounded={rounded}")
+        _LOGGER.debug(
+            f"IntervalCalculator result: interval_key={interval_key}, rounded={rounded}"
+        )
 
         return interval_key

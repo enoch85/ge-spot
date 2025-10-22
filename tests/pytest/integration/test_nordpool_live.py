@@ -33,7 +33,9 @@ def generate_15min_intervals(base_date_str, base_prices, area_code):
         base_price = base_prices[hour_idx]
         # Create 4 intervals per hour with slight price variations
         for quarter in range(4):
-            interval_start = start_time + timedelta(hours=hour_idx, minutes=quarter * 15)
+            interval_start = start_time + timedelta(
+                hours=hour_idx, minutes=quarter * 15
+            )
             interval_end = interval_start + timedelta(minutes=15)
 
             # Add small realistic variation (±2%) to each 15-min interval
@@ -197,7 +199,9 @@ SAMPLE_NORDPOOL_RESPONSES = {
         "updatedAt": get_yesterday_date(),
         "deliveryAreas": ["FI"],
         "market": "DayAhead",
-        "multiAreaEntries": lambda: generate_15min_intervals(get_test_date(), BASE_PRICES_FI, "FI"),
+        "multiAreaEntries": lambda: generate_15min_intervals(
+            get_test_date(), BASE_PRICES_FI, "FI"
+        ),
         "currency": "EUR",
         "exchangeRate": 1,
         "areaStates": [{"state": "Final", "areas": ["FI"]}],
@@ -301,7 +305,9 @@ MOCK_EXCHANGE_RATES = {
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("area", ["FI", "SE3", "NO1", "DK1"])  # Test key Nordic market areas
+@pytest.mark.parametrize(
+    "area", ["FI", "SE3", "NO1", "DK1"]
+)  # Test key Nordic market areas
 async def test_nordpool_live_fetch_parse(area, monkeypatch):
     """Tests fetching and parsing Nordpool data for various Nordic areas.
     This test uses mocked responses injected directly into the API client.
@@ -312,14 +318,18 @@ async def test_nordpool_live_fetch_parse(area, monkeypatch):
     async def mock_fetch_raw_data(self, area, **kwargs):
         # Create a mock response structure matching what the real API returns
         # Get the template and call lambda for multiAreaEntries if it exists
-        area_response = SAMPLE_NORDPOOL_RESPONSES.get(area, SAMPLE_NORDPOOL_RESPONSES["SE3"]).copy()
+        area_response = SAMPLE_NORDPOOL_RESPONSES.get(
+            area, SAMPLE_NORDPOOL_RESPONSES["SE3"]
+        ).copy()
         tomorrow_response = SAMPLE_NORDPOOL_TOMORROW_RESPONSES.get("SE3").copy()
 
         # Call lambda functions to generate current date data
         if callable(area_response.get("multiAreaEntries")):
             area_response["multiAreaEntries"] = area_response["multiAreaEntries"]()
         if callable(tomorrow_response.get("multiAreaEntries")):
-            tomorrow_response["multiAreaEntries"] = tomorrow_response["multiAreaEntries"]()
+            tomorrow_response["multiAreaEntries"] = tomorrow_response[
+                "multiAreaEntries"
+            ]()
 
         # Update dynamic dates
         area_response["deliveryDateCET"] = get_test_date()
@@ -370,7 +380,9 @@ async def test_nordpool_live_fetch_parse(area, monkeypatch):
 
         # Assert: Raw Data Structure (strict validation)
         assert raw_data is not None, f"Raw data for {area} should not be None"
-        assert isinstance(raw_data, dict), f"Raw data should be a dictionary, got {type(raw_data)}"
+        assert isinstance(
+            raw_data, dict
+        ), f"Raw data should be a dictionary, got {type(raw_data)}"
 
         # Validate wrapper structure
         assert "raw_data" in raw_data, "Required field 'raw_data' missing from response"
@@ -380,7 +392,9 @@ async def test_nordpool_live_fetch_parse(area, monkeypatch):
         ), f"raw_data should be a dictionary, got {type(raw_api_response)}"
 
         # Validate Nordpool-specific structure within raw_data
-        assert "today" in raw_api_response, "Required field 'today' missing from raw_data"
+        assert (
+            "today" in raw_api_response
+        ), "Required field 'today' missing from raw_data"
         assert isinstance(
             raw_api_response.get("today"), dict
         ), f"today should be a dictionary, got {type(raw_api_response.get('today'))}"
@@ -389,7 +403,9 @@ async def test_nordpool_live_fetch_parse(area, monkeypatch):
         assert (
             raw_data.get("source") == Source.NORDPOOL
         ), f"Source should be {Source.NORDPOOL}, got {raw_data.get('source')}"
-        assert raw_data.get("area") == area, f"Area should be {area}, got {raw_data.get('area')}"
+        assert (
+            raw_data.get("area") == area
+        ), f"Area should be {area}, got {raw_data.get('area')}"
 
         # Timezone validation - Nordpool uses Oslo time
         assert (
@@ -398,7 +414,9 @@ async def test_nordpool_live_fetch_parse(area, monkeypatch):
 
         # Validate today data structure
         today_data = raw_api_response.get("today", {})
-        assert "multiAreaEntries" in today_data, "multiAreaEntries missing from today data"
+        assert (
+            "multiAreaEntries" in today_data
+        ), "multiAreaEntries missing from today data"
         assert isinstance(
             today_data.get("multiAreaEntries"), list
         ), f"multiAreaEntries should be a list, got {type(today_data.get('multiAreaEntries'))}"
@@ -418,7 +436,9 @@ async def test_nordpool_live_fetch_parse(area, monkeypatch):
             assert (
                 "deliveryStart" in first_entry
             ), "Required field 'deliveryStart' missing from entry"
-            assert "entryPerArea" in first_entry, "Required field 'entryPerArea' missing from entry"
+            assert (
+                "entryPerArea" in first_entry
+            ), "Required field 'entryPerArea' missing from entry"
 
             # Check if area is in entryPerArea (it should be if query is valid)
             entry_per_area = first_entry.get("entryPerArea", {})
@@ -508,7 +528,9 @@ async def test_nordpool_live_fetch_parse(area, monkeypatch):
             interval_diffs.append(interval_diff)
 
             # NordPool now provides 15-minute intervals
-            valid_interval = abs(interval_diff - 15.0) < 1.0  # Within 1 minute of 15 minutes
+            valid_interval = (
+                abs(interval_diff - 15.0) < 1.0
+            )  # Within 1 minute of 15 minutes
             assert (
                 valid_interval
             ), f"Unexpected time gap between {timestamps[i-1]} and {timestamps[i]} for {area}: {interval_diff} minutes (expected 15)"

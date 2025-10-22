@@ -25,7 +25,10 @@ class EnergyChartsAPI(BasePriceAPI):
     """
 
     def __init__(
-        self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        session=None,
+        timezone_service=None,
     ):
         """Initialize the API.
 
@@ -117,7 +120,9 @@ class EnergyChartsAPI(BasePriceAPI):
             # Check for error response from API client first
             if isinstance(response, dict) and response.get("error"):
                 error_msg = response.get("message", "Unknown error")
-                _LOGGER.error(f"Energy-Charts API request failed for {area}: {error_msg}")
+                _LOGGER.error(
+                    f"Energy-Charts API request failed for {area}: {error_msg}"
+                )
                 return None
 
             # Check for valid response structure
@@ -127,7 +132,9 @@ class EnergyChartsAPI(BasePriceAPI):
 
             # Check for required fields (only if we have a valid dict without error)
             if "unix_seconds" not in response or "price" not in response:
-                _LOGGER.error(f"Energy-Charts response missing required fields for {area}")
+                _LOGGER.error(
+                    f"Energy-Charts response missing required fields for {area}"
+                )
                 return None
 
             # Check if we got data

@@ -53,7 +53,8 @@ class TestParserSourceValidation:
                 f"{type(parser.source).__name__}"
             )
             assert parser.source == source_name, (
-                f"Parser source mismatch: expected '{source_name}', " f"got '{parser.source}'"
+                f"Parser source mismatch: expected '{source_name}', "
+                f"got '{parser.source}'"
             )
 
     def test_parser_validation_empty_interval_raw(self, all_parsers, caplog):
@@ -68,14 +69,20 @@ class TestParserSourceValidation:
                 result = parser.validate_parsed_data(test_data)
 
             # Should fail validation
-            assert result is False, f"{source_name} should fail validation with empty data"
+            assert (
+                result is False
+            ), f"{source_name} should fail validation with empty data"
 
             # Check that error message contains correct source name
-            warning_messages = [rec.message for rec in caplog.records if rec.levelname == "WARNING"]
+            warning_messages = [
+                rec.message for rec in caplog.records if rec.levelname == "WARNING"
+            ]
             assert len(warning_messages) > 0, f"No warning logged for {source_name}"
 
             # Verify the source name appears in the message
-            found_source_in_message = any(source_name in msg for msg in warning_messages)
+            found_source_in_message = any(
+                source_name in msg for msg in warning_messages
+            )
             assert (
                 found_source_in_message
             ), f"Source name '{source_name}' not found in warning messages: {warning_messages}"
@@ -86,7 +93,8 @@ class TestParserSourceValidation:
                     "TimezoneService object at 0x" not in msg
                 ), f"TimezoneService object leak detected in {source_name}: {msg}"
                 assert (
-                    "<custom_components.ge_spot.timezone.service.TimezoneService" not in msg
+                    "<custom_components.ge_spot.timezone.service.TimezoneService"
+                    not in msg
                 ), f"TimezoneService object leak detected in {source_name}: {msg}"
 
     def test_parser_validation_missing_current_price(self, all_parsers, caplog):
@@ -122,7 +130,9 @@ class TestParserSourceValidation:
             )
 
             # Check for DEBUG message confirming structural validity
-            debug_messages = [rec.message for rec in caplog.records if rec.levelname == "DEBUG"]
+            debug_messages = [
+                rec.message for rec in caplog.records if rec.levelname == "DEBUG"
+            ]
 
             # Should log that structure is valid
             assert any(

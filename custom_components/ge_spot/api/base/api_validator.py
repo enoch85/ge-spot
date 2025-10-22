@@ -38,10 +38,14 @@ class ApiValidator:
             True if data is valid and usable
         """
         # Use the new DataValidator for validation
-        validation_result = ApiValidator._data_validator.validate_price_data(data, source_name)
+        validation_result = ApiValidator._data_validator.validate_price_data(
+            data, source_name
+        )
 
         # Track validation result for historical analysis
-        ApiValidator._data_validator.track_validation_result(source_name, validation_result)
+        ApiValidator._data_validator.track_validation_result(
+            source_name, validation_result
+        )
 
         # If validation failed, return False
         if not validation_result["valid"]:
@@ -57,7 +61,9 @@ class ApiValidator:
             # For AEMO, we only require at least 16 intervals of data (4 hours with 15-min intervals)
             # Missing intervals will be filled from fallback sources if available
             if interval_count < 16:
-                _LOGGER.warning(f"No interval prices from {source_name}: {interval_count}/16")
+                _LOGGER.warning(
+                    f"No interval prices from {source_name}: {interval_count}/16"
+                )
                 return False
         elif source_name.lower() == Source.ENTSOE.lower():
             # For ENTSO-E, we only require at least 24 intervals of data (6 hours with 15-min intervals)

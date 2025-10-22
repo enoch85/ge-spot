@@ -61,9 +61,7 @@ class TestAemoParser:
     @pytest.fixture
     def sample_csv_qld(self):
         """Create sample CSV with QLD1 data (current timestamps)."""
-        return (
-            f"{SAMPLE_CSV_HEADER}\n{_generate_current_aemo_data('QLD1', 4, 'Australia/Brisbane')}"
-        )
+        return f"{SAMPLE_CSV_HEADER}\n{_generate_current_aemo_data('QLD1', 4, 'Australia/Brisbane')}"
 
     def test_parse_nsw_data(self, parser, sample_csv_nsw):
         """Test parsing NSW1 region data."""
@@ -237,7 +235,9 @@ class TestAemoParser:
         # Check first record - should be current 30-min interval in Sydney time
         # Just verify it's a valid datetime and price
         assert isinstance(prices[0]["timestamp"], datetime)
-        assert prices[0]["price"] == 150.0  # First price from _generate_current_aemo_data
+        assert (
+            prices[0]["price"] == 150.0
+        )  # First price from _generate_current_aemo_data
 
         # Verify price progression
         assert prices[1]["price"] == 160.0
@@ -247,7 +247,9 @@ class TestAemoParser:
     def test_empty_result_structure(self, parser):
         """Test empty result structure."""
         result = parser._create_empty_result(
-            {"area": "NSW1", "timezone": "Australia/Sydney"}, "Australia/Sydney", Currency.AUD
+            {"area": "NSW1", "timezone": "Australia/Sydney"},
+            "Australia/Sydney",
+            Currency.AUD,
         )
 
         assert result["interval_raw"] == {}

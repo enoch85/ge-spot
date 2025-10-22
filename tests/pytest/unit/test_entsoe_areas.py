@@ -105,11 +105,16 @@ class TestEntsoeAreasValidation:
             eic_to_areas[eic_code].append(area)
 
         # Check for duplicates
-        duplicates = {eic: areas for eic, areas in eic_to_areas.items() if len(areas) > 1}
+        duplicates = {
+            eic: areas for eic, areas in eic_to_areas.items() if len(areas) > 1
+        }
 
         # Allow known intentional duplicates
         allowed_duplicates = {
-            "10Y1001A1001A59C": ["GB", "IE(SEM)"],  # Great Britain and Ireland SEM share code
+            "10Y1001A1001A59C": [
+                "GB",
+                "IE(SEM)",
+            ],  # Great Britain and Ireland SEM share code
             "10Y1001A1001A48H": [
                 "NO1",
                 "NO5",
@@ -124,7 +129,9 @@ class TestEntsoeAreasValidation:
                     f"(expected {allowed_duplicates[eic]})"
                 )
             else:
-                pytest.fail(f"Unexpected duplicate EIC code {eic} used by areas: {areas}")
+                pytest.fail(
+                    f"Unexpected duplicate EIC code {eic} used by areas: {areas}"
+                )
 
     def test_energy_charts_areas_subset_of_entsoe(self):
         """Test that areas in ENERGY_CHARTS_BZN that are ENTSOE areas are properly configured."""
@@ -188,6 +195,10 @@ class TestEntsoeAreasValidation:
         for area in AreaMapping.ENTSOE_AREAS.keys():
             display_name = AreaMapping.ENTSOE_AREAS[area]
             # Display name should not be empty
-            assert display_name and len(display_name) > 0, f"Area '{area}' has empty display name"
+            assert (
+                display_name and len(display_name) > 0
+            ), f"Area '{area}' has empty display name"
             # Display name should be a string
-            assert isinstance(display_name, str), f"Display name for area '{area}' is not a string"
+            assert isinstance(
+                display_name, str
+            ), f"Display name for area '{area}' is not a string"

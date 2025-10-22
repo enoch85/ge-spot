@@ -48,7 +48,9 @@ class TestValidationFallback:
 
         # Current time (simulate 16:00, after 01:00 cutoff)
         now = datetime.now(stockholm_tz)
-        current_interval = now.replace(minute=(now.minute // 15) * 15, second=0, microsecond=0)
+        current_interval = now.replace(
+            minute=(now.minute // 15) * 15, second=0, microsecond=0
+        )
         tomorrow = now + timedelta(days=1)
         tomorrow_10am = tomorrow.replace(hour=10, minute=0, second=0, microsecond=0)
 
@@ -99,7 +101,9 @@ class TestValidationFallback:
                             "entryPerArea": {area: 1.5},
                         },
                         {
-                            "deliveryStart": (current_interval + timedelta(minutes=15)).isoformat(),
+                            "deliveryStart": (
+                                current_interval + timedelta(minutes=15)
+                            ).isoformat(),
                             "entryPerArea": {area: 2.0},
                         },
                     ]
@@ -200,7 +204,9 @@ class TestValidationFallback:
             result = await processor.process(future_only_raw)
 
             # Should fail validation and return error
-            assert "error" in result, "Should return error for future-only data after 01:00"
+            assert (
+                "error" in result
+            ), "Should return error for future-only data after 01:00"
             assert (
                 "validation" in result["error"].lower()
                 or "current interval" in result["error"].lower()

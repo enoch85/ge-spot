@@ -48,7 +48,9 @@ class FallbackManager:
             return None
 
         for api_instance in api_instances:
-            source_name = getattr(api_instance, "source_type", type(api_instance).__name__)
+            source_name = getattr(
+                api_instance, "source_type", type(api_instance).__name__
+            )
             attempted_sources.append(source_name)
 
             # Try each source with exponential backoff
@@ -133,4 +135,8 @@ class FallbackManager:
             f"Attempted: {', '.join(attempted_sources)}. "
             f"Last error: {last_exception}"
         )
-        return {"attempted_sources": attempted_sources, "error": last_exception, "has_data": False}
+        return {
+            "attempted_sources": attempted_sources,
+            "error": last_exception,
+            "has_data": False,
+        }

@@ -113,7 +113,9 @@ class TestGracePeriodRateLimiting:
             area="SE4",
             in_grace_period=True,
         )
-        assert should_skip is False, "Grace period should bypass rate limiting for fallback"
+        assert (
+            should_skip is False
+        ), "Grace period should bypass rate limiting for fallback"
         assert "grace period" in reason.lower()
         assert "bypassing rate limiting" in reason.lower()
 

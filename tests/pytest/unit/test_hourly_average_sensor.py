@@ -102,7 +102,11 @@ class TestHourlyAverageSensor:
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         hourly_averages = sensor._calculate_hourly_averages(coordinator.data)
@@ -125,7 +129,11 @@ class TestHourlyAverageSensor:
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         hourly_averages = sensor._calculate_hourly_averages(coordinator.data)
@@ -224,7 +232,11 @@ class TestHourlyAverageSensor:
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         hourly_averages = sensor._calculate_hourly_averages(coordinator.data)
@@ -257,7 +269,11 @@ class TestHourlyAverageSensor:
         mock_now.return_value = mock_dt
 
         sensor = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         value = sensor.native_value
@@ -276,7 +292,11 @@ class TestHourlyAverageSensor:
         mock_now.return_value = mock_dt
 
         sensor2 = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         value2 = sensor2.native_value
@@ -308,7 +328,11 @@ class TestHourlyAverageSensor:
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         hourly_averages = sensor._calculate_hourly_averages(coordinator.data)
@@ -351,7 +375,11 @@ class TestHourlyAverageSensor:
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         hourly_averages = sensor._calculate_hourly_averages(coordinator.data)
@@ -395,7 +423,11 @@ class TestHourlyAverageSensor:
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         hourly_averages = sensor._calculate_hourly_averages(coordinator.data)
@@ -465,7 +497,11 @@ class TestHourlyAverageSensor:
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         hourly_averages = sensor._calculate_hourly_averages(coordinator.data)
@@ -495,7 +531,11 @@ class TestHourlyAverageSensor:
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
-            coordinator, config_data, "hourly_average_price", "Hourly Average Price", day_offset=0
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
         )
 
         hourly_averages = sensor._calculate_hourly_averages(coordinator.data)

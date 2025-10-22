@@ -49,7 +49,10 @@ def format_price_value(price: float, precision: int = 2) -> str:
 
 
 def format_relative_price(
-    price: float, reference_price: float, currency: str = None, use_subunit: bool = False
+    price: float,
+    reference_price: float,
+    currency: str = None,
+    use_subunit: bool = False,
 ) -> str:
     """Format price relative to a reference price.
 

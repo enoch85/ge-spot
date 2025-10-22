@@ -76,7 +76,9 @@ async def test_single_area(api: EnergyChartsAPI, area: str):
         assert (
             raw_data["timezone"] == "Europe/Berlin"
         ), f"Expected Europe/Berlin, got {raw_data['timezone']}"
-        assert raw_data["currency"] == Currency.EUR, f"Expected EUR, got {raw_data['currency']}"
+        assert (
+            raw_data["currency"] == Currency.EUR
+        ), f"Expected EUR, got {raw_data['currency']}"
         assert (
             raw_data["source"] == Source.ENERGY_CHARTS
         ), f"Expected energy_charts, got {raw_data['source']}"
@@ -105,7 +107,14 @@ async def test_single_area(api: EnergyChartsAPI, area: str):
         print(f"✅ Parsed data structure:")
         print(f"   Keys: {list(parsed_data.keys())}")
 
-        required_fields = ["interval_raw", "currency", "timezone", "source", "source_unit", "area"]
+        required_fields = [
+            "interval_raw",
+            "currency",
+            "timezone",
+            "source",
+            "source_unit",
+            "area",
+        ]
         for field in required_fields:
             assert field in parsed_data, f"Missing required field: {field}"
 
@@ -122,7 +131,9 @@ async def test_single_area(api: EnergyChartsAPI, area: str):
         assert (
             parsed_data["source_unit"] == "MWh"
         ), f"Expected MWh, got {parsed_data['source_unit']}"
-        assert parsed_data["area"] == area, f"Expected {area}, got {parsed_data['area']}"
+        assert (
+            parsed_data["area"] == area
+        ), f"Expected {area}, got {parsed_data['area']}"
 
         # Validate interval data
         interval_raw = parsed_data["interval_raw"]
@@ -154,7 +165,9 @@ async def test_single_area(api: EnergyChartsAPI, area: str):
 
         # Price validation
         all_prices = list(interval_raw.values())
-        assert all(isinstance(p, (int, float)) for p in all_prices), "All prices should be numeric"
+        assert all(
+            isinstance(p, (int, float)) for p in all_prices
+        ), "All prices should be numeric"
 
         min_price = min(all_prices)
         max_price = max(all_prices)
@@ -166,16 +179,24 @@ async def test_single_area(api: EnergyChartsAPI, area: str):
         print(f"   Average: {avg_price:.2f} EUR/MWh")
 
         # Sanity check on price range
-        assert -200 <= min_price <= 1000, f"Minimum price {min_price} outside reasonable range"
-        assert -200 <= max_price <= 1000, f"Maximum price {max_price} outside reasonable range"
+        assert (
+            -200 <= min_price <= 1000
+        ), f"Minimum price {min_price} outside reasonable range"
+        assert (
+            -200 <= max_price <= 1000
+        ), f"Maximum price {max_price} outside reasonable range"
 
         # Check interval spacing
         sorted_timestamps = sorted(interval_raw.keys())
         if len(sorted_timestamps) >= 2:
             print(f"\n⏱️  Interval Spacing Check (first 5):")
             for i in range(1, min(6, len(sorted_timestamps))):
-                ts1 = datetime.fromisoformat(sorted_timestamps[i - 1].replace("Z", "+00:00"))
-                ts2 = datetime.fromisoformat(sorted_timestamps[i].replace("Z", "+00:00"))
+                ts1 = datetime.fromisoformat(
+                    sorted_timestamps[i - 1].replace("Z", "+00:00")
+                )
+                ts2 = datetime.fromisoformat(
+                    sorted_timestamps[i].replace("Z", "+00:00")
+                )
                 diff_minutes = (ts2 - ts1).total_seconds() / 60
                 print(
                     f"   {sorted_timestamps[i-1]} -> {sorted_timestamps[i]}: {diff_minutes:.0f} min"

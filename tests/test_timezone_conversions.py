@@ -145,7 +145,11 @@ class TestBackwardConversions:
             "Australia/Adelaide": (21, 30, "+1030"),
         }
 
-        for tz_name, (expected_hour, expected_min, expected_offset) in timezones.items():
+        for tz_name, (
+            expected_hour,
+            expected_min,
+            expected_offset,
+        ) in timezones.items():
             tz = ZoneInfo(tz_name)
             local_dt = utc_dt.astimezone(tz)
 
@@ -332,7 +336,9 @@ class TestMultipleIntervals:
 
         for i in range(16):
             minutes = i * 15
-            local_dt = (base_time + timedelta(minutes=minutes)).replace(tzinfo=copenhagen_tz)
+            local_dt = (base_time + timedelta(minutes=minutes)).replace(
+                tzinfo=copenhagen_tz
+            )
             utc_dt = local_dt.astimezone(timezone.utc)
             intervals.append((local_dt, utc_dt))
 

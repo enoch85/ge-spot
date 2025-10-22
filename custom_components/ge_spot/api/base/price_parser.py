@@ -51,7 +51,8 @@ class BasePriceParser(ABC):
             "source": self.source,
             "price_count": len(data.get("interval_raw", {})),
             "currency": data.get("currency", "EUR"),
-            "has_current_price": "current_price" in data and data["current_price"] is not None,
+            "has_current_price": "current_price" in data
+            and data["current_price"] is not None,
             "has_next_interval_price": "next_interval_price" in data
             and data["next_interval_price"] is not None,
             "parser_version": "2.0",  # Add version for tracking changes
@@ -134,7 +135,9 @@ class BasePriceParser(ABC):
         if "T" in timestamp_str:  # ISO format
             try:
                 # Handle 'Z' for UTC explicitly
-                dt_naive_or_aware = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                dt_naive_or_aware = datetime.fromisoformat(
+                    timestamp_str.replace("Z", "+00:00")
+                )
                 if dt_naive_or_aware.tzinfo is None:
                     # If naive, assume it's in the source_timezone
                     # Use replace() for stdlib timezones, localize() for pytz
@@ -169,13 +172,21 @@ class BasePriceParser(ABC):
                 except ValueError:
                     continue
             if dt is None:
-                raise ValueError(f"Cannot parse date+time timestamp format: {timestamp_str}")
+                raise ValueError(
+                    f"Cannot parse date+time timestamp format: {timestamp_str}"
+                )
 
         elif ":" in timestamp_str:  # HH:MM format (ambiguous date)
             try:
                 # Use context_date if provided, otherwise today in source timezone
-                base_date = context_date if context_date else datetime.now(source_timezone).date()
-                time_format = "%H:%M" if len(timestamp_str.split(":")) == 2 else "%H:%M:%S"
+                base_date = (
+                    context_date
+                    if context_date
+                    else datetime.now(source_timezone).date()
+                )
+                time_format = (
+                    "%H:%M" if len(timestamp_str.split(":")) == 2 else "%H:%M:%S"
+                )
                 time_obj = datetime.strptime(timestamp_str, time_format).time()
                 dt_naive = datetime.combine(base_date, time_obj)
                 # Use replace() for stdlib timezones, localize() for pytz
@@ -264,7 +275,9 @@ class BasePriceParser(ABC):
                     )
                     # Fallback further to UTC date if target timezone fails
                     reference_date_target = datetime.now(timezone.utc).date()
-                    _LOGGER.warning(f"Further fallback to UTC date: {reference_date_target}")
+                    _LOGGER.warning(
+                        f"Further fallback to UTC date: {reference_date_target}"
+                    )
 
         else:
             _LOGGER.debug(
@@ -350,7 +363,9 @@ class BasePriceParser(ABC):
             try:
                 # Parse the timestamp string into a UTC datetime object
                 dt_utc = self.parse_timestamp(
-                    timestamp_key, source_timezone, context_date=context_date_for_parsing
+                    timestamp_key,
+                    source_timezone,
+                    context_date=context_date_for_parsing,
                 )
 
                 # Classify the timestamp based on the target timezone and context date
@@ -371,10 +386,13 @@ class BasePriceParser(ABC):
                 normalized_prices[day_type][interval_key] = price
 
             except ValueError as e:
-                _LOGGER.warning(f"Skipping invalid timestamp key '{timestamp_key}': {e}")
+                _LOGGER.warning(
+                    f"Skipping invalid timestamp key '{timestamp_key}': {e}"
+                )
             except Exception as e:
                 _LOGGER.error(
-                    f"Unexpected error processing timestamp '{timestamp_key}': {e}", exc_info=True
+                    f"Unexpected error processing timestamp '{timestamp_key}': {e}",
+                    exc_info=True,
                 )
 
         _LOGGER.debug(
@@ -413,10 +431,14 @@ class BasePriceParser(ABC):
                 continue
 
         # Changed to DEBUG - validation method will log the WARNING
-        _LOGGER.debug(f"{self.source}: Could not find current interval price for {iso_key}")
+        _LOGGER.debug(
+            f"{self.source}: Could not find current interval price for {iso_key}"
+        )
         return None
 
-    def _get_next_interval_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
+    def _get_next_interval_price(
+        self, interval_raw: Dict[str, float]
+    ) -> Optional[float]:
         """Get the next interval's price from the interval_raw data."""
         if not interval_raw:
             _LOGGER.warning(
@@ -447,7 +469,9 @@ class BasePriceParser(ABC):
                 continue
 
         # Changed to DEBUG - validation method will log WARNING if needed
-        _LOGGER.debug(f"{self.source}: Could not find next interval price for {iso_key}")
+        _LOGGER.debug(
+            f"{self.source}: Could not find next interval price for {iso_key}"
+        )
         return None
 
     def _calculate_day_average(
@@ -455,7 +479,9 @@ class BasePriceParser(ABC):
     ) -> Optional[float]:
         """Calculate day average price from interval_raw data."""
         if not interval_raw:
-            _LOGGER.warning(f"{self.source}: No interval_raw prices found to calculate average.")
+            _LOGGER.warning(
+                f"{self.source}: No interval_raw prices found to calculate average."
+            )
             return None
 
         target_date = datetime.now(timezone.utc).date()
@@ -476,7 +502,9 @@ class BasePriceParser(ABC):
                 if interval_dt.date() == target_date:
                     day_prices.append(price)
             except (ValueError, TypeError):
-                _LOGGER.debug(f"Skipping invalid key format in interval_raw: {interval_key}")
+                _LOGGER.debug(
+                    f"Skipping invalid key format in interval_raw: {interval_key}"
+                )
                 continue
 
         if not day_prices:
@@ -492,7 +520,9 @@ class BasePriceParser(ABC):
 
         return sum(day_prices) / len(day_prices)
 
-    def calculate_peak_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+    def calculate_peak_price(
+        self, interval_prices: Dict[str, float]
+    ) -> Optional[float]:
         """Calculate the peak (maximum) price from interval prices.
 
         Args:
@@ -505,7 +535,9 @@ class BasePriceParser(ABC):
             return None
         return max(interval_prices.values()) if interval_prices else None
 
-    def calculate_off_peak_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+    def calculate_off_peak_price(
+        self, interval_prices: Dict[str, float]
+    ) -> Optional[float]:
         """Calculate the off-peak (minimum) price from interval prices.
 
         Args:

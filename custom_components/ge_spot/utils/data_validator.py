@@ -209,7 +209,11 @@ class DataValidator:
                         z_score = abs((price - mean) / stdev)
                         if z_score > self._anomaly_threshold:
                             result["anomalies"].append(
-                                {"interval": interval, "price": price, "z_score": z_score}
+                                {
+                                    "interval": interval,
+                                    "price": price,
+                                    "z_score": z_score,
+                                }
                             )
         except Exception as e:
             result["warnings"].append(f"Error checking for anomalies: {e}")
@@ -269,8 +273,12 @@ class DataValidator:
             }
 
         history = self._validation_history[source_name]
-        reliability = history["valid"] / history["total"] if history["total"] > 0 else 0.0
-        anomaly_rate = history["anomalies"] / history["valid"] if history["valid"] > 0 else 0.0
+        reliability = (
+            history["valid"] / history["total"] if history["total"] > 0 else 0.0
+        )
+        anomaly_rate = (
+            history["anomalies"] / history["valid"] if history["valid"] > 0 else 0.0
+        )
 
         return {
             "source": source_name,

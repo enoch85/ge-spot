@@ -48,9 +48,13 @@ async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Test ComEd API integration")
     parser.add_argument(
-        "--date", default=None, help="Date to fetch data for (format: YYYY-MM-DD, default: today)"
+        "--date",
+        default=None,
+        help="Date to fetch data for (format: YYYY-MM-DD, default: today)",
     )
-    parser.add_argument("--debug", action="store_true", help="Enable detailed debug logging")
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable detailed debug logging"
+    )
     args = parser.parse_args()
 
     # Configure logging level
@@ -74,7 +78,9 @@ async def main():
             target_date = ref_date_obj.date()
             # ComEd API might use local time for date ranges, let's create a reference in local time
             local_tz = pytz.timezone(LOCAL_TZ_NAME)
-            reference_time = local_tz.localize(ref_date_obj.replace(hour=12, minute=0, second=0))
+            reference_time = local_tz.localize(
+                ref_date_obj.replace(hour=12, minute=0, second=0)
+            )
             logger.info(
                 f"Using reference date: {reference_date_str} (reference time: {reference_time})"
             )
@@ -118,7 +124,9 @@ async def main():
         logger.info("Step 1: Fetching 5-minute data from ComEd API")
         logger.info("=" * 80)
         logger.info(f"  Area: {AREA}")
-        logger.info(f"  Reference time: {reference_time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        logger.info(
+            f"  Reference time: {reference_time.strftime('%Y-%m-%d %H:%M:%S %Z')}"
+        )
 
         raw_data = await api.fetch_raw_data(area=AREA, reference_time=reference_time)
 
@@ -167,7 +175,9 @@ async def main():
             logger.error("❌ FAILED: No interval prices found in the response")
             return 1
 
-        logger.debug(f"Sample aggregated prices: {dict(list(interval_raw_prices.items())[:5])}")
+        logger.debug(
+            f"Sample aggregated prices: {dict(list(interval_raw_prices.items())[:5])}"
+        )
 
         # Step 2: Validate aggregation
         logger.info("\n" + "=" * 80)
@@ -215,7 +225,9 @@ async def main():
                     millis = entry.get("millisUTC")
                     price = entry.get("price")
                     if millis and price is not None:
-                        timestamp = datetime.fromtimestamp(int(millis) / 1000, tz=timezone.utc)
+                        timestamp = datetime.fromtimestamp(
+                            int(millis) / 1000, tz=timezone.utc
+                        )
                         ts = timestamp.isoformat()
                         five_min_by_time[ts] = float(price)
 
@@ -258,7 +270,9 @@ async def main():
             if verification_success == verification_count and verification_count > 0:
                 logger.info(f"\n✅ All verified intervals correctly averaged!")
             elif verification_count == 0:
-                logger.info(f"\n⚠️  Could not verify averaging (insufficient source data)")
+                logger.info(
+                    f"\n⚠️  Could not verify averaging (insufficient source data)"
+                )
         else:
             logger.info(f"  Source 5-minute data not available for verification")
             logger.info(f"  ✅ Trusting aggregated interval data from API")
@@ -280,13 +294,18 @@ async def main():
         converted_prices = {}
         for time_key, price_info in normalized_prices.items():
             # Price should already be in $/kWh or similar from the parser
-            price_kwh = price_info["price"] if isinstance(price_info, dict) else price_info
+            price_kwh = (
+                price_info["price"] if isinstance(price_info, dict) else price_info
+            )
             converted_prices[time_key] = price_kwh
             if isinstance(normalized_prices[time_key], dict):
                 normalized_prices[time_key]["converted_kwh"] = price_kwh
             else:
                 # Ensure structure is consistent for display
-                normalized_prices[time_key] = {"price": price_kwh, "converted_kwh": price_kwh}
+                normalized_prices[time_key] = {
+                    "price": price_kwh,
+                    "converted_kwh": price_kwh,
+                }
 
         logger.debug(
             f"Final prices sample ({target_currency}/kWh): {dict(list(converted_prices.items())[:5])}"
@@ -336,7 +355,9 @@ async def main():
         logger.info(f"\nFirst 8 intervals:")
         for time_key in sorted_keys[:8]:
             price_data = normalized_prices[time_key]
-            price_val = price_data.get("converted_kwh", price_data.get("price", price_data))
+            price_val = price_data.get(
+                "converted_kwh", price_data.get("price", price_data)
+            )
             dt = datetime.fromisoformat(time_key)
             logger.info(
                 f"  {dt.strftime('%Y-%m-%d %H:%M')} → {price_val:.4f} {target_currency}/kWh"
@@ -345,7 +366,9 @@ async def main():
         logger.info(f"\nLast 8 intervals:")
         for time_key in sorted_keys[-8:]:
             price_data = normalized_prices[time_key]
-            price_val = price_data.get("converted_kwh", price_data.get("price", price_data))
+            price_val = price_data.get(
+                "converted_kwh", price_data.get("price", price_data)
+            )
             dt = datetime.fromisoformat(time_key)
             logger.info(
                 f"  {dt.strftime('%Y-%m-%d %H:%M')} → {price_val:.4f} {target_currency}/kWh"
@@ -358,7 +381,9 @@ async def main():
 
         logger.info(f"  Timezone: {LOCAL_TZ_NAME}")
         logger.info(f"  Total intervals: {len(normalized_prices)}")
-        logger.info(f"  Expected intervals per day: {TimeInterval.get_intervals_per_day()}")
+        logger.info(
+            f"  Expected intervals per day: {TimeInterval.get_intervals_per_day()}"
+        )
 
         # Calculate coverage
         hours_coverage = len(sorted_timestamps) / TimeInterval.get_intervals_per_hour()

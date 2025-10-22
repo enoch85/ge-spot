@@ -35,10 +35,14 @@ async def test_amber_live_fetch_parse():
 
         # Assert: Raw Data Structure (strict validation)
         assert raw_data is not None, "Raw data should not be None"
-        assert isinstance(raw_data, list), f"Raw data should be a list, got {type(raw_data)}"
+        assert isinstance(
+            raw_data, list
+        ), f"Raw data should be a list, got {type(raw_data)}"
 
         # Real-world validation: Amber should return data points
-        assert len(raw_data) > 0, "No data returned from Amber API - this indicates a real issue"
+        assert (
+            len(raw_data) > 0
+        ), "No data returned from Amber API - this indicates a real issue"
 
         # Validate structure of raw data items (these fields must be present for correct parsing)
         first_item = raw_data[0]
@@ -49,7 +53,9 @@ async def test_amber_live_fetch_parse():
         # Essential fields that must be present in raw data
         required_fields = ["period", "spotPerKwh"]
         for field in required_fields:
-            assert field in first_item, f"Required field '{field}' missing from raw data"
+            assert (
+                field in first_item
+            ), f"Required field '{field}' missing from raw data"
 
         # Additional validation for period field format
         assert isinstance(
@@ -153,7 +159,9 @@ async def test_amber_live_fetch_parse():
 
             # Valid intervals are multiples of 5 minutes (up to 60 minutes)
             valid_intervals = [5, 10, 15, 30, 60]
-            is_valid = any(abs(minutes_diff - interval) < 1 for interval in valid_intervals)
+            is_valid = any(
+                abs(minutes_diff - interval) < 1 for interval in valid_intervals
+            )
             assert (
                 is_valid
             ), f"Unexpected time gap between {timestamps[i-1]} and {timestamps[i]}: {minutes_diff} minutes"

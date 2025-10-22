@@ -34,7 +34,9 @@ logger = logging.getLogger(__name__)
 # Add the root directory to the path so we can import the component modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 from custom_components.ge_spot.api.omie import OmieAPI
-from custom_components.ge_spot.api.parsers.omie_parser import OmieParser  # Import the parser
+from custom_components.ge_spot.api.parsers.omie_parser import (
+    OmieParser,
+)  # Import the parser
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.timezone.service import TimezoneService
 from custom_components.ge_spot.const.config import Config  # Added import
@@ -58,9 +60,13 @@ async def main():
         help="Area code (ES, PT)",
     )
     parser.add_argument(
-        "--date", default=None, help="Date to fetch data for (format: YYYY-MM-DD, default: today)"
+        "--date",
+        default=None,
+        help="Date to fetch data for (format: YYYY-MM-DD, default: today)",
     )
-    parser.add_argument("--debug", action="store_true", help="Enable detailed debug logging")
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable detailed debug logging"
+    )
     args = parser.parse_args()
 
     # Configure logging level
@@ -84,7 +90,9 @@ async def main():
             ref_date_obj = datetime.strptime(reference_date_str, "%Y-%m-%d")
             target_date = ref_date_obj.date()
             # OMIE API might use local time, create reference in local time
-            reference_time = local_tz.localize(ref_date_obj.replace(hour=12, minute=0, second=0))
+            reference_time = local_tz.localize(
+                ref_date_obj.replace(hour=12, minute=0, second=0)
+            )
             logger.info(
                 f"Using reference date: {reference_date_str} (reference time: {reference_time})"
             )
@@ -102,7 +110,9 @@ async def main():
     # Initialize timezone service based on area
     logger.info("Setting up timezone service...")
     tz_config = {Config.TIMEZONE_REFERENCE: TimezoneReference.LOCAL_AREA}
-    tz_service = TimezoneService(hass=None, area=area, config=tz_config)  # Correct initialization
+    tz_service = TimezoneService(
+        hass=None, area=area, config=tz_config
+    )  # Correct initialization
     # Use str() to correctly log the timezone name
     logger.info(
         f"Timezone service initialized for area: {area} using target timezone: {str(tz_service.target_timezone)}"
@@ -115,7 +125,9 @@ async def main():
         # Step 1: Fetch raw data
         logger.info(f"Fetching OMIE data for area: {area}")
         # Adjust fetch call based on OmieAPI's expected parameters
-        raw_data_dict = await api.fetch_raw_data(area=area, reference_time=reference_time)
+        raw_data_dict = await api.fetch_raw_data(
+            area=area, reference_time=reference_time
+        )
 
         if not raw_data_dict:
             logger.error("Error: Failed to fetch data from OMIE API")
@@ -125,7 +137,9 @@ async def main():
         log_data = {}
         for k, v in raw_data_dict.items():
             # Handle potentially large data like CSV content
-            if k == "raw_data" and isinstance(v, str):  # Check specifically for raw_data string
+            if k == "raw_data" and isinstance(
+                v, str
+            ):  # Check specifically for raw_data string
                 log_data[k] = v[:100] + "..." if len(v) > 100 else v
             elif isinstance(v, (str, list, dict)) and len(str(v)) > 300:
                 log_data[k] = str(v)[:300] + "..."
@@ -138,9 +152,15 @@ async def main():
         parser = OmieParser()  # Instantiate the parser
         parsed_data = parser.parse(raw_data_dict)  # Call the parser's parse method
 
-        if not parsed_data or not parsed_data.get("interval_raw"):  # Changed from hourly_raw
-            logger.error("Error: Parser did not return valid data or interval_raw prices.")
-            logger.error(f"Available keys: {list(parsed_data.keys()) if parsed_data else 'None'}")
+        if not parsed_data or not parsed_data.get(
+            "interval_raw"
+        ):  # Changed from hourly_raw
+            logger.error(
+                "Error: Parser did not return valid data or interval_raw prices."
+            )
+            logger.error(
+                f"Available keys: {list(parsed_data.keys()) if parsed_data else 'None'}"
+            )
             # Log raw response if helpful
             if "raw_data" in raw_data_dict:
                 logger.debug(
@@ -159,19 +179,27 @@ async def main():
         logger.info(f"API Timezone: {source_timezone}")
 
         # OMIE provides hourly interval prices
-        interval_raw_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
+        interval_raw_prices = parsed_data.get(
+            "interval_raw", {}
+        )  # Changed from hourly_raw
         # This check should now reflect the parser's output
         if not interval_raw_prices:
-            logger.error("Error: No interval prices found in the parsed data *after parsing step*.")
+            logger.error(
+                "Error: No interval prices found in the parsed data *after parsing step*."
+            )
             return 1
 
         logger.info(
             f"Found {len(interval_raw_prices)} raw interval prices (before timezone normalization)"
         )
-        logger.debug(f"Raw interval prices sample: {dict(list(interval_raw_prices.items())[:5])}")
+        logger.debug(
+            f"Raw interval prices sample: {dict(list(interval_raw_prices.items())[:5])}"
+        )
 
         # Step 3: Normalize Timezones
-        logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
+        logger.info(
+            f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}..."
+        )
         # Use normalize_interval_prices to handle intervals consistently
         # Note: OMIE is hourly only, so this will show 24 intervals per day
         normalized_prices = tz_service.converter.normalize_interval_prices(
@@ -181,15 +209,21 @@ async def main():
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
         logger.info(f"Expected: ~48 intervals (OMIE provides hourly data only)")
-        logger.debug(f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}")
+        logger.debug(
+            f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}"
+        )
 
         # Step 4: Currency and Unit conversion (EUR/MWh -> EUR/kWh)
         target_currency = Currency.EUR  # OMIE uses EUR
-        logger.info(f"\nConverting units from {original_currency}/MWh to {target_currency}/kWh...")
+        logger.info(
+            f"\nConverting units from {original_currency}/MWh to {target_currency}/kWh..."
+        )
 
         converted_prices = {}
         for time_key, price_info in normalized_prices.items():
-            price_mwh = price_info["price"] if isinstance(price_info, dict) else price_info
+            price_mwh = (
+                price_info["price"] if isinstance(price_info, dict) else price_info
+            )
             # No currency conversion needed, just unit conversion
             price_kwh = price_mwh / 1000
             converted_prices[time_key] = price_kwh
@@ -197,7 +231,10 @@ async def main():
             if isinstance(normalized_prices[time_key], dict):
                 normalized_prices[time_key]["converted_kwh"] = price_kwh
             else:
-                normalized_prices[time_key] = {"price": price_mwh, "converted_kwh": price_kwh}
+                normalized_prices[time_key] = {
+                    "price": price_mwh,
+                    "converted_kwh": price_kwh,
+                }
 
         logger.debug(
             f"Final prices sample ({target_currency}/kWh): {dict(list(converted_prices.items())[:5])}"
@@ -215,8 +252,12 @@ async def main():
 
         all_display_prices = {**today_prices, **tomorrow_prices}
 
-        logger.info(f"\nHourly Prices (formatted time in target timezone: {local_tz_name}):")
-        logger.info(f"{'Hour':<10} {f'{original_currency}/MWh':<15} {f'{target_currency}/kWh':<15}")
+        logger.info(
+            f"\nHourly Prices (formatted time in target timezone: {local_tz_name}):"
+        )
+        logger.info(
+            f"{'Hour':<10} {f'{original_currency}/MWh':<15} {f'{target_currency}/kWh':<15}"
+        )
         logger.info("-" * 45)
 
         for hour_key, price_data in sorted(all_display_prices.items()):
@@ -253,13 +294,17 @@ async def main():
                 now_local.hour >= 13 or reference_date_str
             ):  # If specific date requested, expect full data
                 missing_tomorrow = set(tomorrow_hour_range) - tomorrow_hours_found
-                logger.warning(f"Missing tomorrow hours: {', '.join(sorted(missing_tomorrow))}")
+                logger.warning(
+                    f"Missing tomorrow hours: {', '.join(sorted(missing_tomorrow))}"
+                )
             else:
                 logger.info("Tomorrow's data might not be available yet.")
 
         # Basic check: Did we get full data for today?
         if today_complete:
-            logger.info("\nTest completed successfully (found complete data for today)!")
+            logger.info(
+                "\nTest completed successfully (found complete data for today)!"
+            )
             return 0
         else:
             logger.error(

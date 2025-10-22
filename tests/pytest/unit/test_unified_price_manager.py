@@ -27,13 +27,17 @@ import json
 from freezegun import freeze_time
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Add the parent directory to Python path so we can import the custom_components
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from custom_components.ge_spot.coordinator.unified_price_manager import UnifiedPriceManager
+from custom_components.ge_spot.coordinator.unified_price_manager import (
+    UnifiedPriceManager,
+)
 from tests.lib.mocks.hass import MockHass
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.defaults import Defaults
@@ -52,7 +56,10 @@ async def cancel_health_check_tasks(manager):
     for task in asyncio.all_tasks():
         if hasattr(task, "get_coro"):
             coro_str = str(task.get_coro())
-            if "_schedule_health_check" in coro_str or "_validate_all_sources" in coro_str:
+            if (
+                "_schedule_health_check" in coro_str
+                or "_validate_all_sources" in coro_str
+            ):
                 task.cancel()
                 try:
                     await task
@@ -173,9 +180,15 @@ def auto_mock_core_dependencies():
         )
         mock_cache_manager.return_value.get_data = MagicMock(return_value=None)
         mock_cache_manager.return_value.store = MagicMock()
-        mock_data_processor.return_value.process = AsyncMock(return_value=MOCK_PROCESSED_RESULT)
-        mock_tz_service.return_value = MagicMock()  # Basic mock for TimezoneService instance
-        mock_get_exchange_service.return_value = AsyncMock()  # Mock the service instance itself
+        mock_data_processor.return_value.process = AsyncMock(
+            return_value=MOCK_PROCESSED_RESULT
+        )
+        mock_tz_service.return_value = (
+            MagicMock()
+        )  # Basic mock for TimezoneService instance
+        mock_get_exchange_service.return_value = (
+            AsyncMock()
+        )  # Mock the service instance itself
         mock_now.return_value = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
         mock_get_session.return_value = MagicMock()  # Mock the aiohttp session
 
@@ -203,7 +216,7 @@ class TestUnifiedPriceManager:
             Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
             Config.API_KEY: "test_key",  # Example config
             Config.SOURCE_PRIORITY: [Source.NORDPOOL, Source.ENTSOE],
-            Config.VAT: Defaults.VAT_RATE,
+            Config.VAT: Defaults.VAT,
             Config.INCLUDE_VAT: Defaults.INCLUDE_VAT,
         }
         manager_instance = UnifiedPriceManager(
@@ -219,7 +232,9 @@ class TestUnifiedPriceManager:
         # Ensure processor also gets the mock service if needed by its init/process
         # This depends on DataProcessor implementation, assuming it might need it
         if hasattr(manager_instance._data_processor, "_exchange_service"):
-            manager_instance._data_processor._exchange_service = manager_instance._exchange_service
+            manager_instance._data_processor._exchange_service = (
+                manager_instance._exchange_service
+            )
 
         return manager_instance
 
@@ -227,14 +242,20 @@ class TestUnifiedPriceManager:
         """Test initialization sets attributes correctly."""
         # Core attributes
         assert manager.area == "SE1", f"Expected area 'SE1', got '{manager.area}'"
-        assert manager.currency == "SEK", f"Expected currency 'SEK', got '{manager.currency}'"
+        assert (
+            manager.currency == "SEK"
+        ), f"Expected currency 'SEK', got '{manager.currency}'"
 
         # Initial state
-        assert manager._active_source is None, "Active source should be None on initialization"
+        assert (
+            manager._active_source is None
+        ), "Active source should be None on initialization"
         assert (
             manager._attempted_sources == []
         ), "Attempted sources should be empty on initialization"
-        assert manager._fallback_sources == [], "Fallback sources should be empty on initialization"
+        assert (
+            manager._fallback_sources == []
+        ), "Fallback sources should be empty on initialization"
         assert (
             manager._using_cached_data is False
         ), "using_cached_data should be False on initialization"
@@ -244,17 +265,20 @@ class TestUnifiedPriceManager:
 
         # Dependencies
         assert (
-            manager._tz_service is auto_mock_core_dependencies["tz_service"].return_value
+            manager._tz_service
+            is auto_mock_core_dependencies["tz_service"].return_value
         ), "TimezoneService not properly initialized"
         assert (
             manager._fallback_manager
             is auto_mock_core_dependencies["fallback_manager"].return_value
         ), "FallbackManager not properly initialized"
         assert (
-            manager._cache_manager is auto_mock_core_dependencies["cache_manager"].return_value
+            manager._cache_manager
+            is auto_mock_core_dependencies["cache_manager"].return_value
         ), "CacheManager not properly initialized"
         assert (
-            manager._data_processor is auto_mock_core_dependencies["data_processor"].return_value
+            manager._data_processor
+            is auto_mock_core_dependencies["data_processor"].return_value
         ), "DataProcessor not properly initialized"
 
         # Source configuration
@@ -267,15 +291,23 @@ class TestUnifiedPriceManager:
         ), f"Expected 2 API classes, got {len(manager._api_classes)}"
 
     @pytest.mark.asyncio
-    async def test_fetch_data_success_first_source(self, manager, auto_mock_core_dependencies):
+    async def test_fetch_data_success_first_source(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test successful fetch using the primary source."""
         # Arrange: Mocks already configured for success by default fixture
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_cache_store = auto_mock_core_dependencies["cache_manager"].return_value.store
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_cache_store = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.store
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
 
         # Act
         result = await manager.fetch_data()
@@ -316,16 +348,24 @@ class TestUnifiedPriceManager:
 
     @pytest.mark.asyncio
     @freeze_time("2025-04-26 12:00:00 UTC")
-    async def test_cache_timestamp_validation(self, manager, auto_mock_core_dependencies):
+    async def test_cache_timestamp_validation(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test that cache created is valid shortly after creation (within rate limit)."""
         # Arrange
         mock_now = auto_mock_core_dependencies["now"]
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
-        mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
+        mock_cache_update = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.store
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
 
         # Mock is_in_grace_period to return False so rate limiting works as expected
         with patch.object(manager, "is_in_grace_period", return_value=False):
@@ -371,7 +411,9 @@ class TestUnifiedPriceManager:
             # API should not be called due to rate limiting
             mock_fallback.assert_not_awaited(), "API fetch should be skipped due to rate limit"
             # Cache should be checked (with target_date, no max_age_minutes)
-            assert mock_cache_get.call_count >= 1, "CacheManager.get_data should be called"
+            assert (
+                mock_cache_get.call_count >= 1
+            ), "CacheManager.get_data should be called"
             # Verify area is passed (target_date will be today's date from dt_util.now().date())
             call_kwargs = mock_cache_get.call_args[1]
             assert (
@@ -382,7 +424,9 @@ class TestUnifiedPriceManager:
             mock_processor.assert_awaited_once()
             # Verify processor was called with cached data (check key fields)
             process_call_args = mock_processor.call_args[0][0]
-            assert process_call_args.get("today_interval_prices") == MOCK_PROCESSED_RESULT.get(
+            assert process_call_args.get(
+                "today_interval_prices"
+            ) == MOCK_PROCESSED_RESULT.get(
                 "today_interval_prices"
             ), "Processor should be called with cached interval_prices"
             assert (
@@ -401,14 +445,20 @@ class TestUnifiedPriceManager:
             freezer.stop()
 
     @pytest.mark.asyncio
-    async def test_fetch_data_success_fallback_source(self, manager, auto_mock_core_dependencies):
+    async def test_fetch_data_success_fallback_source(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test successful fetch using a fallback source when primary fails."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_cache_update = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.store
 
         # Create realistic data for fallback success scenario
         fallback_success_result = {
@@ -479,8 +529,12 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_cache_update = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.store
 
         # First call: NORDPOOL succeeds at fetch but fails validation (returns None from processor)
         first_call_result = {
@@ -500,7 +554,10 @@ class TestUnifiedPriceManager:
         processed_second_result = {
             **MOCK_PROCESSED_RESULT,
             "source": Source.ENTSOE,
-            "attempted_sources": [Source.NORDPOOL, Source.ENTSOE],  # Should include both
+            "attempted_sources": [
+                Source.NORDPOOL,
+                Source.ENTSOE,
+            ],  # Should include both
         }
 
         # Mock FallbackManager to return different results on each call
@@ -531,9 +588,13 @@ class TestUnifiedPriceManager:
             len(second_call_api_instances) == 1
         ), f"Second call should only try remaining source (ENTSOE), got {len(second_call_api_instances)}"
         second_source = getattr(
-            second_call_api_instances[0], "source_type", type(second_call_api_instances[0]).__name__
+            second_call_api_instances[0],
+            "source_type",
+            type(second_call_api_instances[0]).__name__,
         )
-        assert second_source == Source.ENTSOE, f"Second call should try ENTSOE, got {second_source}"
+        assert (
+            second_source == Source.ENTSOE
+        ), f"Second call should try ENTSOE, got {second_source}"
 
         # Processor should be called twice
         assert (
@@ -562,11 +623,19 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_cache_update = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.store
 
-        mock_fallback.return_value = MOCK_FAILURE_RESULT  # Simulate failure from FallbackManager
+        mock_fallback.return_value = (
+            MOCK_FAILURE_RESULT  # Simulate failure from FallbackManager
+        )
         mock_cache_get.return_value = None  # No cache available
         # Processor will be called within _generate_empty_result -> _process_result
         # Let's adjust the mock processor to return the expected empty structure
@@ -588,7 +657,9 @@ class TestUnifiedPriceManager:
             mock_cache_get.call_count >= 1
         ), f"CacheManager.get_data should be called, got {mock_cache_get.call_args}"
         call_kwargs = mock_cache_get.call_args[1]
-        assert call_kwargs.get("area") == manager.area, "Cache should be called with correct area"
+        assert (
+            call_kwargs.get("area") == manager.area
+        ), "Cache should be called with correct area"
 
         # Processor is called by _generate_empty_result which itself calls _process_result
         # It might be called with a slightly different structure than MOCK_FAILURE_RESULT
@@ -628,14 +699,22 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_cache_update = auto_mock_core_dependencies["cache_manager"].return_value.store
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_cache_update = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.store
 
         mock_fallback.return_value = MOCK_FAILURE_RESULT  # Simulate failure
         mock_cache_get.return_value = MOCK_CACHED_RESULT  # Provide cached data
         # Processor will be called with the cached data via _process_result
-        mock_processor.return_value = MOCK_CACHED_RESULT  # Assume processor returns it as is
+        mock_processor.return_value = (
+            MOCK_CACHED_RESULT  # Assume processor returns it as is
+        )
 
         # Act
         result = await manager.fetch_data()
@@ -651,7 +730,9 @@ class TestUnifiedPriceManager:
             mock_cache_get.call_count >= 1
         ), f"CacheManager.get_data should be called, got {mock_cache_get.call_args}"
         call_kwargs = mock_cache_get.call_args[1]
-        assert call_kwargs.get("area") == manager.area, "Cache should be called with correct area"
+        assert (
+            call_kwargs.get("area") == manager.area
+        ), "Cache should be called with correct area"
 
         # Processor will be called with the cached data
         # mock_processor.assert_awaited_once_with(MOCK_CACHED_RESULT, is_cached=True), \
@@ -674,9 +755,14 @@ class TestUnifiedPriceManager:
 
         # Check result structure and content
         # The processor mock returns MOCK_CACHED_RESULT, but _process_result adds/modifies flags
-        expected_result = {**MOCK_CACHED_RESULT, "using_cached_data": True}  # Ensure flag is True
+        expected_result = {
+            **MOCK_CACHED_RESULT,
+            "using_cached_data": True,
+        }  # Ensure flag is True
         # Compare key fields
-        assert result.get("using_cached_data") is True, "using_cached_data flag should be True"
+        assert (
+            result.get("using_cached_data") is True
+        ), "using_cached_data flag should be True"
         assert result.get("today_interval_prices") == MOCK_CACHED_RESULT.get(
             "today_interval_prices"
         ), "Prices should match cached data"
@@ -716,8 +802,12 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
 
         # Mock is_in_grace_period to return False so rate limiting works as expected
         with patch.object(manager, "is_in_grace_period", return_value=False):
@@ -738,7 +828,9 @@ class TestUnifiedPriceManager:
 
             # Advance time slightly, but less than min interval (e.g. 3 minutes for a 5 minute interval)
             min_interval_minutes = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
-            mock_now.return_value = now_time + timedelta(minutes=min_interval_minutes / 2)
+            mock_now.return_value = now_time + timedelta(
+                minutes=min_interval_minutes / 2
+            )
 
             # Act - Second call should use cache due to rate limiting
             result = await manager.fetch_data()
@@ -757,7 +849,9 @@ class TestUnifiedPriceManager:
             mock_processor.assert_awaited_once()
             # Verify processor was called with cached data (check key fields)
             process_call_args = mock_processor.call_args[0][0]
-            assert process_call_args.get("today_interval_prices") == MOCK_CACHED_RESULT.get(
+            assert process_call_args.get(
+                "today_interval_prices"
+            ) == MOCK_CACHED_RESULT.get(
                 "today_interval_prices"
             ), "Processor should be called with cached interval_prices"
             assert (
@@ -770,7 +864,9 @@ class TestUnifiedPriceManager:
                 "using_cached_data": True,
             }  # Ensure flag is True
             # Compare key fields
-            assert result.get("using_cached_data") is True, "using_cached_data flag should be True"
+            assert (
+                result.get("using_cached_data") is True
+            ), "using_cached_data flag should be True"
             assert result.get("today_interval_prices") == MOCK_CACHED_RESULT.get(
                 "today_interval_prices"
             ), "Prices should match cached data"
@@ -783,8 +879,12 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
 
         # Mock is_in_grace_period to return False so rate limiting works as expected
         with patch.object(manager, "is_in_grace_period", return_value=False):
@@ -814,7 +914,9 @@ class TestUnifiedPriceManager:
 
             # Advance time slightly, but less than min interval
             min_interval_minutes = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
-            mock_now.return_value = now_time + timedelta(minutes=min_interval_minutes / 2)
+            mock_now.return_value = now_time + timedelta(
+                minutes=min_interval_minutes / 2
+            )
 
             # Act - Second call should try cache but find none
             result = await manager.fetch_data()
@@ -842,7 +944,9 @@ class TestUnifiedPriceManager:
             assert (
                 result.get("using_cached_data") is False
             ), "using_cached_data flag should be False (no cache found)"
-            assert not result.get("today_interval_prices"), "interval_prices should be empty"
+            assert not result.get(
+                "today_interval_prices"
+            ), "interval_prices should be empty"
             assert result.get("has_data") is False, "has_data should be False"
 
     @pytest.mark.asyncio
@@ -854,8 +958,12 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
 
         # Simulate success from API but with malformed data (missing interval_prices)
         malformed_result = {
@@ -872,7 +980,9 @@ class TestUnifiedPriceManager:
 
         # Processor won't be called in this path, _generate_empty_result will be.
         # Configure processor mock for the call inside _generate_empty_result
-        expected_empty = await manager._generate_empty_result(error="All sources failed: None")
+        expected_empty = await manager._generate_empty_result(
+            error="All sources failed: None"
+        )
         mock_processor.return_value = expected_empty
 
         # Act
@@ -885,13 +995,19 @@ class TestUnifiedPriceManager:
         # Fallback manager was called (twice: once for first source, once for retry with remaining sources)
         # Since first source returns malformed data (no valid interval_prices), validation fails and
         # the code retries with remaining sources
-        assert mock_fallback.await_count >= 1, "FallbackManager should be called at least once"
+        assert (
+            mock_fallback.await_count >= 1
+        ), "FallbackManager should be called at least once"
         # Note: It will be called twice when validation fails and remaining sources exist
 
         # Cache was checked after fetch appeared to fail (due to missing key)
-        assert mock_cache_get.call_count >= 1, "Cache should be checked on malformed data"
+        assert (
+            mock_cache_get.call_count >= 1
+        ), "Cache should be checked on malformed data"
         call_kwargs = mock_cache_get.call_args[1]
-        assert call_kwargs.get("area") == manager.area, "Cache should be called with correct area"
+        assert (
+            call_kwargs.get("area") == manager.area
+        ), "Cache should be called with correct area"
         # Processor was called once via _generate_empty_result
         # mock_processor.assert_awaited_once()
         # CORRECTION: _generate_empty_result does NOT call process. Remove assertion.
@@ -904,20 +1020,28 @@ class TestUnifiedPriceManager:
             "failed" in result.get("error", "").lower()
             or "error" in result.get("error", "").lower()
         ), f"Error should indicate fetch failure, got {result.get('error')}"
-        assert not result.get("today_interval_prices", {}), "interval_prices should be empty"
-        assert result.get("has_data", True) is False, "has_data should be False on malformed data"
+        assert not result.get(
+            "today_interval_prices", {}
+        ), "interval_prices should be empty"
+        assert (
+            result.get("has_data", True) is False
+        ), "has_data should be False on malformed data"
         assert result.get("attempted_sources") == [
             Source.NORDPOOL
         ], "Attempted sources should be recorded"
 
     @pytest.mark.asyncio
-    async def test_fetch_data_with_out_of_bounds_prices(self, manager, auto_mock_core_dependencies):
+    async def test_fetch_data_with_out_of_bounds_prices(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test handling of anomalous price values - real-world scenario of price spikes."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
 
         # Normal result structure but with extreme prices at 15-minute intervals
         extreme_price_result = {
@@ -962,20 +1086,28 @@ class TestUnifiedPriceManager:
         ), f"All price points should be preserved, got {len(result['today_interval_prices'])}"
 
         # Result should indicate successful fetch despite extreme prices
-        assert result["has_data"] is True, "has_data should be True despite extreme prices"
+        assert (
+            result["has_data"] is True
+        ), "has_data should be True despite extreme prices"
         assert not result.get(
             "error"
         ), f"No error should be present for extreme prices, got {result.get('error')}"
 
     @pytest.mark.asyncio
-    async def test_fetch_data_with_currency_conversion(self, manager, auto_mock_core_dependencies):
+    async def test_fetch_data_with_currency_conversion(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test proper currency conversion in real-world scenarios with differing currencies."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_exchange_service = auto_mock_core_dependencies["get_exchange_service"].return_value
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_exchange_service = auto_mock_core_dependencies[
+            "get_exchange_service"
+        ].return_value
 
         # Create result with EUR as source currency but SEK as target (15-minute intervals)
         eur_result = {
@@ -991,7 +1123,9 @@ class TestUnifiedPriceManager:
         mock_fallback.return_value = eur_result
 
         # Configure exchange service to simulate conversion
-        mock_exchange_service.convert_currency = AsyncMock(return_value=10.5)  # 1 EUR = 10.5 SEK
+        mock_exchange_service.convert_currency = AsyncMock(
+            return_value=10.5
+        )  # 1 EUR = 10.5 SEK
 
         # Expected processed result with converted currency
         converted_result = {
@@ -1031,13 +1165,17 @@ class TestUnifiedPriceManager:
         ), f"Second interval price should be converted to 2.1 SEK, got {result['today_interval_prices']['2025-04-26T10:15:00+02:00']}"
 
     @pytest.mark.asyncio
-    async def test_fetch_data_with_timezone_conversion(self, manager, auto_mock_core_dependencies):
+    async def test_fetch_data_with_timezone_conversion(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test correct timezone conversion - critical for international markets."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
         mock_tz_service = auto_mock_core_dependencies["tz_service"].return_value
 
         # Create result with UTC timestamps at 15-minute intervals
@@ -1073,8 +1211,12 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
 
         # Assert
-        assert "source_timezone" in result, "Source timezone should be included in result"
-        assert "target_timezone" in result, "Target timezone should be included in result"
+        assert (
+            "source_timezone" in result
+        ), "Source timezone should be included in result"
+        assert (
+            "target_timezone" in result
+        ), "Target timezone should be included in result"
         assert (
             result["source_timezone"] == "UTC"
         ), f"Source timezone should be UTC, got {result.get('source_timezone')}"
@@ -1091,15 +1233,23 @@ class TestUnifiedPriceManager:
         ), f"Second interval should be converted to local time, got keys: {list(result['today_interval_prices'].keys())}"
 
     @pytest.mark.asyncio
-    async def test_partial_data_fallback_to_complete(self, manager, auto_mock_core_dependencies):
+    async def test_partial_data_fallback_to_complete(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test: Primary source has partial data (tomorrow only), fallback source provides complete data."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_cache_store = auto_mock_core_dependencies["cache_manager"].return_value.store
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_cache_store = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.store
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
 
         # Mock ENTSOE returning tomorrow-only (partial data)
         partial_result = {
@@ -1162,7 +1312,9 @@ class TestUnifiedPriceManager:
         assert (
             len(result.get("today_interval_prices", {})) > 0
         ), "Should have today data from fallback"
-        assert len(result.get("tomorrow_interval_prices", {})) > 0, "Should have tomorrow data"
+        assert (
+            len(result.get("tomorrow_interval_prices", {})) > 0
+        ), "Should have tomorrow data"
         assert result["data_source"] == Source.NORDPOOL, "Should use fallback source"
 
         # Verify fallback was called twice (first source + retry)
@@ -1174,7 +1326,9 @@ class TestUnifiedPriceManager:
         ), "ENTSOE should NOT be marked as failed (provided partial data)"
 
     @pytest.mark.asyncio
-    async def test_partial_data_no_remaining_sources(self, manager, auto_mock_core_dependencies):
+    async def test_partial_data_no_remaining_sources(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test: Primary source has partial data, no more sources available, accept partial."""
         # Arrange - Only configure one source
         manager.config[Config.SOURCE_PRIORITY] = [Source.ENTSOE]
@@ -1184,8 +1338,12 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
 
         # Mock ENTSOE returning tomorrow-only
         partial_result = {
@@ -1216,8 +1374,12 @@ class TestUnifiedPriceManager:
 
         # Assert
         assert result is not None, "Should return partial data"
-        assert len(result.get("today_interval_prices", {})) == 0, "Should have no today data"
-        assert len(result.get("tomorrow_interval_prices", {})) > 0, "Should have tomorrow data"
+        assert (
+            len(result.get("today_interval_prices", {})) == 0
+        ), "Should have no today data"
+        assert (
+            len(result.get("tomorrow_interval_prices", {})) > 0
+        ), "Should have tomorrow data"
         assert result["data_source"] == Source.ENTSOE, "Should use primary source"
 
         # Verify only called once (no fallback attempt)
@@ -1234,8 +1396,12 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
 
         # ENTSOE returns tomorrow-only
         entsoe_partial = {
@@ -1296,18 +1462,26 @@ class TestUnifiedPriceManager:
         assert (
             len(result.get("today_interval_prices", {})) > 0
         ), "Should have today data from Nordpool"
-        assert len(result.get("tomorrow_interval_prices", {})) == 0, "Should not have tomorrow data"
+        assert (
+            len(result.get("tomorrow_interval_prices", {})) == 0
+        ), "Should not have tomorrow data"
 
     @pytest.mark.asyncio
-    async def test_consecutive_failures_backoff(self, manager, auto_mock_core_dependencies):
+    async def test_consecutive_failures_backoff(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test implicit validation - failed sources are skipped after grace period."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
         mock_now = auto_mock_core_dependencies["now"]
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
 
         # Set coordinator created time to past grace period
         manager._coordinator_created_at = mock_now.return_value - timedelta(minutes=10)
@@ -1327,18 +1501,26 @@ class TestUnifiedPriceManager:
         await manager.fetch_data()
 
         # Verify sources were marked as failed
-        assert Source.NORDPOOL in manager._failed_sources, "Nordpool should be in failed sources"
-        assert Source.ENTSOE in manager._failed_sources, "ENTSOE should be in failed sources"
+        assert (
+            Source.NORDPOOL in manager._failed_sources
+        ), "Nordpool should be in failed sources"
+        assert (
+            Source.ENTSOE in manager._failed_sources
+        ), "ENTSOE should be in failed sources"
         assert (
             manager._failed_sources[Source.NORDPOOL] is not None
         ), "Nordpool should have failure timestamp"
-        assert manager._consecutive_failures == 1, "First failure should set counter to 1"
+        assert (
+            manager._consecutive_failures == 1
+        ), "First failure should set counter to 1"
 
         # Reset mocks for second call
         mock_fallback.reset_mock()
         mock_processor.reset_mock()
         mock_cache_get.reset_mock()
-        empty_res_2 = await manager._generate_empty_result(error="No API sources available")
+        empty_res_2 = await manager._generate_empty_result(
+            error="No API sources available"
+        )
         mock_processor.return_value = empty_res_2
 
         # Advance time by 1 hour (still past grace period)
@@ -1355,13 +1537,17 @@ class TestUnifiedPriceManager:
         # Assert: FallbackManager should NOT be called because all sources are filtered out
         mock_fallback.assert_not_awaited(), "API should not be called - all sources failed recently"
         # No sources available, so consecutive failures would increment
-        assert manager._consecutive_failures == 2, "Consecutive failures should increment to 2"
+        assert (
+            manager._consecutive_failures == 2
+        ), "Consecutive failures should increment to 2"
 
         # Reset for forced fetch test
         mock_fallback.reset_mock()
         mock_processor.reset_mock()
         mock_cache_get.reset_mock()
-        mock_fallback.return_value = MOCK_SUCCESS_RESULT  # Simulate success for forced fetch
+        mock_fallback.return_value = (
+            MOCK_SUCCESS_RESULT  # Simulate success for forced fetch
+        )
         mock_processor.return_value = MOCK_PROCESSED_RESULT
 
         # Force fetch should bypass 24h filter and try sources again
@@ -1396,18 +1582,26 @@ class TestUnifiedPriceManager:
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies["data_processor"].return_value.process
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
         mock_now = auto_mock_core_dependencies["now"]
-        mock_cache_get = auto_mock_core_dependencies["cache_manager"].return_value.get_data
+        mock_cache_get = auto_mock_core_dependencies[
+            "cache_manager"
+        ].return_value.get_data
 
         # Mock _schedule_health_check to avoid background task complications in tests
         async def mock_schedule_health_check():
             pass  # No-op for testing - we're testing the filter logic, not the health check scheduler
 
-        monkeypatch.setattr(manager, "_schedule_health_check", mock_schedule_health_check)
+        monkeypatch.setattr(
+            manager, "_schedule_health_check", mock_schedule_health_check
+        )
 
         # Clear the rate limiting state to start fresh
-        from custom_components.ge_spot.coordinator.unified_price_manager import _LAST_FETCH_TIME
+        from custom_components.ge_spot.coordinator.unified_price_manager import (
+            _LAST_FETCH_TIME,
+        )
 
         _LAST_FETCH_TIME.clear()
 
@@ -1434,11 +1628,15 @@ class TestUnifiedPriceManager:
         result_1 = await manager.fetch_data()
 
         # Verify failure was recorded
-        assert Source.NORDPOOL in manager._failed_sources, "Nordpool should be marked as failed"
+        assert (
+            Source.NORDPOOL in manager._failed_sources
+        ), "Nordpool should be marked as failed"
         assert Source.ENTSOE in manager._failed_sources, "ENTSOE should be in failed"
         first_failure_time_nordpool = manager._failed_sources[Source.NORDPOOL]
         first_failure_time_entsoe = manager._failed_sources[Source.ENTSOE]
-        assert first_failure_time_nordpool is not None, "Failure timestamp should be set"
+        assert (
+            first_failure_time_nordpool is not None
+        ), "Failure timestamp should be set"
         assert manager._consecutive_failures == 1, "First failure increments counter"
         assert result_1.get("has_data") is False, "No data on failure"
         assert mock_fallback.await_count == 1, "Fallback called on first failure"
@@ -1456,15 +1654,21 @@ class TestUnifiedPriceManager:
         _LAST_FETCH_TIME.clear()  # Clear rate limit to allow fetch attempt
 
         # Verify still past grace period
-        assert manager.is_in_grace_period() == False, "Should still be past grace period"
+        assert (
+            manager.is_in_grace_period() == False
+        ), "Should still be past grace period"
 
-        empty_res_2 = await manager._generate_empty_result(error="No API sources available")
+        empty_res_2 = await manager._generate_empty_result(
+            error="No API sources available"
+        )
         mock_processor.return_value = empty_res_2
 
         result_2 = await manager.fetch_data()
 
         # Verify sources were skipped (no API call made)
-        assert mock_fallback.await_count == 0, "API should NOT be called - sources failed recently"
+        assert (
+            mock_fallback.await_count == 0
+        ), "API should NOT be called - sources failed recently"
         assert (
             manager._consecutive_failures == 2
         ), "Consecutive failures increment when no sources available"
@@ -1491,14 +1695,18 @@ class TestUnifiedPriceManager:
 
         # Verify sources were retried (force=True bypasses filter) and success cleared failures
         assert mock_fallback.await_count == 1, "API should be called when force=True"
-        assert manager._consecutive_failures == 0, "Success resets consecutive failure counter"
+        assert (
+            manager._consecutive_failures == 0
+        ), "Success resets consecutive failure counter"
         assert (
             manager._failed_sources[Source.NORDPOOL] is None
         ), "Successful source clears failure marker"
         # Note: ENTSOE was never tried because NORDPOOL succeeded (fallback stops at first success)
         # So ENTSOE still has its failure marker - this is correct behavior
         assert result_3.get("has_data") is True, "Data available on success"
-        assert result_3.get("data_source") == Source.NORDPOOL, "Correct source in result"
+        assert (
+            result_3.get("data_source") == Source.NORDPOOL
+        ), "Correct source in result"
 
         # ========== SCENARIO 4: New Failure After Previous Success ==========
         # Sources fail again, get new failure timestamps
@@ -1521,7 +1729,9 @@ class TestUnifiedPriceManager:
         result_4 = await manager.fetch_data()
 
         # Verify new failure markers set
-        assert Source.NORDPOOL in manager._failed_sources, "Sources marked as failed again"
+        assert (
+            Source.NORDPOOL in manager._failed_sources
+        ), "Sources marked as failed again"
         second_failure_time_nordpool = manager._failed_sources[Source.NORDPOOL]
         assert (
             second_failure_time_nordpool == second_failure_time_start
@@ -1547,7 +1757,7 @@ class TestHealthCheck:
             Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
             Config.API_KEY: "test_key",
             Config.SOURCE_PRIORITY: [Source.NORDPOOL, Source.ENTSOE],
-            Config.VAT: Defaults.VAT_RATE,
+            Config.VAT: Defaults.VAT,
             Config.INCLUDE_VAT: Defaults.INCLUDE_VAT,
         }
         manager_instance = UnifiedPriceManager(
@@ -1560,7 +1770,9 @@ class TestHealthCheck:
             "get_exchange_service"
         ].return_value
         if hasattr(manager_instance._data_processor, "_exchange_service"):
-            manager_instance._data_processor._exchange_service = manager_instance._exchange_service
+            manager_instance._data_processor._exchange_service = (
+                manager_instance._exchange_service
+            )
         return manager_instance
 
     async def cancel_health_check_tasks(self):
@@ -1568,7 +1780,10 @@ class TestHealthCheck:
         for task in asyncio.all_tasks():
             if hasattr(task, "get_coro"):
                 coro_str = str(task.get_coro())
-                if "_schedule_health_check" in coro_str or "_validate_all_sources" in coro_str:
+                if (
+                    "_schedule_health_check" in coro_str
+                    or "_validate_all_sources" in coro_str
+                ):
                     task.cancel()
                     try:
                         await task
@@ -1576,7 +1791,9 @@ class TestHealthCheck:
                         pass
 
     @pytest.mark.asyncio
-    async def test_health_check_scheduled_on_failure(self, manager, auto_mock_core_dependencies):
+    async def test_health_check_scheduled_on_failure(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test that health check task is scheduled when all sources fail."""
         try:
             # Arrange
@@ -1584,9 +1801,9 @@ class TestHealthCheck:
                 "fallback_manager"
             ].return_value.fetch_with_fallback
             mock_fallback.return_value = MOCK_FAILURE_RESULT
-            auto_mock_core_dependencies["data_processor"].return_value.process.return_value = (
-                MOCK_EMPTY_PROCESSED_RESULT
-            )
+            auto_mock_core_dependencies[
+                "data_processor"
+            ].return_value.process.return_value = MOCK_EMPTY_PROCESSED_RESULT
 
             # Act
             await manager.fetch_data()
@@ -1600,7 +1817,9 @@ class TestHealthCheck:
             await self.cancel_health_check_tasks()
 
     @pytest.mark.asyncio
-    async def test_health_check_only_scheduled_once(self, manager, auto_mock_core_dependencies):
+    async def test_health_check_only_scheduled_once(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test that health check task is not scheduled multiple times."""
         try:
             # Arrange
@@ -1608,9 +1827,9 @@ class TestHealthCheck:
                 "fallback_manager"
             ].return_value.fetch_with_fallback
             mock_fallback.return_value = MOCK_FAILURE_RESULT
-            auto_mock_core_dependencies["data_processor"].return_value.process.return_value = (
-                MOCK_EMPTY_PROCESSED_RESULT
-            )
+            auto_mock_core_dependencies[
+                "data_processor"
+            ].return_value.process.return_value = MOCK_EMPTY_PROCESSED_RESULT
 
             # Act - multiple failures
             await manager.fetch_data()
@@ -1620,20 +1839,27 @@ class TestHealthCheck:
             await manager.fetch_data()
 
             # Assert - flag set once
-            assert manager._health_check_scheduled is True, "Health check should be scheduled"
+            assert (
+                manager._health_check_scheduled is True
+            ), "Health check should be scheduled"
             assert first_scheduled is True, "Health check scheduled on first failure"
         finally:
             # Cleanup
             await self.cancel_health_check_tasks()
 
     @pytest.mark.asyncio
-    async def test_validate_all_sources_success(self, manager, auto_mock_core_dependencies):
+    async def test_validate_all_sources_success(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test _validate_all_sources marks all working sources as validated."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies[
             "fallback_manager"
         ].return_value.fetch_with_fallback
-        mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+        mock_fallback.return_value = {
+            **MOCK_SUCCESS_RESULT,
+            "raw_data": {"test": "data"},
+        }
 
         # Mark sources as failed first
         now = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
@@ -1652,7 +1878,9 @@ class TestHealthCheck:
         ), "ENTSOE should be cleared after successful validation"
 
     @pytest.mark.asyncio
-    async def test_validate_all_sources_partial_failure(self, manager, auto_mock_core_dependencies):
+    async def test_validate_all_sources_partial_failure(
+        self, manager, auto_mock_core_dependencies
+    ):
         """Test _validate_all_sources handles mixed success/failure."""
         # Arrange
         mock_fallback = auto_mock_core_dependencies[
@@ -1669,7 +1897,9 @@ class TestHealthCheck:
         await manager._validate_all_sources()
 
         # Assert
-        assert manager._failed_sources.get("nordpool") is None, "Nordpool should succeed"
+        assert (
+            manager._failed_sources.get("nordpool") is None
+        ), "Nordpool should succeed"
         assert manager._failed_sources.get("entsoe") is not None, "ENTSOE should fail"
 
     def test_failed_source_details_format(self, manager):
@@ -1702,7 +1932,9 @@ class TestHealthCheck:
         test_time = datetime(2025, 4, 26, 16, 0, 0, tzinfo=timezone.utc)
         next_check = manager._calculate_next_health_check(test_time)
         assert next_check.hour == 0, f"Should return 00:00, got {next_check.hour}:00"
-        assert next_check.date() == test_time.date() + timedelta(days=1), "Should be next day"
+        assert next_check.date() == test_time.date() + timedelta(
+            days=1
+        ), "Should be next day"
 
     @pytest.mark.asyncio
     async def test_health_check_non_blocking_on_boot(self, manager):
@@ -1712,7 +1944,9 @@ class TestHealthCheck:
         check runs in background without blocking the caller.
         """
         # Arrange - simulate slow failing sources (26s timeout per source)
-        with patch.object(manager._fallback_manager, "fetch_with_fallback") as mock_fallback:
+        with patch.object(
+            manager._fallback_manager, "fetch_with_fallback"
+        ) as mock_fallback:
 
             async def slow_timeout(*args, **kwargs):
                 """Simulate slow timeout (2s + 6s + 18s = 26s)."""
@@ -1727,13 +1961,17 @@ class TestHealthCheck:
             start_time = time.time()
 
             # Schedule health check with run_immediately=True (background task)
-            task = asyncio.create_task(manager._schedule_health_check(run_immediately=True))
+            task = asyncio.create_task(
+                manager._schedule_health_check(run_immediately=True)
+            )
 
             # Time until task is created (should be instant)
             schedule_time = time.time() - start_time
 
             # Assert - scheduling should be instant (< 0.1s)
-            assert schedule_time < 0.1, f"Scheduling took {schedule_time:.2f}s, should be instant"
+            assert (
+                schedule_time < 0.1
+            ), f"Scheduling took {schedule_time:.2f}s, should be instant"
 
             # Cleanup - cancel background task
             task.cancel()
@@ -1749,7 +1987,9 @@ class TestHealthCheck:
         Verifies that manual cache clear validates all sources in background.
         """
         # Arrange
-        with patch.object(manager._cache_manager, "clear_cache", return_value=True), patch.object(
+        with patch.object(
+            manager._cache_manager, "clear_cache", return_value=True
+        ), patch.object(
             manager, "fetch_data", new_callable=AsyncMock
         ) as mock_fetch, patch.object(
             manager, "_schedule_health_check", new_callable=AsyncMock
@@ -1792,7 +2032,9 @@ class TestHealthCheck:
                 # Fast error
                 return {"error": Exception("Quick error")}
 
-        with patch.object(manager._fallback_manager, "fetch_with_fallback") as mock_fallback:
+        with patch.object(
+            manager._fallback_manager, "fetch_with_fallback"
+        ) as mock_fallback:
             mock_fallback.side_effect = mixed_timing
 
             # Act - measure time for scheduling
@@ -1801,12 +2043,16 @@ class TestHealthCheck:
             start_time = time.time()
 
             # Schedule health check (should return immediately despite slow sources)
-            task = asyncio.create_task(manager._schedule_health_check(run_immediately=True))
+            task = asyncio.create_task(
+                manager._schedule_health_check(run_immediately=True)
+            )
 
             schedule_time = time.time() - start_time
 
             # Assert - scheduling should be instant
-            assert schedule_time < 0.1, f"Scheduling took {schedule_time:.2f}s, should be instant"
+            assert (
+                schedule_time < 0.1
+            ), f"Scheduling took {schedule_time:.2f}s, should be instant"
 
             # Let health check actually run to verify it works
             await asyncio.sleep(1.0)  # Wait for mixed timing to complete
@@ -1825,7 +2071,9 @@ class TestHealthCheck:
         Best-case scenario: All sources respond quickly (< 2s each).
         """
         # Arrange
-        with patch.object(manager._fallback_manager, "fetch_with_fallback") as mock_fallback:
+        with patch.object(
+            manager._fallback_manager, "fetch_with_fallback"
+        ) as mock_fallback:
 
             async def fast_success(*args, **kwargs):
                 """Simulate fast successful response."""
@@ -1844,7 +2092,9 @@ class TestHealthCheck:
             validation_time = time.time() - start_time
 
             # Assert - should complete quickly (< 1s for 3 sources × 0.01s)
-            assert validation_time < 1.0, f"Validation took {validation_time:.2f}s, expected < 1s"
+            assert (
+                validation_time < 1.0
+            ), f"Validation took {validation_time:.2f}s, expected < 1s"
 
             # All sources should be marked as working
             assert all(
@@ -1860,7 +2110,9 @@ class TestHealthCheck:
         initialization/validation, it should still be attempted.
         """
         # Arrange - Mark one source as failed
-        manager._failed_sources[Source.NORDPOOL] = datetime.now(timezone.utc) - timedelta(minutes=5)
+        manager._failed_sources[Source.NORDPOOL] = datetime.now(
+            timezone.utc
+        ) - timedelta(minutes=5)
 
         # Ensure _last_api_fetch is None (first fetch)
         assert manager._last_api_fetch is None, "Should be first fetch"
@@ -1871,7 +2123,10 @@ class TestHealthCheck:
             manager, "_process_result", new_callable=AsyncMock
         ) as mock_process:
 
-            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            mock_fallback.return_value = {
+                **MOCK_SUCCESS_RESULT,
+                "raw_data": {"test": "data"},
+            }
             mock_process.return_value = MOCK_PROCESSED_RESULT
 
             # Act
@@ -1914,7 +2169,10 @@ class TestHealthCheck:
             manager, "_process_result", new_callable=AsyncMock
         ) as mock_process:
 
-            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            mock_fallback.return_value = {
+                **MOCK_SUCCESS_RESULT,
+                "raw_data": {"test": "data"},
+            }
             mock_process.return_value = MOCK_PROCESSED_RESULT
 
             # Act
@@ -1939,7 +2197,9 @@ class TestHealthCheck:
         recently failed sources should be skipped until health check validates them.
         """
         # Arrange - Set coordinator created time to be past grace period
-        manager._coordinator_created_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+        manager._coordinator_created_at = datetime.now(timezone.utc) - timedelta(
+            minutes=10
+        )
 
         # Mark a source as failed and set last fetch time
         now = datetime.now(timezone.utc)
@@ -1955,7 +2215,10 @@ class TestHealthCheck:
             manager, "_process_result", new_callable=AsyncMock
         ) as mock_process:
 
-            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            mock_fallback.return_value = {
+                **MOCK_SUCCESS_RESULT,
+                "raw_data": {"test": "data"},
+            }
             mock_process.return_value = MOCK_PROCESSED_RESULT
 
             # Act
@@ -1972,7 +2235,9 @@ class TestHealthCheck:
 
             # Verify the failed source is not in the list
             source_names = [type(api).__name__ for api in api_instances]
-            assert "NordpoolAPI" not in source_names, "Failed Nordpool source should be skipped"
+            assert (
+                "NordpoolAPI" not in source_names
+            ), "Failed Nordpool source should be skipped"
 
     @pytest.mark.asyncio
     async def test_successful_fetch_updates_last_api_fetch(self, manager):
@@ -1991,7 +2256,10 @@ class TestHealthCheck:
             manager._cache_manager, "store"
         ) as mock_cache_store:
 
-            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            mock_fallback.return_value = {
+                **MOCK_SUCCESS_RESULT,
+                "raw_data": {"test": "data"},
+            }
             mock_process.return_value = MOCK_PROCESSED_RESULT
 
             # Act
@@ -2057,9 +2325,14 @@ class TestHealthCheck:
         # Arrange
         assert manager._all_attempted_sources == []
 
-        with patch.object(manager._fallback_manager, "fetch_with_fallback") as mock_fallback:
+        with patch.object(
+            manager._fallback_manager, "fetch_with_fallback"
+        ) as mock_fallback:
             # Simulate validation attempt
-            mock_fallback.return_value = {**MOCK_SUCCESS_RESULT, "raw_data": {"test": "data"}}
+            mock_fallback.return_value = {
+                **MOCK_SUCCESS_RESULT,
+                "raw_data": {"test": "data"},
+            }
 
             # Act - Run validation (which tracks sources)
             await manager._validate_all_sources()
@@ -2104,7 +2377,9 @@ class TestHealthCheck:
 
                 # Assert - Check log messages
                 warning_messages = [
-                    record.message for record in caplog.records if record.levelname == "WARNING"
+                    record.message
+                    for record in caplog.records
+                    if record.levelname == "WARNING"
                 ]
 
                 # Should have a message about failed sources with time
@@ -2114,7 +2389,8 @@ class TestHealthCheck:
 
                 # Should mention when next check will happen
                 assert any(
-                    ":" in msg and any(char.isdigit() for char in msg) for msg in warning_messages
+                    ":" in msg and any(char.isdigit() for char in msg)
+                    for msg in warning_messages
                 ), "Should include time (HH:MM format) in failure message"
         finally:
             # Cleanup health check task
@@ -2126,7 +2402,9 @@ class TestHealthCheck:
                     pass
 
     @pytest.mark.asyncio
-    async def test_health_check_scheduling_message_includes_windows(self, manager, caplog):
+    async def test_health_check_scheduling_message_includes_windows(
+        self, manager, caplog
+    ):
         """Test that health check scheduling message includes time windows.
 
         Phase 2.1 fix: Users should know health check windows.
@@ -2153,7 +2431,9 @@ class TestHealthCheck:
 
                 # Assert - Check for scheduling message
                 info_messages = [
-                    record.message for record in caplog.records if record.levelname == "INFO"
+                    record.message
+                    for record in caplog.records
+                    if record.levelname == "INFO"
                 ]
 
                 # Should mention scheduling health check
@@ -2194,7 +2474,9 @@ class TestHealthCheck:
         manager._mark_source_attempted(Source.ENTSOE)
 
         # Assert - Should only have unique entries
-        assert len(manager._all_attempted_sources) == 2, "Should only track unique sources"
+        assert (
+            len(manager._all_attempted_sources) == 2
+        ), "Should only track unique sources"
         assert (
             manager._all_attempted_sources.count(Source.NORDPOOL) == 1
         ), "Should not have duplicate entries for same source"

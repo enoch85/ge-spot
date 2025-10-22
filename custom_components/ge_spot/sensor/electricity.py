@@ -77,7 +77,9 @@ async def async_setup_entry(
     # Get specific settings used by some sensors directly (already present)
     vat = options.get(Config.VAT, 0) / 100  # Convert from percentage to decimal
     include_vat = options.get(Config.INCLUDE_VAT, False)
-    price_in_cents = display_unit_setting == DisplayUnit.CENTS  # Use resolved display_unit_setting
+    price_in_cents = (
+        display_unit_setting == DisplayUnit.CENTS
+    )  # Use resolved display_unit_setting
 
     # Create sensor entities (passing the populated config_data)
 

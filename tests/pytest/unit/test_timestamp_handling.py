@@ -75,12 +75,15 @@ class TestTimestampHandling:
 
         # ISO without timezone - should assume source timezone and return UTC
         iso_no_tz = "2023-05-15T14:00:00"
-        dt = parser.parse_timestamp(iso_no_tz, timezones["cet"])  # Assume CET (+1 or +2)
+        dt = parser.parse_timestamp(
+            iso_no_tz, timezones["cet"]
+        )  # Assume CET (+1 or +2)
         # 14:00 CET is 13:00 UTC (standard) or 12:00 UTC (DST)
         assert dt.tzinfo == timezone.utc, f"Expected timezone UTC, got {dt.tzinfo}"
         # Check if the UTC hour matches the expected conversion from 14:00 CET
         expected_utc_hour = 14 - (
-            timezones["cet"].utcoffset(datetime(2023, 5, 15, 14, 0)).total_seconds() / 3600
+            timezones["cet"].utcoffset(datetime(2023, 5, 15, 14, 0)).total_seconds()
+            / 3600
         )
         assert (
             dt.hour == expected_utc_hour
@@ -98,7 +101,9 @@ class TestTimestampHandling:
 
         # ISO with different timezone offset - should correctly convert to UTC
         iso_offset = "2023-05-15T18:45:00+02:00"
-        dt = parser.parse_timestamp(iso_offset, timezones["utc"])  # Source TZ irrelevant
+        dt = parser.parse_timestamp(
+            iso_offset, timezones["utc"]
+        )  # Source TZ irrelevant
         # The time should be stored as UTC, so 18:45+02:00 becomes 16:45 UTC
         assert (
             dt.hour == 16
@@ -108,11 +113,15 @@ class TestTimestampHandling:
 
         # Test with microseconds - should handle correctly and return UTC
         iso_micros = "2023-05-15T22:15:30.123456+00:00"
-        dt = parser.parse_timestamp(iso_micros, timezones["utc"])  # Source TZ irrelevant
+        dt = parser.parse_timestamp(
+            iso_micros, timezones["utc"]
+        )  # Source TZ irrelevant
         assert dt.hour == 22, f"Expected hour 22 UTC, got {dt.hour}"
         assert dt.minute == 15, f"Expected minute 15, got {dt.minute}"
         assert dt.second == 30, f"Expected second 30, got {dt.second}"
-        assert dt.microsecond == 123456, f"Expected microsecond 123456, got {dt.microsecond}"
+        assert (
+            dt.microsecond == 123456
+        ), f"Expected microsecond 123456, got {dt.microsecond}"
         assert dt.tzinfo == timezone.utc, f"Expected timezone UTC, got {dt.tzinfo}"
 
         # Test with invalid ISO format - should raise ValueError
@@ -136,7 +145,8 @@ class TestTimestampHandling:
         dt = parser.parse_timestamp(euro_date, timezones["cet"])  # Assume CET source
         assert dt.tzinfo == timezone.utc, f"Expected timezone UTC, got {dt.tzinfo}"
         expected_utc_hour = 14 - (
-            timezones["cet"].utcoffset(datetime(2023, 5, 15, 14, 30)).total_seconds() / 3600
+            timezones["cet"].utcoffset(datetime(2023, 5, 15, 14, 30)).total_seconds()
+            / 3600
         )
         assert (
             dt.hour == expected_utc_hour
@@ -148,20 +158,29 @@ class TestTimestampHandling:
 
         # US format - should assume source timezone (US Eastern) and return UTC
         us_date = "05/15/2023 10:45"
-        dt = parser.parse_timestamp(us_date, timezones["us_eastern"])  # Assume US Eastern source
+        dt = parser.parse_timestamp(
+            us_date, timezones["us_eastern"]
+        )  # Assume US Eastern source
         assert dt.tzinfo == timezone.utc, f"Expected timezone UTC, got {dt.tzinfo}"
         expected_utc_hour = 10 - (
-            timezones["us_eastern"].utcoffset(datetime(2023, 5, 15, 10, 45)).total_seconds() / 3600
+            timezones["us_eastern"]
+            .utcoffset(datetime(2023, 5, 15, 10, 45))
+            .total_seconds()
+            / 3600
         )
         assert (
             dt.hour == expected_utc_hour
         ), f"Expected hour {expected_utc_hour} UTC from 10:45 US Eastern, got {dt.hour}"
         assert dt.minute == 45, f"Expected minute 45, got {dt.minute}"
-        assert dt.date() == datetime(2023, 5, 15).date(), f"Expected date 2023-05-15, got {dt.date}"
+        assert (
+            dt.date() == datetime(2023, 5, 15).date()
+        ), f"Expected date 2023-05-15, got {dt.date}"
 
         # Test with seconds - should assume source timezone and return UTC
         date_time_sec = "2023-05-15 12:00:30"
-        dt = parser.parse_timestamp(date_time_sec, timezones["utc"])  # Assume UTC source
+        dt = parser.parse_timestamp(
+            date_time_sec, timezones["utc"]
+        )  # Assume UTC source
         assert dt.hour == 12, f"Expected hour 12 UTC, got {dt.hour}"
         assert dt.second == 30, f"Expected second 30, got {dt.second}"
         assert dt.tzinfo == timezone.utc, f"Expected timezone UTC, got {dt.tzinfo}"
@@ -186,14 +205,20 @@ class TestTimestampHandling:
         # Input timestamps should be UTC after parsing
         # Today 12:00 UTC
         today_utc = datetime.combine(
-            test_dates["today"], datetime.min.time().replace(hour=12), tzinfo=timezone.utc
+            test_dates["today"],
+            datetime.min.time().replace(hour=12),
+            tzinfo=timezone.utc,
         )
         day_type = parser.classify_timestamp_day(today_utc, timezones["utc"])
-        assert day_type == "today", f"Expected 'today', got '{day_type}' for {today_utc} in UTC"
+        assert (
+            day_type == "today"
+        ), f"Expected 'today', got '{day_type}' for {today_utc} in UTC"
 
         # Tomorrow 12:00 UTC
         tomorrow_utc = datetime.combine(
-            test_dates["tomorrow"], datetime.min.time().replace(hour=12), tzinfo=timezone.utc
+            test_dates["tomorrow"],
+            datetime.min.time().replace(hour=12),
+            tzinfo=timezone.utc,
         )
         day_type = parser.classify_timestamp_day(tomorrow_utc, timezones["utc"])
         assert (
@@ -202,7 +227,9 @@ class TestTimestampHandling:
 
         # Yesterday 12:00 UTC
         yesterday_utc = datetime.combine(
-            test_dates["yesterday"], datetime.min.time().replace(hour=12), tzinfo=timezone.utc
+            test_dates["yesterday"],
+            datetime.min.time().replace(hour=12),
+            tzinfo=timezone.utc,
         )
         day_type = parser.classify_timestamp_day(yesterday_utc, timezones["utc"])
         assert (
@@ -212,7 +239,9 @@ class TestTimestampHandling:
         # Cross-timezone tests - critical for real-world operation
         # Late today in UTC (22:00) but tomorrow in Tokyo (UTC+9 -> 07:00 next day)
         late_today_utc = datetime.combine(
-            test_dates["today"], datetime.min.time().replace(hour=22), tzinfo=timezone.utc
+            test_dates["today"],
+            datetime.min.time().replace(hour=22),
+            tzinfo=timezone.utc,
         )
 
         # Should be "today" in UTC
@@ -233,7 +262,9 @@ class TestTimestampHandling:
 
         # Test early tomorrow UTC (01:00) which might be today in US timezones (e.g. US Eastern UTC-5/-4 -> 21:00/20:00 previous day)
         early_tomorrow_utc = datetime.combine(
-            test_dates["tomorrow"], datetime.min.time().replace(hour=1), tzinfo=timezone.utc
+            test_dates["tomorrow"],
+            datetime.min.time().replace(hour=1),
+            tzinfo=timezone.utc,
         )
 
         # Should be "tomorrow" in UTC
@@ -280,17 +311,27 @@ class TestTimestampHandling:
         assert (
             len(result["tomorrow"]) == 2
         ), f"Expected 2 tomorrow entries, got {len(result['tomorrow'])}: {result['tomorrow']}"
-        assert len(result["other"]) == 0, f"Expected 0 other entries, got {len(result['other'])}"
+        assert (
+            len(result["other"]) == 0
+        ), f"Expected 0 other entries, got {len(result['other'])}"
 
         # Verify specific hours are correctly assigned
-        assert result["today"]["10:00"] == 50.0, "Expected '10:00' today to have value 50.0"
-        assert result["today"]["12:00"] == 60.0, "Expected '12:00' today to have value 60.0"
+        assert (
+            result["today"]["10:00"] == 50.0
+        ), "Expected '10:00' today to have value 50.0"
+        assert (
+            result["today"]["12:00"] == 60.0
+        ), "Expected '12:00' today to have value 60.0"
         assert (
             result["today"]["14:00"] == 70.0
         ), "Expected '14:00' today to have value 70.0"  # FIXED Assertion
 
-        assert result["tomorrow"]["10:00"] == 55.0, "Expected '10:00' tomorrow to have value 55.0"
-        assert result["tomorrow"]["12:00"] == 65.0, "Expected '12:00' tomorrow to have value 65.0"
+        assert (
+            result["tomorrow"]["10:00"] == 55.0
+        ), "Expected '10:00' tomorrow to have value 55.0"
+        assert (
+            result["tomorrow"]["12:00"] == 65.0
+        ), "Expected '12:00' tomorrow to have value 65.0"
 
         # Test with timezone conversion - critical for real-world operation
         # UTC -> CET (usually +1 or +2 hours)
@@ -330,14 +371,18 @@ class TestTimestampHandling:
         )
 
         # Calculate the expected hour for 14:00 UTC (assumed today) in Australia/Sydney
-        dt_14_utc = parser.parse_timestamp("14:00", timezones["utc"])  # Uses today's date
+        dt_14_utc = parser.parse_timestamp(
+            "14:00", timezones["utc"]
+        )  # Uses today's date
         dt_14_aus = dt_14_utc.astimezone(timezones["australian"])
         expected_hour_14_aus = f"{dt_14_aus.hour:02d}:00"
 
         # 14:00 UTC on 2025-10-14 becomes 01:00 on 2025-10-15 in Australia (crosses midnight)
         # So it should be in tomorrow's data based on the date_context of 2025-10-14
         # Check both today and tomorrow to find where it ended up
-        day_key_14 = "today" if expected_hour_14_aus in result_aus["today"] else "tomorrow"
+        day_key_14 = (
+            "today" if expected_hour_14_aus in result_aus["today"] else "tomorrow"
+        )
 
         assert (
             expected_hour_14_aus in result_aus[day_key_14]
@@ -365,7 +410,9 @@ class TestTimestampHandling:
             except ValueError:
                 continue  # Ignore invalid dates like Oct 32
 
-        assert dst_fallback_date is not None, "Could not determine DST fallback date for testing"
+        assert (
+            dst_fallback_date is not None
+        ), "Could not determine DST fallback date for testing"
         _LOGGER.info(f"Using DST fallback date for testing: {dst_fallback_date}")
 
         # Test case for "fall back" transition where 2:00-3:00 occurs twice in CET
@@ -386,7 +433,9 @@ class TestTimestampHandling:
             date_context=dst_fallback_date,  # Provide context for classification
         )
 
-        assert result_dst is not None, "Normalizing DST transition timestamps should not fail"
+        assert (
+            result_dst is not None
+        ), "Normalizing DST transition timestamps should not fail"
         # All these times should fall on the same calendar day in CET
         assert "today" in result_dst, "Result should contain 'today' key"
         assert (
@@ -401,7 +450,9 @@ class TestTimestampHandling:
         ), "Expected value from the second occurrence of 02:00 during DST fallback"
         assert "04:00" in result_dst["today"], "Expected '04:00' key"
         assert result_dst["today"]["04:00"] == 90.0, "Expected correct value for 04:00"
-        assert len(result_dst["tomorrow"]) == 0, "Expected 0 tomorrow entries for DST test"
+        assert (
+            len(result_dst["tomorrow"]) == 0
+        ), "Expected 0 tomorrow entries for DST test"
         assert (
             len(result_dst["other"]) == 0
         ), f"Expected 0 other entries for DST test, got {len(result_dst['other'])}"  # Check 'other'
@@ -409,21 +460,31 @@ class TestTimestampHandling:
         # Test case for empty input
         empty_prices = {}
         result_empty = parser.normalize_timestamps(
-            empty_prices, timezones["utc"], timezones["utc"]  # Source timezone  # Target timezone
+            empty_prices,
+            timezones["utc"],
+            timezones["utc"],  # Source timezone  # Target timezone
         )
 
         # Should return empty structures, not None or error
         assert result_empty is not None, "Normalizing empty prices should not fail"
-        assert "today" in result_empty, "Result should contain 'today' key even with empty input"
+        assert (
+            "today" in result_empty
+        ), "Result should contain 'today' key even with empty input"
         assert (
             "tomorrow" in result_empty
         ), "Result should contain 'tomorrow' key even with empty input"
-        assert "other" in result_empty, "Result should contain 'other' key even with empty input"
-        assert len(result_empty["today"]) == 0, "Expected 0 entries for today with empty input"
+        assert (
+            "other" in result_empty
+        ), "Result should contain 'other' key even with empty input"
+        assert (
+            len(result_empty["today"]) == 0
+        ), "Expected 0 entries for today with empty input"
         assert (
             len(result_empty["tomorrow"]) == 0
         ), "Expected 0 entries for tomorrow with empty input"
-        assert len(result_empty["other"]) == 0, "Expected 0 entries for other with empty input"
+        assert (
+            len(result_empty["other"]) == 0
+        ), "Expected 0 entries for other with empty input"
 
         # Test with malformed timestamps - should skip invalid, process valid
         malformed_prices = {

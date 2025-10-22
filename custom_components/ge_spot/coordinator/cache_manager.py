@@ -54,7 +54,9 @@ class CacheManager:
             target_date: Optional specific date the data is for (defaults to timestamp's date)
         """
         if not timestamp:
-            timestamp = dt_util.utcnow()  # Use aware UTC timestamp by default if none provided
+            timestamp = (
+                dt_util.utcnow()
+            )  # Use aware UTC timestamp by default if none provided
         elif timestamp.tzinfo is None:
             # Do not assume UTC for naive timestamps. This indicates an issue.
             _LOGGER.error(
@@ -66,7 +68,9 @@ class CacheManager:
             return
 
         # Use provided target_date if available, otherwise use timestamp's date
-        actual_target_date = target_date if target_date is not None else timestamp.date()
+        actual_target_date = (
+            target_date if target_date is not None else timestamp.date()
+        )
 
         cache_key = self._generate_cache_key(area, source, actual_target_date)
 
@@ -122,13 +126,17 @@ class CacheManager:
         """
         # If source is specified, try that first using AdvancedCache.get()
         if source:
-            cache_key = self._generate_cache_key(area, source, target_date)  # Use date in key
+            cache_key = self._generate_cache_key(
+                area, source, target_date
+            )  # Use date in key
             # AdvancedCache.get handles TTL expiry check internally
             entry_data = self._price_cache.get(cache_key)
             if entry_data:
                 # If max_age_minutes is specified, perform an additional check
                 if max_age_minutes is not None:
-                    entry_info = self._price_cache.get_info().get("entries", {}).get(cache_key)
+                    entry_info = (
+                        self._price_cache.get_info().get("entries", {}).get(cache_key)
+                    )
                     # Ensure the entry found actually matches the requested target_date from metadata
                     # (Although key matching should guarantee this, it's a safety check)
                     if (
@@ -137,7 +145,9 @@ class CacheManager:
                         == target_date.isoformat()
                         and self._is_entry_within_max_age(entry_info, max_age_minutes)
                     ):
-                        _LOGGER.debug(f"Cache hit for specific key {cache_key} within max_age.")
+                        _LOGGER.debug(
+                            f"Cache hit for specific key {cache_key} within max_age."
+                        )
                         return entry_data
                     else:
                         _LOGGER.debug(
@@ -146,7 +156,9 @@ class CacheManager:
                         return None  # Treat as expired for this request
                 else:
                     # No max_age check needed, TTL check passed in .get()
-                    _LOGGER.debug(f"Cache hit for specific key: {cache_key} (TTL check only).")
+                    _LOGGER.debug(
+                        f"Cache hit for specific key: {cache_key} (TTL check only)."
+                    )
                     return entry_data  # Return the data part directly
 
         # If specific source not found/expired or not specified, search all entries for the area AND date
@@ -164,7 +176,10 @@ class CacheManager:
             metadata = entry_info.get("metadata", {})
             # Check if the key belongs to the requested area AND target_date
             # We check metadata explicitly here as key structure might vary slightly
-            if metadata.get("area") == area and metadata.get("target_date") == target_date_str:
+            if (
+                metadata.get("area") == area
+                and metadata.get("target_date") == target_date_str
+            ):
                 # Check if expired based on TTL (already checked by .get() later, but good for pre-filtering)
                 if not entry_info.get("is_expired"):
                     # Check against max_age_minutes if specified
@@ -182,9 +197,13 @@ class CacheManager:
                                     if created_at_str
                                     else datetime.min.replace(tzinfo=timezone.utc)
                                 )
-                                if created_at.tzinfo is None:  # Ensure timezone aware for sorting
+                                if (
+                                    created_at.tzinfo is None
+                                ):  # Ensure timezone aware for sorting
                                     created_at = created_at.replace(tzinfo=timezone.utc)
-                                valid_entries_with_timestamp.append((created_at, entry_data))
+                                valid_entries_with_timestamp.append(
+                                    (created_at, entry_data)
+                                )
                             except Exception as e:
                                 _LOGGER.warning(
                                     f"Error parsing created_at for sorting cache key {key}: {e}"
@@ -268,7 +287,9 @@ class CacheManager:
         # Return the data part of the newest valid entry
         return valid_entries_with_timestamp[0][1]
 
-    def _is_entry_within_max_age(self, entry_info: Dict[str, Any], max_age_minutes: int) -> bool:
+    def _is_entry_within_max_age(
+        self, entry_info: Dict[str, Any], max_age_minutes: int
+    ) -> bool:
         """Check if a cache entry info dict is within the specified max age."""
         created_at_str = entry_info.get("created_at")
         if not created_at_str:
@@ -300,7 +321,9 @@ class CacheManager:
 
             return (now_utc - created_at) <= max_age_delta
         except Exception as e:
-            _LOGGER.warning(f"Error checking max_age for timestamp {created_at_str}: {e}")
+            _LOGGER.warning(
+                f"Error checking max_age for timestamp {created_at_str}: {e}"
+            )
             return False
 
     def clear(self, area: str, target_date: Optional[date] = None) -> bool:
@@ -312,7 +335,9 @@ class CacheManager:
         for key, entry_info in cache_info.get("entries", {}).items():
             metadata = entry_info.get("metadata", {})
             matches_area = metadata.get("area") == area
-            matches_date = target_date is None or metadata.get("target_date") == target_date_str
+            matches_date = (
+                target_date is None or metadata.get("target_date") == target_date_str
+            )
 
             if matches_area and matches_date:
                 keys_to_delete.append(key)
@@ -332,7 +357,9 @@ class CacheManager:
 
         return deleted
 
-    def clear_cache(self, area: Optional[str] = None, target_date: Optional[date] = None) -> bool:
+    def clear_cache(
+        self, area: Optional[str] = None, target_date: Optional[date] = None
+    ) -> bool:
         """Clear all cache or cache for a specific area/date."""
         if area:
             return self.clear(area, target_date)  # Pass date to clear
@@ -385,7 +412,9 @@ class CacheManager:
             )
 
         if not area or not source:
-            _LOGGER.warning("Cannot update cache: Area or Source missing in processed data.")
+            _LOGGER.warning(
+                "Cannot update cache: Area or Source missing in processed data."
+            )
             return
 
         _LOGGER.debug(

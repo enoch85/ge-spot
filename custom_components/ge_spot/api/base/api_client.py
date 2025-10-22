@@ -13,7 +13,9 @@ _LOGGER = logging.getLogger(__name__)
 class ApiClient:
     """Generic API client with improved error handling."""
 
-    def __init__(self, session: Optional[aiohttp.ClientSession] = None, pool_size: int = 10):
+    def __init__(
+        self, session: Optional[aiohttp.ClientSession] = None, pool_size: int = 10
+    ):
         """Initialize the API client.
 
         Args:
@@ -73,7 +75,10 @@ class ApiClient:
 
                         if "application/json" in content_type:
                             return await response.json()
-                        elif "text/xml" in content_type or "application/xml" in content_type:
+                        elif (
+                            "text/xml" in content_type
+                            or "application/xml" in content_type
+                        ):
                             return await response.text(encoding=encoding)
                         else:
                             # Try JSON first, fall back to text if that fails
@@ -84,14 +89,20 @@ class ApiClient:
                 else:
                     async with aiohttp.ClientSession() as session:
                         async with session.get(
-                            url, params=params, headers=merged_headers, timeout=timeout_obj
+                            url,
+                            params=params,
+                            headers=merged_headers,
+                            timeout=timeout_obj,
                         ) as response:
                             # HTTP 204 = No Content - data not published yet (not an error)
                             if response.status == 204:
                                 _LOGGER.info(
                                     f"API returned 204 (No Content) - data not yet published: {url}"
                                 )
-                                return {"status": 204, "message": "Data not yet published"}
+                                return {
+                                    "status": 204,
+                                    "message": "Data not yet published",
+                                }
 
                             if response.status != 200:
                                 _LOGGER.error(
@@ -100,11 +111,16 @@ class ApiClient:
                                 return {}
 
                             # Check content type to determine how to parse the response
-                            content_type = response.headers.get("Content-Type", "").lower()
+                            content_type = response.headers.get(
+                                "Content-Type", ""
+                            ).lower()
 
                             if "application/json" in content_type:
                                 return await response.json()
-                            elif "text/xml" in content_type or "application/xml" in content_type:
+                            elif (
+                                "text/xml" in content_type
+                                or "application/xml" in content_type
+                            ):
                                 return await response.text(encoding=encoding)
                             else:
                                 # Try JSON first, fall back to text if that fails
@@ -176,7 +192,9 @@ class ApiClient:
                                     "error": True,
                                     "status_code": response.status,
                                     "message": (
-                                        error_text[:500] if len(error_text) > 500 else error_text
+                                        error_text[:500]
+                                        if len(error_text) > 500
+                                        else error_text
                                     ),
                                     "url": url,
                                 }
@@ -204,7 +222,10 @@ class ApiClient:
 
                         if "application/json" in content_type:
                             return await response.json()
-                        elif "text/xml" in content_type or "application/xml" in content_type:
+                        elif (
+                            "text/xml" in content_type
+                            or "application/xml" in content_type
+                        ):
                             return await response.text(encoding=encoding)
                         elif "text/csv" in content_type or "text/plain" in content_type:
                             return await response.text(encoding=encoding)
@@ -218,7 +239,10 @@ class ApiClient:
                     # Create temporary session if none exists
                     async with aiohttp.ClientSession() as session:
                         async with session.get(
-                            url, params=params, headers=merged_headers, timeout=timeout_obj
+                            url,
+                            params=params,
+                            headers=merged_headers,
+                            timeout=timeout_obj,
                         ) as response:
                             if response.status != 200:
                                 _LOGGER.error(
@@ -256,13 +280,21 @@ class ApiClient:
                                     return await response.text(encoding=encoding)
 
                             # If no specific format requested, check content type
-                            content_type = response.headers.get("Content-Type", "").lower()
+                            content_type = response.headers.get(
+                                "Content-Type", ""
+                            ).lower()
 
                             if "application/json" in content_type:
                                 return await response.json()
-                            elif "text/xml" in content_type or "application/xml" in content_type:
+                            elif (
+                                "text/xml" in content_type
+                                or "application/xml" in content_type
+                            ):
                                 return await response.text(encoding=encoding)
-                            elif "text/csv" in content_type or "text/plain" in content_type:
+                            elif (
+                                "text/csv" in content_type
+                                or "text/plain" in content_type
+                            ):
                                 return await response.text(encoding=encoding)
                             else:
                                 try:
@@ -277,7 +309,11 @@ class ApiClient:
                 return {"error": True, "message": str(e), "url": url}
             except Exception as e:
                 _LOGGER.error(f"Unexpected error in API request: {url} - {e}")
-                return {"error": True, "message": f"Unexpected error: {str(e)}", "url": url}
+                return {
+                    "error": True,
+                    "message": f"Unexpected error: {str(e)}",
+                    "url": url,
+                }
 
     async def close(self) -> None:
         """Close the session if it was created by this instance."""

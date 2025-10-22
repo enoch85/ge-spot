@@ -20,7 +20,9 @@ import sys
 import logging
 
 # Add the project root to the path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+)
 
 from custom_components.ge_spot.api.entsoe import EntsoeAPI
 from custom_components.ge_spot.const.areas import AreaMapping

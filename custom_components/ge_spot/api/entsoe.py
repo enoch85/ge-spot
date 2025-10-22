@@ -34,7 +34,10 @@ class EntsoeAPI(BasePriceAPI):
     """API implementation for ENTSO-E Transparency Platform."""
 
     def __init__(
-        self, config: Optional[Dict[str, Any]] = None, session=None, timezone_service=None
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        session=None,
+        timezone_service=None,
     ):
         """Initialize the API.
 
@@ -105,7 +108,9 @@ class EntsoeAPI(BasePriceAPI):
             "ENTSO-E config check: config keys=%s, API_KEY constant='%s', api_key value=%s",
             list(self.config.keys()),
             Config.API_KEY,
-            self.config.get(Config.API_KEY) or self.config.get("api_key") or "NOT FOUND",
+            self.config.get(Config.API_KEY)
+            or self.config.get("api_key")
+            or "NOT FOUND",
         )
 
         api_key = self.config.get(Config.API_KEY) or self.config.get("api_key")
@@ -288,11 +293,12 @@ class EntsoeAPI(BasePriceAPI):
         if should_fetch_tomorrow:
             tomorrow = reference_time + timedelta(days=1)
             # Corrected periodEnd for tomorrow to cover the full day
-            period_start = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).strftime(
-                TimeFormat.ENTSOE_DATE_HOUR
-            )
+            period_start = tomorrow.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ).strftime(TimeFormat.ENTSOE_DATE_HOUR)
             period_end = (
-                tomorrow.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+                + timedelta(days=1)
             ).strftime(TimeFormat.ENTSOE_DATE_HOUR)
 
             params_tomorrow = {
@@ -314,7 +320,11 @@ class EntsoeAPI(BasePriceAPI):
 
             def is_data_available(data):
                 # Check for non-empty string containing the success marker
-                return data and isinstance(data, str) and "Publication_MarketDocument" in data
+                return (
+                    data
+                    and isinstance(data, str)
+                    and "Publication_MarketDocument" in data
+                )
 
             tomorrow_xml = await fetch_with_retry(
                 fetch_tomorrow,
@@ -330,7 +340,9 @@ class EntsoeAPI(BasePriceAPI):
             # --- Fallback Trigger Logic ---
             # If it's past the failure check time and tomorrow's data is still not available/valid,
             # treat this fetch attempt as a failure to trigger fallback.
-            if now_cet.hour >= failure_check_hour_cet and not is_data_available(tomorrow_xml):
+            if now_cet.hour >= failure_check_hour_cet and not is_data_available(
+                tomorrow_xml
+            ):
                 _LOGGER.warning(
                     f"ENTSO-E fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
                     f"but was not available or invalid. Triggering fallback."
@@ -403,7 +415,9 @@ class EntsoeAPI(BasePriceAPI):
                 _LOGGER.warning("ENTSOE API: Parser returned no interval_raw data.")
                 return {}
 
-            _LOGGER.debug(f"ENTSOE API: Parser returned keys: {list(parsed_data.keys())}")
+            _LOGGER.debug(
+                f"ENTSOE API: Parser returned keys: {list(parsed_data.keys())}"
+            )
 
             # Add source name for consistency if not already present
             if "source_name" not in parsed_data:
@@ -461,7 +475,9 @@ async def validate_api_key(api_key, area, session=None):
                 return True
             else:
                 # Try alternative areas if this one failed for non-auth, non-'no data' reasons
-                _LOGGER.warning(f"API key validation encountered an error with area {area}: {e}")
+                _LOGGER.warning(
+                    f"API key validation encountered an error with area {area}: {e}"
+                )
 
                 # Try alternative areas that are known to have good data availability
                 # These areas were identified in the improvements document
@@ -473,7 +489,9 @@ async def validate_api_key(api_key, area, session=None):
 
                 # Try each alternative area
                 for alt_area in alternative_areas:
-                    _LOGGER.info(f"Trying alternative area {alt_area} for API key validation")
+                    _LOGGER.info(
+                        f"Trying alternative area {alt_area} for API key validation"
+                    )
                     try:
                         # Create a new config and API instance for the alternative area
                         alt_config = {"area": alt_area, "api_key": api_key}
@@ -496,7 +514,9 @@ async def validate_api_key(api_key, area, session=None):
                             )
                             return True
                         else:
-                            _LOGGER.warning(f"Error with alternative area {alt_area}: {alt_e}")
+                            _LOGGER.warning(
+                                f"Error with alternative area {alt_area}: {alt_e}"
+                            )
                             continue  # Continue to the next alternative area
 
                 # If we get here, all attempts failed but not due to auth issues

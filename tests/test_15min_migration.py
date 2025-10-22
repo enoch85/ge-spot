@@ -20,7 +20,9 @@ try:
     from custom_components.ge_spot.const.time import TimeInterval
 
     # Test default is QUARTER_HOURLY
-    assert TimeInterval.DEFAULT == TimeInterval.QUARTER_HOURLY, "DEFAULT should be QUARTER_HOURLY"
+    assert (
+        TimeInterval.DEFAULT == TimeInterval.QUARTER_HOURLY
+    ), "DEFAULT should be QUARTER_HOURLY"
     print("✅ DEFAULT = QUARTER_HOURLY")
 
     # Test helper methods
@@ -33,13 +35,19 @@ try:
     assert TimeInterval.get_intervals_per_day() == 96, "Should return 96 intervals/day"
     print(f"✅ get_intervals_per_day() = {TimeInterval.get_intervals_per_day()}")
 
-    assert TimeInterval.get_intervals_per_day_dst_spring() == 92, "Should return 92 for DST spring"
+    assert (
+        TimeInterval.get_intervals_per_day_dst_spring() == 92
+    ), "Should return 92 for DST spring"
     print(
         f"✅ get_intervals_per_day_dst_spring() = {TimeInterval.get_intervals_per_day_dst_spring()}"
     )
 
-    assert TimeInterval.get_intervals_per_day_dst_fall() == 100, "Should return 100 for DST fall"
-    print(f"✅ get_intervals_per_day_dst_fall() = {TimeInterval.get_intervals_per_day_dst_fall()}")
+    assert (
+        TimeInterval.get_intervals_per_day_dst_fall() == 100
+    ), "Should return 100 for DST fall"
+    print(
+        f"✅ get_intervals_per_day_dst_fall() = {TimeInterval.get_intervals_per_day_dst_fall()}"
+    )
 
     print("✅ TEST 1 PASSED: Configuration system works correctly")
 except AssertionError as e:
@@ -58,7 +66,9 @@ print()
 print("TEST 2: Interval Calculator")
 print("-" * 80)
 try:
-    from custom_components.ge_spot.timezone.interval_calculator import IntervalCalculator
+    from custom_components.ge_spot.timezone.interval_calculator import (
+        IntervalCalculator,
+    )
     from zoneinfo import ZoneInfo
 
     # Create calculator with UTC timezone
@@ -81,7 +91,9 @@ try:
     minute = current_dt.minute
     rounded_minute = (minute // 15) * 15
     expected_current = f"{current_dt.hour:02d}:{rounded_minute:02d}"
-    assert current_key == expected_current, f"Expected {expected_current}, got {current_key}"
+    assert (
+        current_key == expected_current
+    ), f"Expected {expected_current}, got {current_key}"
     print(f"✅ Current interval matches expected: {expected_current}")
 
     print("✅ TEST 2 PASSED: Interval calculator works correctly")
@@ -131,12 +143,19 @@ try:
         area="test_area",
         currency="EUR",
         fetched_at=datetime.now(timezone.utc).isoformat(),
-        today_interval_prices={"00:00": 45.0, "00:15": 50.0, "00:30": 48.0, "00:45": 52.0},
+        today_interval_prices={
+            "00:00": 45.0,
+            "00:15": 50.0,
+            "00:30": 48.0,
+            "00:45": 52.0,
+        },
         current_price=50.0,
         next_interval_price=52.0,
     )
     assert len(price_data.today_interval_prices) == 4, "Should have 4 interval prices"
-    assert "today_interval_prices" in price_data.__dict__, "Should have today_interval_prices field"
+    assert (
+        "today_interval_prices" in price_data.__dict__
+    ), "Should have today_interval_prices field"
     print(f"✅ StandardizedPriceData uses today_interval_prices field")
     print(f"✅ Sample data: {list(price_data.today_interval_prices.keys())[:4]}")
 
@@ -194,7 +213,9 @@ try:
     mock_comed = [{"millisUTC": 1696118400000, "price": "45.5"}]
     comed_result = comed_parser.parse(mock_comed)
     assert "interval_raw" in comed_result, "ComEd parser should return 'interval_raw'"
-    assert "hourly_raw" not in comed_result, "ComEd parser should NOT return 'hourly_raw'"
+    assert (
+        "hourly_raw" not in comed_result
+    ), "ComEd parser should NOT return 'hourly_raw'"
     print(f"✅ ComEd parser returns 'interval_raw'")
 
     print("✅ TEST 4 PASSED: Parsers use correct key names")
@@ -237,14 +258,20 @@ try:
     assert (
         len(interval_raw) == 2
     ), f"Should have 2 fifteen-minute intervals, got {len(interval_raw)}"
-    print(f"✅ ComEd aggregates to 15-min intervals: {len(interval_raw)} intervals created")
+    print(
+        f"✅ ComEd aggregates to 15-min intervals: {len(interval_raw)} intervals created"
+    )
 
     # Check that prices are averaged
     prices = list(interval_raw.values())
     # First interval: (50 + 51 + 52) / 3 = 51.0
-    assert abs(prices[0] - 51.0) < 0.01, f"First interval should average to 51.0, got {prices[0]}"
+    assert (
+        abs(prices[0] - 51.0) < 0.01
+    ), f"First interval should average to 51.0, got {prices[0]}"
     # Second interval: (60 + 61 + 62) / 3 = 61.0
-    assert abs(prices[1] - 61.0) < 0.01, f"Second interval should average to 61.0, got {prices[1]}"
+    assert (
+        abs(prices[1] - 61.0) < 0.01
+    ), f"Second interval should average to 61.0, got {prices[1]}"
     print(f"✅ Prices correctly averaged: {prices}")
 
     print("✅ TEST 5 PASSED: ComEd aggregation works correctly")
@@ -271,10 +298,26 @@ try:
     # Create 5-minute mock data
     mock_data = {
         "ELEC_NEM_SUMMARY": [
-            {"REGIONID": "NSW1", "PRICE": 100.0, "SETTLEMENTDATE": "2025-10-01T00:00:00+00:00"},
-            {"REGIONID": "NSW1", "PRICE": 102.0, "SETTLEMENTDATE": "2025-10-01T00:05:00+00:00"},
-            {"REGIONID": "NSW1", "PRICE": 104.0, "SETTLEMENTDATE": "2025-10-01T00:10:00+00:00"},
-            {"REGIONID": "NSW1", "PRICE": 110.0, "SETTLEMENTDATE": "2025-10-01T00:15:00+00:00"},
+            {
+                "REGIONID": "NSW1",
+                "PRICE": 100.0,
+                "SETTLEMENTDATE": "2025-10-01T00:00:00+00:00",
+            },
+            {
+                "REGIONID": "NSW1",
+                "PRICE": 102.0,
+                "SETTLEMENTDATE": "2025-10-01T00:05:00+00:00",
+            },
+            {
+                "REGIONID": "NSW1",
+                "PRICE": 104.0,
+                "SETTLEMENTDATE": "2025-10-01T00:10:00+00:00",
+            },
+            {
+                "REGIONID": "NSW1",
+                "PRICE": 110.0,
+                "SETTLEMENTDATE": "2025-10-01T00:15:00+00:00",
+            },
         ]
     }
 
@@ -285,11 +328,15 @@ try:
     assert (
         len(interval_raw) == 2
     ), f"Should have 2 fifteen-minute intervals, got {len(interval_raw)}"
-    print(f"✅ AEMO aggregates to 15-min intervals: {len(interval_raw)} intervals created")
+    print(
+        f"✅ AEMO aggregates to 15-min intervals: {len(interval_raw)} intervals created"
+    )
 
     # Check averaging: (100 + 102 + 104) / 3 = 102.0
     prices = list(interval_raw.values())
-    assert abs(prices[0] - 102.0) < 0.01, f"First interval should average to 102.0, got {prices[0]}"
+    assert (
+        abs(prices[0] - 102.0) < 0.01
+    ), f"First interval should average to 102.0, got {prices[0]}"
     print(f"✅ Prices correctly averaged: {prices[0]:.2f}")
 
     print("✅ TEST 6 PASSED: AEMO aggregation works correctly")
@@ -322,7 +369,9 @@ try:
 
     # Verify NO old keys
     assert "hourly_raw" not in parser_result, "Parser should not return 'hourly_raw'"
-    assert "hourly_prices" not in parser_result, "Parser should not return 'hourly_prices'"
+    assert (
+        "hourly_prices" not in parser_result
+    ), "Parser should not return 'hourly_prices'"
     print(f"✅ Parser does not return old keys (hourly_raw, hourly_prices)")
 
     print("✅ TEST 7 PASSED: API/Parser integration uses correct keys")
@@ -359,7 +408,9 @@ try:
 
     # Check IntervalCalculator exists (not HourCalculator)
     try:
-        from custom_components.ge_spot.timezone.interval_calculator import IntervalCalculator
+        from custom_components.ge_spot.timezone.interval_calculator import (
+            IntervalCalculator,
+        )
 
         print(f"✅ IntervalCalculator class exists (not HourCalculator)")
     except ImportError:

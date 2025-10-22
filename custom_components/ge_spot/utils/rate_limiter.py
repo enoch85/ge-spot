@@ -62,9 +62,7 @@ class RateLimiter:
         # This ensures that after HA restart, we can immediately try all fallback sources
         # to find one with complete data, without waiting for rate limit intervals
         if in_grace_period:
-            reason = (
-                "Within grace period after startup - bypassing rate limiting for fallback attempts"
-            )
+            reason = "Within grace period after startup - bypassing rate limiting for fallback attempts"
             log_rate_limiting(area or "unknown", False, reason, source)
             return False, reason
 
@@ -88,7 +86,9 @@ class RateLimiter:
                 / Network.Defaults.SECONDS_PER_MINUTE
                 < backoff_minutes
             ):
-                next_retry = last_failure_time + datetime.timedelta(minutes=backoff_minutes)
+                next_retry = last_failure_time + datetime.timedelta(
+                    minutes=backoff_minutes
+                )
                 reason = f"Backing off after {consecutive_failures} failures. Next retry: {next_retry.strftime('%H:%M:%S')}"
                 log_rate_limiting(area or "unknown", True, reason, source)
                 return True, reason

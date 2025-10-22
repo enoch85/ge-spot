@@ -77,7 +77,9 @@ def convert_energy_price(
                 return None
 
             if source_factor == 0:
-                _LOGGER.error("Source unit '%s' has a zero conversion factor.", source_unit)
+                _LOGGER.error(
+                    "Source unit '%s' has a zero conversion factor.", source_unit
+                )
                 return None
 
             # Energy price conversion:

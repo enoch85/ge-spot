@@ -14,7 +14,9 @@ _LOGGER = logging.getLogger(__name__)
 class ApiKeyManager:
     """Manager for API key validation and status tracking."""
 
-    def __init__(self, hass: HomeAssistant, config: Dict[str, Any], session: Optional[Any] = None):
+    def __init__(
+        self, hass: HomeAssistant, config: Dict[str, Any], session: Optional[Any] = None
+    ):
         """Initialize the API key manager.
 
         Args:
@@ -43,7 +45,9 @@ class ApiKeyManager:
                     from ..api import entsoe
 
                     area = self.config.get("area")
-                    is_valid = await entsoe.validate_api_key(api_key, area, self.session)
+                    is_valid = await entsoe.validate_api_key(
+                        api_key, area, self.session
+                    )
                     api_key_status[Source.ENTSOE] = {
                         "configured": True,
                         "valid": is_valid,
@@ -58,7 +62,9 @@ class ApiKeyManager:
                     if not is_valid and self.config.get(Config.SOURCE_PRIORITY):
                         # Create a new list without ENTSOE
                         original_priority = self.config.get(Config.SOURCE_PRIORITY, [])
-                        adjusted_priority = [s for s in original_priority if s != Source.ENTSOE]
+                        adjusted_priority = [
+                            s for s in original_priority if s != Source.ENTSOE
+                        ]
                         # Add ENTSOE at the end for completeness
                         adjusted_priority.append(Source.ENTSOE)
                         self.config[Config.SOURCE_PRIORITY] = adjusted_priority
@@ -67,7 +73,9 @@ class ApiKeyManager:
                         )
                 except Exception as e:
                     area = self.config.get("area")
-                    _LOGGER.error(f"Error validating ENTSO-E API key for region {area}: {e}")
+                    _LOGGER.error(
+                        f"Error validating ENTSO-E API key for region {area}: {e}"
+                    )
                     api_key_status[Source.ENTSOE] = {
                         "configured": True,
                         "valid": False,

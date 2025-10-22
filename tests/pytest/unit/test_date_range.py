@@ -15,7 +15,9 @@ import pytz
 import pytest
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Add the parent directory to Python path so we can import the custom_components
@@ -43,8 +45,12 @@ class DateRangeUtilityTests(unittest.TestCase):
         logger.info(f"Using reference time: {self.reference_time.isoformat()}")
 
         # Add additional reference times for edge cases
-        self.reference_time_midnight = datetime(2025, 4, 17, 0, 0, 0, tzinfo=timezone.utc)
-        self.reference_time_almost_midnight = datetime(2025, 4, 17, 23, 59, 59, tzinfo=timezone.utc)
+        self.reference_time_midnight = datetime(
+            2025, 4, 17, 0, 0, 0, tzinfo=timezone.utc
+        )
+        self.reference_time_almost_midnight = datetime(
+            2025, 4, 17, 23, 59, 59, tzinfo=timezone.utc
+        )
 
         # Reference time with non-UTC timezone for testing timezone handling
         self.cet_tz = pytz.timezone("Europe/Stockholm")
@@ -53,7 +59,9 @@ class DateRangeUtilityTests(unittest.TestCase):
     def _log_date_ranges(self, date_ranges, test_name, source=None):
         """Log date ranges for debugging."""
         source_str = f" for {source}" if source else ""
-        logger.info(f"Test: {test_name}{source_str} - Generated {len(date_ranges)} date ranges:")
+        logger.info(
+            f"Test: {test_name}{source_str} - Generated {len(date_ranges)} date ranges:"
+        )
         for i, (start, end) in enumerate(date_ranges):
             logger.info(f"  Range {i+1}: {start.isoformat()} to {end.isoformat()}")
 
@@ -129,14 +137,18 @@ class DateRangeUtilityTests(unittest.TestCase):
         # ENTSO-E needs specific data ranges for day-ahead market data
         # Should generate 4 date ranges for ENTSO-E
         self.assertEqual(
-            len(date_ranges), 4, f"Expected 4 date ranges for ENTSO-E, got {len(date_ranges)}"
+            len(date_ranges),
+            4,
+            f"Expected 4 date ranges for ENTSO-E, got {len(date_ranges)}",
         )
 
         # Check each range has the correct structure
         for i, (start, end) in enumerate(date_ranges):
             # Verify ranges are properly structured (end is after start)
             self.assertLess(
-                start, end, f"Range {i+1}: start time ({start}) should be before end time ({end})"
+                start,
+                end,
+                f"Range {i+1}: start time ({start}) should be before end time ({end})",
             )
 
             # Verify each date range preserves the timezone
@@ -173,7 +185,9 @@ class DateRangeUtilityTests(unittest.TestCase):
 
         # Should generate 5 date ranges for AEMO
         self.assertEqual(
-            len(date_ranges), 5, f"Expected 5 date ranges for AEMO, got {len(date_ranges)}"
+            len(date_ranges),
+            5,
+            f"Expected 5 date ranges for AEMO, got {len(date_ranges)}",
         )
 
         # Check that the times are rounded to 5-minute intervals
@@ -185,7 +199,9 @@ class DateRangeUtilityTests(unittest.TestCase):
                 f"Range {i+1}: start minute ({start.minute}) should be a multiple of 5",
             )
             self.assertEqual(
-                start.second, 0, f"Range {i+1}: start second ({start.second}) should be 0"
+                start.second,
+                0,
+                f"Range {i+1}: start second ({start.second}) should be 0",
             )
             self.assertEqual(
                 start.microsecond,
@@ -197,9 +213,13 @@ class DateRangeUtilityTests(unittest.TestCase):
                 0,
                 f"Range {i+1}: end minute ({end.minute}) should be a multiple of 5",
             )
-            self.assertEqual(end.second, 0, f"Range {i+1}: end second ({end.second}) should be 0")
             self.assertEqual(
-                end.microsecond, 0, f"Range {i+1}: end microsecond ({end.microsecond}) should be 0"
+                end.second, 0, f"Range {i+1}: end second ({end.second}) should be 0"
+            )
+            self.assertEqual(
+                end.microsecond,
+                0,
+                f"Range {i+1}: end microsecond ({end.microsecond}) should be 0",
             )
 
     def test_comed_source(self):
@@ -209,7 +229,9 @@ class DateRangeUtilityTests(unittest.TestCase):
 
         # Should generate 5 date ranges for ComEd
         self.assertEqual(
-            len(date_ranges), 5, f"Expected 5 date ranges for ComEd, got {len(date_ranges)}"
+            len(date_ranges),
+            5,
+            f"Expected 5 date ranges for ComEd, got {len(date_ranges)}",
         )
 
         # Check that the times are rounded to 5-minute intervals
@@ -221,7 +243,9 @@ class DateRangeUtilityTests(unittest.TestCase):
                 f"Range {i+1}: start minute ({start.minute}) should be a multiple of 5",
             )
             self.assertEqual(
-                start.second, 0, f"Range {i+1}: start second ({start.second}) should be 0"
+                start.second,
+                0,
+                f"Range {i+1}: start second ({start.second}) should be 0",
             )
             self.assertEqual(
                 start.microsecond,
@@ -233,9 +257,13 @@ class DateRangeUtilityTests(unittest.TestCase):
                 0,
                 f"Range {i+1}: end minute ({end.minute}) should be a multiple of 5",
             )
-            self.assertEqual(end.second, 0, f"Range {i+1}: end second ({end.second}) should be 0")
             self.assertEqual(
-                end.microsecond, 0, f"Range {i+1}: end microsecond ({end.microsecond}) should be 0"
+                end.second, 0, f"Range {i+1}: end second ({end.second}) should be 0"
+            )
+            self.assertEqual(
+                end.microsecond,
+                0,
+                f"Range {i+1}: end microsecond ({end.microsecond}) should be 0",
             )
 
     def test_quarter_hourly_interval(self):
@@ -261,7 +289,9 @@ class DateRangeUtilityTests(unittest.TestCase):
                 f"Range {i+1}: start minute ({start.minute}) should be a multiple of 15",
             )
             self.assertEqual(
-                start.second, 0, f"Range {i+1}: start second ({start.second}) should be 0"
+                start.second,
+                0,
+                f"Range {i+1}: start second ({start.second}) should be 0",
             )
             self.assertEqual(
                 start.microsecond,
@@ -273,9 +303,13 @@ class DateRangeUtilityTests(unittest.TestCase):
                 0,
                 f"Range {i+1}: end minute ({end.minute}) should be a multiple of 15",
             )
-            self.assertEqual(end.second, 0, f"Range {i+1}: end second ({end.second}) should be 0")
             self.assertEqual(
-                end.microsecond, 0, f"Range {i+1}: end microsecond ({end.microsecond}) should be 0"
+                end.second, 0, f"Range {i+1}: end second ({end.second}) should be 0"
+            )
+            self.assertEqual(
+                end.microsecond,
+                0,
+                f"Range {i+1}: end microsecond ({end.microsecond}) should be 0",
             )
 
     def test_custom_parameters(self):
@@ -314,7 +348,9 @@ class DateRangeUtilityTests(unittest.TestCase):
 
     def test_no_historical(self):
         """Test the date range utility with no historical data for future-only APIs."""
-        date_ranges = generate_date_ranges(self.reference_time, include_historical=False)
+        date_ranges = generate_date_ranges(
+            self.reference_time, include_historical=False
+        )
         self._log_date_ranges(date_ranges, "No Historical Data")
 
         # Should generate 3 date ranges without historical data

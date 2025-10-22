@@ -64,9 +64,7 @@ class FetchDecisionMaker:
         # CRITICAL CHECK: Do we have data for the current interval?
         if not data_validity.has_current_interval:
             current_interval_key = self._tz_service.get_current_interval_key()
-            reason = (
-                f"No data for current interval ({current_interval_key}) - fetching data immediately"
-            )
+            reason = f"No data for current interval ({current_interval_key}) - fetching data immediately"
             _LOGGER.info(reason)  # INFO level: expected on reload, not an error
 
             # Respect rate limiting UNLESS this is a health check
@@ -81,7 +79,9 @@ class FetchDecisionMaker:
                 )
 
                 if should_skip:
-                    reason = f"No current interval data, but rate limited ({skip_reason})"
+                    reason = (
+                        f"No current interval data, but rate limited ({skip_reason})"
+                    )
                     # INFO level: This is expected when parser changes or cache invalidation happens
                     # The system will fall back to any available cached data
                     _LOGGER.info(reason)
@@ -125,9 +125,7 @@ class FetchDecisionMaker:
                 )
 
                 if should_skip:
-                    reason = (
-                        f"Grace period with incomplete today data, but rate limited ({skip_reason})"
-                    )
+                    reason = f"Grace period with incomplete today data, but rate limited ({skip_reason})"
                     _LOGGER.info(reason)
                     return False, reason
 
@@ -175,7 +173,10 @@ class FetchDecisionMaker:
             tomorrow_date = now.date() + timedelta(days=1)
 
             # Check against the required interval threshold (76 intervals = 80% of 96)
-            if data_validity.tomorrow_interval_count < Network.Defaults.REQUIRED_TOMORROW_INTERVALS:
+            if (
+                data_validity.tomorrow_interval_count
+                < Network.Defaults.REQUIRED_TOMORROW_INTERVALS
+            ):
                 reason = (
                     f"Special fetch window ({start_hour}:00-{end_hour}:00) - "
                     f"missing tomorrow's data (have {data_validity.tomorrow_interval_count} intervals, "
@@ -213,7 +214,10 @@ class FetchDecisionMaker:
         # POST-WINDOW RETRY: After special window, check if we missed tomorrow's data
         elif hour >= end_hour:
             # If we don't have tomorrow's data and it's after the window, try to fetch
-            if data_validity.tomorrow_interval_count < Network.Defaults.REQUIRED_TOMORROW_INTERVALS:
+            if (
+                data_validity.tomorrow_interval_count
+                < Network.Defaults.REQUIRED_TOMORROW_INTERVALS
+            ):
                 reason = (
                     f"After special window ({end_hour}:00) but missing tomorrow's data "
                     f"(have {data_validity.tomorrow_interval_count} intervals, "

@@ -88,19 +88,25 @@ def generate_nordpool_response(delivery_date, area="SE4"):
                 "blockName": "Off-peak 1",
                 "deliveryStart": entries[0]["deliveryStart"],
                 "deliveryEnd": entries[7]["deliveryEnd"],
-                "averagePricePerArea": {area: {"average": 32.59, "min": 30.98, "max": 35.22}},
+                "averagePricePerArea": {
+                    area: {"average": 32.59, "min": 30.98, "max": 35.22}
+                },
             },
             {
                 "blockName": "Peak",
                 "deliveryStart": entries[8]["deliveryStart"],
                 "deliveryEnd": entries[19]["deliveryEnd"],
-                "averagePricePerArea": {area: {"average": 4.16, "min": -16.60, "max": 42.45}},
+                "averagePricePerArea": {
+                    area: {"average": 4.16, "min": -16.60, "max": 42.45}
+                },
             },
             {
                 "blockName": "Off-peak 2",
                 "deliveryStart": entries[20]["deliveryStart"],
                 "deliveryEnd": entries[23]["deliveryEnd"],
-                "averagePricePerArea": {area: {"average": 43.90, "min": 32.43, "max": 56.33}},
+                "averagePricePerArea": {
+                    area: {"average": 43.90, "min": 32.43, "max": 56.33}
+                },
             },
         ],
         "currency": "EUR",
@@ -153,7 +159,9 @@ async def test_nordpool_full_chain(monkeypatch):
         }
 
     # Patch the NordpoolAPI.fetch_day_ahead_prices method
-    monkeypatch.setattr(NordpoolAPI, "fetch_day_ahead_prices", mock_fetch_day_ahead_prices)
+    monkeypatch.setattr(
+        NordpoolAPI, "fetch_day_ahead_prices", mock_fetch_day_ahead_prices
+    )
 
     # Mock the exchange rate service to avoid real network calls
     async def mock_get_rates(self, force_refresh=False):
@@ -188,7 +196,9 @@ async def test_nordpool_full_chain(monkeypatch):
     assert (
         parsed_data["source"] == Source.NORDPOOL
     ), f"Source should be {Source.NORDPOOL}, got {parsed_data.get('source')}"
-    assert parsed_data["area"] == area, f"Area should be {area}, got {parsed_data.get('area')}"
+    assert (
+        parsed_data["area"] == area
+    ), f"Area should be {area}, got {parsed_data.get('area')}"
 
     # Validate interval prices
     interval_prices = parsed_data.get("today_interval_prices", {})
@@ -232,7 +242,9 @@ async def test_nordpool_full_chain(monkeypatch):
 
         # Real-world validation: Prices should be within reasonable bounds for electricity markets
         # Typical Nordpool prices range: -50 to 500 EUR/MWh in extreme cases
-        assert -100 <= price <= 1000, f"Price {price} for {timestamp} is outside reasonable range"
+        assert (
+            -100 <= price <= 1000
+        ), f"Price {price} for {timestamp} is outside reasonable range"
 
     # Step 3: Test currency conversion
     # This tests a critical real-world function that users depend on
@@ -248,7 +260,9 @@ async def test_nordpool_full_chain(monkeypatch):
     converted_prices = {}
     for ts, price in interval_prices.items():
         # Test specific conversion logic - if this fails, it's a real issue
-        price_converted = await exchange_service.convert(price, source_currency, target_currency)
+        price_converted = await exchange_service.convert(
+            price, source_currency, target_currency
+        )
 
         # Validate conversion result
         assert isinstance(
@@ -292,7 +306,9 @@ async def test_nordpool_full_chain(monkeypatch):
     today_hours = [
         ts
         for ts in converted_prices
-        if datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(market_tz).date()
+        if datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        .astimezone(market_tz)
+        .date()
         == test_day
     ]
 
@@ -304,7 +320,9 @@ async def test_nordpool_full_chain(monkeypatch):
 
     # Log some example values for verification
     sorted_hours = sorted(today_hours)
-    logger.info(f"Day's hours ({len(today_hours)}): {sorted_hours[:3]}... to {sorted_hours[-3:]}")
+    logger.info(
+        f"Day's hours ({len(today_hours)}): {sorted_hours[:3]}... to {sorted_hours[-3:]}"
+    )
     logger.info(
         f"Price range: {min(converted_prices[ts] for ts in today_hours):.4f} to {max(converted_prices[ts] for ts in today_hours):.4f} {target_currency}/kWh"
     )

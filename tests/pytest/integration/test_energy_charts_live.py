@@ -113,7 +113,9 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
 
         # Assert: Raw Data Structure (strict validation)
         assert raw_data is not None, f"Raw data for {area} should not be None"
-        assert isinstance(raw_data, dict), f"Raw data should be a dictionary, got {type(raw_data)}"
+        assert isinstance(
+            raw_data, dict
+        ), f"Raw data should be a dictionary, got {type(raw_data)}"
 
         # Validate wrapper structure
         assert "raw_data" in raw_data, "Required field 'raw_data' missing from response"
@@ -123,9 +125,13 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
         ), f"raw_data should be a dictionary, got {type(raw_api_response)}"
 
         # Validate Energy-Charts specific structure
-        assert "unix_seconds" in raw_api_response, "Required field 'unix_seconds' missing"
+        assert (
+            "unix_seconds" in raw_api_response
+        ), "Required field 'unix_seconds' missing"
         assert "price" in raw_api_response, "Required field 'price' missing"
-        assert isinstance(raw_api_response["unix_seconds"], list), "unix_seconds should be a list"
+        assert isinstance(
+            raw_api_response["unix_seconds"], list
+        ), "unix_seconds should be a list"
         assert isinstance(raw_api_response["price"], list), "price should be a list"
 
         # Validate source and area information
@@ -135,7 +141,9 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
         assert raw_data.get("area") == area, f"Area should be {area}"
 
         # Timezone validation - Energy-Charts uses Berlin time (CET/CEST)
-        assert raw_data.get("timezone") == "Europe/Berlin", "Timezone should be Europe/Berlin"
+        assert (
+            raw_data.get("timezone") == "Europe/Berlin"
+        ), "Timezone should be Europe/Berlin"
 
         # Currency validation - Energy-Charts always returns EUR
         assert raw_data.get("currency") == Currency.EUR, "Currency should be EUR"
@@ -165,10 +173,14 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
         assert isinstance(parsed_data, dict), "Parsed data should be a dictionary"
 
         # Required fields validation
-        assert parsed_data.get("source") == Source.ENERGY_CHARTS, "Source should be energy_charts"
+        assert (
+            parsed_data.get("source") == Source.ENERGY_CHARTS
+        ), "Source should be energy_charts"
         assert parsed_data.get("area") == area, f"Area should be {area}"
         assert parsed_data.get("currency") == Currency.EUR, "Currency should be EUR"
-        assert parsed_data.get("timezone") == "Europe/Berlin", "Timezone should be Europe/Berlin"
+        assert (
+            parsed_data.get("timezone") == "Europe/Berlin"
+        ), "Timezone should be Europe/Berlin"
         assert parsed_data.get("source_unit") == "MWh", "Source unit should be MWh"
 
         # Interval prices validation
@@ -195,11 +207,15 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
                 pytest.fail(f"Invalid timestamp format: '{timestamp}' for {area}")
 
             # Price validation
-            assert isinstance(price, float), f"Price should be a float, got {type(price)}"
+            assert isinstance(
+                price, float
+            ), f"Price should be a float, got {type(price)}"
 
             # Energy-Charts price range validation (EUR/MWh)
             # European electricity prices typically range from -100 to 500 EUR/MWh
-            assert -100 <= price <= 500, f"Price {price} EUR/MWh is outside reasonable range"
+            assert (
+                -100 <= price <= 500
+            ), f"Price {price} EUR/MWh is outside reasonable range"
 
         # Check for sequential 15-minute intervals
         timestamps = sorted(interval_prices.keys())

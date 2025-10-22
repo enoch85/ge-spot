@@ -22,7 +22,9 @@ import logging
 import aiohttp
 
 # Add the project root to the path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+)
 
 from custom_components.ge_spot.api.nordpool import NordpoolAPI
 from custom_components.ge_spot.timezone.service import TimezoneService
@@ -60,7 +62,9 @@ async def main():
         logger.info("Fetching data from Nordpool API...")
 
         # Call the fetch_raw_data method with the area code
-        raw_data_response = await api.fetch_raw_data(area_code)  # Renamed variable for clarity
+        raw_data_response = await api.fetch_raw_data(
+            area_code
+        )  # Renamed variable for clarity
 
         # Debug: Print raw data keys
         logger.info(
@@ -101,7 +105,9 @@ async def main():
                     # Process tomorrow's data if available
                     tomorrow_data = nested_raw_data.get("tomorrow")
                     if tomorrow_data and "multiAreaEntries" in tomorrow_data:
-                        logger.info("Extracting tomorrow's prices from nested raw_data.")
+                        logger.info(
+                            "Extracting tomorrow's prices from nested raw_data."
+                        )
                         for entry in tomorrow_data["multiAreaEntries"]:
                             timestamp_utc = entry["deliveryStart"]
                             price = entry["entryPerArea"].get(area_code)
@@ -158,7 +164,9 @@ async def main():
                         price_eur = price_data  # Assume it's the price directly
 
                     if price_eur is None:
-                        logger.warning(f"Missing price for timestamp {timestamp_utc}, skipping.")
+                        logger.warning(
+                            f"Missing price for timestamp {timestamp_utc}, skipping."
+                        )
                         continue
 
                     # Convert EUR/MWh to SEK/kWh
@@ -181,7 +189,9 @@ async def main():
                     logger.error("No interval prices could be formatted.")
                     result = 1  # Should have been caught earlier, but double-check
                 else:
-                    logger.info(f"Successfully processed {num_interval_prices} interval prices.")
+                    logger.info(
+                        f"Successfully processed {num_interval_prices} interval prices."
+                    )
 
                     # Group by date
                     prices_by_date = {}
@@ -197,7 +207,9 @@ async def main():
                     logger.info(f"Source: nordpool")
                     logger.info(f"Area: {area_code}")
                     logger.info(f"Currency: EUR (original), SEK (converted)")
-                    logger.info(f"API Timezone: {raw_data_response.get('timezone', 'Unknown')}")
+                    logger.info(
+                        f"API Timezone: {raw_data_response.get('timezone', 'Unknown')}"
+                    )
                     logger.info(f"Local Timezone: {timezone_service.area_timezone}")
 
                     # Format interval prices into a table

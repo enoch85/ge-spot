@@ -95,7 +95,9 @@ def test_normalize_interval_prices_basic(timezone_service_ha_mode):
 
     # Target HA time: Europe/Stockholm (UTC+1 in Jan)
     # The new API returns Dict[datetime, float]
-    normalized = timezone_service_ha_mode.normalize_interval_prices(raw_prices_utc, source_tz_str)
+    normalized = timezone_service_ha_mode.normalize_interval_prices(
+        raw_prices_utc, source_tz_str
+    )
 
     # Check that we got 3 normalized timestamps
     assert len(normalized) == 3
@@ -192,7 +194,9 @@ def test_invalid_source_timezone(timezone_service_ha_mode):
     # The implementation may either raise an error or handle it gracefully
     # Just verify it doesn't crash
     try:
-        result = timezone_service_ha_mode.normalize_interval_prices(raw_prices, invalid_tz)
+        result = timezone_service_ha_mode.normalize_interval_prices(
+            raw_prices, invalid_tz
+        )
         # If it succeeds, check that we got reasonable output
         assert isinstance(result, dict)
     except (ValueError, Exception) as e:
@@ -236,7 +240,9 @@ def test_get_next_interval_key_dst_springforward(timezone_service_ha_mode):
     assert interval_key in ["01:45", "02:00", "03:00"]
 
 
-@freeze_time("2023-10-29 02:30:00+02:00")  # Time is 02:30 CEST during fallback (first 2am)
+@freeze_time(
+    "2023-10-29 02:30:00+02:00"
+)  # Time is 02:30 CEST during fallback (first 2am)
 def test_get_next_interval_key_dst_fallback_first_occurrence(timezone_service_ha_mode):
     """Test get_next_interval_key during the first pass of DST fallback hour."""
     # With 15-minute intervals during DST fallback

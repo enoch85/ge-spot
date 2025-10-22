@@ -94,7 +94,9 @@ class AmberAPI(BasePriceAPI):
             )
 
             if not data or not isinstance(data, list):
-                _LOGGER.warning(f"Unexpected or empty Amber data format received for area {area}")
+                _LOGGER.warning(
+                    f"Unexpected or empty Amber data format received for area {area}"
+                )
                 return {}
 
             # Parse the response
@@ -116,7 +118,9 @@ class AmberAPI(BasePriceAPI):
                 },
             }
         except Exception as e:
-            _LOGGER.error(f"Error during Amber API request for area {area}: {e}", exc_info=True)
+            _LOGGER.error(
+                f"Error during Amber API request for area {area}: {e}", exc_info=True
+            )
             return {}
         finally:
             if session is None and client:

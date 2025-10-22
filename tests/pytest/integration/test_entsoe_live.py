@@ -156,14 +156,18 @@ def entsoe_api(monkeypatch):
         return SAMPLE_ENTSOE_RESPONSES.get(area, SAMPLE_ENTSOE_RESPONSES["DE-LU"])
 
     # Patch the method in the EntsoeAPI class
-    monkeypatch.setattr(EntsoeAPI, "fetch_day_ahead_prices", mock_fetch_day_ahead_prices)
+    monkeypatch.setattr(
+        EntsoeAPI, "fetch_day_ahead_prices", mock_fetch_day_ahead_prices
+    )
 
     # Return a simple instance - the methods are mocked so config doesn't matter
     return EntsoeAPI(config={})
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("area", ["DE-LU", "FR", "ES", "FI"])  # Test a few diverse areas
+@pytest.mark.parametrize(
+    "area", ["DE-LU", "FR", "ES", "FI"]
+)  # Test a few diverse areas
 async def test_entsoe_live_fetch_parse(entsoe_api, area):
     """Tests fetching and parsing ENTSO-E data for a given area using mocked responses."""
     logger.info(f"Testing ENTSO-E API for area: {area}...")
@@ -173,7 +177,9 @@ async def test_entsoe_live_fetch_parse(entsoe_api, area):
 
         # Assert: Parsed Data Structure (strict validation)
         assert parsed_data is not None, f"Parsed data for {area} should not be None"
-        assert isinstance(parsed_data, dict), f"Parsed data for {area} should be a dictionary"
+        assert isinstance(
+            parsed_data, dict
+        ), f"Parsed data for {area} should be a dictionary"
         assert (
             parsed_data.get("source") == Source.ENTSOE
         ), f"Source should be {Source.ENTSOE}, got {parsed_data.get('source')}"

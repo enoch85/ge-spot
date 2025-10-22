@@ -187,7 +187,9 @@ async def test_entsoe_full_chain(monkeypatch):
 
     # Validate raw data structure (basic checks)
     assert raw_data is not None, "Raw data should not be None"
-    assert isinstance(raw_data, dict), f"Raw data should be a dictionary, got {type(raw_data)}"
+    assert isinstance(
+        raw_data, dict
+    ), f"Raw data should be a dictionary, got {type(raw_data)}"
 
     # Log raw data structure for debugging
     logger.info(f"Raw data contains keys: {list(raw_data.keys())}")
@@ -209,7 +211,9 @@ async def test_entsoe_full_chain(monkeypatch):
     assert (
         parsed_data["source"] == Source.ENTSOE
     ), f"Source should be {Source.ENTSOE}, got {parsed_data.get('source')}"
-    assert parsed_data["area"] == area, f"Area should be {area}, got {parsed_data.get('area')}"
+    assert (
+        parsed_data["area"] == area
+    ), f"Area should be {area}, got {parsed_data.get('area')}"
     assert "currency" in parsed_data, "Parsed data should contain a 'currency' key"
     assert (
         parsed_data["currency"] == Currency.EUR
@@ -284,7 +288,9 @@ async def test_entsoe_full_chain(monkeypatch):
         ), f"Price should be a float, got {type(price)} for timestamp {timestamp}"
 
         # Real-world validation: Prices should be within reasonable bounds for electricity markets
-        assert -1000 <= price <= 5000, f"Price {price} for {timestamp} is outside reasonable range"
+        assert (
+            -1000 <= price <= 5000
+        ), f"Price {price} for {timestamp} is outside reasonable range"
 
     # Step 3: Test currency conversion
     exchange_service = ExchangeRateService()
@@ -299,7 +305,9 @@ async def test_entsoe_full_chain(monkeypatch):
     converted_prices = {}
     for ts, price in interval_prices.items():
         # Test specific conversion logic - if this fails, it's a real issue
-        price_converted = await exchange_service.convert(price, source_currency, target_currency)
+        price_converted = await exchange_service.convert(
+            price, source_currency, target_currency
+        )
 
         # Validate conversion result
         assert isinstance(
@@ -327,7 +335,9 @@ async def test_entsoe_full_chain(monkeypatch):
     today_hours = [
         ts
         for ts in converted_prices
-        if datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(market_tz).date()
+        if datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        .astimezone(market_tz)
+        .date()
         == mock_today
     ]
 
@@ -350,7 +360,9 @@ async def test_entsoe_full_chain(monkeypatch):
         ), f"Non-hourly gap between {sorted_hours[i-1]} and {sorted_hours[i]}"
 
     # Log some example values for verification
-    logger.info(f"Today's hours ({len(today_hours)}): {sorted_hours[:3]}... to {sorted_hours[-3:]}")
+    logger.info(
+        f"Today's hours ({len(today_hours)}): {sorted_hours[:3]}... to {sorted_hours[-3:]}"
+    )
     logger.info(
         f"Price range: {min(converted_prices[ts] for ts in today_hours):.4f} to {max(converted_prices[ts] for ts in today_hours):.4f} {target_currency}/kWh"
     )
@@ -358,7 +370,9 @@ async def test_entsoe_full_chain(monkeypatch):
     # Check if price variation exists (real markets have price variation)
     prices = [converted_prices[ts] for ts in today_hours]
     price_variation = max(prices) - min(prices)
-    assert price_variation > 0.001, "No price variation found - suspicious for real market data"
+    assert (
+        price_variation > 0.001
+    ), "No price variation found - suspicious for real market data"
 
     # Test complete - if we get here, the full chain works correctly
     logger.info(

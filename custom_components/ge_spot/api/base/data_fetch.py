@@ -16,7 +16,9 @@ _LOGGER = logging.getLogger(__name__)
 class BaseDataFetcher(ABC):
     """Base class for API data fetchers."""
 
-    def __init__(self, source: str, session=None, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, source: str, session=None, config: Optional[Dict[str, Any]] = None
+    ):
         """Initialize the data fetcher.
 
         Args:
@@ -74,7 +76,9 @@ class BaseDataFetcher(ABC):
         # Default implementation assumes valid config
         return True
 
-    def create_skipped_response(self, reason: str = "missing_api_key") -> Dict[str, Any]:
+    def create_skipped_response(
+        self, reason: str = "missing_api_key"
+    ) -> Dict[str, Any]:
         """Create a standardized response for when an API is skipped.
 
         Args:
@@ -86,7 +90,9 @@ class BaseDataFetcher(ABC):
         return create_skipped_response(self.source, reason)
 
 
-def create_skipped_response(source: str, reason: str = "missing_api_key") -> Dict[str, Any]:
+def create_skipped_response(
+    source: str, reason: str = "missing_api_key"
+) -> Dict[str, Any]:
     """Create a standardized response for when an API is skipped.
 
     Args:
@@ -203,7 +209,9 @@ class PriceDataFetcher:
                     and "today_interval_prices" in source_result
                     and source_result["today_interval_prices"]
                 ):
-                    _LOGGER.info(f"Successfully fetched data from {source_name} for area {area}")
+                    _LOGGER.info(
+                        f"Successfully fetched data from {source_name} for area {area}"
+                    )
 
                     # If this isn't the primary source, record as fallback
                     if i > 0:
@@ -233,7 +241,9 @@ class PriceDataFetcher:
 
             except Exception as e:
                 error_msg = str(e)
-                _LOGGER.warning(f"Error fetching from {source_name} for area {area}: {error_msg}")
+                _LOGGER.warning(
+                    f"Error fetching from {source_name} for area {area}: {error_msg}"
+                )
                 errors[source_name] = error_msg
                 # Add to fallback sources since it failed
                 fallback_sources.append(source_name)
@@ -272,7 +282,9 @@ class PriceDataFetcher:
                         area, currency, "All sources failed and cache expired"
                     )
             else:
-                _LOGGER.error(f"All sources failed for area {area} and no cache available")
+                _LOGGER.error(
+                    f"All sources failed for area {area} and no cache available"
+                )
                 # Return an empty result structure
                 result = self._create_empty_result(
                     area, currency, "All sources failed and no cache available"
@@ -309,7 +321,9 @@ class PriceDataFetcher:
         Returns:
             Dictionary with standardized empty structure
         """
-        from custom_components.ge_spot.api.base.data_structure import StandardizedPriceData
+        from custom_components.ge_spot.api.base.data_structure import (
+            StandardizedPriceData,
+        )
 
         # Generate empty result with proper structure
         empty_result = StandardizedPriceData.create_empty(
@@ -396,7 +410,9 @@ class PriceDataFetcher:
 
         return results
 
-    def clear_cache(self, area: Optional[str] = None, older_than: Optional[float] = None):
+    def clear_cache(
+        self, area: Optional[str] = None, older_than: Optional[float] = None
+    ):
         """Clear cached data.
 
         Args:
@@ -405,13 +421,17 @@ class PriceDataFetcher:
         """
         # If area is specified, clear only that area
         if area:
-            keys_to_clear = [key for key in self.cache.keys() if key.startswith(f"{area}_")]
+            keys_to_clear = [
+                key for key in self.cache.keys() if key.startswith(f"{area}_")
+            ]
 
             # If older_than is specified, only clear old entries
             if older_than:
                 now = datetime.now(timezone.utc).timestamp()
                 keys_to_clear = [
-                    key for key in keys_to_clear if now - self.cache[key]["timestamp"] > older_than
+                    key
+                    for key in keys_to_clear
+                    if now - self.cache[key]["timestamp"] > older_than
                 ]
 
             # Clear the specified keys

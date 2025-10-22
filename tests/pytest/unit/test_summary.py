@@ -12,7 +12,9 @@ import logging
 from datetime import datetime
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Add the parent directory to Python path so we can import the custom_components
@@ -75,7 +77,9 @@ def run_unified_tests():
 def run_adapter_tests():
     """Run adapter tests by importing test cases from test_tomorrow_data_manager."""
     # from scripts.tests.test_tomorrow_data_manager import test_tomorrow_data_manager # Commented out - incorrect path/structure
-    logger.warning("Adapter tests are currently skipped in test_summary.py due to refactoring.")
+    logger.warning(
+        "Adapter tests are currently skipped in test_summary.py due to refactoring."
+    )
     return True  # Temporarily mark as passed
 
     # # Create a test suite with the adapter tests

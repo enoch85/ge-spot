@@ -41,7 +41,9 @@ def get_deduplicated_regions():
     # First, collect all regions from all sources
     for source, area_dict in SOURCE_AREA_MAPS.items():
         source_priority = (
-            API_SOURCE_PRIORITIES.index(source) if source in API_SOURCE_PRIORITIES else 999
+            API_SOURCE_PRIORITIES.index(source)
+            if source in API_SOURCE_PRIORITIES
+            else 999
         )
         for region_code, display_name in area_dict.items():
             # Normalize display name to handle different capitalizations

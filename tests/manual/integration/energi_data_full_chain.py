@@ -53,9 +53,15 @@ logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 
 async def main():
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Test Energi Data Service API integration")
+    parser = argparse.ArgumentParser(
+        description="Test Energi Data Service API integration"
+    )
     parser.add_argument(
-        "area", nargs="?", default="DK1", choices=DANISH_AREAS, help="Area code (DK1, DK2)"
+        "area",
+        nargs="?",
+        default="DK1",
+        choices=DANISH_AREAS,
+        help="Area code (DK1, DK2)",
     )
     args = parser.parse_args()
     area = args.area
@@ -98,19 +104,36 @@ async def main():
 
         # Extract the actual API responses for today and tomorrow if available in nested structure
         nested_raw = raw_data_wrapper.get("raw_data", {})
-        api_response_today = nested_raw.get("today") if isinstance(nested_raw, dict) else None
-        api_response_tomorrow = nested_raw.get("tomorrow") if isinstance(nested_raw, dict) else None
+        api_response_today = (
+            nested_raw.get("today") if isinstance(nested_raw, dict) else None
+        )
+        api_response_tomorrow = (
+            nested_raw.get("tomorrow") if isinstance(nested_raw, dict) else None
+        )
 
         if api_response_today:
-            print(f"Today's raw data sample (truncated): {str(api_response_today)[:300]}...")
+            print(
+                f"Today's raw data sample (truncated): {str(api_response_today)[:300]}..."
+            )
             if isinstance(api_response_today, dict) and "records" in api_response_today:
-                print(f"Number of hourly records today: {len(api_response_today['records'])}")
+                print(
+                    f"Number of hourly records today: {len(api_response_today['records'])}"
+                )
                 if api_response_today["records"]:
-                    print(f"First record sample today: {api_response_today['records'][0]}")
+                    print(
+                        f"First record sample today: {api_response_today['records'][0]}"
+                    )
         if api_response_tomorrow:
-            print(f"Tomorrow's raw data sample (truncated): {str(api_response_tomorrow)[:300]}...")
-            if isinstance(api_response_tomorrow, dict) and "records" in api_response_tomorrow:
-                print(f"Number of hourly records tomorrow: {len(api_response_tomorrow['records'])}")
+            print(
+                f"Tomorrow's raw data sample (truncated): {str(api_response_tomorrow)[:300]}..."
+            )
+            if (
+                isinstance(api_response_tomorrow, dict)
+                and "records" in api_response_tomorrow
+            ):
+                print(
+                    f"Number of hourly records tomorrow: {len(api_response_tomorrow['records'])}"
+                )
 
         # Print info about the expanded interval data
         print(f"\nExpanded interval prices: {len(interval_raw_prices)} intervals")
@@ -132,7 +155,9 @@ async def main():
             "timezone": raw_data_wrapper.get("timezone", "Europe/Copenhagen"),
         }
 
-        print(f"Found {len(interval_raw_prices)} interval prices (already expanded from hourly)")
+        print(
+            f"Found {len(interval_raw_prices)} interval prices (already expanded from hourly)"
+        )
 
         # Step 3: Currency conversion (DKK -> EUR)
         print("\nConverting prices from DKK to EUR...")
@@ -174,7 +199,9 @@ async def main():
             print("-" * 40)
 
             for hour, prices in sorted(hours.items()):
-                print(f"{hour:<10} {prices['original']:<15.4f} {prices['converted']:<15.6f}")
+                print(
+                    f"{hour:<10} {prices['original']:<15.4f} {prices['converted']:<15.6f}"
+                )
 
         today = datetime.now(dk_tz).strftime("%Y-%m-%d")
         if today in prices_by_date:
@@ -184,7 +211,9 @@ async def main():
             # Native 15-minute intervals: expect 96 per day (4 per hour × 24 hours)
             expected_intervals = 96
             if len(today_prices) == expected_intervals:
-                print(f"✓ Complete set of {expected_intervals} 15-minute intervals for today")
+                print(
+                    f"✓ Complete set of {expected_intervals} 15-minute intervals for today"
+                )
             elif len(today_prices) >= expected_intervals * 0.9:
                 print(
                     f"✓ Nearly complete data: Found {len(today_prices)} 15-minute intervals (expected {expected_intervals})"
@@ -195,7 +224,9 @@ async def main():
                 )
 
                 # Show first few missing intervals if any
-                all_intervals = set(f"{h:02d}:{m:02d}" for h in range(24) for m in [0, 15, 30, 45])
+                all_intervals = set(
+                    f"{h:02d}:{m:02d}" for h in range(24) for m in [0, 15, 30, 45]
+                )
                 found_intervals = set(today_prices.keys())
                 missing_intervals = all_intervals - found_intervals
                 if missing_intervals:
@@ -210,14 +241,18 @@ async def main():
             print(f"\nWarning: No prices found for today ({today})")
 
         if today in prices_by_date:
-            prices = [details["original"] for _, details in prices_by_date[today].items()]
+            prices = [
+                details["original"] for _, details in prices_by_date[today].items()
+            ]
             if prices:
                 price_variation = max(prices) - min(prices)
                 print(f"\nPrice variation today: {price_variation:.2f} DKK/MWh")
                 if price_variation > 0:
                     print("✓ Price variation detected (expected for real market data)")
                 else:
-                    print("⚠ No price variation detected - suspicious for real market data")
+                    print(
+                        "⚠ No price variation detected - suspicious for real market data"
+                    )
 
         print("\nTest completed successfully!")
 

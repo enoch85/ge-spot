@@ -53,7 +53,9 @@ async def test_aemo_live():
         interval_raw = parsed_data["interval_raw"]
         print(f"✓ Parser successful")
         print(f"  - Intervals parsed: {len(interval_raw)}")
-        print(f"  - Source interval: {parsed_data.get('source_interval_minutes')} minutes")
+        print(
+            f"  - Source interval: {parsed_data.get('source_interval_minutes')} minutes"
+        )
 
         # Validate data
         print("\n4. Validating data...")

@@ -15,7 +15,9 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
 import pytest
 
-from custom_components.ge_spot.coordinator.unified_price_manager import UnifiedPriceManager
+from custom_components.ge_spot.coordinator.unified_price_manager import (
+    UnifiedPriceManager,
+)
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.network import Network
 from custom_components.ge_spot.const.config import Config
@@ -202,7 +204,9 @@ class TestSourceFilteringLogic:
         assert Source.NORDPOOL not in price_manager._failed_sources
 
         # Get all area-supported sources
-        all_area_sources = [cls(config={}).source_type for cls in price_manager._api_classes]
+        all_area_sources = [
+            cls(config={}).source_type for cls in price_manager._api_classes
+        ]
 
         # If Nordpool is supported, it should be available
         if Source.NORDPOOL in all_area_sources:
@@ -313,7 +317,9 @@ class TestIntegrationScenarios:
         assert price_manager._health_check_scheduled is False
 
         # All sources should be available
-        all_area_sources = [cls(config={}).source_type for cls in price_manager._api_classes]
+        all_area_sources = [
+            cls(config={}).source_type for cls in price_manager._api_classes
+        ]
 
         # No sources filtered (none have failure timestamps)
         for source in all_area_sources:
@@ -365,7 +371,9 @@ class TestIntegrationScenarios:
     def test_scenario_all_sources_failed(self, price_manager):
         """Test scenario: All sources failed."""
         now = dt_util.now()
-        all_area_sources = [cls(config={}).source_type for cls in price_manager._api_classes]
+        all_area_sources = [
+            cls(config={}).source_type for cls in price_manager._api_classes
+        ]
 
         # Mark all sources as failed
         for source in all_area_sources:
@@ -457,7 +465,8 @@ class TestTimeoutCalculation:
     def test_total_max_timeout_per_source(self):
         """Verify total max timeout per source is 26 seconds."""
         timeouts = [
-            Network.Defaults.RETRY_BASE_TIMEOUT * (Network.Defaults.RETRY_TIMEOUT_MULTIPLIER**i)
+            Network.Defaults.RETRY_BASE_TIMEOUT
+            * (Network.Defaults.RETRY_TIMEOUT_MULTIPLIER**i)
             for i in range(Network.Defaults.RETRY_COUNT)
         ]
 

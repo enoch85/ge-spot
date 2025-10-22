@@ -63,13 +63,17 @@ class EnergiDataParser(BasePriceParser):
                 # Safely get today's records
                 today_data = api_content.get("today")
                 today_records = (
-                    today_data.get("records", []) if isinstance(today_data, dict) else []
+                    today_data.get("records", [])
+                    if isinstance(today_data, dict)
+                    else []
                 )
 
                 # Safely get tomorrow's records
                 tomorrow_data = api_content.get("tomorrow")
                 tomorrow_records = (
-                    tomorrow_data.get("records", []) if isinstance(tomorrow_data, dict) else []
+                    tomorrow_data.get("records", [])
+                    if isinstance(tomorrow_data, dict)
+                    else []
                 )
 
                 records = today_records + tomorrow_records
@@ -85,7 +89,11 @@ class EnergiDataParser(BasePriceParser):
                 _LOGGER.warning("Nested 'raw_data' key found, but its value is None.")
 
         # Fallback: Check for top-level 'records' key (e.g. from direct test data)
-        if not records and "records" in raw_data and isinstance(raw_data["records"], list):
+        if (
+            not records
+            and "records" in raw_data
+            and isinstance(raw_data["records"], list)
+        ):
             _LOGGER.debug("Using top-level 'records' key.")
             records = raw_data["records"]
 
@@ -94,7 +102,9 @@ class EnergiDataParser(BasePriceParser):
             _LOGGER.warning(
                 "No valid records found in Energi Data Service data after checking nested and top-level structures."
             )
-            _LOGGER.debug(f"Data received by parser: {raw_data}")  # Log the structure received
+            _LOGGER.debug(
+                f"Data received by parser: {raw_data}"
+            )  # Log the structure received
             return result
 
         # --- Parse interval prices from records ---
@@ -122,18 +132,26 @@ class EnergiDataParser(BasePriceParser):
                     interval_key = dt_utc.isoformat()
                     price = float(record["DayAheadPriceDKK"])
                     interval_prices_iso[interval_key] = price
-                    _LOGGER.debug(f"Parsed interval price for {interval_key}: {price} DKK/MWh")
+                    _LOGGER.debug(
+                        f"Parsed interval price for {interval_key}: {price} DKK/MWh"
+                    )
                 else:
-                    _LOGGER.warning(f"Record missing TimeDK or DayAheadPriceDKK: {record}")
+                    _LOGGER.warning(
+                        f"Record missing TimeDK or DayAheadPriceDKK: {record}"
+                    )
             except (ValueError, TypeError) as e:
                 _LOGGER.debug(f"Failed to parse Energi Data Service record: {e}")
 
         # Use interval prices directly - already in correct 15-minute format
         if interval_prices_iso:
             result["interval_raw"] = interval_prices_iso
-            _LOGGER.debug(f"Final interval_raw has {len(result['interval_raw'])} interval prices")
+            _LOGGER.debug(
+                f"Final interval_raw has {len(result['interval_raw'])} interval prices"
+            )
         else:
-            _LOGGER.warning("[energi_data_service] interval_raw is EMPTY after parsing!")
+            _LOGGER.warning(
+                "[energi_data_service] interval_raw is EMPTY after parsing!"
+            )
 
         return result
 

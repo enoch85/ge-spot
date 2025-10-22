@@ -57,7 +57,9 @@ class AemoAPI(BasePriceAPI):
         """Get the base URL for the API."""
         return Aemo.NEMWEB_PREDISPATCH_URL
 
-    async def fetch_raw_data(self, area: str, session=None, **kwargs) -> Optional[Dict[str, Any]]:
+    async def fetch_raw_data(
+        self, area: str, session=None, **kwargs
+    ) -> Optional[Dict[str, Any]]:
         """Fetch raw price data from NEMWEB Pre-dispatch.
 
         Args:
@@ -99,7 +101,9 @@ class AemoAPI(BasePriceAPI):
             _LOGGER.debug(f"Extracting CSV from ZIP ({len(zip_data):,} bytes)")
             csv_content = unzip_single_file(zip_data, expected_extension=".csv")
 
-            _LOGGER.info(f"Extracted CSV ({len(csv_content):,} characters) for region {area}")
+            _LOGGER.info(
+                f"Extracted CSV ({len(csv_content):,} characters) for region {area}"
+            )
 
             # Return data structure expected by parser
             return {
@@ -116,7 +120,9 @@ class AemoAPI(BasePriceAPI):
             }
 
         except Exception as e:
-            _LOGGER.error(f"Error fetching NEMWEB pre-dispatch data: {e}", exc_info=True)
+            _LOGGER.error(
+                f"Error fetching NEMWEB pre-dispatch data: {e}", exc_info=True
+            )
             return None
 
         finally:
@@ -164,7 +170,9 @@ class AemoAPI(BasePriceAPI):
             full_match = re.search(full_pattern, html)
 
             if not full_match:
-                _LOGGER.error(f"Could not find full filename for timestamp {latest_timestamp}")
+                _LOGGER.error(
+                    f"Could not find full filename for timestamp {latest_timestamp}"
+                )
                 return None
 
             filename = full_match.group(0)
@@ -177,7 +185,9 @@ class AemoAPI(BasePriceAPI):
             _LOGGER.error(f"Error finding latest pre-dispatch file: {e}", exc_info=True)
             return None
 
-    async def _download_binary_file(self, client: ApiClient, url: str) -> Optional[bytes]:
+    async def _download_binary_file(
+        self, client: ApiClient, url: str
+    ) -> Optional[bytes]:
         """Download a binary file (ZIP) from URL.
 
         Uses aiohttp directly since ApiClient doesn't support binary response format.
@@ -196,7 +206,9 @@ class AemoAPI(BasePriceAPI):
                 # Use existing session
                 async with client.session.get(url, timeout=timeout_obj) as response:
                     if response.status != 200:
-                        _LOGGER.error(f"Failed to download {url}: HTTP {response.status}")
+                        _LOGGER.error(
+                            f"Failed to download {url}: HTTP {response.status}"
+                        )
                         return None
                     return await response.read()
             else:
@@ -204,12 +216,16 @@ class AemoAPI(BasePriceAPI):
                 async with aiohttp.ClientSession() as temp_session:
                     async with temp_session.get(url, timeout=timeout_obj) as response:
                         if response.status != 200:
-                            _LOGGER.error(f"Failed to download {url}: HTTP {response.status}")
+                            _LOGGER.error(
+                                f"Failed to download {url}: HTTP {response.status}"
+                            )
                             return None
                         return await response.read()
 
         except Exception as e:
-            _LOGGER.error(f"Error downloading binary file from {url}: {e}", exc_info=True)
+            _LOGGER.error(
+                f"Error downloading binary file from {url}: {e}", exc_info=True
+            )
             return None
 
     def get_timezone_for_area(self, area: str) -> str:

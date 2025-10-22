@@ -107,8 +107,9 @@ class EnergiDataAPI(BasePriceAPI):
                 )
 
                 # --- Fallback Trigger Logic ---
-                if now_cet.hour >= failure_check_hour_cet and not is_tomorrow_data_present(
-                    raw_tomorrow
+                if (
+                    now_cet.hour >= failure_check_hour_cet
+                    and not is_tomorrow_data_present(raw_tomorrow)
                 ):
                     _LOGGER.warning(
                         f"EnergiDataService fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
@@ -118,7 +119,11 @@ class EnergiDataAPI(BasePriceAPI):
 
             # --- Final Check for Today's Data ---
             # Check if today's data is valid before proceeding
-            if not raw_today or not isinstance(raw_today, dict) or not raw_today.get("records"):
+            if (
+                not raw_today
+                or not isinstance(raw_today, dict)
+                or not raw_today.get("records")
+            ):
                 _LOGGER.error(
                     f"EnergiDataService fetch failed for area {area}: Today's data is missing or invalid."
                 )
@@ -181,7 +186,9 @@ class EnergiDataAPI(BasePriceAPI):
             Raw response
         """
         # Parse the provided date string
-        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        date_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d").replace(
+            tzinfo=timezone.utc
+        )
 
         # Generate date ranges to try
         date_ranges = generate_date_ranges(date_obj, Source.ENERGI_DATA_SERVICE)

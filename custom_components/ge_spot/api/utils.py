@@ -42,7 +42,9 @@ async def fetch_with_retry(
     local_tz = None
     if local_tz_name:
         # Run the blocking call in an executor to avoid blocking the event loop
-        local_tz = await asyncio.get_event_loop().run_in_executor(None, get_timezone, local_tz_name)
+        local_tz = await asyncio.get_event_loop().run_in_executor(
+            None, get_timezone, local_tz_name
+        )
 
     while True:
         result = await fetch_func(*args, **kwargs)

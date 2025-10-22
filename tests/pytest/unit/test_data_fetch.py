@@ -29,7 +29,11 @@ class MockParser:
                 "api_timezone": "UTC",
             }
         elif raw_data.get("data") == "raw_empty":
-            return {"today_interval_prices": {}, "currency": "EUR", "api_timezone": "UTC"}
+            return {
+                "today_interval_prices": {},
+                "currency": "EUR",
+                "api_timezone": "UTC",
+            }
         elif raw_data.get("data") == "raw_partial":
             return {
                 "today_interval_prices": {
@@ -322,7 +326,9 @@ async def test_fetch_with_fallback_all_fail_no_cache(price_data_fetcher):
 
     # The updated implementation should return a standardized empty result instead of None
     assert result is not None, "Result should not be None even when all sources fail"
-    assert "today_interval_prices" in result, "Result should include interval_prices field"
+    assert (
+        "today_interval_prices" in result
+    ), "Result should include interval_prices field"
     assert isinstance(
         result["today_interval_prices"], dict
     ), f"interval_prices should be a dictionary, got {type(result.get('interval_prices'))}"
@@ -389,8 +395,12 @@ async def test_fetch_with_fallback_all_fail_cache_hit(price_data_fetcher):
     assert (
         result["source"] == "cached_source"
     ), f"Source should be cached_source, got {result.get('source')}"
-    assert "today_interval_prices" in result, "Result should include interval_prices from cache"
-    assert len(result["today_interval_prices"]) > 0, "Cached interval_prices should not be empty"
+    assert (
+        "today_interval_prices" in result
+    ), "Result should include interval_prices from cache"
+    assert (
+        len(result["today_interval_prices"]) > 0
+    ), "Cached interval_prices should not be empty"
     assert (
         result["today_interval_prices"]["2024-01-01T10:00:00+00:00"] == 5.0
     ), "Price value from cache should match expected"
@@ -424,15 +434,21 @@ async def test_fetch_with_fallback_all_fail_cache_expired(price_data_fetcher):
 
     # Result should be standardized empty result, NOT the expired cached data
     assert result is not None, "Result should not be None when all sources fail"
-    assert result["source"] != "cached_source", "Result should not use expired cache data"
-    assert "today_interval_prices" in result, "Result should include interval_prices field"
+    assert (
+        result["source"] != "cached_source"
+    ), "Result should not use expired cache data"
+    assert (
+        "today_interval_prices" in result
+    ), "Result should include interval_prices field"
     assert (
         len(result["today_interval_prices"]) == 0
     ), f"interval_prices should be empty when all sources fail and cache expired, got {len(result.get('interval_prices', {}))} entries"
 
     # Area should be preserved
     assert "area" in result, "Result should include area field"
-    assert result["area"] == area, f"Area should match requested area, got {result.get('area')}"
+    assert (
+        result["area"] == area
+    ), f"Area should match requested area, got {result.get('area')}"
 
     # All sources should be marked as attempted and failed
     assert "attempted_sources" in result, "Result should track attempted_sources"
@@ -458,15 +474,21 @@ async def test_fetch_with_fallback_empty_sources(price_data_fetcher):
     # Updated implementation should return a standardized empty result rather than None
     if result is None:
         # This is acceptable if the implementation returns None for empty sources
-        assert result is None, "Result should be None when called with empty sources list"
+        assert (
+            result is None
+        ), "Result should be None when called with empty sources list"
     else:
         # Or it should return a standardized empty result with error information
-        assert "today_interval_prices" in result, "Result should include interval_prices field"
+        assert (
+            "today_interval_prices" in result
+        ), "Result should include interval_prices field"
         assert (
             len(result["today_interval_prices"]) == 0
         ), "interval_prices should be empty when called with empty sources list"
         assert "area" in result, "Result should include area field"
-        assert result["area"] == area, f"Area should match requested area, got {result.get('area')}"
+        assert (
+            result["area"] == area
+        ), f"Area should match requested area, got {result.get('area')}"
         # The attempted_sources field may not exist if no sources were provided
         if "attempted_sources" in result:
             assert (
@@ -540,11 +562,16 @@ async def test_cache_behavior_with_expiry_times(price_data_fetcher):
 
     # Custom cache expiry should be used if provided
     result_custom_expiry = await price_data_fetcher.fetch_with_fallback(
-        sources, area, currency, cache_expiry_hours=12  # Longer than our 6-hour old cache
+        sources,
+        area,
+        currency,
+        cache_expiry_hours=12,  # Longer than our 6-hour old cache
     )
 
     # With extended expiry, should return cached data
-    assert result_custom_expiry is not None, "Result should not be None with custom cache expiry"
+    assert (
+        result_custom_expiry is not None
+    ), "Result should not be None with custom cache expiry"
     if result_custom_expiry.get("source") == "cached_source":
         # Cache was used (expected behavior with extended expiry)
         assert (
@@ -562,5 +589,7 @@ async def test_cache_behavior_with_expiry_times(price_data_fetcher):
     )
 
     # With default expiry (cache is exactly at threshold), behavior depends on implementation details
-    assert result_default_expiry is not None, "Result should not be None with default cache expiry"
+    assert (
+        result_default_expiry is not None
+    ), "Result should not be None with default cache expiry"
     # Cannot assert exact behavior as it depends on implementation (> vs >=)

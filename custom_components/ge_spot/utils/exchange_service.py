@@ -63,7 +63,9 @@ class ExchangeRateService:
                 Network.URLs.ECB, timeout=Network.Defaults.HTTP_TIMEOUT
             ) as response:
                 if response.status != 200:
-                    _LOGGER.error("Failed to fetch exchange rates: HTTP %s", response.status)
+                    _LOGGER.error(
+                        "Failed to fetch exchange rates: HTTP %s", response.status
+                    )
                     return None
 
                 xml_data = await response.text()
@@ -79,7 +81,10 @@ class ExchangeRateService:
             ns = {"gesmes": ECB.XML_NAMESPACE_GESMES, "ecb": ECB.XML_NAMESPACE_ECB}
 
             # ECB always uses EUR as the base currency
-            rates = {Currency.EUR: 1.0, Currency.CENTS: 100.0}  # Add cents with fixed rate to EUR
+            rates = {
+                Currency.EUR: 1.0,
+                Currency.CENTS: 100.0,
+            }  # Add cents with fixed rate to EUR
 
             # Find exchange rates in the XML
             for cube in root.findall(".//ecb:Cube[@currency]", ns):
@@ -156,7 +161,9 @@ class ExchangeRateService:
             cache_loaded = await self._load_cache()
 
         # Decide if fetch is needed
-        needs_fetch = force_refresh or not self.rates  # Fetch if forced or no rates in memory/cache
+        needs_fetch = (
+            force_refresh or not self.rates
+        )  # Fetch if forced or no rates in memory/cache
 
         if needs_fetch:
             fresh_rates = None
@@ -174,7 +181,9 @@ class ExchangeRateService:
                 self.last_update = now
                 await self._save_cache()
                 # Fall through to return self.rates
-            elif self.rates:  # Fetch failed, but we have rates (from memory or loaded cache)
+            elif (
+                self.rates
+            ):  # Fetch failed, but we have rates (from memory or loaded cache)
                 _LOGGER.warning("Using existing rates as fresh fetch failed.")
                 # Fall through to return self.rates
             else:  # Fetch failed AND we still have no rates
@@ -230,8 +239,12 @@ class ExchangeRateService:
 
         # Check if we have the rates
         if from_currency not in rates or to_currency not in rates:
-            _LOGGER.error("Missing exchange rates for %s → %s", from_currency, to_currency)
-            raise ValueError(f"Missing exchange rates for {from_currency} → {to_currency}")
+            _LOGGER.error(
+                "Missing exchange rates for %s → %s", from_currency, to_currency
+            )
+            raise ValueError(
+                f"Missing exchange rates for {from_currency} → {to_currency}"
+            )
 
         # EUR-based conversion: amount / from_rate * to_rate
         from_rate = rates[from_currency]
@@ -264,7 +277,9 @@ class ExchangeRateService:
         """
         # Format timestamp
         last_updated_iso = (
-            datetime.datetime.fromtimestamp(self.last_update, datetime.timezone.utc).isoformat()
+            datetime.datetime.fromtimestamp(
+                self.last_update, datetime.timezone.utc
+            ).isoformat()
             if self.last_update
             else None
         )
@@ -317,7 +332,9 @@ class ExchangeRateService:
             hass: Home Assistant instance
         """
         if not hass:
-            _LOGGER.warning("Cannot register update handlers: no Home Assistant instance")
+            _LOGGER.warning(
+                "Cannot register update handlers: no Home Assistant instance"
+            )
             return
 
         # Only register handlers once
@@ -328,7 +345,9 @@ class ExchangeRateService:
         self.hass = hass
 
         # Update on startup
-        self.hass.bus.async_listen_once("homeassistant_started", self._handle_startup_update)
+        self.hass.bus.async_listen_once(
+            "homeassistant_started", self._handle_startup_update
+        )
 
         # Set up scheduled updates at specific times
         update_times = [
@@ -372,7 +391,9 @@ class ExchangeRateService:
             )
             return
 
-        _LOGGER.info(f"Running scheduled exchange rate update at {_now.strftime('%H:%M')}")
+        _LOGGER.info(
+            f"Running scheduled exchange rate update at {_now.strftime('%H:%M')}"
+        )
         try:
             await self.get_rates(force_refresh=True)
             self._last_scheduled_update = current_time

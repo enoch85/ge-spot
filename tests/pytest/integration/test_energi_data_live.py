@@ -41,10 +41,14 @@ async def test_energi_data_live_fetch_parse(area):
 
         # Assert: Raw Data Structure (strict validation)
         assert raw_data is not None, f"Raw data for {area} should not be None"
-        assert isinstance(raw_data, dict), f"Raw data should be a dictionary, got {type(raw_data)}"
+        assert isinstance(
+            raw_data, dict
+        ), f"Raw data should be a dictionary, got {type(raw_data)}"
 
         # Validate API-specific structure - fetch_raw_data returns processed data with interval_raw
-        assert "interval_raw" in raw_data, "Required field 'interval_raw' missing from raw data"
+        assert (
+            "interval_raw" in raw_data
+        ), "Required field 'interval_raw' missing from raw data"
         assert isinstance(
             raw_data["interval_raw"], dict
         ), f"interval_raw should be a dict, got {type(raw_data.get('interval_raw'))}"
@@ -55,7 +59,9 @@ async def test_energi_data_live_fetch_parse(area):
             len(interval_raw) > 0
         ), f"No interval prices returned from Energi Data Service API for {area} - this indicates a real issue"
 
-        logger.info(f"Received {len(interval_raw)} native 15-minute intervals from DayAheadPrices")
+        logger.info(
+            f"Received {len(interval_raw)} native 15-minute intervals from DayAheadPrices"
+        )
 
         # The fetch_raw_data now returns already-parsed data with interval_raw
         # So we use it directly instead of calling parse_raw_data
@@ -101,7 +107,9 @@ async def test_energi_data_live_fetch_parse(area):
         # Log if we have full day(s) of data
         if len(interval_prices) >= expected_per_day:
             days = len(interval_prices) / expected_per_day
-            logger.info(f"Received ~{days:.1f} day(s) of data ({len(interval_prices)} intervals)")
+            logger.info(
+                f"Received ~{days:.1f} day(s) of data ({len(interval_prices)} intervals)"
+            )
 
         # Validate timestamp format and price values
         for timestamp, price in interval_prices.items():
@@ -121,7 +129,9 @@ async def test_energi_data_live_fetch_parse(area):
                     seven_days_ago <= dt <= three_days_ahead
                 ), f"Timestamp {timestamp} is outside reasonable range for {area}"
             except ValueError:
-                raise AssertionError(f"Invalid timestamp format: '{timestamp}' for {area}")
+                raise AssertionError(
+                    f"Invalid timestamp format: '{timestamp}' for {area}"
+                )
 
             # Price validation
             assert isinstance(
@@ -167,7 +177,9 @@ async def test_energi_data_live_fetch_parse(area):
 
     except AssertionError as ae:
         # Let assertion errors propagate - these are test failures that should be fixed in the code, not the test
-        logger.error(f"Energi Data Service Live Test ({area}): ASSERTION FAILED - {str(ae)}")
+        logger.error(
+            f"Energi Data Service Live Test ({area}): ASSERTION FAILED - {str(ae)}"
+        )
         raise
     except Exception as e:
         # Don't catch exceptions - let the test fail to expose real issues

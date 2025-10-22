@@ -72,7 +72,11 @@ class ComedAPI(BasePriceAPI):
                 "timezone": metadata.get("timezone", "America/Chicago"),
                 "currency": metadata.get("currency", "cents"),
                 "source_name": "comed",
-                "raw_data": {"data": raw_data, "timestamp": now_utc.isoformat(), "area": area},
+                "raw_data": {
+                    "data": raw_data,
+                    "timestamp": now_utc.isoformat(),
+                    "area": area,
+                },
             }
         finally:
             if session is None and client:
@@ -117,7 +121,9 @@ class ComedAPI(BasePriceAPI):
                 endpoint = area
             else:
                 # Default to 5minutefeed if area is not recognized
-                _LOGGER.warning(f"Unrecognized ComEd area: {area}, defaulting to 5minutefeed")
+                _LOGGER.warning(
+                    f"Unrecognized ComEd area: {area}, defaulting to 5minutefeed"
+                )
                 endpoint = ComEd.FIVE_MINUTE_FEED
 
             # Generate date ranges to try - ComEd uses 5-minute intervals
@@ -155,7 +161,9 @@ class ComedAPI(BasePriceAPI):
 
             # If we've tried all date ranges and still have no data, return None
             if not response:
-                _LOGGER.warning("No valid data found from ComEd after trying multiple date ranges")
+                _LOGGER.warning(
+                    "No valid data found from ComEd after trying multiple date ranges"
+                )
                 return None
 
             # Check if response is valid

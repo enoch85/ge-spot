@@ -40,7 +40,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 # Explicitly set the parser logger level to DEBUG
-logging.getLogger("custom_components.ge_spot.api.parsers.nordpool_parser").setLevel(logging.DEBUG)
+logging.getLogger("custom_components.ge_spot.api.parsers.nordpool_parser").setLevel(
+    logging.DEBUG
+)
 
 # Add the root directory to the path so we can import the component modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
@@ -216,7 +218,9 @@ class DebugCacheManager(CacheManager):
             for area, sources in area_sources.items():
                 for source, dates in sources.items():
                     dates_str = ", ".join(sorted(dates))
-                    logger.debug(f"  - Area: {area}, Source: {source}, Dates: {dates_str}")
+                    logger.debug(
+                        f"  - Area: {area}, Source: {source}, Dates: {dates_str}"
+                    )
 
         return stats
 
@@ -228,7 +232,9 @@ class DebugExchangeRateService(ExchangeRateService):
         """Initialize with debug logging."""
         super().__init__(session, cache_file)
         actual_cache_path = cache_file or self._get_default_cache_path()
-        logger.debug(f"EXCHANGE CACHE: Initialized with cache file: {actual_cache_path}")
+        logger.debug(
+            f"EXCHANGE CACHE: Initialized with cache file: {actual_cache_path}"
+        )
 
     async def _load_cache(self):
         """Load exchange rates from cache with debug logging."""
@@ -276,7 +282,9 @@ class DebugExchangeRateService(ExchangeRateService):
         logger.debug(f"EXCHANGE CACHE: Getting rates (force_refresh={force_refresh})")
 
         if not self.rates:
-            logger.debug("EXCHANGE CACHE: No rates in memory, will try to load from cache")
+            logger.debug(
+                "EXCHANGE CACHE: No rates in memory, will try to load from cache"
+            )
         elif force_refresh:
             logger.debug("EXCHANGE CACHE: Force refresh requested")
 
@@ -299,7 +307,10 @@ async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Test Nordpool API integration")
     parser.add_argument(
-        "area", nargs="?", default="SE3", help=f'Area code (e.g. {", ".join(COMMON_AREAS[:5])})'
+        "area",
+        nargs="?",
+        default="SE3",
+        help=f'Area code (e.g. {", ".join(COMMON_AREAS[:5])})',
     )
     parser.add_argument(
         "date",
@@ -308,9 +319,13 @@ async def main():
         help="Date to fetch data for (format: YYYY-MM-DD, default: today)",
     )
     parser.add_argument(
-        "--no-cache", action="store_true", help="Skip cache check and force fetch from API"
+        "--no-cache",
+        action="store_true",
+        help="Skip cache check and force fetch from API",
     )
-    parser.add_argument("--clear-cache", action="store_true", help="Clear the cache before testing")
+    parser.add_argument(
+        "--clear-cache", action="store_true", help="Clear the cache before testing"
+    )
     args = parser.parse_args()
 
     area = args.area
@@ -326,14 +341,16 @@ async def main():
             # Parse the date and create a datetime at noon UTC for that date
             ref_date_obj = datetime.strptime(reference_date, "%Y-%m-%d")
             target_date = ref_date_obj.date()
-            reference_time = ref_date_obj.replace(hour=12, minute=0, second=0).astimezone(
-                timezone.utc
-            )
+            reference_time = ref_date_obj.replace(
+                hour=12, minute=0, second=0
+            ).astimezone(timezone.utc)
             logger.info(
                 f"Using reference date: {reference_date} (reference time: {reference_time})"
             )
         except ValueError:
-            logger.error(f"Invalid date format: {reference_date}. Please use YYYY-MM-DD format.")
+            logger.error(
+                f"Invalid date format: {reference_date}. Please use YYYY-MM-DD format."
+            )
             return 1
 
     logger.info(f"\n===== Nordpool API Full Chain Test for {area} =====\n")
@@ -407,11 +424,15 @@ async def main():
 
                 if cached_data:
                     logger.info("✓ Found data in cache!")
-                    logger.info(f"Cache timestamp: {cached_data.get('last_updated', 'unknown')}")
+                    logger.info(
+                        f"Cache timestamp: {cached_data.get('last_updated', 'unknown')}"
+                    )
                     cached_interval_prices = cached_data.get(
                         "interval_prices", {}
                     )  # Note: interval_prices in cache
-                    logger.info(f"Cached data contains {len(cached_interval_prices)} price points")
+                    logger.info(
+                        f"Cached data contains {len(cached_interval_prices)} price points"
+                    )
                     # Mark as cached data for display purposes
                     cached_data["using_cached_data"] = True
                     processed_data = cached_data
@@ -436,7 +457,9 @@ async def main():
                 logger.info(f"Raw data wrapper keys: {list(raw_data_wrapper.keys())}")
                 if "raw_data" in raw_data_wrapper and raw_data_wrapper["raw_data"]:
                     sample_data = str(raw_data_wrapper["raw_data"])[:300]
-                    logger.info(f"Raw API response sample (truncated): {sample_data}...")
+                    logger.info(
+                        f"Raw API response sample (truncated): {sample_data}..."
+                    )
                 else:
                     logger.warning("No nested 'raw_data' found in API response wrapper")
 
@@ -452,14 +475,18 @@ async def main():
                 # Step 2: Process parsed data and normalize timezones using the centralized converter
                 logger.info("\nProcessing parsed data and normalizing timezones...")
                 # Use the data returned by the parser now
-                interval_raw = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
+                interval_raw = parsed_data.get(
+                    "interval_raw", {}
+                )  # Changed from hourly_raw
                 source_timezone = parsed_data.get("timezone")
                 source_currency = parsed_data.get(
                     "currency", Currency.EUR
                 )  # Get currency from parser
                 source_unit = parsed_data.get("source_unit")  # Get unit from parser
 
-                logger.info(f"Source: {parsed_data.get('source')}")  # Use source from parser
+                logger.info(
+                    f"Source: {parsed_data.get('source')}"
+                )  # Use source from parser
                 logger.info(f"Area: {area}")  # Area comes from args/wrapper
                 logger.info(f"Currency: {source_currency}")
                 logger.info(f"API Timezone: {source_timezone}")
@@ -499,7 +526,9 @@ async def main():
                 for i, ts in enumerate(sample_timestamps, 1):
                     price = interval_raw[ts]
                     price_val = (
-                        price if isinstance(price, (int, float)) else price.get("price", "N/A")
+                        price
+                        if isinstance(price, (int, float))
+                        else price.get("price", "N/A")
                     )
                     logger.info(f"  {i}. {ts} → {price_val}")
 
@@ -520,7 +549,9 @@ async def main():
                     logger.info(f"  Average interval: {avg_interval:.1f} minutes")
 
                     if abs(avg_interval - 15) < 1:  # Within 1 minute of 15
-                        logger.info("✓ CONFIRMED: API is providing 15-minute interval data")
+                        logger.info(
+                            "✓ CONFIRMED: API is providing 15-minute interval data"
+                        )
                     elif abs(avg_interval - 60) < 1:  # Within 1 minute of 60
                         logger.warning(
                             "⚠ WARNING: API appears to be providing hourly data (not 15-minute intervals)"
@@ -544,7 +575,9 @@ async def main():
                     preserve_date=True,  # Important: preserve date to differentiate today/tomorrow
                 )
 
-                logger.info(f"After normalization: {len(normalized_prices)} price points")
+                logger.info(
+                    f"After normalization: {len(normalized_prices)} price points"
+                )
                 logger.info(f"Expected: 192 15-minute intervals (96 per day × 2 days)")
                 if len(normalized_prices) < 100:
                     logger.warning(
@@ -556,7 +589,9 @@ async def main():
 
                 # Step 3: Currency conversion (local currency -> EUR if needed)
                 # Use source_currency from parsed_data
-                target_currency = Currency.SEK if area.startswith("SE") else Currency.EUR
+                target_currency = (
+                    Currency.SEK if area.startswith("SE") else Currency.EUR
+                )
 
                 # Use the split_into_today_tomorrow method from TimezoneConverter
                 today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(
@@ -567,7 +602,9 @@ async def main():
                 )
 
                 # Debug: Check if we're losing intervals during split
-                logger.debug(f"Before split: {len(normalized_prices)} normalized prices")
+                logger.debug(
+                    f"Before split: {len(normalized_prices)} normalized prices"
+                )
                 logger.debug(
                     f"After split: today={len(today_prices)}, tomorrow={len(tomorrow_prices)}, total={len(today_prices) + len(tomorrow_prices)}"
                 )
@@ -580,11 +617,15 @@ async def main():
                     logger.debug(f"Sample normalized keys: {sample_keys}")
                     sample_today = list(today_prices.keys())[:5] if today_prices else []
                     logger.debug(f"Sample today keys: {sample_today}")
-                    sample_tomorrow = list(tomorrow_prices.keys())[:5] if tomorrow_prices else []
+                    sample_tomorrow = (
+                        list(tomorrow_prices.keys())[:5] if tomorrow_prices else []
+                    )
                     logger.debug(f"Sample tomorrow keys: {sample_tomorrow}")
 
                 # Step 3: Currency conversion (local currency -> target currency if needed)
-                logger.info(f"\nConverting prices from {source_currency} to {target_currency}...")
+                logger.info(
+                    f"\nConverting prices from {source_currency} to {target_currency}..."
+                )
                 # Fix: Pass the existing session to the exchange rate service
                 exchange_service = DebugExchangeRateService(session=session)
 
@@ -600,7 +641,11 @@ async def main():
                     converted_prices = {}
                     for hour_key, price_info in all_prices_to_convert.items():
                         # Extract price from dict structure
-                        price = price_info["price"] if isinstance(price_info, dict) else price_info
+                        price = (
+                            price_info["price"]
+                            if isinstance(price_info, dict)
+                            else price_info
+                        )
                         price_converted = price
                         if source_currency != target_currency:
                             price_converted = await exchange_service.convert(
@@ -616,11 +661,17 @@ async def main():
                     # Provide fallback conversion for demo purposes
                     converted_prices = {}
                     for hour_key, price_info in all_prices_to_convert.items():
-                        price = price_info["price"] if isinstance(price_info, dict) else price_info
+                        price = (
+                            price_info["price"]
+                            if isinstance(price_info, dict)
+                            else price_info
+                        )
                         # Apply a simple fixed exchange rate as fallback
                         fallback_rate = 11.0 if target_currency == Currency.SEK else 1.0
                         price_converted = (
-                            price * fallback_rate if source_currency != target_currency else price
+                            price * fallback_rate
+                            if source_currency != target_currency
+                            else price
                         )
                         # Convert to kWh
                         price_kwh = price_converted / 1000
@@ -640,7 +691,9 @@ async def main():
                     "target_timezone": local_tz_name,
                     "last_updated": timestamp.isoformat(),
                     "using_cached_data": False,  # Mark as fresh data
-                    "source_unit": str(source_unit) if source_unit else None,  # Store unit
+                    "source_unit": (
+                        str(source_unit) if source_unit else None
+                    ),  # Store unit
                 }
 
                 # Store in cache for future use (production behavior)
@@ -655,7 +708,9 @@ async def main():
 
                 # Show cache statistics
                 cache_stats = cache_manager.get_cache_stats()
-                logger.info(f"Cache now contains {len(cache_stats.get('entries', {}))} entries")
+                logger.info(
+                    f"Cache now contains {len(cache_stats.get('entries', {}))} entries"
+                )
 
                 # Set processed_data for display section
                 processed_data = processed_data_for_cache
@@ -670,7 +725,9 @@ async def main():
             display_target_currency = processed_data.get("target_currency", "N/A")
             display_source_unit = processed_data.get("source_unit", "N/A")
 
-            logger.info(f"Original Currency: {display_original_currency}/{display_source_unit}")
+            logger.info(
+                f"Original Currency: {display_original_currency}/{display_source_unit}"
+            )
             logger.info(
                 f"Converted Currency: {display_target_currency}/kWh"
             )  # Assuming always kWh after conversion
@@ -724,12 +781,16 @@ async def main():
 
             # Get keys from the processed data structure (display layer - may be aggregated)
             today_hours = set(processed_data.get("interval_prices", {}).keys())
-            tomorrow_hours = set(processed_data.get("tomorrow_interval_prices", {}).keys())
+            tomorrow_hours = set(
+                processed_data.get("tomorrow_interval_prices", {}).keys()
+            )
 
             logger.info(f"\nData completeness (Display Layer):")
             logger.info(f"Today: {len(today_hours)} intervals")
             logger.info(f"Tomorrow: {len(tomorrow_hours)} intervals")
-            logger.info(f"Total display intervals: {len(today_hours) + len(tomorrow_hours)}")
+            logger.info(
+                f"Total display intervals: {len(today_hours) + len(tomorrow_hours)}"
+            )
 
             # Note about data layers
             logger.info(
@@ -751,19 +812,27 @@ async def main():
 
             if total_prices >= min_expected_hours:
                 logger.info(f"\n✅ Test completed successfully!")
-                logger.info(f"   ✓ Confirmed 15-minute granularity in raw data (192 intervals)")
-                logger.info(f"   ✓ Confirmed 15-minute interval spacing (avg: 15.0 minutes)")
+                logger.info(
+                    f"   ✓ Confirmed 15-minute granularity in raw data (192 intervals)"
+                )
+                logger.info(
+                    f"   ✓ Confirmed 15-minute interval spacing (avg: 15.0 minutes)"
+                )
                 logger.info(
                     f"   ✓ Display layer has {total_prices} intervals (aggregated for compatibility)"
                 )
-                logger.info(f"   ✓ Data source verified: NordPool API with 15-minute support")
+                logger.info(
+                    f"   ✓ Data source verified: NordPool API with 15-minute support"
+                )
                 return 0
             else:
                 logger.error(f"\n❌ Test failed: Insufficient display data.")
                 logger.error(
                     f"   Found only {total_prices} display intervals (expected at least {min_expected_hours})"
                 )
-                logger.error(f"   Note: Raw data validation passed, but display aggregation failed")
+                logger.error(
+                    f"   Note: Raw data validation passed, but display aggregation failed"
+                )
                 return 1
 
         except Exception as e:

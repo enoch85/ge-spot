@@ -72,7 +72,9 @@ def sanitize_sensitive_data(
     return sanitized
 
 
-def log_rate_limiting(area: str, decision: bool, reason: str, source: Optional[str] = None) -> None:
+def log_rate_limiting(
+    area: str, decision: bool, reason: str, source: Optional[str] = None
+) -> None:
     """Log rate limiting decisions.
 
     Args:

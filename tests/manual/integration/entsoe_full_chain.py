@@ -77,7 +77,10 @@ async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Test ENTSO-E API integration")
     parser.add_argument(
-        "area", nargs="?", default="FI", help=f'Area code (e.g. {", ".join(COMMON_AREAS[:5])})'
+        "area",
+        nargs="?",
+        default="FI",
+        help=f'Area code (e.g. {", ".join(COMMON_AREAS[:5])})',
     )
     parser.add_argument(
         "api_key",
@@ -86,9 +89,13 @@ async def main():
         help="ENTSO-E API key (optional if environment variable is set)",
     )
     parser.add_argument(
-        "--date", default=None, help="Date to fetch data for (format: YYYY-MM-DD, default: today)"
+        "--date",
+        default=None,
+        help="Date to fetch data for (format: YYYY-MM-DD, default: today)",
     )
-    parser.add_argument("--debug", action="store_true", help="Enable detailed debug logging")
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable detailed debug logging"
+    )
     args = parser.parse_args()
 
     # Configure logging level
@@ -114,9 +121,9 @@ async def main():
         try:
             ref_date_obj = datetime.strptime(reference_date_str, "%Y-%m-%d")
             target_date = ref_date_obj.date()
-            reference_time = ref_date_obj.replace(hour=12, minute=0, second=0).astimezone(
-                timezone.utc
-            )
+            reference_time = ref_date_obj.replace(
+                hour=12, minute=0, second=0
+            ).astimezone(timezone.utc)
             logger.info(
                 f"Using reference date: {reference_date_str} (reference time: {reference_time})"
             )
@@ -171,7 +178,8 @@ async def main():
         for k, v in raw_data.items():
             if k == "xml_responses" and isinstance(v, list):
                 log_data[k] = [
-                    f"XML Response {i+1} (length: {len(xml)})" for i, xml in enumerate(v)
+                    f"XML Response {i+1} (length: {len(xml)})"
+                    for i, xml in enumerate(v)
                 ]
             elif isinstance(v, (str, list, dict)) and len(str(v)) > 300:
                 log_data[k] = str(v)[:300] + "..."
@@ -184,16 +192,22 @@ async def main():
         parsed_data = await api.parse_raw_data(raw_data)
 
         logger.debug(f"Parsed data keys: {list(parsed_data.keys())}")
-        logger.info(f"Source: {parsed_data.get('source_name', parsed_data.get('source'))}")
+        logger.info(
+            f"Source: {parsed_data.get('source_name', parsed_data.get('source'))}"
+        )
         logger.info(f"Area: {area}")
         original_currency = parsed_data.get("currency", Currency.EUR)
         logger.info(f"Currency: {original_currency}")
         source_timezone = parsed_data.get("timezone")
         logger.info(f"API Timezone: {source_timezone}")
 
-        interval_raw_prices = parsed_data.get("interval_raw", {})  # Changed from hourly_raw
+        interval_raw_prices = parsed_data.get(
+            "interval_raw", {}
+        )  # Changed from hourly_raw
         if not interval_raw_prices:
-            logger.error("Error: No interval prices found in the parsed data after parsing step.")
+            logger.error(
+                "Error: No interval prices found in the parsed data after parsing step."
+            )
             logger.error(f"Available keys: {list(parsed_data.keys())}")
             if "xml_responses" in raw_data:
                 for i, xml in enumerate(raw_data["xml_responses"]):
@@ -205,10 +219,14 @@ async def main():
         logger.info(
             f"Found {len(interval_raw_prices)} raw interval prices (before timezone normalization)"
         )
-        logger.debug(f"Raw interval prices sample: {dict(list(interval_raw_prices.items())[:5])}")
+        logger.debug(
+            f"Raw interval prices sample: {dict(list(interval_raw_prices.items())[:5])}"
+        )
 
         # Step 3: Normalize Timezones
-        logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
+        logger.info(
+            f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}..."
+        )
         # Use normalize_interval_prices to preserve 15-minute intervals
         normalized_prices = tz_converter.normalize_interval_prices(
             interval_prices=interval_raw_prices,  # Changed from hourly_raw_prices
@@ -217,7 +235,9 @@ async def main():
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
         logger.info(f"Expected: ~192 intervals (15-min for 2 days)")
-        logger.debug(f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}")
+        logger.debug(
+            f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}"
+        )
 
         # Step 4: Currency conversion (EUR -> Local currency if needed)
         target_currency = Currency.EUR
@@ -230,13 +250,17 @@ async def main():
         elif area == "GB":
             target_currency = Currency.GBP
 
-        logger.info(f"\nConverting prices from {original_currency} to {target_currency}...")
+        logger.info(
+            f"\nConverting prices from {original_currency} to {target_currency}..."
+        )
         exchange_service = ExchangeRateService()
         await exchange_service.get_rates(force_refresh=True)
 
         converted_prices = {}
         for hour_key, price_info in normalized_prices.items():
-            price_mwh = price_info["price"] if isinstance(price_info, dict) else price_info
+            price_mwh = (
+                price_info["price"] if isinstance(price_info, dict) else price_info
+            )
             price_converted_mwh = price_mwh
             if original_currency != target_currency:
                 price_converted_mwh = await exchange_service.convert(
@@ -247,21 +271,32 @@ async def main():
             if isinstance(normalized_prices[hour_key], dict):
                 normalized_prices[hour_key]["converted_kwh"] = price_kwh
             else:
-                normalized_prices[hour_key] = {"price": price_mwh, "converted_kwh": price_kwh}
+                normalized_prices[hour_key] = {
+                    "price": price_mwh,
+                    "converted_kwh": price_kwh,
+                }
 
-        logger.debug(f"Converted prices sample: {dict(list(converted_prices.items())[:5])}")
+        logger.debug(
+            f"Converted prices sample: {dict(list(converted_prices.items())[:5])}"
+        )
 
         # Step 5: Display results
         logger.info("\nPrice Information:")
         logger.info(f"Original Currency: {original_currency}/MWh")
         logger.info(f"Converted Currency: {target_currency}/kWh")
 
-        today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(normalized_prices)
+        today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(
+            normalized_prices
+        )
 
         all_display_prices = {**today_prices, **tomorrow_prices}
 
-        logger.info(f"\nHourly Prices (formatted as HH:00 in target timezone: {local_tz_name}):")
-        logger.info(f"{'Hour':<10} {f'{original_currency}/MWh':<15} {f'{target_currency}/kWh':<15}")
+        logger.info(
+            f"\nHourly Prices (formatted as HH:00 in target timezone: {local_tz_name}):"
+        )
+        logger.info(
+            f"{'Hour':<10} {f'{original_currency}/MWh':<15} {f'{target_currency}/kWh':<15}"
+        )
         logger.info("-" * 40)
 
         for hour_key, price_data in sorted(all_display_prices.items()):
@@ -297,7 +332,9 @@ async def main():
 
             if now_central_europe.hour >= 13 or reference_date_str:
                 missing_tomorrow = set(tomorrow_hour_range) - tomorrow_hours_found
-                logger.warning(f"Missing tomorrow hours: {', '.join(sorted(missing_tomorrow))}")
+                logger.warning(
+                    f"Missing tomorrow hours: {', '.join(sorted(missing_tomorrow))}"
+                )
             else:
                 logger.info("Tomorrow's data might not be available yet.")
 

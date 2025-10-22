@@ -16,7 +16,9 @@ from datetime import datetime, timezone
 import pytest
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Add the parent directory to Python path
@@ -66,12 +68,15 @@ class TestEnergyChartsErrorHandling:
         ]
 
         # Should have exactly one error message about the timeout
-        assert len(error_messages) == 1, f"Should have 1 error message, got {len(error_messages)}"
+        assert (
+            len(error_messages) == 1
+        ), f"Should have 1 error message, got {len(error_messages)}"
         assert (
             "request failed" in error_messages[0].lower()
         ), "Error message should indicate request failure"
         assert (
-            "timed out" in error_messages[0].lower() or "timeout" in error_messages[0].lower()
+            "timed out" in error_messages[0].lower()
+            or "timeout" in error_messages[0].lower()
         ), "Error message should mention timeout"
 
         # Should NOT have "missing required fields" error
@@ -107,7 +112,9 @@ class TestEnergyChartsErrorHandling:
         ]
         assert len(error_messages) == 1
         assert "request failed" in error_messages[0].lower()
-        assert not any("missing required fields" in msg.lower() for msg in error_messages)
+        assert not any(
+            "missing required fields" in msg.lower() for msg in error_messages
+        )
 
     @pytest.mark.asyncio
     async def test_invalid_response_structure_handled(self, api, caplog):
@@ -212,7 +219,11 @@ class TestEnergyChartsErrorHandling:
         # Assert
         assert result is not None, "Should return data on success"
         assert "raw_data" in result
-        assert result["raw_data"]["unix_seconds"] == [1729414800, 1729414900, 1729415000]
+        assert result["raw_data"]["unix_seconds"] == [
+            1729414800,
+            1729414900,
+            1729415000,
+        ]
 
         # Should have no errors
         error_messages = [
@@ -257,4 +268,6 @@ class TestEnergyChartsErrorHandling:
         assert "request failed" in error_messages[0].lower()
         assert "rate limit" in error_messages[0].lower()
         # Should NOT reach the "missing fields" check
-        assert not any("missing required fields" in msg.lower() for msg in error_messages)
+        assert not any(
+            "missing required fields" in msg.lower() for msg in error_messages
+        )

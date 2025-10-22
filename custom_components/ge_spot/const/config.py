@@ -9,7 +9,9 @@ class Config:
     VAT = "vat"
     INCLUDE_VAT = "include_vat"  # Whether to include VAT in price calculations
     # Price components (applied in order: spot + tariff + tax, then VAT on total)
-    ADDITIONAL_TARIFF = "additional_tariff"  # Additional tariff/fees from energy provider (per kWh)
+    ADDITIONAL_TARIFF = (
+        "additional_tariff"  # Additional tariff/fees from energy provider (per kWh)
+    )
     ENERGY_TAX = "energy_tax"  # Fixed energy tax per kWh (e.g. government levy, applied before VAT)
     UPDATE_INTERVAL = "update_interval"
     DISPLAY_UNIT = "display_unit"
@@ -44,7 +46,9 @@ class Config:
     # Parallel fetching configuration
     PARALLEL_FETCH = "parallel_fetch"  # Whether to fetch in parallel
     PARALLEL_FETCH_TIMEOUT = "parallel_fetch_timeout"  # Timeout for parallel fetching
-    PARALLEL_FETCH_MAX_WORKERS = "parallel_fetch_max_workers"  # Maximum number of workers
+    PARALLEL_FETCH_MAX_WORKERS = (
+        "parallel_fetch_max_workers"  # Maximum number of workers
+    )
 
     # Data validation configuration
     VALIDATE_RESPONSES = "validate_responses"  # Whether to validate API responses

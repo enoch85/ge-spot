@@ -68,9 +68,13 @@ async def main():
         help="Amber API key (optional if environment variable is set)",
     )
     parser.add_argument(
-        "--date", default=None, help="Date to fetch data for (format: YYYY-MM-DD, default: today)"
+        "--date",
+        default=None,
+        help="Date to fetch data for (format: YYYY-MM-DD, default: today)",
     )
-    parser.add_argument("--debug", action="store_true", help="Enable detailed debug logging")
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable detailed debug logging"
+    )
     args = parser.parse_args()
 
     # Configure logging level
@@ -99,7 +103,9 @@ async def main():
             ref_date_obj = datetime.strptime(reference_date_str, "%Y-%m-%d")
             target_date = ref_date_obj.date()
             # Amber API likely uses local time, create reference in local time
-            reference_time = local_tz.localize(ref_date_obj.replace(hour=12, minute=0, second=0))
+            reference_time = local_tz.localize(
+                ref_date_obj.replace(hour=12, minute=0, second=0)
+            )
             logger.info(
                 f"Using reference date: {reference_date_str} (reference time: {reference_time})"
             )
@@ -117,7 +123,9 @@ async def main():
     # Initialize timezone service based on area
     logger.info("Setting up timezone service...")
     tz_config = {"timezone_reference": "area"}  # Assuming area dictates timezone
-    tz_service = TimezoneService(area=area, config=tz_config, fixed_timezone=local_tz_name)
+    tz_service = TimezoneService(
+        area=area, config=tz_config, fixed_timezone=local_tz_name
+    )
     tz_converter = TimezoneConverter(tz_service)
     logger.info(f"Timezone service initialized for area: {area} using {local_tz_name}")
 
@@ -138,7 +146,9 @@ async def main():
         if isinstance(raw_data, list):
             logger.debug(f"Received {len(raw_data)} data points in list")
             if raw_data:
-                logger.debug(f"First raw data point sample: {json.dumps(raw_data[0], indent=2)}")
+                logger.debug(
+                    f"First raw data point sample: {json.dumps(raw_data[0], indent=2)}"
+                )
         elif isinstance(raw_data, dict):
             logger.debug(f"Raw data keys: {list(raw_data.keys())}")
             log_data = {}
@@ -147,7 +157,9 @@ async def main():
                     log_data[k] = str(v)[:300] + "..."
                 else:
                     log_data[k] = v
-            logger.debug(f"Raw data content (summary): {json.dumps(log_data, indent=2)}")
+            logger.debug(
+                f"Raw data content (summary): {json.dumps(log_data, indent=2)}"
+            )
         else:
             logger.debug(
                 f"Raw data type: {type(raw_data)}, content (truncated): {str(raw_data)[:300]}..."
@@ -158,7 +170,9 @@ async def main():
         parsed_data = await api.parse_raw_data(raw_data)
 
         logger.debug(f"Parsed data keys: {list(parsed_data.keys())}")
-        logger.info(f"Source: {parsed_data.get('source_name', parsed_data.get('source'))}")
+        logger.info(
+            f"Source: {parsed_data.get('source_name', parsed_data.get('source'))}"
+        )
         logger.info(f"Area: {area}")
         original_currency = parsed_data.get("currency", Currency.AUD)
         logger.info(f"Currency: {original_currency}")
@@ -166,23 +180,33 @@ async def main():
         logger.info(f"API Timezone: {source_timezone}")
 
         # Amber provides prices per kWh, often in 30-min or 5-min intervals
-        raw_prices = parsed_data.get("raw_prices", {})  # Assuming parser returns raw prices here
+        raw_prices = parsed_data.get(
+            "raw_prices", {}
+        )  # Assuming parser returns raw prices here
         if not raw_prices:
-            logger.error("Error: No raw prices found in the parsed data after parsing step.")
+            logger.error(
+                "Error: No raw prices found in the parsed data after parsing step."
+            )
             return 1
 
-        logger.info(f"Found {len(raw_prices)} raw price points (before timezone normalization)")
+        logger.info(
+            f"Found {len(raw_prices)} raw price points (before timezone normalization)"
+        )
         # Amber interval can vary, check if parser provides info
         is_five_minute = parsed_data.get("is_five_minute", False)
         is_thirty_minute = parsed_data.get("is_thirty_minute", False)
         interval_desc = (
-            "5-minute" if is_five_minute else ("30-minute" if is_thirty_minute else "Hourly")
+            "5-minute"
+            if is_five_minute
+            else ("30-minute" if is_thirty_minute else "Hourly")
         )
         logger.info(f"Data interval: {interval_desc}")
         logger.debug(f"Raw prices sample: {dict(list(raw_prices.items())[:5])}")
 
         # Step 3: Normalize Timezones
-        logger.info(f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}...")
+        logger.info(
+            f"\nNormalizing timestamps from {source_timezone} to {local_tz_name}..."
+        )
         # Use normalize_interval_prices to preserve 15-minute intervals
         normalized_prices = tz_converter.normalize_interval_prices(
             interval_prices=raw_prices,  # Pass the raw prices
@@ -190,22 +214,33 @@ async def main():
             preserve_date=True,  # Keep original date context
         )
         logger.info(f"After normalization: {len(normalized_prices)} price points")
-        logger.info(f"Expected: Depends on Amber API interval (possibly 30-min or hourly)")
-        logger.debug(f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}")
+        logger.info(
+            f"Expected: Depends on Amber API interval (possibly 30-min or hourly)"
+        )
+        logger.debug(
+            f"Normalized prices sample: {dict(list(normalized_prices.items())[:5])}"
+        )
 
         # Step 4: Unit/Currency conversion (Amber is usually AUD/kWh, so only structure adjustment needed)
         target_currency = Currency.AUD
-        logger.info(f"\nPrices are already in target currency/unit: {target_currency}/kWh")
+        logger.info(
+            f"\nPrices are already in target currency/unit: {target_currency}/kWh"
+        )
 
         converted_prices = {}
         for time_key, price_info in normalized_prices.items():
-            price_kwh = price_info["price"] if isinstance(price_info, dict) else price_info
+            price_kwh = (
+                price_info["price"] if isinstance(price_info, dict) else price_info
+            )
             converted_prices[time_key] = price_kwh
             # Ensure structure is consistent for display
             if isinstance(normalized_prices[time_key], dict):
                 normalized_prices[time_key]["converted_kwh"] = price_kwh
             else:
-                normalized_prices[time_key] = {"price": price_kwh, "converted_kwh": price_kwh}
+                normalized_prices[time_key] = {
+                    "price": price_kwh,
+                    "converted_kwh": price_kwh,
+                }
 
         logger.debug(
             f"Final prices sample ({target_currency}/kWh): {dict(list(converted_prices.items())[:5])}"
@@ -217,12 +252,15 @@ async def main():
 
         # Split into today/tomorrow based on the *local* target date
         today_prices, tomorrow_prices = tz_converter.split_into_today_tomorrow(
-            normalized_prices, target_date=target_date  # Pass the target date explicitly
+            normalized_prices,
+            target_date=target_date,  # Pass the target date explicitly
         )
 
         all_display_prices = {**today_prices, **tomorrow_prices}
 
-        logger.info(f"\nPrice Points (formatted time in target timezone: {local_tz_name}):")
+        logger.info(
+            f"\nPrice Points (formatted time in target timezone: {local_tz_name}):"
+        )
         logger.info(f"{'Time':<20} {f'{target_currency}/kWh':<15}")
         logger.info("-" * 40)
 
@@ -252,7 +290,9 @@ async def main():
 
         # Basic check: Did we get a reasonable amount of data for today?
         # Amber might provide forecast data, but let's focus on getting *some* data for today.
-        min_expected_today = expected_intervals_per_day // 4  # Expect at least a quarter of the day
+        min_expected_today = (
+            expected_intervals_per_day // 4
+        )  # Expect at least a quarter of the day
 
         today_sufficient = len(today_keys) >= min_expected_today
 

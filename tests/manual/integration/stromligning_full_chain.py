@@ -46,10 +46,16 @@ async def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Test Strømlikning API integration")
     parser.add_argument(
-        "area", nargs="?", default="DK1", choices=DANISH_AREAS, help="Area code (DK1, DK2)"
+        "area",
+        nargs="?",
+        default="DK1",
+        choices=DANISH_AREAS,
+        help="Area code (DK1, DK2)",
     )
     # Add supplier argument
-    parser.add_argument("--supplier", required=True, help="Supplier name (e.g. EWII, AndelEnergi)")
+    parser.add_argument(
+        "--supplier", required=True, help="Supplier name (e.g. EWII, AndelEnergi)"
+    )
     args = parser.parse_args()
 
     area = args.area
@@ -67,7 +73,9 @@ async def main():
 
     try:
         # Step 1: Fetch raw data
-        logger.info(f"Fetching Strømlikning data for area: {area}, supplier: {supplier}")
+        logger.info(
+            f"Fetching Strømlikning data for area: {area}, supplier: {supplier}"
+        )
         # Pass config to fetch_raw_data if needed by underlying methods (though __init__ should handle it now)
         raw_data = await api.fetch_raw_data(area=area)
         logger.debug(
@@ -132,7 +140,9 @@ async def main():
 
         # Step 4: Display results
         logger.info("\nPrice Information:")
-        logger.info(f"Original Currency: {parsed_data.get('currency', Currency.DKK)}/MWh")
+        logger.info(
+            f"Original Currency: {parsed_data.get('currency', Currency.DKK)}/MWh"
+        )
         logger.info(f"Converted Currency: {Currency.EUR}/kWh")
 
         # Group prices by date
@@ -164,7 +174,9 @@ async def main():
             logger.info("-" * 40)
 
             for hour, prices in sorted(hours.items()):
-                logger.info(f"{hour:<10} {prices['original']:<15.4f} {prices['converted']:<15.6f}")
+                logger.info(
+                    f"{hour:<10} {prices['original']:<15.4f} {prices['converted']:<15.6f}"
+                )
 
         # Validate that we have data for today and tomorrow
         today = datetime.now(dk_tz).strftime("%Y-%m-%d")
@@ -196,10 +208,14 @@ async def main():
 
         if tomorrow in prices_by_date:
             tomorrow_prices = prices_by_date[tomorrow]
-            logger.info(f"\nFound {len(tomorrow_prices)} price points for tomorrow ({tomorrow})")
+            logger.info(
+                f"\nFound {len(tomorrow_prices)} price points for tomorrow ({tomorrow})"
+            )
 
             if len(tomorrow_prices) >= 96:
-                logger.info("✓ Complete set of 96 15-minute interval prices for tomorrow")
+                logger.info(
+                    "✓ Complete set of 96 15-minute interval prices for tomorrow"
+                )
             elif len(tomorrow_prices) >= 90:
                 logger.info(
                     f"✓ Nearly complete data: Found {len(tomorrow_prices)} 15-minute intervals (expected 96)"
@@ -220,7 +236,9 @@ async def main():
         # Check if we have price components (Strømlikning specific)
         if parsed_data.get("price_components"):
             logger.info("\nPrice Components Found:")
-            for component_name, value in parsed_data.get("price_components", {}).items():
+            for component_name, value in parsed_data.get(
+                "price_components", {}
+            ).items():
                 logger.info(f"- {component_name}: {value}")
 
         # Final validation - check if we have enough data overall to consider the test successful

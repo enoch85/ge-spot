@@ -3,7 +3,9 @@
 import pytest
 from datetime import datetime, timezone
 
-from custom_components.ge_spot.api.parsers.energy_charts_parser import EnergyChartsParser
+from custom_components.ge_spot.api.parsers.energy_charts_parser import (
+    EnergyChartsParser,
+)
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.const.sources import Source
 
@@ -25,7 +27,9 @@ class TestEnergyChartsParser:
         prices = []
 
         # Start timestamp: 2025-10-07 00:00:00 UTC
-        start_timestamp = datetime(2025, 10, 7, 0, 0, 0, tzinfo=timezone.utc).timestamp()
+        start_timestamp = datetime(
+            2025, 10, 7, 0, 0, 0, tzinfo=timezone.utc
+        ).timestamp()
 
         # Generate 96 intervals (24 hours × 4 intervals/hour)
         for i in range(96):
@@ -81,7 +85,9 @@ class TestEnergyChartsParser:
 
         # Check interval data (96 15-min intervals for one day)
         interval_raw = result["interval_raw"]
-        assert len(interval_raw) == 96, f"Expected 96 intervals, got {len(interval_raw)}"
+        assert (
+            len(interval_raw) == 96
+        ), f"Expected 96 intervals, got {len(interval_raw)}"
 
         # Verify ISO timestamps are used as keys
         keys = list(interval_raw.keys())
@@ -94,7 +100,9 @@ class TestEnergyChartsParser:
         assert all(isinstance(p, float) for p in prices)
 
         # Verify prices are in reasonable range (EUR/MWh)
-        assert all(0 <= p <= 500 for p in prices), "Prices should be in reasonable range"
+        assert all(
+            0 <= p <= 500 for p in prices
+        ), "Prices should be in reasonable range"
 
     def test_parse_fr_data(self, parser, sample_energy_charts_data):
         """Test parsing France data."""
@@ -132,7 +140,11 @@ class TestEnergyChartsParser:
 
     def test_parse_missing_raw_data(self, parser):
         """Test parsing with missing raw_data key."""
-        input_data = {"timezone": "Europe/Berlin", "currency": Currency.EUR, "area": "BE"}
+        input_data = {
+            "timezone": "Europe/Berlin",
+            "currency": Currency.EUR,
+            "area": "BE",
+        }
 
         result = parser.parse(input_data)
 
@@ -199,7 +211,11 @@ class TestEnergyChartsParser:
         unix_ts = 1728302400
 
         input_data = {
-            "raw_data": {"unix_seconds": [unix_ts], "price": [100.0], "unit": "EUR / MWh"},
+            "raw_data": {
+                "unix_seconds": [unix_ts],
+                "price": [100.0],
+                "unit": "EUR / MWh",
+            },
             "timezone": "Europe/Berlin",
             "currency": Currency.EUR,
             "area": "DE-LU",
@@ -262,9 +278,15 @@ class TestEnergyChartsParser:
 
     def test_create_empty_result(self, parser):
         """Test empty result structure."""
-        original_data = {"area": "DE-LU", "timezone": "Europe/Berlin", "currency": Currency.EUR}
+        original_data = {
+            "area": "DE-LU",
+            "timezone": "Europe/Berlin",
+            "currency": Currency.EUR,
+        }
 
-        result = parser._create_empty_result(original_data, "Europe/Berlin", Currency.EUR)
+        result = parser._create_empty_result(
+            original_data, "Europe/Berlin", Currency.EUR
+        )
 
         assert result["interval_raw"] == {}
         assert result["currency"] == Currency.EUR

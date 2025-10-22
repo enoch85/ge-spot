@@ -94,7 +94,13 @@ class ExtremaPriceSensor(PriceValueSensor):
     """Base class for min/max price sensors."""
 
     def __init__(
-        self, coordinator, config_data, sensor_type, name_suffix, day_offset=0, extrema_type="min"
+        self,
+        coordinator,
+        config_data,
+        sensor_type,
+        name_suffix,
+        day_offset=0,
+        extrema_type="min",
     ):
         """Initialize the extrema price sensor."""
         self._day_offset = day_offset
@@ -138,7 +144,9 @@ class ExtremaPriceSensor(PriceValueSensor):
                     try:
                         dt = datetime.fromisoformat(timestamp)
                         # Use HA's datetime format
-                        formatted_time = dt_util.as_local(dt).isoformat(timespec="minutes")
+                        formatted_time = dt_util.as_local(dt).isoformat(
+                            timespec="minutes"
+                        )
                         return {"timestamp": formatted_time, "value": price_value}
                     except (ValueError, TypeError):
                         return {"timestamp": timestamp, "value": price_value}
@@ -147,7 +155,12 @@ class ExtremaPriceSensor(PriceValueSensor):
 
         # Initialize parent class
         super().__init__(
-            coordinator, config_data, sensor_type, name_suffix, extract_value, get_timestamp
+            coordinator,
+            config_data,
+            sensor_type,
+            name_suffix,
+            extract_value,
+            get_timestamp,
         )
 
 
@@ -222,7 +235,9 @@ class PriceDifferenceSensor(PriceValueSensor):
     device_class = SensorDeviceClass.MONETARY
     state_class = None
 
-    def __init__(self, coordinator, config_data, sensor_type, name_suffix, value1_key, value2_key):
+    def __init__(
+        self, coordinator, config_data, sensor_type, name_suffix, value1_key, value2_key
+    ):
         """Initialize the price difference sensor."""
 
         # Create value extraction function
@@ -242,7 +257,9 @@ class PriceDifferenceSensor(PriceValueSensor):
             if value2_key == "average":
                 # Get from statistics
                 stats = data.get("statistics", {})
-                value2 = stats.get("avg")  # Fixed: use 'avg' to match PriceStatistics dataclass
+                value2 = stats.get(
+                    "avg"
+                )  # Fixed: use 'avg' to match PriceStatistics dataclass
                 _LOGGER.debug(
                     f"PriceDifferenceSensor {self.entity_id}: Reading average from statistics: {value2}"
                 )
@@ -284,7 +301,13 @@ class PricePercentSensor(PriceValueSensor):
     state_class = None
 
     def __init__(
-        self, coordinator, config_data, sensor_type, name_suffix, value_key, reference_key
+        self,
+        coordinator,
+        config_data,
+        sensor_type,
+        name_suffix,
+        value_key,
+        reference_key,
     ):
         """Initialize the price percentage sensor."""
 
@@ -303,7 +326,9 @@ class PricePercentSensor(PriceValueSensor):
             if reference_key == "average":
                 # Get from statistics
                 stats = data.get("statistics", {})
-                reference = stats.get("avg")  # Fixed: use 'avg' to match PriceStatistics dataclass
+                reference = stats.get(
+                    "avg"
+                )  # Fixed: use 'avg' to match PriceStatistics dataclass
                 _LOGGER.debug(
                     f"PricePercentSensor {self.entity_id}: Reading average from statistics: {reference}"
                 )
@@ -349,7 +374,9 @@ class HourlyAverageSensor(PriceValueSensor):
     device_class = SensorDeviceClass.MONETARY
     state_class = None
 
-    def __init__(self, coordinator, config_data, sensor_type, name_suffix, day_offset=0):
+    def __init__(
+        self, coordinator, config_data, sensor_type, name_suffix, day_offset=0
+    ):
         """Initialize the hourly average price sensor.
 
         Args:
@@ -421,14 +448,21 @@ class HourlyAverageSensor(PriceValueSensor):
                         }
                     )
                 except (ValueError, AttributeError) as e:
-                    _LOGGER.warning(f"Failed to convert hourly interval {hhmm_key}: {e}")
+                    _LOGGER.warning(
+                        f"Failed to convert hourly interval {hhmm_key}: {e}"
+                    )
                     continue
 
             return {"hourly_prices": hourly_list}
 
         # Initialize parent class
         super().__init__(
-            coordinator, config_data, sensor_type, name_suffix, extract_value, get_hourly_attrs
+            coordinator,
+            config_data,
+            sensor_type,
+            name_suffix,
+            extract_value,
+            get_hourly_attrs,
         )
 
     def _calculate_hourly_averages(self, data: Dict[str, Any]) -> Dict[str, float]:

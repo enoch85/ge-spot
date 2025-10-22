@@ -87,8 +87,16 @@ def test_parsers():
         # Provide realistic data structure
         mock_data = {
             "ELEC_NEM_SUMMARY": [
-                {"REGIONID": "NSW1", "PRICE": 100.0, "SETTLEMENTDATE": "2025-10-01T00:00:00+00:00"},
-                {"REGIONID": "NSW1", "PRICE": 102.0, "SETTLEMENTDATE": "2025-10-01T00:05:00+00:00"},
+                {
+                    "REGIONID": "NSW1",
+                    "PRICE": 100.0,
+                    "SETTLEMENTDATE": "2025-10-01T00:00:00+00:00",
+                },
+                {
+                    "REGIONID": "NSW1",
+                    "PRICE": 102.0,
+                    "SETTLEMENTDATE": "2025-10-01T00:05:00+00:00",
+                },
             ]
         }
 
@@ -139,7 +147,9 @@ def test_parsers():
     print("TEST 5: Energy-Charts Parser Structure")
     print("-" * 80)
     try:
-        from custom_components.ge_spot.api.parsers.energy_charts_parser import EnergyChartsParser
+        from custom_components.ge_spot.api.parsers.energy_charts_parser import (
+            EnergyChartsParser,
+        )
 
         parser = EnergyChartsParser()
 

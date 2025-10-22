@@ -48,18 +48,24 @@ class OmieParser(BasePriceParser):
         raw_data_payload = data.get("raw_data")
         source_timezone = data.get("timezone", "Europe/Madrid")
         area = data.get("area", "ES")
-        _LOGGER.debug(f"[OmieParser] Received data for Area: {area}, Timezone: {source_timezone}")
+        _LOGGER.debug(
+            f"[OmieParser] Received data for Area: {area}, Timezone: {source_timezone}"
+        )
 
         result = {
             "interval_raw": {},
-            "currency": data.get("currency", Currency.EUR),  # Use provided currency or default
+            "currency": data.get(
+                "currency", Currency.EUR
+            ),  # Use provided currency or default
             "source": data.get("source", Source.OMIE),
             "timezone": source_timezone,
             "metadata": {"fetched_at": data.get("fetched_at"), "area": area},
         }
 
         if not raw_data_payload or not isinstance(raw_data_payload, dict):
-            _LOGGER.warning("[OmieParser] No valid 'raw_data' dictionary found in input.")
+            _LOGGER.warning(
+                "[OmieParser] No valid 'raw_data' dictionary found in input."
+            )
             return result
 
         # --- Parsing Logic for Today and Tomorrow ---
@@ -72,11 +78,17 @@ class OmieParser(BasePriceParser):
                 _LOGGER.debug(f"[OmieParser] Parsing data for '{day_key}'.")
                 try:
                     # Pass the raw text and let the sub-parser handle it
-                    if raw_text.strip().startswith("{") and raw_text.strip().endswith("}"):
-                        _LOGGER.debug(f"[OmieParser] Attempting to parse '{day_key}' data as JSON.")
+                    if raw_text.strip().startswith("{") and raw_text.strip().endswith(
+                        "}"
+                    ):
+                        _LOGGER.debug(
+                            f"[OmieParser] Attempting to parse '{day_key}' data as JSON."
+                        )
                         self._parse_json(raw_text, result, source_timezone)
                     else:
-                        _LOGGER.debug(f"[OmieParser] Attempting to parse '{day_key}' data as CSV.")
+                        _LOGGER.debug(
+                            f"[OmieParser] Attempting to parse '{day_key}' data as CSV."
+                        )
                         self._parse_csv(raw_text, result, source_timezone)
 
                 except Exception as e:
@@ -112,7 +124,9 @@ class OmieParser(BasePriceParser):
 
         return result
 
-    def _parse_json(self, json_data: str, result: Dict[str, Any], timezone_name: str) -> None:
+    def _parse_json(
+        self, json_data: str, result: Dict[str, Any], timezone_name: str
+    ) -> None:
         """Parse JSON data (less common for OMIE files, might be ESIOS format)."""
         interval_prices = {}
         try:
@@ -126,7 +140,9 @@ class OmieParser(BasePriceParser):
         try:
             data = json.loads(json_data)
             if "PVPC" in data and isinstance(data["PVPC"], list):
-                _LOGGER.debug("[OmieParser/_parse_json] Parsing ESIOS PVPC JSON structure.")
+                _LOGGER.debug(
+                    "[OmieParser/_parse_json] Parsing ESIOS PVPC JSON structure."
+                )
                 for entry in data["PVPC"]:
                     try:
                         day_str = entry.get("Dia")
@@ -172,9 +188,14 @@ class OmieParser(BasePriceParser):
         except json.JSONDecodeError as e:
             _LOGGER.error(f"[OmieParser/_parse_json] Invalid JSON: {e}")
         except Exception as e:
-            _LOGGER.error(f"[OmieParser/_parse_json] Error during JSON parsing: {e}", exc_info=True)
+            _LOGGER.error(
+                f"[OmieParser/_parse_json] Error during JSON parsing: {e}",
+                exc_info=True,
+            )
 
-    def _parse_csv(self, csv_data: str, result: Dict[str, Any], timezone_name: str) -> None:
+    def _parse_csv(
+        self, csv_data: str, result: Dict[str, Any], timezone_name: str
+    ) -> None:
         """Parse CSV-like text data from OMIE files (Updated Logic)."""
         interval_prices = {}
         area = result.get("metadata", {}).get("area", "ES")
@@ -196,7 +217,9 @@ class OmieParser(BasePriceParser):
             # 1. Find the date from the first few lines
             for i, line in enumerate(lines[:5]):  # Check first 5 lines for date
                 parts = line.strip().split(";")
-                if len(parts) > 3 and parts[3].count("/") == 2:  # Look for DD/MM/YYYY in 4th column
+                if (
+                    len(parts) > 3 and parts[3].count("/") == 2
+                ):  # Look for DD/MM/YYYY in 4th column
                     try:
                         # Validate it looks like a date
                         datetime.strptime(parts[3], "%d/%m/%Y")
@@ -216,8 +239,12 @@ class OmieParser(BasePriceParser):
             # 2. Find the relevant price line based on area
             price_line_prefix_es = "Precio marginal en el sistema español"
             price_line_prefix_pt = "Precio marginal en el sistema portugués"
-            target_prefix = price_line_prefix_pt if area.upper() == "PT" else price_line_prefix_es
-            fallback_prefix = price_line_prefix_es if area.upper() == "PT" else price_line_prefix_pt
+            target_prefix = (
+                price_line_prefix_pt if area.upper() == "PT" else price_line_prefix_es
+            )
+            fallback_prefix = (
+                price_line_prefix_es if area.upper() == "PT" else price_line_prefix_pt
+            )
 
             for i, line in enumerate(lines):
                 stripped_line = line.strip()
@@ -320,5 +347,6 @@ class OmieParser(BasePriceParser):
 
         except Exception as e:
             _LOGGER.error(
-                f"[OmieParser/_parse_csv] Error during CSV processing: {e}", exc_info=True
+                f"[OmieParser/_parse_csv] Error during CSV processing: {e}",
+                exc_info=True,
             )

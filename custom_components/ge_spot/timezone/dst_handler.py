@@ -49,11 +49,15 @@ class DSTHandler:
             return False, ""
         elif diff_hours < 24:
             # Spring forward day (23 hours)
-            _LOGGER.debug(f"Detected DST spring forward day: {dt.date()} with {diff_hours} hours")
+            _LOGGER.debug(
+                f"Detected DST spring forward day: {dt.date()} with {diff_hours} hours"
+            )
             return True, DSTTransitionType.SPRING_FORWARD
         else:
             # Fall back day (25 hours)
-            _LOGGER.debug(f"Detected DST fall back day: {dt.date()} with {diff_hours} hours")
+            _LOGGER.debug(
+                f"Detected DST fall back day: {dt.date()} with {diff_hours} hours"
+            )
             return True, DSTTransitionType.FALL_BACK
 
     def get_dst_offset_info(self, dt: Optional[datetime] = None) -> str:

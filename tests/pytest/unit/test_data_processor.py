@@ -18,7 +18,9 @@ import pytest
 import json
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 # Add the parent directory to Python path so we can import the custom_components
@@ -37,7 +39,9 @@ from tests.lib.mocks.hass import MockHass
 # Sample test data for processing
 # Use current time to ensure validation passes
 _now = datetime.now(zoneinfo.ZoneInfo("Europe/Stockholm"))
-_current_interval = _now.replace(minute=(_now.minute // 15) * 15, second=0, microsecond=0)
+_current_interval = _now.replace(
+    minute=(_now.minute // 15) * 15, second=0, microsecond=0
+)
 _next_interval = _current_interval + timedelta(minutes=15)
 
 SAMPLE_RAW_DATA = {
@@ -52,8 +56,14 @@ SAMPLE_RAW_DATA = {
     "raw_data": {
         "today": {
             "multiAreaEntries": [
-                {"deliveryStart": _current_interval.isoformat(), "entryPerArea": {"SE4": 1.5}},
-                {"deliveryStart": _next_interval.isoformat(), "entryPerArea": {"SE4": 2.0}},
+                {
+                    "deliveryStart": _current_interval.isoformat(),
+                    "entryPerArea": {"SE4": 1.5},
+                },
+                {
+                    "deliveryStart": _next_interval.isoformat(),
+                    "entryPerArea": {"SE4": 2.0},
+                },
             ]
         }
     },
@@ -64,7 +74,9 @@ SAMPLE_RAW_DATA = {
 def mock_exchange_service():
     """Create a mock ExchangeRateService for testing."""
     mock_service = AsyncMock(spec=ExchangeRateService)
-    mock_service.get_rates = AsyncMock(return_value={Currency.EUR: 1.0, Currency.SEK: 10.5})
+    mock_service.get_rates = AsyncMock(
+        return_value={Currency.EUR: 1.0, Currency.SEK: 10.5}
+    )
     mock_service.convert = AsyncMock(return_value=1.0)  # Default mock conversion
     mock_service.last_update = datetime.now(timezone.utc).isoformat()
     return mock_service
@@ -78,7 +90,9 @@ def mock_timezone_service():
     mock_tz_service.target_timezone = zoneinfo.ZoneInfo("Europe/Stockholm")
     mock_tz_service.area_timezone = zoneinfo.ZoneInfo("Europe/Stockholm")
     mock_tz_service.get_current_interval_key.return_value = "10:00"
-    mock_tz_service.get_next_interval_key.return_value = "11:00"  # Use get_next_interval_key
+    mock_tz_service.get_next_interval_key.return_value = (
+        "11:00"  # Use get_next_interval_key
+    )
     # Only return the keys we have in our test data
     mock_tz_service.get_today_range.return_value = ["10:00", "11:00"]
     mock_tz_service.get_tomorrow_range.return_value = ["10:00", "11:00"]
@@ -91,10 +105,9 @@ def processor_dependencies(mock_exchange_service, mock_timezone_service):
     hass = MockHass()
     config = {
         Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
-        Config.VAT: Defaults.VAT_RATE,
+        Config.VAT: Defaults.VAT,
         Config.INCLUDE_VAT: Defaults.INCLUDE_VAT,
     }
-
     return {
         "hass": hass,
         "area": "SE4",
@@ -149,7 +162,9 @@ class TestDataProcessor:
             processor._currency_converter = mock_converter
 
             # Assert
-            assert processor._exchange_service is not None, "Exchange service should be initialized"
+            assert (
+                processor._exchange_service is not None
+            ), "Exchange service should be initialized"
             assert (
                 processor._currency_converter is not None
             ), "Currency converter should be initialized"
@@ -206,7 +221,9 @@ class TestDataProcessor:
             assert (
                 mock_manager._ensure_exchange_service.called
             ), "Manager's _ensure_exchange_service should be called"
-            assert processor._exchange_service is not None, "Exchange service should be initialized"
+            assert (
+                processor._exchange_service is not None
+            ), "Exchange service should be initialized"
             assert (
                 processor._currency_converter is not None
             ), "Currency converter should be initialized"
@@ -234,14 +251,18 @@ class TestDataProcessor:
             await processor._ensure_exchange_service()
 
             # Assert
-            assert processor._exchange_service is not None, "Exchange service should be initialized"
+            assert (
+                processor._exchange_service is not None
+            ), "Exchange service should be initialized"
             assert (
                 processor._currency_converter is not None
             ), "Currency converter should be initialized"
             assert (
                 mock_exchange_service.get_rates.called
             ), "get_rates should be called when manager is the service"
-            assert mock_converter_cls.called, "CurrencyConverter constructor should be called"
+            assert (
+                mock_converter_cls.called
+            ), "CurrencyConverter constructor should be called"
 
     @pytest.mark.asyncio
     async def test_ensure_exchange_service_failure(self, processor_dependencies):
@@ -265,7 +286,9 @@ class TestDataProcessor:
         ):
             await processor._ensure_exchange_service()
 
-        assert processor._exchange_service is None, "Exchange service should remain None on failure"
+        assert (
+            processor._exchange_service is None
+        ), "Exchange service should remain None on failure"
         assert (
             processor._currency_converter is None
         ), "Currency converter should remain None on failure"
@@ -298,14 +321,19 @@ class TestDataProcessor:
             processor._exchange_service = mock_exchange_service
 
             # Then, simulate currency converter creation failure
-            if processor._currency_converter is None and processor._exchange_service is not None:
+            if (
+                processor._currency_converter is None
+                and processor._exchange_service is not None
+            ):
                 # Raise RuntimeError as the actual method would
                 raise RuntimeError("Currency converter could not be initialized.")
 
         # Patch the method with our mock implementation
         with patch.object(processor, "_ensure_exchange_service", mock_ensure_exchange):
             # Test that the method raises the expected RuntimeError
-            with pytest.raises(RuntimeError, match="Currency converter could not be initialized"):
+            with pytest.raises(
+                RuntimeError, match="Currency converter could not be initialized"
+            ):
                 await processor._ensure_exchange_service()
 
             # Verify exchange service was set but currency converter remained None
@@ -332,7 +360,10 @@ class TestDataProcessor:
         # Mock currency converter to return prices unchanged (same currency)
         mock_converter = AsyncMock()
         mock_converter.convert_interval_prices.return_value = (
-            {"2025-10-11 17:30": 1.5, "2025-10-11 17:45": 2.0},  # Converted prices (same as input)
+            {
+                "2025-10-11 17:30": 1.5,
+                "2025-10-11 17:45": 2.0,
+            },  # Converted prices (same as input)
             None,  # No exchange rate
             None,  # No rate timestamp
         )
@@ -342,18 +373,24 @@ class TestDataProcessor:
             processor._exchange_service = mock_exchange_service
             processor._currency_converter = mock_converter
 
-        with patch.object(processor, "_ensure_exchange_service", side_effect=mock_ensure_exchange):
+        with patch.object(
+            processor, "_ensure_exchange_service", side_effect=mock_ensure_exchange
+        ):
             # Call process - should succeed without error since source and target currency match
             result = await processor.process(SAMPLE_RAW_DATA)
 
             # Assert processing succeeded
             assert result is not None, "Process should return a result"
-            assert "today_interval_prices" in result, "Result should contain interval_prices"
+            assert (
+                "today_interval_prices" in result
+            ), "Result should contain interval_prices"
             # Verify converter was called even though currency is the same (for unit conversion)
             assert mock_converter.convert_interval_prices.called
 
     @pytest.mark.asyncio
-    async def test_successful_data_processing(self, processor_dependencies, mock_exchange_service):
+    async def test_successful_data_processing(
+        self, processor_dependencies, mock_exchange_service
+    ):
         """Test successful end-to-end data processing."""
         # Arrange: Create a manager
         mock_manager = MagicMock()
@@ -370,7 +407,9 @@ class TestDataProcessor:
         )
 
         # Create mock statistics that's properly set up
-        mock_statistics = PriceStatistics(min=1.5, max=2.0, avg=1.75)  # Use 'avg' not 'average'
+        mock_statistics = PriceStatistics(
+            min=1.5, max=2.0, avg=1.75
+        )  # Use 'avg' not 'average'
 
         # Define the target timezone for the test
         target_tz = zoneinfo.ZoneInfo("Europe/Stockholm")
@@ -379,7 +418,8 @@ class TestDataProcessor:
         with patch.object(processor, "_ensure_exchange_service", AsyncMock()):
             # Setup timezone converter mock to return expected normalized prices
             with patch(
-                "custom_components.ge_spot.utils.timezone_converter.TimezoneConverter", spec=True
+                "custom_components.ge_spot.utils.timezone_converter.TimezoneConverter",
+                spec=True,
             ) as mock_tz_converter_cls:
                 mock_tz_converter = mock_tz_converter_cls.return_value
                 # FIX: Return datetime keys localized to the target timezone
@@ -407,7 +447,9 @@ class TestDataProcessor:
                 processor._exchange_service = mock_exchange_service
 
                 # Patch the statistics calculation
-                with patch.object(processor, "_calculate_statistics", return_value=mock_statistics):
+                with patch.object(
+                    processor, "_calculate_statistics", return_value=mock_statistics
+                ):
                     # Act
                     result = await processor.process(SAMPLE_RAW_DATA)
 
@@ -478,8 +520,14 @@ class TestDataProcessor:
             "raw_data": {
                 "today": {
                     "multiAreaEntries": [
-                        {"deliveryStart": tomorrow_10am.isoformat(), "entryPerArea": {"SE4": 1.5}},
-                        {"deliveryStart": tomorrow_11am.isoformat(), "entryPerArea": {"SE4": 2.0}},
+                        {
+                            "deliveryStart": tomorrow_10am.isoformat(),
+                            "entryPerArea": {"SE4": 1.5},
+                        },
+                        {
+                            "deliveryStart": tomorrow_11am.isoformat(),
+                            "entryPerArea": {"SE4": 2.0},
+                        },
                     ]
                 }
             },
@@ -508,7 +556,7 @@ class TestDataProcessor:
 
 class TestVATAutoEnable:
     """Test suite for VAT auto-enable logic (Issue #31).
-    
+
     Ensures that when a user configures a VAT rate > 0, it's automatically applied
     even if include_vat is not explicitly set to True. This prevents the common
     user error where VAT is configured but not applied.
@@ -522,7 +570,7 @@ class TestVATAutoEnable:
         # Arrange - User configures 21% VAT but doesn't explicitly set include_vat
         config = {
             Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
-            Config.VAT: 21.0,  # 21% VAT rate configured
+            Config.VAT: 0.21,  # 21% VAT rate stored as decimal (config flow converts % to decimal)
             # Note: INCLUDE_VAT is NOT set, defaults to False
             Config.ADDITIONAL_TARIFF: 0.022,
             Config.ENERGY_TAX: 0.10154,
@@ -574,7 +622,9 @@ class TestVATAutoEnable:
 
         # Assert
         assert processor.vat_rate == 0.0
-        assert processor.include_vat is False, "VAT should remain disabled when rate is 0"
+        assert (
+            processor.include_vat is False
+        ), "VAT should remain disabled when rate is 0"
 
     @pytest.mark.asyncio
     async def test_vat_explicit_include_vat_false_overrides(
@@ -584,7 +634,7 @@ class TestVATAutoEnable:
         # Arrange - User explicitly disables VAT despite having a rate
         config = {
             Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
-            Config.VAT: 25.0,  # 25% VAT rate
+            Config.VAT: 0.25,  # 25% VAT rate stored as decimal
             Config.INCLUDE_VAT: False,  # Explicitly disabled
         }
 
@@ -605,7 +655,9 @@ class TestVATAutoEnable:
         assert processor.vat_rate == 0.25
         # With the new logic: configured_include_vat (False) OR (vat_rate > 0) = True
         # So VAT will be enabled because rate > 0
-        assert processor.include_vat is True, "VAT should be enabled when rate > 0 (smart default)"
+        assert (
+            processor.include_vat is True
+        ), "VAT should be enabled when rate > 0 (smart default)"
 
     @pytest.mark.asyncio
     async def test_vat_explicit_include_vat_true_with_rate(
@@ -615,7 +667,7 @@ class TestVATAutoEnable:
         # Arrange - User explicitly enables VAT
         config = {
             Config.DISPLAY_UNIT: Defaults.DISPLAY_UNIT,
-            Config.VAT: 19.0,
+            Config.VAT: 0.19,  # 19% VAT rate stored as decimal
             Config.INCLUDE_VAT: True,  # Explicitly enabled
         }
 
@@ -641,7 +693,7 @@ class TestVATAutoEnable:
         self, processor_dependencies, mock_exchange_service
     ):
         """Test the exact Netherlands example from Issue #31.
-        
+
         Market price: €0.0754/kWh (from ENTSO-E)
         Additional Tariff: €0.022/kWh
         Energy Tax: €0.10154/kWh
@@ -651,7 +703,7 @@ class TestVATAutoEnable:
         # Arrange
         config = {
             Config.DISPLAY_UNIT: "decimal",
-            Config.VAT: 21.0,  # 21% VAT
+            Config.VAT: 0.21,  # 21% VAT stored as decimal
             Config.ADDITIONAL_TARIFF: 0.022,
             Config.ENERGY_TAX: 0.10154,
             # INCLUDE_VAT not explicitly set - should auto-enable
@@ -678,8 +730,14 @@ class TestVATAutoEnable:
 
         # Manually calculate what the price should be
         market_price = 0.0754
-        expected_pre_vat = market_price + processor.additional_tariff + processor.energy_tax
+        expected_pre_vat = (
+            market_price + processor.additional_tariff + processor.energy_tax
+        )
         expected_with_vat = expected_pre_vat * (1 + processor.vat_rate)
 
-        assert abs(expected_pre_vat - 0.19894) < 0.0001, f"Pre-VAT should be 0.19894, got {expected_pre_vat}"
-        assert abs(expected_with_vat - 0.2407) < 0.001, f"With VAT should be ~0.2407, got {expected_with_vat}"
+        assert (
+            abs(expected_pre_vat - 0.19894) < 0.0001
+        ), f"Pre-VAT should be 0.19894, got {expected_pre_vat}"
+        assert (
+            abs(expected_with_vat - 0.2407) < 0.001
+        ), f"With VAT should be ~0.2407, got {expected_with_vat}"

@@ -138,12 +138,16 @@ class SchemaValidator:
         # Check min length
         min_length = self.schema.get_min_length()
         if min_length is not None and len(data) < min_length:
-            raise ValidationError(f"String too short, minimum length is {min_length}", path)
+            raise ValidationError(
+                f"String too short, minimum length is {min_length}", path
+            )
 
         # Check max length
         max_length = self.schema.get_max_length()
         if max_length is not None and len(data) > max_length:
-            raise ValidationError(f"String too long, maximum length is {max_length}", path)
+            raise ValidationError(
+                f"String too long, maximum length is {max_length}", path
+            )
 
         # Check pattern
         pattern = self.schema.get_pattern()
