@@ -2,8 +2,10 @@
 Quick validation test for parser functionality after 15-min migration.
 Tests that parsers return correct data structures and keys.
 """
+
 import sys
 from datetime import datetime, timezone
+
 
 def test_parsers():
     """Test all parsers return correct keys and structure."""
@@ -35,6 +37,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ ENTSOE parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -68,6 +71,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ ComEd parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -101,6 +105,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ AEMO parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -125,6 +130,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ NordPool parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -149,6 +155,7 @@ def test_parsers():
     except Exception as e:
         print(f"❌ Energy-Charts parser test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -166,6 +173,7 @@ def test_parsers():
     print()
 
     return True
+
 
 if __name__ == "__main__":
     success = test_parsers()

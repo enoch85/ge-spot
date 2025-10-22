@@ -8,6 +8,8 @@ from .price import (
     TomorrowExtremaPriceSensor,
     TomorrowAveragePriceSensor,
     TomorrowSensorMixin,
+    HourlyAverageSensor,
+    TomorrowHourlyAverageSensor,
 )
 
 __all__ = [
@@ -18,4 +20,6 @@ __all__ = [
     "TomorrowExtremaPriceSensor",
     "TomorrowAveragePriceSensor",
     "TomorrowSensorMixin",
+    "HourlyAverageSensor",
+    "TomorrowHourlyAverageSensor",
 ]

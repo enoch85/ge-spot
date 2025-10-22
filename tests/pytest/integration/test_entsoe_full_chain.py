@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Go up two levels to reach the workspace root where custom_components is located
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 from custom_components.ge_spot.api.entsoe import EntsoeAPI
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
@@ -90,7 +90,7 @@ SAMPLE_ENTSOE_RAW_DATA = {
             </TimeSeries>
         </Period>
     </Publication_MarketDocument>
-    """
+    """,
     }
 }
 
@@ -125,22 +125,17 @@ SAMPLE_ENTSOE_PARSED_DATA = {
             "2025-04-27T18:00:00Z": 59.94,
             "2025-04-27T19:00:00Z": 58.23,
             "2025-04-27T20:00:00Z": 52.47,
-            "2025-04-27T21:00:00Z": 46.92
-        }
+            "2025-04-27T21:00:00Z": 46.92,
+        },
     }
 }
 
 # Mock exchange rates
 MOCK_EXCHANGE_RATES = {
-    "rates": {
-        "SEK": 11.32,
-        "NOK": 10.56,
-        "DKK": 7.45,
-        "EUR": 1.0,
-        "USD": 1.08
-    },
-    "base": "EUR"
+    "rates": {"SEK": 11.32, "NOK": 10.56, "DKK": 7.45, "EUR": 1.0, "USD": 1.08},
+    "base": "EUR",
 }
+
 
 @pytest.mark.asyncio
 async def test_entsoe_full_chain(monkeypatch):
@@ -202,26 +197,40 @@ async def test_entsoe_full_chain(monkeypatch):
 
     # Validate parsed data format
     assert parsed_data is not None, "Parsed data should not be None"
-    assert isinstance(parsed_data, dict), f"Parsed data should be a dictionary, got {type(parsed_data)}"
+    assert isinstance(
+        parsed_data, dict
+    ), f"Parsed data should be a dictionary, got {type(parsed_data)}"
 
     # Required fields validation
-    assert "today_interval_prices" in parsed_data, "Parsed data should contain 'interval_prices' key"
+    assert (
+        "today_interval_prices" in parsed_data
+    ), "Parsed data should contain 'interval_prices' key"
     assert "source" in parsed_data, "Parsed data should contain 'source' key"
-    assert parsed_data["source"] == Source.ENTSOE, f"Source should be {Source.ENTSOE}, got {parsed_data.get('source')}"
+    assert (
+        parsed_data["source"] == Source.ENTSOE
+    ), f"Source should be {Source.ENTSOE}, got {parsed_data.get('source')}"
     assert parsed_data["area"] == area, f"Area should be {area}, got {parsed_data.get('area')}"
     assert "currency" in parsed_data, "Parsed data should contain a 'currency' key"
-    assert parsed_data["currency"] == Currency.EUR, f"ENTSOE currency should be EUR, got {parsed_data.get('currency')}"
+    assert (
+        parsed_data["currency"] == Currency.EUR
+    ), f"ENTSOE currency should be EUR, got {parsed_data.get('currency')}"
 
     # Validate interval prices
     interval_prices = parsed_data.get("today_interval_prices", {})
-    assert isinstance(interval_prices, dict), f"interval_prices should be a dictionary, got {type(interval_prices)}"
+    assert isinstance(
+        interval_prices, dict
+    ), f"interval_prices should be a dictionary, got {type(interval_prices)}"
 
     # Validation: ENTSOE should return data
-    assert interval_prices, "No interval prices found - this indicates a real issue with the API or parser"
+    assert (
+        interval_prices
+    ), "No interval prices found - this indicates a real issue with the API or parser"
 
     # Check for reasonable number of intervals (at least 24 for day-ahead prices, could be more with 15-min intervals)
     min_expected_intervals = 24
-    assert len(interval_prices) >= min_expected_intervals, f"Expected at least {min_expected_intervals} interval prices, got {len(interval_prices)}"
+    assert (
+        len(interval_prices) >= min_expected_intervals
+    ), f"Expected at least {min_expected_intervals} interval prices, got {len(interval_prices)}"
 
     logger.info(f"Parsed data contains {len(interval_prices)} interval prices")
 
@@ -229,21 +238,50 @@ async def test_entsoe_full_chain(monkeypatch):
     for timestamp, price in interval_prices.items():
         try:
             # Validate ISO timestamp format
-            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
 
             # If using static mock data, skip the 'reasonable range' assertion
             # Only check range for non-mock timestamps
-            mock_dates = {"2025-04-26T22:00:00Z", "2025-04-26T23:00:00Z", "2025-04-27T00:00:00Z", "2025-04-27T01:00:00Z", "2025-04-27T02:00:00Z", "2025-04-27T03:00:00Z", "2025-04-27T04:00:00Z", "2025-04-27T05:00:00Z", "2025-04-27T06:00:00Z", "2025-04-27T07:00:00Z", "2025-04-27T08:00:00Z", "2025-04-27T09:00:00Z", "2025-04-27T10:00:00Z", "2025-04-27T11:00:00Z", "2025-04-27T12:00:00Z", "2025-04-27T13:00:00Z", "2025-04-27T14:00:00Z", "2025-04-27T15:00:00Z", "2025-04-27T16:00:00Z", "2025-04-27T17:00:00Z", "2025-04-27T18:00:00Z", "2025-04-27T19:00:00Z", "2025-04-27T20:00:00Z", "2025-04-27T21:00:00Z"}
+            mock_dates = {
+                "2025-04-26T22:00:00Z",
+                "2025-04-26T23:00:00Z",
+                "2025-04-27T00:00:00Z",
+                "2025-04-27T01:00:00Z",
+                "2025-04-27T02:00:00Z",
+                "2025-04-27T03:00:00Z",
+                "2025-04-27T04:00:00Z",
+                "2025-04-27T05:00:00Z",
+                "2025-04-27T06:00:00Z",
+                "2025-04-27T07:00:00Z",
+                "2025-04-27T08:00:00Z",
+                "2025-04-27T09:00:00Z",
+                "2025-04-27T10:00:00Z",
+                "2025-04-27T11:00:00Z",
+                "2025-04-27T12:00:00Z",
+                "2025-04-27T13:00:00Z",
+                "2025-04-27T14:00:00Z",
+                "2025-04-27T15:00:00Z",
+                "2025-04-27T16:00:00Z",
+                "2025-04-27T17:00:00Z",
+                "2025-04-27T18:00:00Z",
+                "2025-04-27T19:00:00Z",
+                "2025-04-27T20:00:00Z",
+                "2025-04-27T21:00:00Z",
+            }
             if timestamp not in mock_dates:
                 now = datetime.now().astimezone()
                 three_days_ago = now - timedelta(days=3)
                 five_days_ahead = now + timedelta(days=5)
-                assert three_days_ago <= dt <= five_days_ahead, f"Timestamp {timestamp} outside reasonable range"
+                assert (
+                    three_days_ago <= dt <= five_days_ahead
+                ), f"Timestamp {timestamp} outside reasonable range"
         except ValueError:
             pytest.fail(f"Invalid timestamp format: '{timestamp}'")
 
         # Validate price
-        assert isinstance(price, float), f"Price should be a float, got {type(price)} for timestamp {timestamp}"
+        assert isinstance(
+            price, float
+        ), f"Price should be a float, got {type(price)} for timestamp {timestamp}"
 
         # Real-world validation: Prices should be within reasonable bounds for electricity markets
         assert -1000 <= price <= 5000, f"Price {price} for {timestamp} is outside reasonable range"
@@ -264,11 +302,15 @@ async def test_entsoe_full_chain(monkeypatch):
         price_converted = await exchange_service.convert(price, source_currency, target_currency)
 
         # Validate conversion result
-        assert isinstance(price_converted, float), f"Converted price should be a float, got {type(price_converted)}"
+        assert isinstance(
+            price_converted, float
+        ), f"Converted price should be a float, got {type(price_converted)}"
 
         # Validation: Conversion should produce non-zero results for non-zero inputs
         if abs(price) > 0.001:
-            assert abs(price_converted) > 0.001, f"Conversion produced unexpectedly small value: {price_converted} from {price}"
+            assert (
+                abs(price_converted) > 0.001
+            ), f"Conversion produced unexpectedly small value: {price_converted} from {price}"
 
         # Convert MWh -> kWh (this is what users see in the UI)
         price_kwh = price_converted / 1000
@@ -276,32 +318,42 @@ async def test_entsoe_full_chain(monkeypatch):
 
     # Step 4: Validate today's hours
     # This verifies that we can extract data for the current day, which is a core feature
-    market_tz = pytz.timezone('Europe/Stockholm')
+    market_tz = pytz.timezone("Europe/Stockholm")
 
     # Modify today's date to match our mocked data timestamps
     mock_today = datetime.strptime("2025-04-27", "%Y-%m-%d").date()
 
     # Find all hours for the mock today in the local timezone
-    today_hours = [ts for ts in converted_prices if
-                    datetime.fromisoformat(ts.replace('Z', '+00:00')).astimezone(market_tz).date() == mock_today]
+    today_hours = [
+        ts
+        for ts in converted_prices
+        if datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(market_tz).date()
+        == mock_today
+    ]
 
     # Validation: Should have complete data for today
     expected_hours = 24
-    assert len(today_hours) >= expected_hours - 2, f"Expected at least {expected_hours-2} hourly prices for today, got {len(today_hours)}"
+    assert (
+        len(today_hours) >= expected_hours - 2
+    ), f"Expected at least {expected_hours-2} hourly prices for today, got {len(today_hours)}"
 
     # Verify timestamps are properly ordered and contiguous
     sorted_hours = sorted(today_hours)
     for i in range(1, len(sorted_hours)):
-        prev_dt = datetime.fromisoformat(sorted_hours[i-1].replace('Z', '+00:00'))
-        curr_dt = datetime.fromisoformat(sorted_hours[i].replace('Z', '+00:00'))
+        prev_dt = datetime.fromisoformat(sorted_hours[i - 1].replace("Z", "+00:00"))
+        curr_dt = datetime.fromisoformat(sorted_hours[i].replace("Z", "+00:00"))
         hour_diff = (curr_dt - prev_dt).total_seconds() / 3600
 
         # Validation: Hours should be sequential
-        assert abs(hour_diff - 1.0) < 0.1, f"Non-hourly gap between {sorted_hours[i-1]} and {sorted_hours[i]}"
+        assert (
+            abs(hour_diff - 1.0) < 0.1
+        ), f"Non-hourly gap between {sorted_hours[i-1]} and {sorted_hours[i]}"
 
     # Log some example values for verification
     logger.info(f"Today's hours ({len(today_hours)}): {sorted_hours[:3]}... to {sorted_hours[-3:]}")
-    logger.info(f"Price range: {min(converted_prices[ts] for ts in today_hours):.4f} to {max(converted_prices[ts] for ts in today_hours):.4f} {target_currency}/kWh")
+    logger.info(
+        f"Price range: {min(converted_prices[ts] for ts in today_hours):.4f} to {max(converted_prices[ts] for ts in today_hours):.4f} {target_currency}/kWh"
+    )
 
     # Check if price variation exists (real markets have price variation)
     prices = [converted_prices[ts] for ts in today_hours]
@@ -309,14 +361,19 @@ async def test_entsoe_full_chain(monkeypatch):
     assert price_variation > 0.001, "No price variation found - suspicious for real market data"
 
     # Test complete - if we get here, the full chain works correctly
-    logger.info("ENTSO-E Full Chain Test: PASS - All steps from API fetch to final price conversion are working")
+    logger.info(
+        "ENTSO-E Full Chain Test: PASS - All steps from API fetch to final price conversion are working"
+    )
+
 
 if __name__ == "__main__":
     import asyncio
+
     print("Starting ENTSO-E full-chain test...")
     try:
         asyncio.run(test_entsoe_full_chain())
     except Exception as e:
         import traceback
+
         print("Exception occurred:")
         traceback.print_exc()

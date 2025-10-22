@@ -34,7 +34,9 @@ try:
     print(f"✅ get_intervals_per_day() = {TimeInterval.get_intervals_per_day()}")
 
     assert TimeInterval.get_intervals_per_day_dst_spring() == 92, "Should return 92 for DST spring"
-    print(f"✅ get_intervals_per_day_dst_spring() = {TimeInterval.get_intervals_per_day_dst_spring()}")
+    print(
+        f"✅ get_intervals_per_day_dst_spring() = {TimeInterval.get_intervals_per_day_dst_spring()}"
+    )
 
     assert TimeInterval.get_intervals_per_day_dst_fall() == 100, "Should return 100 for DST fall"
     print(f"✅ get_intervals_per_day_dst_fall() = {TimeInterval.get_intervals_per_day_dst_fall()}")
@@ -46,6 +48,7 @@ except AssertionError as e:
 except Exception as e:
     print(f"❌ TEST 1 ERROR: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -73,7 +76,6 @@ try:
     assert ":" in next_key, "Next interval key should contain ':'"
     print(f"✅ get_next_interval_key() = {next_key}")
 
-
     # Verify it's 15 minutes ahead
     current_dt = datetime.now(utc_tz)
     minute = current_dt.minute
@@ -86,6 +88,7 @@ try:
 except Exception as e:
     print(f"❌ TEST 2 ERROR: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 except AssertionError as e:
@@ -94,6 +97,7 @@ except AssertionError as e:
 except Exception as e:
     print(f"❌ TEST 2 ERROR: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -103,7 +107,10 @@ print()
 print("TEST 3: Data Structures")
 print("-" * 80)
 try:
-    from custom_components.ge_spot.api.base.data_structure import IntervalPrice, StandardizedPriceData
+    from custom_components.ge_spot.api.base.data_structure import (
+        IntervalPrice,
+        StandardizedPriceData,
+    )
 
     # Test IntervalPrice dataclass
     interval_price = IntervalPrice(
@@ -112,7 +119,7 @@ try:
         interval_key="00:15",
         currency="EUR",
         timezone="UTC",
-        source="test"
+        source="test",
     )
     assert interval_price.price == 50.0, "Price should be 50.0"
     assert interval_price.interval_key == "00:15", "Interval key should be 00:15"
@@ -126,7 +133,7 @@ try:
         fetched_at=datetime.now(timezone.utc).isoformat(),
         today_interval_prices={"00:00": 45.0, "00:15": 50.0, "00:30": 48.0, "00:45": 52.0},
         current_price=50.0,
-        next_interval_price=52.0
+        next_interval_price=52.0,
     )
     assert len(price_data.today_interval_prices) == 4, "Should have 4 interval prices"
     assert "today_interval_prices" in price_data.__dict__, "Should have today_interval_prices field"
@@ -140,6 +147,7 @@ except AssertionError as e:
 except Exception as e:
     print(f"❌ TEST 3 ERROR: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -151,20 +159,25 @@ print("-" * 80)
 try:
     # Test ENTSO-E parser
     from custom_components.ge_spot.api.parsers.entsoe_parser import EntsoeParser
+
     parser = EntsoeParser()
 
     # Create mock data
     mock_data = {
-        "TimeSeries": [{
-            "Period": [{
-                "resolution": "PT15M",
-                "timeInterval": {"start": "2025-10-01T00:00:00Z"},
-                "Point": [
-                    {"position": "1", "price.amount": "50.0"},
-                    {"position": "2", "price.amount": "51.0"},
+        "TimeSeries": [
+            {
+                "Period": [
+                    {
+                        "resolution": "PT15M",
+                        "timeInterval": {"start": "2025-10-01T00:00:00Z"},
+                        "Point": [
+                            {"position": "1", "price.amount": "50.0"},
+                            {"position": "2", "price.amount": "51.0"},
+                        ],
+                    }
                 ]
-            }]
-        }]
+            }
+        ]
     }
 
     result = parser.parse(mock_data)
@@ -175,6 +188,7 @@ try:
 
     # Test ComEd parser
     from custom_components.ge_spot.api.parsers.comed_parser import ComedParser
+
     comed_parser = ComedParser()
 
     mock_comed = [{"millisUTC": 1696118400000, "price": "45.5"}]
@@ -190,6 +204,7 @@ except AssertionError as e:
 except Exception as e:
     print(f"❌ TEST 4 ERROR: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -219,7 +234,9 @@ try:
     interval_raw = result["interval_raw"]
 
     # Should have 2 fifteen-minute intervals, not 6 five-minute or 1 hourly
-    assert len(interval_raw) == 2, f"Should have 2 fifteen-minute intervals, got {len(interval_raw)}"
+    assert (
+        len(interval_raw) == 2
+    ), f"Should have 2 fifteen-minute intervals, got {len(interval_raw)}"
     print(f"✅ ComEd aggregates to 15-min intervals: {len(interval_raw)} intervals created")
 
     # Check that prices are averaged
@@ -237,6 +254,7 @@ except AssertionError as e:
 except Exception as e:
     print(f"❌ TEST 5 ERROR: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -264,7 +282,9 @@ try:
     interval_raw = result["interval_raw"]
 
     # Should have 2 fifteen-minute intervals
-    assert len(interval_raw) == 2, f"Should have 2 fifteen-minute intervals, got {len(interval_raw)}"
+    assert (
+        len(interval_raw) == 2
+    ), f"Should have 2 fifteen-minute intervals, got {len(interval_raw)}"
     print(f"✅ AEMO aggregates to 15-min intervals: {len(interval_raw)} intervals created")
 
     # Check averaging: (100 + 102 + 104) / 3 = 102.0
@@ -279,6 +299,7 @@ except AssertionError as e:
 except Exception as e:
     print(f"❌ TEST 6 ERROR: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -311,6 +332,7 @@ except AssertionError as e:
 except Exception as e:
     print(f"❌ TEST 7 ERROR: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -327,13 +349,18 @@ try:
     sig = inspect.signature(StandardizedPriceData)
     params = list(sig.parameters.keys())
 
-    assert "today_interval_prices" in params, "StandardizedPriceData should have 'interval_prices' parameter"
-    assert "hourly_prices" not in params, "StandardizedPriceData should NOT have 'hourly_prices' parameter"
+    assert (
+        "today_interval_prices" in params
+    ), "StandardizedPriceData should have 'interval_prices' parameter"
+    assert (
+        "hourly_prices" not in params
+    ), "StandardizedPriceData should NOT have 'hourly_prices' parameter"
     print(f"✅ StandardizedPriceData parameters: {params}")
 
     # Check IntervalCalculator exists (not HourCalculator)
     try:
         from custom_components.ge_spot.timezone.interval_calculator import IntervalCalculator
+
         print(f"✅ IntervalCalculator class exists (not HourCalculator)")
     except ImportError:
         raise AssertionError("IntervalCalculator should exist")
@@ -341,6 +368,7 @@ try:
     # Ensure HourCalculator doesn't exist
     try:
         from custom_components.ge_spot.timezone.hour_calculator import HourCalculator
+
         raise AssertionError("HourCalculator should not exist anymore")
     except ImportError:
         print(f"✅ HourCalculator does not exist (correctly renamed)")
@@ -352,6 +380,7 @@ except AssertionError as e:
 except Exception as e:
     print(f"❌ TEST 8 ERROR: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 

@@ -13,15 +13,12 @@ import asyncio
 import logging
 from unittest.mock import MagicMock, patch, AsyncMock, call
 from datetime import datetime, timedelta, timezone
-import zoneinfo # Add zoneinfo import
+import zoneinfo  # Add zoneinfo import
 import pytest
 import json
 
 # Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Add the parent directory to Python path so we can import the custom_components
@@ -55,34 +52,23 @@ SAMPLE_RAW_DATA = {
     "raw_data": {
         "today": {
             "multiAreaEntries": [
-                {
-                    "deliveryStart": _current_interval.isoformat(),
-                    "entryPerArea": {
-                        "SE4": 1.5
-                    }
-                },
-                {
-                    "deliveryStart": _next_interval.isoformat(),
-                    "entryPerArea": {
-                        "SE4": 2.0
-                    }
-                }
+                {"deliveryStart": _current_interval.isoformat(), "entryPerArea": {"SE4": 1.5}},
+                {"deliveryStart": _next_interval.isoformat(), "entryPerArea": {"SE4": 2.0}},
             ]
         }
-    }
+    },
 }
+
 
 @pytest.fixture
 def mock_exchange_service():
     """Create a mock ExchangeRateService for testing."""
     mock_service = AsyncMock(spec=ExchangeRateService)
-    mock_service.get_rates = AsyncMock(return_value={
-        Currency.EUR: 1.0,
-        Currency.SEK: 10.5
-    })
+    mock_service.get_rates = AsyncMock(return_value={Currency.EUR: 1.0, Currency.SEK: 10.5})
     mock_service.convert = AsyncMock(return_value=1.0)  # Default mock conversion
     mock_service.last_update = datetime.now(timezone.utc).isoformat()
     return mock_service
+
 
 @pytest.fixture
 def mock_timezone_service():
@@ -97,6 +83,7 @@ def mock_timezone_service():
     mock_tz_service.get_today_range.return_value = ["10:00", "11:00"]
     mock_tz_service.get_tomorrow_range.return_value = ["10:00", "11:00"]
     return mock_tz_service
+
 
 @pytest.fixture
 def processor_dependencies(mock_exchange_service, mock_timezone_service):
@@ -114,14 +101,17 @@ def processor_dependencies(mock_exchange_service, mock_timezone_service):
         "target_currency": "SEK",
         "config": config,
         "tz_service": mock_timezone_service,
-        "exchange_service": mock_exchange_service
+        "exchange_service": mock_exchange_service,
     }
+
 
 class TestDataProcessor:
     """Test suite for the DataProcessor class."""
 
     @pytest.mark.asyncio
-    async def test_ensure_exchange_service_success(self, processor_dependencies, mock_exchange_service):
+    async def test_ensure_exchange_service_success(
+        self, processor_dependencies, mock_exchange_service
+    ):
         """Test successful initialization of exchange service and currency converter."""
         # Create a specially mocked manager that won't trigger the get_rates attribute check
         mock_manager = MagicMock(spec=[])  # No attributes to avoid hasattr match
@@ -134,11 +124,11 @@ class TestDataProcessor:
             target_currency=processor_dependencies["target_currency"],
             config=processor_dependencies["config"],
             tz_service=processor_dependencies["tz_service"],
-            manager=mock_manager
+            manager=mock_manager,
         )
 
         # Patch the _ensure_exchange_service method to test our customized version
-        with patch.object(processor, '_ensure_exchange_service') as mock_ensure:
+        with patch.object(processor, "_ensure_exchange_service") as mock_ensure:
             # Call our patched method
             mock_ensure.return_value = None  # Simulate successful completion
             await processor._ensure_exchange_service()
@@ -150,7 +140,9 @@ class TestDataProcessor:
         processor._exchange_service = mock_exchange_service
 
         # Patch the CurrencyConverter to avoid actual initialization
-        with patch('custom_components.ge_spot.coordinator.data_processor.CurrencyConverter') as mock_converter_cls:
+        with patch(
+            "custom_components.ge_spot.coordinator.data_processor.CurrencyConverter"
+        ) as mock_converter_cls:
             mock_converter = mock_converter_cls.return_value
 
             # Manually create the currency converter
@@ -158,10 +150,14 @@ class TestDataProcessor:
 
             # Assert
             assert processor._exchange_service is not None, "Exchange service should be initialized"
-            assert processor._currency_converter is not None, "Currency converter should be initialized"
+            assert (
+                processor._currency_converter is not None
+            ), "Currency converter should be initialized"
 
     @pytest.mark.asyncio
-    async def test_ensure_exchange_service_manager_method(self, processor_dependencies, mock_exchange_service):
+    async def test_ensure_exchange_service_manager_method(
+        self, processor_dependencies, mock_exchange_service
+    ):
         """Test initialization when manager has _ensure_exchange_service method."""
         # Arrange
         mock_manager = MagicMock(spec=[])  # No attributes to avoid hasattr match
@@ -181,11 +177,11 @@ class TestDataProcessor:
             target_currency=processor_dependencies["target_currency"],
             config=processor_dependencies["config"],
             tz_service=processor_dependencies["tz_service"],
-            manager=mock_manager
+            manager=mock_manager,
         )
 
         # Patch the processor's _ensure_exchange_service method
-        with patch.object(processor, '_ensure_exchange_service') as mock_ensure:
+        with patch.object(processor, "_ensure_exchange_service") as mock_ensure:
             # Call our patched method
             mock_ensure.return_value = None  # Simulate successful completion
             await processor._ensure_exchange_service()
@@ -194,7 +190,9 @@ class TestDataProcessor:
             assert mock_ensure.called, "ensure_exchange_service should be called"
 
         # Directly test the specific part we're interested in by setting up processor
-        with patch('custom_components.ge_spot.coordinator.data_processor.CurrencyConverter') as mock_converter_cls:
+        with patch(
+            "custom_components.ge_spot.coordinator.data_processor.CurrencyConverter"
+        ) as mock_converter_cls:
             # Simulate manager._ensure_exchange_service getting called and setting exchange_service
             await mock_manager._ensure_exchange_service()
 
@@ -205,15 +203,23 @@ class TestDataProcessor:
             processor._currency_converter = mock_converter_cls.return_value
 
             # Assert
-            assert mock_manager._ensure_exchange_service.called, "Manager's _ensure_exchange_service should be called"
+            assert (
+                mock_manager._ensure_exchange_service.called
+            ), "Manager's _ensure_exchange_service should be called"
             assert processor._exchange_service is not None, "Exchange service should be initialized"
-            assert processor._currency_converter is not None, "Currency converter should be initialized"
+            assert (
+                processor._currency_converter is not None
+            ), "Currency converter should be initialized"
 
     @pytest.mark.asyncio
-    async def test_ensure_exchange_service_direct_service(self, processor_dependencies, mock_exchange_service):
+    async def test_ensure_exchange_service_direct_service(
+        self, processor_dependencies, mock_exchange_service
+    ):
         """Test initialization when manager is already an ExchangeRateService."""
         # Patch the CurrencyConverter to avoid actual initialization
-        with patch('custom_components.ge_spot.coordinator.data_processor.CurrencyConverter') as mock_converter_cls:
+        with patch(
+            "custom_components.ge_spot.coordinator.data_processor.CurrencyConverter"
+        ) as mock_converter_cls:
             # Create processor with the mock exchange service as manager
             processor = DataProcessor(
                 hass=processor_dependencies["hass"],
@@ -221,7 +227,7 @@ class TestDataProcessor:
                 target_currency=processor_dependencies["target_currency"],
                 config=processor_dependencies["config"],
                 tz_service=processor_dependencies["tz_service"],
-                manager=mock_exchange_service  # Use exchange service directly as manager
+                manager=mock_exchange_service,  # Use exchange service directly as manager
             )
 
             # Act
@@ -229,8 +235,12 @@ class TestDataProcessor:
 
             # Assert
             assert processor._exchange_service is not None, "Exchange service should be initialized"
-            assert processor._currency_converter is not None, "Currency converter should be initialized"
-            assert mock_exchange_service.get_rates.called, "get_rates should be called when manager is the service"
+            assert (
+                processor._currency_converter is not None
+            ), "Currency converter should be initialized"
+            assert (
+                mock_exchange_service.get_rates.called
+            ), "get_rates should be called when manager is the service"
             assert mock_converter_cls.called, "CurrencyConverter constructor should be called"
 
     @pytest.mark.asyncio
@@ -246,18 +256,24 @@ class TestDataProcessor:
             target_currency=processor_dependencies["target_currency"],
             config=processor_dependencies["config"],
             tz_service=processor_dependencies["tz_service"],
-            manager=mock_manager
+            manager=mock_manager,
         )
 
         # Act & Assert
-        with pytest.raises(RuntimeError, match="Exchange service could not be initialized or retrieved"):
+        with pytest.raises(
+            RuntimeError, match="Exchange service could not be initialized or retrieved"
+        ):
             await processor._ensure_exchange_service()
 
         assert processor._exchange_service is None, "Exchange service should remain None on failure"
-        assert processor._currency_converter is None, "Currency converter should remain None on failure"
+        assert (
+            processor._currency_converter is None
+        ), "Currency converter should remain None on failure"
 
     @pytest.mark.asyncio
-    async def test_currency_converter_initialization_failure(self, processor_dependencies, mock_exchange_service):
+    async def test_currency_converter_initialization_failure(
+        self, processor_dependencies, mock_exchange_service
+    ):
         """Test that exceptions during currency converter initialization are properly handled."""
         # Create the processor with a special mock manager that will appear
         # to have an exchange service but will fail when creating the currency converter
@@ -270,7 +286,7 @@ class TestDataProcessor:
             target_currency=processor_dependencies["target_currency"],
             config=processor_dependencies["config"],
             tz_service=processor_dependencies["tz_service"],
-            manager=mock_manager
+            manager=mock_manager,
         )
 
         # We need to ensure processor._exchange_service is None initially
@@ -287,7 +303,7 @@ class TestDataProcessor:
                 raise RuntimeError("Currency converter could not be initialized.")
 
         # Patch the method with our mock implementation
-        with patch.object(processor, '_ensure_exchange_service', mock_ensure_exchange):
+        with patch.object(processor, "_ensure_exchange_service", mock_ensure_exchange):
             # Test that the method raises the expected RuntimeError
             with pytest.raises(RuntimeError, match="Currency converter could not be initialized"):
                 await processor._ensure_exchange_service()
@@ -297,18 +313,20 @@ class TestDataProcessor:
             assert processor._currency_converter is None
 
     @pytest.mark.asyncio
-    async def test_process_with_currency_converter_failure(self, processor_dependencies, mock_exchange_service):
+    async def test_process_with_currency_converter_failure(
+        self, processor_dependencies, mock_exchange_service
+    ):
         """Test process method handling when currency converter works with same currency."""
         # This test verifies that DataProcessor can successfully process data
         # when source and target currency match (still needs converter for unit conversion)
-        
+
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
             area=processor_dependencies["area"],
             target_currency="SEK",  # Same as source currency in SAMPLE_RAW_DATA
             config=processor_dependencies["config"],
             tz_service=processor_dependencies["tz_service"],
-            manager=MagicMock(spec=[])
+            manager=MagicMock(spec=[]),
         )
 
         # Mock currency converter to return prices unchanged (same currency)
@@ -316,7 +334,7 @@ class TestDataProcessor:
         mock_converter.convert_interval_prices.return_value = (
             {"2025-10-11 17:30": 1.5, "2025-10-11 17:45": 2.0},  # Converted prices (same as input)
             None,  # No exchange rate
-            None   # No rate timestamp
+            None,  # No rate timestamp
         )
 
         # Mock _ensure_exchange_service to set both exchange service and currency converter
@@ -324,7 +342,7 @@ class TestDataProcessor:
             processor._exchange_service = mock_exchange_service
             processor._currency_converter = mock_converter
 
-        with patch.object(processor, '_ensure_exchange_service', side_effect=mock_ensure_exchange):
+        with patch.object(processor, "_ensure_exchange_service", side_effect=mock_ensure_exchange):
             # Call process - should succeed without error since source and target currency match
             result = await processor.process(SAMPLE_RAW_DATA)
 
@@ -348,74 +366,90 @@ class TestDataProcessor:
             target_currency=processor_dependencies["target_currency"],
             config=processor_dependencies["config"],
             tz_service=processor_dependencies["tz_service"],
-            manager=mock_manager
+            manager=mock_manager,
         )
 
         # Create mock statistics that's properly set up
-        mock_statistics = PriceStatistics(
-            min=1.5,
-            max=2.0,
-            avg=1.75  # Use 'avg' not 'average'
-        )
+        mock_statistics = PriceStatistics(min=1.5, max=2.0, avg=1.75)  # Use 'avg' not 'average'
 
         # Define the target timezone for the test
         target_tz = zoneinfo.ZoneInfo("Europe/Stockholm")
 
         # Patch _ensure_exchange_service to bypass it
-        with patch.object(processor, '_ensure_exchange_service', AsyncMock()):
+        with patch.object(processor, "_ensure_exchange_service", AsyncMock()):
             # Setup timezone converter mock to return expected normalized prices
-            with patch('custom_components.ge_spot.utils.timezone_converter.TimezoneConverter', spec=True) as mock_tz_converter_cls:
+            with patch(
+                "custom_components.ge_spot.utils.timezone_converter.TimezoneConverter", spec=True
+            ) as mock_tz_converter_cls:
                 mock_tz_converter = mock_tz_converter_cls.return_value
                 # FIX: Return datetime keys localized to the target timezone
                 mock_tz_converter.normalize_interval_prices.return_value = {
                     datetime(2024, 1, 1, 10, 0, tzinfo=target_tz): 1.5,
-                    datetime(2024, 1, 1, 11, 0, tzinfo=target_tz): 2.0
+                    datetime(2024, 1, 1, 11, 0, tzinfo=target_tz): 2.0,
                 }
                 # Mock split_into_today_tomorrow to return today and tomorrow dicts
                 mock_tz_converter.split_into_today_tomorrow.return_value = (
                     {datetime(2024, 1, 1, 10, 0, tzinfo=target_tz): 1.5},  # today
-                    {datetime(2024, 1, 1, 11, 0, tzinfo=target_tz): 2.0}   # tomorrow
+                    {datetime(2024, 1, 1, 11, 0, tzinfo=target_tz): 2.0},  # tomorrow
                 )
                 processor._tz_converter = mock_tz_converter
 
                 # Setup currency converter mock
                 mock_currency_converter = AsyncMock()
-                mock_currency_converter.convert_interval_prices = AsyncMock(return_value=(
-                    {"10:00": 1.5, "11:00": 2.0},  # Converted prices
-                    10.5,  # Exchange rate
-                    datetime.now(timezone.utc).isoformat()  # Rate timestamp
-                ))
+                mock_currency_converter.convert_interval_prices = AsyncMock(
+                    return_value=(
+                        {"10:00": 1.5, "11:00": 2.0},  # Converted prices
+                        10.5,  # Exchange rate
+                        datetime.now(timezone.utc).isoformat(),  # Rate timestamp
+                    )
+                )
                 processor._currency_converter = mock_currency_converter
                 processor._exchange_service = mock_exchange_service
 
                 # Patch the statistics calculation
-                with patch.object(processor, '_calculate_statistics', return_value=mock_statistics):
+                with patch.object(processor, "_calculate_statistics", return_value=mock_statistics):
                     # Act
                     result = await processor.process(SAMPLE_RAW_DATA)
 
                     # Assert
                     assert result is not None, "Process should return a result"
-                    assert "error" not in result, f"Result should not contain an error, got: {result.get('error')}"
-                    assert result.get("today_interval_prices") == {"10:00": 1.5, "11:00": 2.0}, f"Result should have correctly processed interval_prices, got: {result.get('interval_prices')}"
-                    assert result.get("current_price") == 1.5, f"Current price should be correctly set, got: {result.get('current_price')}"
-                    assert result.get("next_interval_price") == 2.0, f"Next interval price should be correctly set, got: {result.get('next_interval_price')}"
-                    assert result.get("source_currency") == "SEK", f"Source currency should be set, got: {result.get('source_currency')}"
-                    assert result.get("target_currency") == "SEK", f"Target currency should be set, got: {result.get('target_currency')}"
+                    assert (
+                        "error" not in result
+                    ), f"Result should not contain an error, got: {result.get('error')}"
+                    assert result.get("today_interval_prices") == {
+                        "10:00": 1.5,
+                        "11:00": 2.0,
+                    }, f"Result should have correctly processed interval_prices, got: {result.get('interval_prices')}"
+                    assert (
+                        result.get("current_price") == 1.5
+                    ), f"Current price should be correctly set, got: {result.get('current_price')}"
+                    assert (
+                        result.get("next_interval_price") == 2.0
+                    ), f"Next interval price should be correctly set, got: {result.get('next_interval_price')}"
+                    assert (
+                        result.get("source_currency") == "SEK"
+                    ), f"Source currency should be set, got: {result.get('source_currency')}"
+                    assert (
+                        result.get("target_currency") == "SEK"
+                    ), f"Target currency should be set, got: {result.get('target_currency')}"
                     assert "statistics" in result, "Result should include statistics"
                     # Note: complete_data will be False because we only have 2 prices, but that's OK for this unit test
 
-
     @pytest.mark.asyncio
-    async def test_validation_failure_triggers_fallback(self, processor_dependencies, mock_exchange_service):
+    async def test_validation_failure_triggers_fallback(
+        self, processor_dependencies, mock_exchange_service
+    ):
         """Test that when validation fails (missing current interval), processing returns error to trigger fallback."""
         # This test verifies that the new validation logic correctly fails when current interval is missing
         # after the morning cutoff time (01:00), which should trigger fallback to next source
-        
+
         # Create mock manager
         mock_manager = MagicMock()
         mock_manager._exchange_service = mock_exchange_service
-        mock_manager.is_in_grace_period.return_value = False  # NOT in grace period - validation should fail strictly
-        
+        mock_manager.is_in_grace_period.return_value = (
+            False  # NOT in grace period - validation should fail strictly
+        )
+
         # Create processor
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
@@ -423,16 +457,16 @@ class TestDataProcessor:
             target_currency=processor_dependencies["target_currency"],
             config=processor_dependencies["config"],
             tz_service=processor_dependencies["tz_service"],
-            manager=mock_manager
+            manager=mock_manager,
         )
-        
+
         # Create test data WITHOUT current interval (future data only)
         # Use tomorrow's data to simulate ENTSO-E behavior at 16:00
         stockholm_tz = zoneinfo.ZoneInfo("Europe/Stockholm")
         tomorrow = datetime.now(stockholm_tz) + timedelta(days=1)
         tomorrow_10am = tomorrow.replace(hour=10, minute=0, second=0, microsecond=0)
         tomorrow_11am = tomorrow.replace(hour=11, minute=0, second=0, microsecond=0)
-        
+
         future_only_data = {
             "source": "entsoe",
             "area": "SE4",
@@ -444,34 +478,29 @@ class TestDataProcessor:
             "raw_data": {
                 "today": {
                     "multiAreaEntries": [
-                        {
-                            "deliveryStart": tomorrow_10am.isoformat(),
-                            "entryPerArea": {
-                                "SE4": 1.5
-                            }
-                        },
-                        {
-                            "deliveryStart": tomorrow_11am.isoformat(),
-                            "entryPerArea": {
-                                "SE4": 2.0
-                            }
-                        }
+                        {"deliveryStart": tomorrow_10am.isoformat(), "entryPerArea": {"SE4": 1.5}},
+                        {"deliveryStart": tomorrow_11am.isoformat(), "entryPerArea": {"SE4": 2.0}},
                     ]
                 }
-            }
+            },
         }
-        
+
         # Patch _ensure_exchange_service
-        with patch.object(processor, '_ensure_exchange_service', AsyncMock()):
+        with patch.object(processor, "_ensure_exchange_service", AsyncMock()):
             # Act - process the future-only data
             result = await processor.process(future_only_data)
-            
+
             # Assert - should return error to trigger fallback
             assert result is not None, "Process should return a result"
-            assert "error" in result, f"Result should contain an error to trigger fallback, got: {result}"
-            assert "validation failed" in result["error"].lower() or "missing current interval" in result["error"].lower(), \
-                f"Error should mention validation failure or missing current interval, got: {result.get('error')}"
-            
+            assert (
+                "error" in result
+            ), f"Result should contain an error to trigger fallback, got: {result}"
+            assert (
+                "validation failed" in result["error"].lower()
+                or "missing current interval" in result["error"].lower()
+            ), f"Error should mention validation failure or missing current interval, got: {result.get('error')}"
+
             # Should indicate the source that failed
-            assert "entsoe" in result.get("error", "").lower() or result.get("attempted_sources") == ["entsoe"], \
-                f"Error should reference the failed source"
+            assert "entsoe" in result.get("error", "").lower() or result.get(
+                "attempted_sources"
+            ) == ["entsoe"], f"Error should reference the failed source"

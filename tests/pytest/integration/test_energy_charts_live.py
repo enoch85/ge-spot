@@ -1,4 +1,5 @@
 """Integration test for Energy-Charts API - Live API calls."""
+
 import pytest
 import logging
 from datetime import datetime, timedelta
@@ -15,30 +16,30 @@ logger = logging.getLogger(__name__)
 # Mock data generator for 15-minute intervals (96 per day)
 def generate_energy_charts_mock_data(base_date_str, bidding_zone="DE-LU"):
     """Generate mock Energy-Charts API response with realistic price data.
-    
+
     Args:
         base_date_str: Date string in format "2025-10-07"
         bidding_zone: Bidding zone code (e.g. "DE-LU", "FR")
-        
+
     Returns:
         Dict with unix_seconds and price arrays (96 intervals)
     """
     base_date = datetime.fromisoformat(base_date_str)
     start_time = base_date.replace(hour=0, minute=0, second=0)
-    
+
     unix_seconds = []
     prices = []
-    
+
     # Generate 96 15-minute intervals
     for i in range(96):
         # Calculate timestamp (15-minute intervals = 900 seconds)
         interval_time = start_time + timedelta(minutes=i * 15)
         unix_ts = int(interval_time.timestamp())
         unix_seconds.append(unix_ts)
-        
+
         # Generate realistic price pattern (30-150 EUR/MWh)
         hour_of_day = i // 4  # Convert interval to hour
-        
+
         # Base price with daily pattern
         # Lower at night (hours 0-6), peak during day (hours 10-20)
         if hour_of_day < 6:
@@ -49,17 +50,17 @@ def generate_energy_charts_mock_data(base_date_str, bidding_zone="DE-LU"):
             base = 100 + ((hour_of_day - 10) * 3)
         else:
             base = 130 - ((hour_of_day - 20) * 10)
-        
+
         # Add 15-minute variation (±5 EUR/MWh)
         variation = -2.5 + (i % 4) * 1.67
         price = round(base + variation, 2)
         prices.append(price)
-    
+
     return {
         "unix_seconds": unix_seconds,
         "price": prices,
         "unit": "EUR / MWh",
-        "license_info": "© Bundesnetzagentur | SMARD.de, CC BY 4.0"
+        "license_info": "© Bundesnetzagentur | SMARD.de, CC BY 4.0",
     }
 
 
@@ -84,8 +85,10 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
     # Create a modified version of fetch_raw_data that returns our mock data
     async def mock_fetch_raw_data(self, area, session=None, **kwargs):
         # Get mock response for this area
-        mock_response = SAMPLE_ENERGY_CHARTS_RESPONSES.get(area, SAMPLE_ENERGY_CHARTS_RESPONSES["DE-LU"])
-        
+        mock_response = SAMPLE_ENERGY_CHARTS_RESPONSES.get(
+            area, SAMPLE_ENERGY_CHARTS_RESPONSES["DE-LU"]
+        )
+
         # Return standardized structure
         return {
             "raw_data": mock_response,
@@ -95,7 +98,7 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
             "bzn": area,
             "source": Source.ENERGY_CHARTS,
             "fetched_at": datetime.now().isoformat(),
-            "license_info": mock_response.get("license_info", "")
+            "license_info": mock_response.get("license_info", ""),
         }
 
     # Patch the method in the EnergyChartsAPI class
@@ -115,7 +118,9 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
         # Validate wrapper structure
         assert "raw_data" in raw_data, "Required field 'raw_data' missing from response"
         raw_api_response = raw_data.get("raw_data")
-        assert isinstance(raw_api_response, dict), f"raw_data should be a dictionary, got {type(raw_api_response)}"
+        assert isinstance(
+            raw_api_response, dict
+        ), f"raw_data should be a dictionary, got {type(raw_api_response)}"
 
         # Validate Energy-Charts specific structure
         assert "unix_seconds" in raw_api_response, "Required field 'unix_seconds' missing"
@@ -124,7 +129,9 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
         assert isinstance(raw_api_response["price"], list), "price should be a list"
 
         # Validate source and area information
-        assert raw_data.get("source") == Source.ENERGY_CHARTS, f"Source should be {Source.ENERGY_CHARTS}"
+        assert (
+            raw_data.get("source") == Source.ENERGY_CHARTS
+        ), f"Source should be {Source.ENERGY_CHARTS}"
         assert raw_data.get("area") == area, f"Area should be {area}"
 
         # Timezone validation - Energy-Charts uses Berlin time (CET/CEST)
@@ -136,13 +143,17 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
         # Validate data arrays
         unix_seconds = raw_api_response["unix_seconds"]
         prices = raw_api_response["price"]
-        
+
         assert len(unix_seconds) > 0, "unix_seconds array should not be empty"
         assert len(prices) > 0, "price array should not be empty"
-        assert len(unix_seconds) == len(prices), "unix_seconds and price arrays must have same length"
+        assert len(unix_seconds) == len(
+            prices
+        ), "unix_seconds and price arrays must have same length"
 
         # Validate 15-minute interval data (96 intervals per day)
-        assert len(unix_seconds) == 96, f"Expected 96 intervals (15-min data), got {len(unix_seconds)}"
+        assert (
+            len(unix_seconds) == 96
+        ), f"Expected 96 intervals (15-min data), got {len(unix_seconds)}"
 
         logger.info(f"Raw data contains {len(unix_seconds)} price intervals")
 
@@ -166,14 +177,16 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
         assert isinstance(interval_prices, dict), "interval_raw should be a dictionary"
 
         # Validate price data - 96 intervals (15-minute data)
-        assert len(interval_prices) == 96, f"Expected 96 interval prices, got {len(interval_prices)}"
+        assert (
+            len(interval_prices) == 96
+        ), f"Expected 96 interval prices, got {len(interval_prices)}"
 
         # Validate timestamp format and price values
         for timestamp, price in interval_prices.items():
             # Validate ISO timestamp format
             try:
                 dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-                
+
                 # Check timestamp is within reasonable range
                 assert dt.year == 2025
                 assert dt.month == 10
@@ -183,7 +196,7 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
 
             # Price validation
             assert isinstance(price, float), f"Price should be a float, got {type(price)}"
-            
+
             # Energy-Charts price range validation (EUR/MWh)
             # European electricity prices typically range from -100 to 500 EUR/MWh
             assert -100 <= price <= 500, f"Price {price} EUR/MWh is outside reasonable range"
@@ -191,19 +204,22 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
         # Check for sequential 15-minute intervals
         timestamps = sorted(interval_prices.keys())
         for i in range(1, len(timestamps)):
-            prev_dt = datetime.fromisoformat(timestamps[i-1].replace("Z", "+00:00"))
+            prev_dt = datetime.fromisoformat(timestamps[i - 1].replace("Z", "+00:00"))
             curr_dt = datetime.fromisoformat(timestamps[i].replace("Z", "+00:00"))
             interval_diff = (curr_dt - prev_dt).total_seconds() / 60  # Minutes
-            
+
             # Energy-Charts provides native 15-minute intervals
-            assert abs(interval_diff - 15.0) < 1.0, \
-                f"Expected 15-minute interval, got {interval_diff} minutes between {timestamps[i-1]} and {timestamps[i]}"
+            assert (
+                abs(interval_diff - 15.0) < 1.0
+            ), f"Expected 15-minute interval, got {interval_diff} minutes between {timestamps[i-1]} and {timestamps[i]}"
 
         # Validate license information
         assert "license_info" in parsed_data, "License info should be present"
 
-        logger.info(f"Energy-Charts Test ({area}): PASS - Found {len(interval_prices)} interval prices. "
-                   f"Range: {min(interval_prices.values()):.2f} to {max(interval_prices.values()):.2f} EUR/MWh")
+        logger.info(
+            f"Energy-Charts Test ({area}): PASS - Found {len(interval_prices)} interval prices. "
+            f"Range: {min(interval_prices.values()):.2f} to {max(interval_prices.values()):.2f} EUR/MWh"
+        )
 
     except AssertionError as ae:
         logger.error(f"Energy-Charts Test ({area}): ASSERTION FAILED - {str(ae)}")
@@ -216,16 +232,16 @@ async def test_energy_charts_live_fetch_parse(area, monkeypatch):
 @pytest.mark.asyncio
 async def test_energy_charts_timestamp_conversion(monkeypatch):
     """Test that unix timestamps are correctly converted to ISO format."""
-    
+
     # Create specific mock data with known timestamps
     known_timestamp = int(datetime(2025, 10, 7, 12, 0, 0).timestamp())
     mock_data = {
         "unix_seconds": [known_timestamp, known_timestamp + 900],  # 12:00 and 12:15
         "price": [100.0, 105.0],
         "unit": "EUR / MWh",
-        "license_info": ""
+        "license_info": "",
     }
-    
+
     async def mock_fetch(self, area, session=None, **kwargs):
         return {
             "raw_data": mock_data,
@@ -235,19 +251,19 @@ async def test_energy_charts_timestamp_conversion(monkeypatch):
             "bzn": area,
             "source": Source.ENERGY_CHARTS,
             "fetched_at": datetime.now().isoformat(),
-            "license_info": ""
+            "license_info": "",
         }
-    
+
     monkeypatch.setattr(EnergyChartsAPI, "fetch_raw_data", mock_fetch)
-    
+
     api = EnergyChartsAPI()
     raw_data = await api.fetch_raw_data("DE-LU")
     parsed_data = api.parser.parse(raw_data)
-    
+
     # Check timestamps were converted correctly
     timestamps = sorted(parsed_data["interval_raw"].keys())
     assert len(timestamps) == 2
-    
+
     # Verify ISO format
     for ts in timestamps:
         assert "T" in ts
@@ -260,14 +276,14 @@ async def test_energy_charts_timestamp_conversion(monkeypatch):
 @pytest.mark.asyncio
 async def test_energy_charts_validation(monkeypatch):
     """Test data validation in parser."""
-    
+
     # Test with invalid data
     invalid_data = {
         "unix_seconds": [1696636800, 1696637700],
         "price": [100.0],  # Mismatched length!
-        "unit": "EUR / MWh"
+        "unit": "EUR / MWh",
     }
-    
+
     async def mock_fetch_invalid(self, area, session=None, **kwargs):
         return {
             "raw_data": invalid_data,
@@ -275,14 +291,14 @@ async def test_energy_charts_validation(monkeypatch):
             "currency": Currency.EUR,
             "area": area,
             "bzn": area,
-            "source": Source.ENERGY_CHARTS
+            "source": Source.ENERGY_CHARTS,
         }
-    
+
     monkeypatch.setattr(EnergyChartsAPI, "fetch_raw_data", mock_fetch_invalid)
-    
+
     api = EnergyChartsAPI()
     raw_data = await api.fetch_raw_data("DE-LU")
     parsed_data = api.parser.parse(raw_data)
-    
+
     # Should return empty result for invalid data
     assert len(parsed_data["interval_raw"]) == 0
