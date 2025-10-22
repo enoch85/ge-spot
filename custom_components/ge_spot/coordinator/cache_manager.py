@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from ..utils.advanced_cache import AdvancedCache
 from ..const.defaults import Defaults  # Import Defaults for CACHE_TTL
