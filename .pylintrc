@@ -1,0 +1,78 @@
+[MAIN]
+# Minimum Python version
+py-version=3.12
+
+# Discover Python modules and packages in the file system subtree
+ignore=__pycache__,.git,.storage,improvements,docs,scripts
+
+[MESSAGES CONTROL]
+# Disable specific warnings that don't apply to our project
+# R0801: Similar lines in N files (duplicate-code) - We have legitimate patterns in tests/parsers
+# R0903: Too few public methods - API clients may be simple wrappers
+disable=
+    R0801,
+    R0903
+
+[FORMAT]
+# Maximum line length (PEP 8 default)
+max-line-length=88
+
+# Expected format of line ending, e.g. empty (any line ending), LF or CRLF
+expected-line-ending-format=LF
+
+[BASIC]
+# Good variable names which should always be accepted
+good-names=i,j,k,ex,_,e,dt,tz,id,db
+
+[DESIGN]
+# Maximum number of arguments for function / method
+max-args=7
+
+# Maximum number of attributes for a class
+max-attributes=10
+
+# Maximum number of boolean expressions in an if statement
+max-bool-expr=5
+
+# Maximum number of branch for function / method body
+max-branches=15
+
+# Maximum number of locals for function / method body
+max-locals=20
+
+# Maximum number of return / yield for function / method body
+max-returns=8
+
+# Maximum number of statements in function / method body
+max-statements=60
+
+[SIMILARITIES]
+# Minimum lines of duplicate code to report
+min-similarity-lines=10
+
+# Ignore comments when computing similarities
+ignore-comments=yes
+
+# Ignore docstrings when computing similarities
+ignore-docstrings=yes
+
+# Ignore imports when computing similarities
+ignore-imports=yes
+
+# Signature of functions/methods to ignore when computing similarities
+ignore-signatures=yes
+
+[IMPORTS]
+# Allow wildcard imports from typing
+allow-wildcard-with-all=yes
+
+[TYPECHECK]
+# List of members which are set dynamically
+generated-members=requests.structures.LookupDict
+
+[REPORTS]
+# Set to no to disable scoring
+score=yes
+
+# Template used to display messages
+msg-template={path}:{line}: [{msg_id}({symbol}), {obj}] {msg}
