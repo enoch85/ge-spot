@@ -1,7 +1,5 @@
 """Update interval constants for different API sources."""
 
-from typing import Dict
-
 from .sources import Source
 
 

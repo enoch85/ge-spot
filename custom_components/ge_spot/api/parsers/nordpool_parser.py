@@ -2,11 +2,10 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from ..base.price_parser import BasePriceParser
 from ...const.sources import Source
-from ...timezone.timezone_utils import normalize_hour_value
 from ...const.currencies import Currency
 from ...const.energy import EnergyUnit  # Added import
 

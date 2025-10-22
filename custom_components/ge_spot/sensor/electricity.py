@@ -1,18 +1,13 @@
 """Electricity price data sensors for the GE-Spot integration."""
 
 import logging
-from datetime import datetime, timedelta
-import voluptuous as vol
-from homeassistant.components.sensor import SensorDeviceClass
+
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.const import ATTR_ATTRIBUTION
 
 from ..const import DOMAIN
 from ..const.config import Config
-from ..price.formatter import format_price, format_price_value, format_relative_price
 from ..coordinator import UnifiedPriceCoordinator
 from .price import (
     PriceValueSensor,

@@ -1,10 +1,7 @@
 """Data validation utilities for API responses."""
 
 import logging
-from typing import Dict, Any, Optional
-from datetime import datetime
-
-from homeassistant.util import dt as dt_util
+from typing import Dict, Any
 
 from ...timezone.service import TimezoneService
 from ...const.sources import Source

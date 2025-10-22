@@ -1,7 +1,6 @@
 """Validation functions for config flow."""
 
 import logging
-import datetime
 from typing import Dict, List
 
 from ..const.areas import AreaMapping

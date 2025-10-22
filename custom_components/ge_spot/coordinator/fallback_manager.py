@@ -1,11 +1,9 @@
 import logging
 import asyncio
-from typing import List, Dict, Any, Optional, Type
+from typing import List, Dict, Any, Optional
 
 # Import BasePriceAPI from its specific module
 from ..api.base.base_price_api import BasePriceAPI
-from ..const.sources import Source
-from ..const.config import Config
 from ..const.errors import PriceFetchError
 from ..const.network import Network
 

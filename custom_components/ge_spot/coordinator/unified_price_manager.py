@@ -1,33 +1,23 @@
 """Unified Price Manager for ge-spot integration."""
 
 import logging
-from datetime import timedelta, datetime, time, date
-from typing import Any, Dict, Optional, List, Type, Union
+from datetime import timedelta, datetime, date
+from typing import Any, Dict, Optional, List
 import asyncio  # Added for rate limiting
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from ..const import DOMAIN
 from ..const.config import Config
 from ..const.sources import Source
-from ..const.intervals import SourceIntervals
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..const.network import Network
-from ..const.currencies import Currency
 from ..const.time import ValidationRetry
 from ..const.errors import Errors, ErrorDetails
 from ..api import get_sources_for_region
-from ..api.base.base_price_api import BasePriceAPI
-from ..api.base.data_structure import (
-    StandardizedPriceData,
-    create_standardized_price_data,
-)
-from ..api.base.session_manager import close_session
 from ..timezone.service import TimezoneService  # Added import
 from ..utils.exchange_service import ExchangeRateService, get_exchange_service
 from .data_processor import DataProcessor

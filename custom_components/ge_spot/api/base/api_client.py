@@ -2,7 +2,7 @@
 
 import logging
 import asyncio
-from typing import Dict, Any, Optional, List, Callable, Awaitable
+from typing import Dict, Any, Optional, List
 import aiohttp
 
 from ...const.attributes import Attributes

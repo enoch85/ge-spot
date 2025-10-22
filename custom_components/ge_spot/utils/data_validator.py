@@ -1,7 +1,7 @@
 """Data validation utilities for API responses."""
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 import statistics
 from datetime import datetime
 

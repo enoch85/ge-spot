@@ -3,12 +3,10 @@
 import logging
 import json
 import os
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Optional, List, Tuple, Union, Set
-from pathlib import Path
+from datetime import datetime, timezone
+from typing import Dict, Any, Optional
 
 from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
 
 from ..const.config import Config
 from ..const.defaults import Defaults

@@ -10,9 +10,8 @@ from ..const import DOMAIN
 from ..const.config import Config
 from ..const.sources import Source
 from ..const.defaults import Defaults
-from ..const.areas import AreaMapping
 from ..const.time import TimezoneReference
-from ..api import get_sources_for_region, create_api
+from ..api import get_sources_for_region
 from ..api import entsoe
 from .schemas import get_options_schema, get_default_values
 

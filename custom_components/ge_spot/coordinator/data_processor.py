@@ -2,34 +2,21 @@
 
 import logging
 import math
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, List, Tuple
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 
 from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
 
-from ..utils.exchange_service import get_exchange_service, ExchangeRateService
-from ..timezone.source_tz import get_source_timezone
+from ..utils.exchange_service import ExchangeRateService
 from ..const.config import Config
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..timezone.service import TimezoneService
-from ..api.base.data_structure import PriceStatistics, StandardizedPriceData
-from ..const.currencies import Currency
-
-# Import Defaults class to access PRECISION
-from ..const.defaults import Defaults
+from ..api.base.data_structure import PriceStatistics
 from ..const.energy import EnergyUnit
-
-# Fix import path for CacheManager
-from .cache_manager import CacheManager
 
 from ..timezone.timezone_converter import TimezoneConverter  # Import TimezoneConverter
 from ..price.currency_converter import CurrencyConverter  # Import CurrencyConverter
-from ..price.statistics import calculate_statistics
-
-# Use relative import for timezone_utils
-from ..timezone.timezone_utils import get_timezone_object
 
 # Use relative import for sources
 from ..const.sources import Source

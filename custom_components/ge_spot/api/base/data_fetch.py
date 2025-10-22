@@ -5,10 +5,9 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Union, Type
 from datetime import datetime, timezone
 
-from ...const.sources import Source
 from .error_handler import ErrorHandler
 from .base_price_api import BasePriceAPI
-from .data_structure import StandardizedPriceData, create_standardized_price_data
+from .data_structure import StandardizedPriceData
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -2,13 +2,11 @@
 
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta, timezone, time
-from typing import Dict, Any, Optional, List, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, Optional, List
 
 from ...const.sources import Source
-from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
-from ...timezone.timezone_utils import normalize_hour_value
 
 _LOGGER = logging.getLogger(__name__)
 

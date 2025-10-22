@@ -7,7 +7,6 @@ from typing import Dict, Any, Optional
 from .base.api_client import ApiClient
 from ..const.sources import Source
 from ..const.currencies import Currency
-from ..const.network import Network
 from .parsers.energy_charts_parser import EnergyChartsParser
 from .base.base_price_api import BasePriceAPI
 from .base.error_handler import ErrorHandler

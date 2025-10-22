@@ -10,7 +10,6 @@ from ..const.currencies import Currency
 from ..const.areas import AreaMapping
 from ..const.time import TimeFormat
 from ..const.network import Network
-from ..const.config import Config
 from .parsers.nordpool_parser import NordpoolParser
 from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI

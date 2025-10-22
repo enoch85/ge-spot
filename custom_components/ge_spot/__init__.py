@@ -2,22 +2,16 @@
 
 import asyncio
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
-
-# Define CONFIG_SCHEMA to fix the warning
-CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 from .const.config import Config
 from .const.defaults import Defaults
-from .const.network import Network
-from .const.sources import Source, SourceInfo
 from .coordinator import UnifiedPriceCoordinator  # Import only the new coordinator
 from .api.base.session_manager import register_shutdown_task
 from .utils.exchange_service import get_exchange_service

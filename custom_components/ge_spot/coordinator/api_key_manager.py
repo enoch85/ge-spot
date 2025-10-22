@@ -1,7 +1,7 @@
 """API key manager for electricity spot prices."""
 
 import logging
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional
 
 from homeassistant.core import HomeAssistant
 

@@ -1,6 +1,6 @@
 """Statistics utility functions for price calculations."""
 
-from typing import Dict, List, Optional
+from typing import Dict
 
 from ..api.base.data_structure import PriceStatistics
 

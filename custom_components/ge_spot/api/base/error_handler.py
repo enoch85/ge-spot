@@ -5,7 +5,7 @@ import asyncio
 import time
 import functools
 from datetime import datetime
-from typing import Callable, Any, Dict, Optional, Union, List, Tuple
+from typing import Callable, Any, Dict
 
 from ...const.network import NetworkErrorType, RetryStrategy
 

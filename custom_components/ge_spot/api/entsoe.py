@@ -3,26 +3,20 @@
 import logging
 import asyncio
 from datetime import datetime, timezone, timedelta, time
-import xml.etree.ElementTree as ET
 from typing import Dict, Any, Optional
 
 from .base.api_client import ApiClient
 from ..utils.debug_utils import sanitize_sensitive_data
 from ..utils.date_range import generate_date_ranges  # Re-add this import
-from ..timezone import TimezoneService
-from ..const.api import EntsoE, SourceTimezone  # Update import
+from ..const.api import SourceTimezone  # Update import
 from ..const.sources import Source  # Add Source import
 from ..const.areas import AreaMapping
 from ..const.config import Config
-from ..const.display import DisplayUnit
 from ..const.network import Network, ContentType
 from ..const.time import TimeFormat
-from ..const.energy import EnergyUnit
-from ..const.currencies import Currency
 from .parsers.entsoe_parser import EntsoeParser
 from .base.base_price_api import BasePriceAPI
 from .base.error_handler import ErrorHandler
-from .base.data_structure import create_standardized_price_data
 from .utils import fetch_with_retry
 from ..const.time import TimezoneName
 from ..timezone.timezone_utils import get_timezone_object

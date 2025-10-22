@@ -1,10 +1,9 @@
 """Formatting utilities for price data."""
 
 import logging
-from typing import Any, Dict, Optional, Union
 
 from ..const.currencies import Currency
-from .currency_service import format_currency_for_display, get_currency_symbol
+from .currency_service import format_currency_for_display
 
 _LOGGER = logging.getLogger(__name__)
 

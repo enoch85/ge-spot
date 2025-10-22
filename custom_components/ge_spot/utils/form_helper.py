@@ -1,7 +1,7 @@
 """Form helper utilities for GE-Spot integration."""
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, List
 
 from homeassistant.helpers import selector
 

@@ -3,12 +3,12 @@
 import logging
 import re
 from datetime import datetime, timedelta, tzinfo
-from typing import Dict, Any, Optional, List, Tuple, Union
+from typing import Dict, Any, Optional, List, Tuple
 import zoneinfo
 
 from ..const.config import Config
 from ..const.defaults import Defaults
-from .timezone_utils import get_source_timezone, convert_datetime, get_timezone_object
+from .timezone_utils import get_source_timezone
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 """OMIE API client."""
 
 import logging
-from datetime import datetime, timezone, timedelta, time
+from datetime import datetime, timezone, timedelta
 import aiohttp
 from typing import Dict, Any, Optional
 
@@ -13,7 +13,6 @@ from ..const.network import Network
 from ..const.currencies import Currency
 from ..const.time import TimezoneName
 from ..timezone.timezone_utils import get_timezone_object
-from .utils import fetch_with_retry
 from .base.error_handler import ErrorHandler
 
 _LOGGER = logging.getLogger(__name__)

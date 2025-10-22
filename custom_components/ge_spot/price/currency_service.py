@@ -1,10 +1,9 @@
 """Currency service for GE-Spot integration."""
 
 import logging
-from typing import Dict, Any, Optional
 
 from ..const.currencies import Currency
-from ..const.areas import Timezone, AreaInfo
+from ..const.areas import AreaInfo
 from ..const.api import Source
 from ..const.sources import SourceInfo
 

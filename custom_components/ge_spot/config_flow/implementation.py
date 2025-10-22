@@ -2,7 +2,6 @@
 
 import logging
 import voluptuous as vol
-import hashlib
 
 from homeassistant.config_entries import ConfigFlow
 from homeassistant.core import callback
