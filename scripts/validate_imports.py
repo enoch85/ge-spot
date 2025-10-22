@@ -95,14 +95,17 @@ class ImportValidator:
                         levels_to_go_up = level - 1
                         base_parts = (
                             current_package_parts[:-levels_to_go_up]
-                            if levels_to_go_up > 0 and levels_to_go_up <= len(current_package_parts)
+                            if levels_to_go_up > 0
+                            and levels_to_go_up <= len(current_package_parts)
                             else current_package_parts
                         )
 
                         if module:
                             # Add the module path to the base
                             module_parts = base_parts + module.split(".")
-                            full_module = f"custom_components.ge_spot.{'.'.join(module_parts)}"
+                            full_module = (
+                                f"custom_components.ge_spot.{'.'.join(module_parts)}"
+                            )
                         else:
                             # Just the base package
                             full_module = (
@@ -406,7 +409,9 @@ class ImportValidator:
                         current_file = file_path
                     print(f"   Line {line_num}: {line_content}")
 
-                print("\n💡 Consider replacing 'Any' with specific types for better type safety.")
+                print(
+                    "\n💡 Consider replacing 'Any' with specific types for better type safety."
+                )
                 print("=" * 70)
 
         return 0 if not self.errors else 1
@@ -416,13 +421,19 @@ def main():
     """Main entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Validate imports in the GE-Spot codebase")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Print detailed information")
+    parser = argparse.ArgumentParser(
+        description="Validate imports in the GE-Spot codebase"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Print detailed information"
+    )
     parser.add_argument(
         "--check-any", action="store_true", help="Check for usage of 'Any' type hint"
     )
     parser.add_argument(
-        "--path", default=".", help="Path to the project root (default: current directory)"
+        "--path",
+        default=".",
+        help="Path to the project root (default: current directory)",
     )
 
     args = parser.parse_args()
