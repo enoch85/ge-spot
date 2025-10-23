@@ -1375,7 +1375,7 @@ class UnifiedPriceManager:
                         if processed_data
                         else "Processing returned None or empty"
                     )
-                    _LOGGER.warning(
+                    _LOGGER.info(
                         f"[{self.area}] {failed_source}: Fetch succeeded but validation failed ({error_info}) - trying next source"
                     )
 

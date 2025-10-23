@@ -584,12 +584,12 @@ class DataProcessor:
                 else:
                     missing_keys = sorted(list(today_keys - found_keys))
                     # Update warning message threshold
-                    _LOGGER.warning(
+                    _LOGGER.info(
                         f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}"
                     )
                     processed_result["statistics"] = PriceStatistics().to_dict()
             else:
-                _LOGGER.warning(
+                _LOGGER.info(
                     f"No final prices for today available after processing for area {self.area}, skipping stats."
                 )
                 processed_result["statistics"] = PriceStatistics().to_dict()

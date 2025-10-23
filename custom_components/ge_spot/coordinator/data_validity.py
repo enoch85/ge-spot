@@ -281,7 +281,7 @@ def calculate_data_validity(
             and validity.last_valid_interval >= end_of_today
         )
     else:
-        _LOGGER.warning("No valid intervals found in price data")
+        _LOGGER.debug("No valid intervals found in price data")
 
     _LOGGER.debug(f"Calculated {validity}")
 
