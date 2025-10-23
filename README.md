@@ -140,6 +140,17 @@ After installation:
 - **Source Priority**: Order of data sources to try (first = highest priority)
 - **VAT Rate**: Set your applicable VAT percentage (e.g. 25 for 25%)
 
+#### Setting Source Priority Order
+
+The order in which you select data sources determines their priority. To set a specific source as your primary:
+
+1. Uncheck all source options
+2. Select your preferred primary source first (e.g., ENTSO-E)
+3. Continue selecting additional sources in your desired priority order
+4. Submit the configuration
+
+The first selected source becomes your highest priority, and the integration will attempt to use sources in the order you configured them.
+
 ### Advanced Settings
 
 - **Display Format**: Choose between decimal (e.g. 0.15 EUR/kWh) or subunit (e.g. 15 cents/kWh)
