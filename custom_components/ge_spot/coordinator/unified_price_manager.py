@@ -847,16 +847,122 @@ class UnifiedPriceManager:
                 # Process the raw result (this is where parsing happens)
                 processed_data = await self._process_result(result)
 
-                # Check data completeness
-                has_today = processed_data and bool(
-                    processed_data.get("today_interval_prices")
+                # Check data completeness with interval count validation
+                from ..const.time import TimeInterval, DSTTransitionType
+                from ..timezone.dst_handler import DSTHandler
+
+                expected_intervals = (
+                    TimeInterval.get_intervals_per_day()
+                )  # 96 for non-DST days
+
+                today_prices = (
+                    processed_data.get("today_interval_prices", {})
+                    if processed_data
+                    else {}
                 )
-                has_tomorrow = processed_data and bool(
-                    processed_data.get("tomorrow_interval_prices")
+                tomorrow_prices = (
+                    processed_data.get("tomorrow_interval_prices", {})
+                    if processed_data
+                    else {}
                 )
-                has_complete_data = has_today and has_tomorrow
+
+                today_count = len(today_prices)
+                tomorrow_count = len(tomorrow_prices)
+
+                # Check if we have data (non-empty dictionaries)
+                has_today = bool(today_prices)
+                has_tomorrow = bool(tomorrow_prices)
+
+                # Check for DST transitions to adjust expected interval counts
+                dst_handler = DSTHandler(self._tz_service.target_timezone)
+
+                # Check today
+                is_today_dst, today_dst_type = dst_handler.is_dst_transition_day(now)
+                if is_today_dst:
+                    if today_dst_type == DSTTransitionType.SPRING_FORWARD:
+                        expected_today = (
+                            TimeInterval.get_intervals_per_day_dst_spring()
+                        )  # 92
+                    else:  # FALL_BACK
+                        expected_today = (
+                            TimeInterval.get_intervals_per_day_dst_fall()
+                        )  # 100
+                else:
+                    expected_today = expected_intervals  # 96
+
+                # Check tomorrow
+                tomorrow = now + timedelta(days=1)
+                is_tomorrow_dst, tomorrow_dst_type = dst_handler.is_dst_transition_day(
+                    tomorrow
+                )
+                if is_tomorrow_dst:
+                    if tomorrow_dst_type == DSTTransitionType.SPRING_FORWARD:
+                        expected_tomorrow = (
+                            TimeInterval.get_intervals_per_day_dst_spring()
+                        )  # 92
+                    else:  # FALL_BACK
+                        expected_tomorrow = (
+                            TimeInterval.get_intervals_per_day_dst_fall()
+                        )  # 100
+                else:
+                    expected_tomorrow = expected_intervals  # 96
+
+                # Check if the data is complete (correct number of intervals)
+                # Allow 1-2 missing intervals for edge cases (API timing, rounding)
+                # But this catches genuinely incomplete data like 94/96
+                min_acceptable_today = max(
+                    expected_today - 2, 90
+                )  # Never accept less than 90
+                min_acceptable_tomorrow = max(expected_tomorrow - 2, 90)
+
+                today_complete = (
+                    today_count >= min_acceptable_today if has_today else False
+                )
+                tomorrow_complete = (
+                    tomorrow_count >= min_acceptable_tomorrow if has_tomorrow else False
+                )
+
+                # Log interval counts for debugging
+                if has_today or has_tomorrow:
+                    dst_info = []
+                    if is_today_dst:
+                        dst_info.append(f"today={today_dst_type}")
+                    if is_tomorrow_dst:
+                        dst_info.append(f"tomorrow={tomorrow_dst_type}")
+                    dst_str = f" (DST: {', '.join(dst_info)})" if dst_info else ""
+
+                    _LOGGER.debug(
+                        f"[{self.area}] Interval counts: today={today_count}/{expected_today}, "
+                        f"tomorrow={tomorrow_count}/{expected_tomorrow}, "
+                        f"min_acceptable=(today>={min_acceptable_today}, tomorrow>={min_acceptable_tomorrow}){dst_str}"
+                    )
+
+                # Data is complete only if both today AND tomorrow have sufficient intervals
+                has_complete_data = today_complete and tomorrow_complete
                 has_partial_data = (has_today or has_tomorrow) and not has_complete_data
                 has_any_data = has_today or has_tomorrow
+
+                # Warn if we have data but it's incomplete (missing intervals)
+                if has_today and not today_complete:
+                    dst_note = (
+                        f" (DST {today_dst_type} expects {expected_today})"
+                        if is_today_dst
+                        else ""
+                    )
+                    _LOGGER.warning(
+                        f"[{self.area}] Incomplete today data from {result.get('data_source', 'unknown')}: "
+                        f"{today_count}/{expected_today} intervals (missing {expected_today - today_count}){dst_note}"
+                    )
+                if has_tomorrow and not tomorrow_complete:
+                    dst_note = (
+                        f" (DST {tomorrow_dst_type} expects {expected_tomorrow})"
+                        if is_tomorrow_dst
+                        else ""
+                    )
+                    _LOGGER.warning(
+                        f"[{self.area}] Incomplete tomorrow data from {result.get('data_source', 'unknown')}: "
+                        f"{tomorrow_count}/{expected_tomorrow} intervals (missing {expected_tomorrow - tomorrow_count}){dst_note}"
+                    )
 
                 # Get remaining sources for potential retry
                 attempted_so_far = (

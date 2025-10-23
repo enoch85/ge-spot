@@ -39,7 +39,7 @@ def test_parsers():
         import traceback
 
         traceback.print_exc()
-        return False
+        raise  # Re-raise to fail the test properly
 
     # Test 2: ComEd Parser
     print()
@@ -73,7 +73,7 @@ def test_parsers():
         import traceback
 
         traceback.print_exc()
-        return False
+        raise  # Re-raise to fail the test properly
 
     # Test 3: AEMO Parser
     print()
@@ -115,7 +115,7 @@ D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,2,0,2025/10/01 00:30:00,1
         import traceback
 
         traceback.print_exc()
-        return False
+        raise  # Re-raise to fail the test properly
 
     # Test 4: NordPool Parser
     print()
@@ -140,7 +140,7 @@ D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,2,0,2025/10/01 00:30:00,1
         import traceback
 
         traceback.print_exc()
-        return False
+        raise  # Re-raise to fail the test properly
 
     # Test 5: Energy-Charts Parser
     print()
@@ -167,7 +167,7 @@ D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,2,0,2025/10/01 00:30:00,1
         import traceback
 
         traceback.print_exc()
-        return False
+        raise  # Re-raise to fail the test properly
 
     print()
     print("=" * 80)
@@ -182,9 +182,15 @@ D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,2,0,2025/10/01 00:30:00,1
     print("  ✅ Energy-Charts parsing working (15-min native data)")
     print()
 
-    return True
+    # Don't return anything - pytest expects None from test functions
+    # All the actual tests are the assert statements above
 
 
 if __name__ == "__main__":
-    success = test_parsers()
-    sys.exit(0 if success else 1)
+    try:
+        test_parsers()
+        print("\n✅ All parser validation tests passed!")
+        sys.exit(0)
+    except (AssertionError, Exception) as e:
+        print(f"\n❌ Test failed: {e}")
+        sys.exit(1)
