@@ -46,7 +46,7 @@ GE-Spot is available in the default HACS store!
 
 The integration supports multiple price data sources with automatic fallback capabilities:
 
-- **Nordpool** - Nordic and Baltic countries
+- **Nordpool** - Nordic (Norway, Sweden, Denmark, Finland), Baltic (Estonia, Latvia, Lithuania), and Central/Western Europe (Germany, Austria, Belgium, France, Netherlands, Poland)
 - **ENTSO-E** - European Network of Transmission System Operators (requires API key)
 - **Energy-Charts** - European spot prices (Germany, France, Netherlands, Belgium, Austria, and more)
 - **Energi Data Service** - Denmark
@@ -123,7 +123,12 @@ For complete area mappings, see [`const/areas.py`](custom_components/ge_spot/con
 - **Peak/Off-Peak Price** - Today's high/low
 - **Price Difference** - Current vs average (absolute)
 - **Price Percentage** - Current vs average (relative)
-- **Tomorrow prices** - Average, peak, and off-peak forecasts
+- **Hourly Average Price** - Current hour's average (calculated from 15-min intervals)
+- **Tomorrow Average Price** - Tomorrow's average forecast
+- **Tomorrow Peak/Off-Peak Price** - Tomorrow's high/low forecasts
+- **Tomorrow Hourly Average Price** - Tomorrow's hourly averages
+
+See [docs/hourly_average_sensors.md](docs/hourly_average_sensors.md) for details on hourly average sensors.
 
 ## Configuration
 
@@ -154,6 +159,9 @@ The first selected source becomes your highest priority, and the integration wil
 ### Advanced Settings
 
 - **Display Format**: Choose between decimal (e.g. 0.15 EUR/kWh) or subunit (e.g. 15 cents/kWh)
+- **Additional Tariff**: Add grid/transfer fees from your provider (per kWh, applied before VAT)
+- **Energy Tax**: Add fixed energy tax per kWh (e.g., government levy, applied before VAT)
+- **Timezone Reference**: Display prices in Home Assistant timezone or local area timezone
 - **API Keys**: For ENTSO-E, you'll need to [register for an API key](https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html)
 - **API Key Reuse**: The integration will reuse API keys across different regions using the same source
 
@@ -248,8 +256,10 @@ entities:
     name: Current Electricity Price (15-min interval)
   - entity: sensor.gespot_next_interval_price_se4
     name: Next Interval Price
-  - entity: sensor.gespot_day_average_price_se4
+  - entity: sensor.gespot_average_price_se4
     name: Today's Average
+  - entity: sensor.gespot_hourly_average_price_se4
+    name: Current Hour Average
   - entity: sensor.gespot_tomorrow_average_price_se4
     name: Tomorrow's Average
 ```
@@ -417,7 +427,7 @@ automation:
         entity_id: sensor.gespot_current_price_se4
     condition:
       - condition: template
-        value_template: "{{ states('sensor.gespot_current_price_se4')|float < states('sensor.gespot_day_average_price_se4')|float * 0.8 }}"
+        value_template: "{{ states('sensor.gespot_current_price_se4')|float < states('sensor.gespot_average_price_se4')|float * 0.8 }}"
     action:
       - service: switch.turn_on
         entity_id: switch.water_heater
