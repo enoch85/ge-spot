@@ -159,35 +159,35 @@ class AreaMapping:
     # Nordpool areas display names
     NORDPOOL_AREAS = {
         # Nordic regions
-        Area.NO1: "Norway (NO1)",
-        Area.NO2: "Norway (NO2)",
-        Area.NO3: "Norway (NO3)",
-        Area.NO4: "Norway (NO4)",
-        Area.NO5: "Norway (NO5)",
-        Area.SE1: "Sweden (SE1)",
-        Area.SE2: "Sweden (SE2)",
-        Area.SE3: "Sweden (SE3)",
-        Area.SE4: "Sweden (SE4)",
-        Area.DK1: "Denmark (DK1)",
-        Area.DK2: "Denmark (DK2)",
-        Area.FI: "Finland (FI)",
+        Area.NO1: "NO1",
+        Area.NO2: "NO2",
+        Area.NO3: "NO3",
+        Area.NO4: "NO4",
+        Area.NO5: "NO5",
+        Area.SE1: "SE1",
+        Area.SE2: "SE2",
+        Area.SE3: "SE3",
+        Area.SE4: "SE4",
+        Area.DK1: "DK1",
+        Area.DK2: "DK2",
+        Area.FI: "FI",
         # Baltic regions
-        Area.EE: "Estonia (EE)",
-        Area.LV: "Latvia (LV)",
-        Area.LT: "Lithuania (LT)",
+        Area.EE: "EE",
+        Area.LV: "LV",
+        Area.LT: "LT",
         # Central/Western Europe
-        Area.AT: "Austria (AT)",
-        Area.BE: "Belgium (BE)",
-        Area.FR: "France (FR)",
-        Area.DE: "Germany (DE)",
-        Area.NL: "Netherlands (NL)",
-        Area.PL: "Poland (PL)",
+        Area.AT: "AT",
+        Area.BE: "BE",
+        Area.FR: "FR",
+        Area.DE: "DE",
+        Area.NL: "NL",
+        Area.PL: "PL",
     }
 
     # Energi Data Service areas
     ENERGI_DATA_AREAS = {
-        Area.DK1: "Denmark (DK1)",
-        Area.DK2: "Denmark (DK2)",
+        Area.DK1: "DK1",
+        Area.DK2: "DK2",
     }
 
     # ENTSO-E area mapping from our area codes to ENTSO-E area codes
@@ -203,6 +203,7 @@ class AreaMapping:
         Area.EE: "10Y1001A1001A39I",  # Updated EIC code (was: 10Y1001A1001A816)
         Area.FI: "10YFI-1--------U",
         Area.FR: "10YFR-RTE------C",
+        Area.DE: "10Y1001A1001A82H",  # Germany (same bidding zone as DE-LU)
         Area.DE_LU: "10Y1001A1001A82H",
         "GR": "10YGR-HTSO-----Y",
         "HU": "10YHU-MAVIR----U",
@@ -238,7 +239,7 @@ class AreaMapping:
         "AL": "10YAL-KESH-----5",  # Re-enabled with verified code
         "BA": "10YBA-JPCC-----D",  # Re-enabled with verified code
         "ME": "10YCS-CG-TSO---S",  # Updated EIC code (was: 10YME-CGES-----S)
-        "MK": "10YMK-MEPSO----8",
+        # "MK": "10YMK-MEPSO----8",  # REMOVED: ENTSO-E API does not support day-ahead prices (A65) for North Macedonia
         "RS": "10YCS-SERBIATSOV",  # Updated EIC code (was: 10YRS-EMS------W)
         "TR": "10YTR-TEIAS----W",  # Re-enabled with verified code
         "UA": "10Y1001C--00003F",  # Fixed: corrected EIC code for Ukraine BZ
@@ -250,58 +251,59 @@ class AreaMapping:
     # ENTSO-E areas (Display names)
     ENTSOE_AREAS = {
         # Core European Market Bidding Zones (SDAC)
-        Area.AT: "Austria (AT)",
-        Area.BE: "Belgium (BE)",
-        "BG": "Bulgaria (BG)",
-        "HR": "Croatia (HR)",
-        "CZ": "Czech Republic (CZ)",
-        Area.DK1: "Denmark (DK1, West Denmark)",
-        Area.DK2: "Denmark (DK2, East Denmark)",
-        Area.EE: "Estonia (EE)",
-        Area.FI: "Finland (FI)",
-        Area.FR: "France (FR)",
-        Area.DE_LU: "Germany-Luxembourg (DE-LU)",
-        "GR": "Greece (GR)",
-        "HU": "Hungary (HU)",
-        "IT": "Italy (IT, Mainland)",
-        "IT-North": "Italy (IT-North)",
-        "IT-Centre-South": "Italy (IT-Centre-South)",
-        "IT-South": "Italy (IT-South)",
-        "IT-South-2": "Italy (IT-South-2)",
-        "IT-Sardinia": "Italy (IT-Sardinia)",
-        "IT-Sicily": "Italy (IT-Sicily)",
-        Area.LV: "Latvia (LV)",
-        Area.LT: "Lithuania (LT)",
-        Area.NL: "Netherlands (NL)",
-        Area.NO1: "Norway (NO1, Oslo/East)",
-        Area.NO2: "Norway (NO2, Kristiansand/South)",
-        Area.NO3: "Norway (NO3, Trondheim/Central)",
-        Area.NO4: "Norway (NO4, Tromsø/North)",
-        Area.NO5: "Norway (NO5, Bergen/West)",
-        "PL": "Poland (PL)",
-        Area.PT: "Portugal (PT)",
-        "RO": "Romania (RO)",
-        "SK": "Slovakia (SK)",
-        "SI": "Slovenia (SI)",
-        Area.ES: "Spain (ES)",
-        Area.SE1: "Sweden (SE1, Luleå/North)",
-        Area.SE2: "Sweden (SE2, Sundsvall/North-Central)",
-        Area.SE3: "Sweden (SE3, Stockholm/South-Central)",
-        Area.SE4: "Sweden (SE4, Malmö/South)",
-        Area.CH: "Switzerland (CH)",
+        Area.AT: "AT",
+        Area.BE: "BE",
+        "BG": "BG",
+        "HR": "HR",
+        "CZ": "CZ",
+        Area.DK1: "DK1",
+        Area.DK2: "DK2",
+        Area.EE: "EE",
+        Area.FI: "FI",
+        Area.FR: "FR",
+        Area.DE: "DE",
+        Area.DE_LU: "DE-LU",
+        "GR": "GR",
+        "HU": "HU",
+        "IT": "IT",
+        "IT-North": "IT-North",
+        "IT-Centre-South": "IT-Centre-South",
+        "IT-South": "IT-South",
+        "IT-South-2": "IT-South-2",
+        "IT-Sardinia": "IT-Sardinia",
+        "IT-Sicily": "IT-Sicily",
+        Area.LV: "LV",
+        Area.LT: "LT",
+        Area.NL: "NL",
+        Area.NO1: "NO1",
+        Area.NO2: "NO2",
+        Area.NO3: "NO3",
+        Area.NO4: "NO4",
+        Area.NO5: "NO5",
+        "PL": "PL",
+        Area.PT: "PT",
+        "RO": "RO",
+        "SK": "SK",
+        "SI": "SI",
+        Area.ES: "ES",
+        Area.SE1: "SE1",
+        Area.SE2: "SE2",
+        Area.SE3: "SE3",
+        Area.SE4: "SE4",
+        Area.CH: "CH",
         # Other ENTSO-E Areas
-        "GB": "Great Britain (GB)",
-        "IE(SEM)": "Ireland/Northern Ireland (SEM)",
-        # "AL": "Albania (AL)",  # No day-ahead data available
-        # "BA": "Bosnia and Herzegovina (BA)",  # No day-ahead data available
-        "ME": "Montenegro (ME)",
-        "MK": "North Macedonia (MK)",
-        "RS": "Serbia (RS)",
-        # "TR": "Turkey (TR)",  # No day-ahead data available
-        # "UA": "Ukraine (UA)",  # No day-ahead data available - use UA-IPS instead
-        "UA-IPS": "Ukraine IPS (UA-IPS)",
-        # "UA-BEI": "Ukraine-West (UA-BEI)",  # No day-ahead data available
-        # "CY": "Cyprus (CY)"  # No day-ahead data available
+        "GB": "GB",
+        "IE(SEM)": "IE(SEM)",
+        # "AL": "AL",  # No day-ahead data available
+        # "BA": "BA",  # No day-ahead data available
+        "ME": "ME",
+        # "MK": "MK",  # REMOVED: ENTSO-E API does not support day-ahead prices (A65) for MK
+        "RS": "RS",
+        # "TR": "TR",  # No day-ahead data available
+        # "UA": "UA",  # No day-ahead data available - use UA-IPS instead
+        "UA-IPS": "UA-IPS",
+        # "UA-BEI": "UA-BEI",  # No day-ahead data available
+        # "CY": "CY"  # No day-ahead data available
     }
 
     # Energy-Charts bidding zones (38 zones across Europe)
@@ -316,7 +318,7 @@ class AreaMapping:
         Area.NO3: "NO3",
         Area.NO4: "NO4",
         Area.NO5: "NO5",
-        "NO2NSL": "NO2NSL",  # Norway 2 NSL
+        "NO2NSL": "NO2NSL",
         Area.DK1: "DK1",
         Area.DK2: "DK2",
         Area.FI: "FI",
@@ -356,29 +358,29 @@ class AreaMapping:
 
     # OMIE areas
     OMIE_AREAS = {
-        Area.ES: "Spain",
-        Area.PT: "Portugal",
+        Area.ES: "ES",
+        Area.PT: "PT",
     }
 
     # AEMO areas
     AEMO_AREAS = {
-        Area.NSW1: "New South Wales (NSW1)",
-        Area.QLD1: "Queensland (QLD1)",
-        Area.SA1: "South Australia (SA1)",
-        Area.TAS1: "Tasmania (TAS1)",
-        Area.VIC1: "Victoria (VIC1)",
+        Area.NSW1: "NSW1",
+        Area.QLD1: "QLD1",
+        Area.SA1: "SA1",
+        Area.TAS1: "TAS1",
+        Area.VIC1: "VIC1",
     }
 
     # Stromligning areas
     STROMLIGNING_AREAS = {
-        Area.DK1: "Denmark (DK1)",
-        Area.DK2: "Denmark (DK2)",
+        Area.DK1: "DK1",
+        Area.DK2: "DK2",
     }
 
     # ComEd areas
     COMED_AREAS = {
-        "5minutefeed": "ComEd 5 Minute Price",
-        "currenthouraverage": "ComEd Current Hour Average Price",
+        "5minutefeed": "ComEd: 5min",
+        "currenthouraverage": "ComEd: avg hour",
     }
 
     # All areas combined for lookup
