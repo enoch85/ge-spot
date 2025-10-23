@@ -937,8 +937,23 @@ class UnifiedPriceManager:
                         f"min_acceptable=(today>={min_acceptable_today}, tomorrow>={min_acceptable_tomorrow}){dst_str}"
                     )
 
-                # Data is complete only if both today AND tomorrow have sufficient intervals
-                has_complete_data = today_complete and tomorrow_complete
+                # Determine if tomorrow data is expected yet
+                # Tomorrow data is typically published around 13:00 CET
+                # Before that time, we should accept today-only data as complete
+                current_hour = now.hour
+                tomorrow_window_start = Network.Defaults.SPECIAL_HOUR_WINDOWS[1][
+                    0
+                ]  # 13:00
+                tomorrow_expected = (
+                    current_hour >= tomorrow_window_start
+                )  # After 13:00, we expect tomorrow data
+
+                # Data is complete if:
+                # - We have both today AND tomorrow (always acceptable)
+                # - OR we have today complete and tomorrow isn't expected yet (before 13:00)
+                has_complete_data = today_complete and (
+                    tomorrow_complete or not tomorrow_expected
+                )
                 has_partial_data = (has_today or has_tomorrow) and not has_complete_data
                 has_any_data = has_today or has_tomorrow
 
