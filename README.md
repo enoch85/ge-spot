@@ -162,9 +162,22 @@ The first selected source becomes your highest priority, and the integration wil
 - **Rate limiting** - Minimum 15-minute intervals 
 - **Automatic retries** - Exponential backoff for failed requests (2s → 6s → 18s)
 - **Data caching** - Persistent storage with TTL
-- **Source fallback** - Try all sources in priority order
+- **Intelligent interval validation** - DST-aware validation ensures complete data:
+  - **Normal days**: Expects 96 intervals (15-min × 96 = 24 hours)
+  - **DST spring forward**: Expects 92 intervals (23 hours)
+  - **DST fall back**: Expects 100 intervals (25 hours)
+  - **Strict validation**: Allows only 1 missing interval (15 minutes) tolerance
+  - **Automatic fallback**: Switches to alternative sources when data is incomplete
+- **Source fallback** - Try all sources in priority order until complete data is found
 - **Daily health check** - All configured sources validated once per day during special windows
 - **Source health monitoring** - Track which sources are working vs failed, with retry schedules
+
+**Example:** If ENTSO-E returns 94/96 intervals (missing 30 minutes), the system automatically:
+1. Detects incomplete data (94 < 95 minimum required)
+2. Logs warning about missing intervals
+3. Tries next configured source (e.g., Energy Charts)
+4. Uses complete data from working source
+5. Caches complete result for future requests
 
 ## Architecture
 
@@ -178,7 +191,12 @@ The first selected source becomes your highest priority, and the integration wil
 ### Timezone & Interval Handling
 
 - **Source timezone detection** - Each API has known timezone behavior
-- **DST transitions** - Handles 92-100 intervals on transition days  
+- **DST transitions** - Handles 92-100 intervals on transition days automatically
+- **Interval validation** - Ensures data completeness before acceptance:
+  - Validates exact interval count matches expected (92/96/100 depending on DST)
+  - Tolerates 1 missing interval (15 minutes) for API timing edge cases
+  - Rejects incomplete data (2+ missing intervals = 30+ minutes)
+  - Automatically tries alternative sources when primary source is incomplete
 - **15-minute alignment** - All data normalized to :00, :15, :30, :45 boundaries
 - **Home Assistant integration** - Displays in your configured timezone
 
@@ -425,7 +443,12 @@ Then set this sensor as your energy cost sensor in the Energy Dashboard settings
 - **No data** - Check area is supported by selected source
 - **API key errors** - Verify ENTSO-E API key if using that source  
 - **Missing tomorrow prices** - Available after 13:00 CET daily
-- **96 data points** - Correct! 15-minute intervals = 96 per day
+- **96 data points** - Correct! 15-minute intervals = 96 per day (92 on DST spring, 100 on DST fall)
+- **Incomplete data warnings** - If you see warnings about incomplete intervals:
+  - System automatically tries alternative sources
+  - Check `active_source` in sensor attributes to see which source is being used
+  - Configure multiple sources for better reliability
+  - Example: `[NL] Incomplete today data from entsoe: 94/96 intervals (missing 2)` → System switches to Energy Charts
 
 **Source Health Monitoring:**
 
