@@ -1,18 +1,14 @@
 """Cache manager for electricity spot prices."""
 
-import json
 import logging
-import os
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Union
-from datetime import tzinfo
+from typing import Any, Dict, Optional
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..utils.advanced_cache import AdvancedCache
 from ..const.defaults import Defaults  # Import Defaults for CACHE_TTL
-from ..timezone.timezone_utils import get_timezone_object  # Import the missing function
 
 _LOGGER = logging.getLogger(__name__)
 

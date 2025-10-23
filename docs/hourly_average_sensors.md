@@ -43,7 +43,11 @@ Shows hourly average prices for tomorrow, typically available after 13:00 (varie
 
 ## Sensor Attributes
 
-Both sensors provide a `hourly_prices` attribute containing all hourly averages for the day:
+Both hourly average sensors provide comprehensive attributes with hourly aggregated data instead of 15-minute interval prices:
+
+### Today's Hourly Prices
+
+**Attribute**: `today_hourly_prices`
 
 ```python
 [
@@ -55,13 +59,45 @@ Both sensors provide a `hourly_prices` attribute containing all hourly averages 
 ]
 ```
 
+### Tomorrow's Hourly Prices
+
+**Attribute**: `tomorrow_hourly_prices`
+
+```python
+[
+  {"time": datetime(2025, 10, 23, 0, 0, tzinfo=...), "value": 14.12},
+  {"time": datetime(2025, 10, 23, 1, 0, tzinfo=...), "value": 16.05},
+  ...
+]
+```
+
+### Statistics Attributes
+
+Both sensors include convenient statistics calculated from hourly averages:
+
+- **`today_min_price`**: Lowest hourly average price today
+- **`today_max_price`**: Highest hourly average price today
+- **`today_avg_price`**: Average of all hourly prices today
+- **`tomorrow_min_price`**: Lowest hourly average price tomorrow (when available)
+- **`tomorrow_max_price`**: Highest hourly average price tomorrow (when available)
+- **`tomorrow_avg_price`**: Average of all hourly prices tomorrow (when available)
+
 **Format**:
 - `time`: Python `datetime` object with timezone information
 - `value`: Floating-point price rounded to 4 decimal places
+- Statistics: Rounded to 5 decimal places for accuracy
+
+### Differences from Standard Sensors
+
+Unlike the standard price sensors which include `today_interval_prices` and `tomorrow_interval_prices` (96 entries per day), the hourly average sensors provide:
+
+- **`today_hourly_prices`** and **`tomorrow_hourly_prices`** (24 entries per day)
+- Statistics calculated from hourly averages (not 15-minute intervals)
+- No 15-minute interval data in attributes (simplified for hourly use cases)
 
 **Compatibility**:
 - Home Assistant templates
-- EV Smart Charging integration
+- EV Smart Charging integration (expects datetime objects)
 - Custom automations
 - Energy dashboard
 - Nordpool-compatible automations

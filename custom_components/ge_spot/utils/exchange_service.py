@@ -1,9 +1,9 @@
 """Currency exchange rate service for GE-Spot."""
 
 import logging
+import xml.etree.ElementTree as ET
 import aiohttp
 import aiofiles
-import xml.etree.ElementTree as ET
 import datetime
 import json
 import os

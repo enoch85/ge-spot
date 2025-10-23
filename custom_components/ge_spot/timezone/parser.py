@@ -7,7 +7,7 @@ from typing import Optional, Union
 
 from homeassistant.util import dt as dt_util
 
-from .source_tz import get_timezone_object, get_source_timezone, get_source_format
+from .source_tz import get_timezone_object, get_source_timezone
 from ..const.time import TimezoneConstants
 from ..const.sources import Source
 from ..const.api import SourceTimezone

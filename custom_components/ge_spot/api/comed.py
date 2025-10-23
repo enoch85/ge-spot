@@ -1,17 +1,14 @@
 """API handler for ComEd 5-Minute Pricing."""
 
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional, List
+from datetime import datetime, timezone
+from typing import Dict, Any
 import asyncio
 import json
 import re
 
 from .base.api_client import ApiClient
-from ..timezone import TimezoneService
 from ..const.sources import Source
-from ..const.config import Config
-from ..const.display import DisplayUnit
 from ..const.api import ComEd
 from .parsers.comed_parser import ComedParser
 from ..utils.date_range import generate_date_ranges

@@ -4,7 +4,6 @@ import logging
 import aiohttp
 import asyncio
 import weakref
-from typing import Any, Optional, Dict
 
 _LOGGER = logging.getLogger(__name__)
 

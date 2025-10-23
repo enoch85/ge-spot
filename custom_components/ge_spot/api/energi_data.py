@@ -4,12 +4,10 @@ import logging
 import datetime
 from datetime import timezone, timedelta, time
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from .base.api_client import ApiClient
 from ..const.sources import Source
-from ..const.config import Config
-from ..const.display import DisplayUnit
 from .parsers.energi_data_parser import EnergiDataParser
 from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI

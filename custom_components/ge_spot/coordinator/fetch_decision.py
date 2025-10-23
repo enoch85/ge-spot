@@ -5,10 +5,8 @@ Instead of asking "do we have complete data?", we ask "how long is our data vali
 """
 
 import logging
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from typing import Any, Optional, Tuple
-
-from homeassistant.util import dt as dt_util
 
 from ..const.network import Network
 from .data_validity import DataValidity

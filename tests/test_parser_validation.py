@@ -84,23 +84,21 @@ def test_parsers():
 
         parser = AemoParser()
 
-        # Provide realistic data structure
+        # Provide realistic NEMWEB CSV data structure (AEMO uses 30-min intervals)
+        csv_content = """C,PREDISPATCH
+I,PREDISPATCH,REGION_PRICES,1,PREDISPATCH_RUN_DATETIME,REGIONID,PERIODID,INTERVENTION,DATETIME,RRP,EEP,RAISE6SECRRP
+D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,1,0,2025/10/01 00:00:00,100.0,100.0,0.0
+D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,2,0,2025/10/01 00:30:00,102.0,102.0,0.0"""
+
         mock_data = {
-            "ELEC_NEM_SUMMARY": [
-                {
-                    "REGIONID": "NSW1",
-                    "PRICE": 100.0,
-                    "SETTLEMENTDATE": "2025-10-01T00:00:00+00:00",
-                },
-                {
-                    "REGIONID": "NSW1",
-                    "PRICE": 102.0,
-                    "SETTLEMENTDATE": "2025-10-01T00:05:00+00:00",
-                },
-            ]
+            "csv_content": csv_content,
+            "area": "NSW1",
+            "timezone": "Australia/Sydney",
+            "currency": "AUD",
+            "raw_data": {},
         }
 
-        result = parser.parse(mock_data, area="NSW1")
+        result = parser.parse(mock_data)
 
         assert isinstance(result, dict), "Parser should return dict"
         assert "interval_raw" in result, "Parser should return 'interval_raw'"
@@ -108,7 +106,9 @@ def test_parsers():
         assert isinstance(result["interval_raw"], dict), "interval_raw should be dict"
 
         print(f"✅ AEMO parser returns correct keys: {list(result.keys())}")
-        print(f"✅ Parsed {len(result['interval_raw'])} intervals")
+        print(
+            f"✅ Parsed {len(result['interval_raw'])} intervals (2 x 30-min expanded to 4 x 15-min)"
+        )
 
     except Exception as e:
         print(f"❌ AEMO parser test failed: {e}")

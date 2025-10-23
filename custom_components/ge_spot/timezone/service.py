@@ -11,7 +11,7 @@ from homeassistant.util import dt as dt_util
 
 # Local imports
 # Import Timezone class instead of AREA_TIMEZONES directly
-from ..const.areas import Area, Timezone
+from ..const.areas import Timezone
 from ..const.config import Config
 from ..const.time import TimezoneConstants, TimezoneReference, TimeInterval
 from .timezone_converter import TimezoneConverter

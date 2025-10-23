@@ -3,12 +3,10 @@
 import logging
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 
 from ...const.sources import Source
 from ...const.currencies import Currency
-from ...timezone.timezone_utils import normalize_hour_value
-from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
 from ...const.energy import EnergyUnit  # Add this import
 

@@ -3,10 +3,9 @@
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone, date
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional
 
 from ...timezone.service import TimezoneService
-from ...const.sources import Source
 from ...const.time import TimeInterval
 from ...timezone.timezone_utils import get_timezone_object  # Import helper
 

@@ -418,7 +418,7 @@ class TestDataProcessor:
         with patch.object(processor, "_ensure_exchange_service", AsyncMock()):
             # Setup timezone converter mock to return expected normalized prices
             with patch(
-                "custom_components.ge_spot.utils.timezone_converter.TimezoneConverter",
+                "custom_components.ge_spot.timezone.timezone_converter.TimezoneConverter",
                 spec=True,
             ) as mock_tz_converter_cls:
                 mock_tz_converter = mock_tz_converter_cls.return_value

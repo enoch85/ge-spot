@@ -545,3 +545,124 @@ class TestHourlyAverageSensor:
         # Average should be calculated from valid intervals only
         # (100 + 102 + 104 + 106) / 4 = 103.0
         assert hourly_averages["10:00"] == 103.0
+
+    def test_hourly_attributes_instead_of_interval_prices(
+        self, mock_coordinator, config_data
+    ):
+        """Test that hourly sensors provide hourly price attributes instead of interval prices.
+
+        This is the main feature requested in issue #26 - hourly sensors should show
+        hourly aggregated data, not 15-minute intervals.
+        """
+        sensor = HourlyAverageSensor(
+            mock_coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
+        )
+        sensor._tz_service = None
+
+        attrs = sensor.extra_state_attributes
+
+        # Should NOT have interval prices
+        assert "today_interval_prices" not in attrs
+        assert "tomorrow_interval_prices" not in attrs
+
+        # Should have hourly prices
+        assert "today_hourly_prices" in attrs
+        assert "tomorrow_hourly_prices" in attrs
+
+        # Verify today's hourly prices structure
+        today_hourly = attrs["today_hourly_prices"]
+        assert isinstance(today_hourly, list)
+        assert len(today_hourly) == 3  # 3 hours in mock data
+
+        # Each entry should have 'time' (datetime) and 'value' (float)
+        for entry in today_hourly:
+            assert "time" in entry
+            assert "value" in entry
+            assert isinstance(entry["time"], datetime)
+            assert isinstance(entry["value"], float)
+
+        # Verify values are hourly averages
+        hour_0_entry = next((e for e in today_hourly if e["time"].hour == 0), None)
+        assert hour_0_entry is not None
+        assert abs(hour_0_entry["value"] - 13.0) < 0.0001  # (10+12+14+16)/4 = 13.0
+
+        hour_1_entry = next((e for e in today_hourly if e["time"].hour == 1), None)
+        assert hour_1_entry is not None
+        assert abs(hour_1_entry["value"] - 23.0) < 0.0001  # (20+22+24+26)/4 = 23.0
+
+        # Verify tomorrow's hourly prices
+        tomorrow_hourly = attrs["tomorrow_hourly_prices"]
+        assert isinstance(tomorrow_hourly, list)
+        assert len(tomorrow_hourly) == 2  # 2 hours in mock data
+
+        hour_0_entry = next((e for e in tomorrow_hourly if e["time"].hour == 0), None)
+        assert hour_0_entry is not None
+        assert abs(hour_0_entry["value"] - 18.0) < 0.0001  # (15+17+19+21)/4 = 18.0
+
+        # Should have statistics
+        assert "today_min_price" in attrs
+        assert "today_max_price" in attrs
+        assert "today_avg_price" in attrs
+
+        # Verify statistics values
+        assert attrs["today_min_price"] == 13.0  # Hour 0 average
+        assert attrs["today_max_price"] == 33.0  # Hour 2 average
+        expected_avg = (13.0 + 23.0 + 33.0) / 3
+        assert abs(attrs["today_avg_price"] - expected_avg) < 0.0001
+
+    def test_tomorrow_hourly_attributes_statistics(self, mock_coordinator, config_data):
+        """Test that tomorrow statistics are included when tomorrow data is available."""
+        sensor = HourlyAverageSensor(
+            mock_coordinator,
+            config_data,
+            "tomorrow_hourly_average_price",
+            "Tomorrow Hourly Average Price",
+            day_offset=1,
+        )
+        sensor._tz_service = None
+
+        attrs = sensor.extra_state_attributes
+
+        # Should have tomorrow statistics
+        assert "tomorrow_min_price" in attrs
+        assert "tomorrow_max_price" in attrs
+        assert "tomorrow_avg_price" in attrs
+
+        # Verify statistics values for tomorrow
+        assert attrs["tomorrow_min_price"] == 18.0  # Hour 0 average
+        assert attrs["tomorrow_max_price"] == 28.0  # Hour 1 average
+        expected_avg = (18.0 + 28.0) / 2
+        assert abs(attrs["tomorrow_avg_price"] - expected_avg) < 0.0001
+
+    def test_hourly_attributes_with_empty_data(self, config_data):
+        """Test that empty hourly prices don't cause errors."""
+        coordinator = Mock()
+        coordinator.data = {
+            "today_interval_prices": {},
+            "tomorrow_interval_prices": {},
+        }
+        coordinator.last_update_success = True
+
+        sensor = HourlyAverageSensor(
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
+        )
+        sensor._tz_service = None
+
+        attrs = sensor.extra_state_attributes
+
+        # Should have empty lists
+        assert attrs["today_hourly_prices"] == []
+        assert attrs["tomorrow_hourly_prices"] == []
+
+        # Should NOT have statistics for empty data
+        assert "today_min_price" not in attrs
+        assert "today_max_price" not in attrs
+        assert "today_avg_price" not in attrs

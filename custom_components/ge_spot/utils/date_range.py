@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple
 
 from ..const.time import TimeInterval
 from ..const.sources import Source

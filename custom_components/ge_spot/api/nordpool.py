@@ -10,7 +10,6 @@ from ..const.currencies import Currency
 from ..const.areas import AreaMapping
 from ..const.time import TimeFormat
 from ..const.network import Network
-from ..const.config import Config
 from .parsers.nordpool_parser import NordpoolParser
 from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
@@ -40,7 +39,7 @@ class NordpoolAPI(BasePriceAPI):
         """
         super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
-        self.parser = NordpoolParser()
+        self.parser = NordpoolParser(timezone_service=timezone_service)
 
     def _get_source_type(self) -> str:
         """Get the source type identifier.
@@ -121,6 +120,26 @@ class NordpoolAPI(BasePriceAPI):
         # Generate date ranges to try
         # For Nordpool, we need to handle today and tomorrow separately
         date_ranges = generate_date_ranges(reference_time, Source.NORDPOOL)
+
+        # Check if we need extended date ranges due to timezone offset
+        extended_ranges = self.needs_extended_date_range("Europe/Oslo", reference_time)
+
+        # Fetch yesterday's data if needed
+        yesterday_data = None
+        if extended_ranges["need_yesterday"]:
+            yesterday = (reference_time - timedelta(days=1)).strftime(
+                TimeFormat.DATE_ONLY
+            )
+            params_yesterday = {
+                "currency": Currency.EUR,
+                "date": yesterday,
+                "market": "DayAhead",
+                "deliveryArea": delivery_area,
+            }
+            yesterday_data = await client.fetch(self.base_url, params=params_yesterday)
+            _LOGGER.debug(
+                f"Fetched yesterday's data ({yesterday}) for timezone offset handling"
+            )
 
         # Fetch today's data (first range is today to tomorrow)
         today_start, today_end = date_ranges[0]
@@ -205,8 +224,9 @@ class NordpoolAPI(BasePriceAPI):
 
         # Construct the dictionary to be returned to FallbackManager/DataProcessor
         # This dictionary should contain everything the parser needs.
-        # Ensure raw_data structure is consistent even if tomorrow_data is None
+        # Include yesterday/tomorrow data if fetched for timezone offset handling
         raw_data_payload = {
+            "yesterday": yesterday_data,
             "today": today_data,
             "tomorrow": tomorrow_data,
         }

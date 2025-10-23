@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from ..base.price_parser import BasePriceParser
 from ...const.currencies import Currency

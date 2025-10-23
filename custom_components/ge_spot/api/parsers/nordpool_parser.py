@@ -2,11 +2,10 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from ..base.price_parser import BasePriceParser
 from ...const.sources import Source
-from ...timezone.timezone_utils import normalize_hour_value
 from ...const.currencies import Currency
 from ...const.energy import EnergyUnit  # Added import
 
@@ -54,8 +53,10 @@ class NordpoolParser(BasePriceParser):
 
         interval_raw = {}
 
-        # Nordpool data often comes in days (today, tomorrow)
+        # Nordpool data can include yesterday, today, and tomorrow (for timezone offset handling)
         days_to_process = []
+        if isinstance(raw_api_response.get("yesterday"), dict):
+            days_to_process.append(raw_api_response["yesterday"])
         if isinstance(raw_api_response.get("today"), dict):
             days_to_process.append(raw_api_response["today"])
         if isinstance(raw_api_response.get("tomorrow"), dict):

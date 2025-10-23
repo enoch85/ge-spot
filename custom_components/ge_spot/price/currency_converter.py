@@ -1,12 +1,9 @@
 """Currency conversion utilities."""
 
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
-from ..const.currencies import Currency
 from ..const.energy import EnergyUnit
-from ..const.defaults import Defaults
-from ..const.config import Config
 from ..const.display import DisplayUnit
 from ..utils.exchange_service import ExchangeRateService
 from ..utils.unit_conversion import convert_energy_price, get_display_unit_multiplier

@@ -8,7 +8,6 @@ from homeassistant.util import dt as dt_util
 from .dst_handler import DSTHandler
 from ..const.time import (
     DSTTransitionType,
-    TimezoneConstants,
     TimezoneReference,
     TimeInterval,
 )

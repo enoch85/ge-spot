@@ -2,11 +2,10 @@
 
 import logging
 from datetime import datetime, tzinfo, timedelta, timezone
-from typing import Dict, Any, Optional, Union
+from typing import Optional, Union
 
 import zoneinfo
 
-from ..const.sources import Source
 from ..const.time import TimezoneConstants, TimezoneName
 from ..const.api import SourceTimezone
 from ..const.areas import Timezone

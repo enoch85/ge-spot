@@ -2,22 +2,18 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any
 
 from homeassistant.components.sensor import (
     SensorEntity,
-    SensorStateClass,
     SensorDeviceClass,
 )
 from homeassistant.util import dt as dt_util
 
-from ..const import DOMAIN
 from ..const.attributes import Attributes
 from ..const.config import Config
-from ..const.currencies import Currency, CurrencyInfo
+from ..const.currencies import CurrencyInfo
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
-from ..const.network import Network
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -2,12 +2,7 @@
 
 import logging
 
-from homeassistant.config_entries import ConfigFlow, OptionsFlow
-from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
-
-from ..const import DOMAIN
-from .implementation import GSpotConfigFlow
+from .implementation import GSpotConfigFlow  # noqa: F401
 from .options import GSpotOptionsFlow
 
 _LOGGER = logging.getLogger(__name__)

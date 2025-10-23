@@ -13,6 +13,7 @@ Home Assistant custom integration providing 15-minute electricity spot prices ac
 7. **Keep it simple** - Clean code over complexity, cleanup as you go
 8. **Ask before acting** - When uncertain, clarify first
 9. **No analysis/summary files in git** - All `*ANALYSIS*.md`, `*SUMMARY*.md` files stay untracked
+10. **Format with black** - Run `black` on all Python code before committing. Consistent formatting is mandatory.
 
 ## Architecture
 
@@ -102,9 +103,14 @@ grep -r "= 96" custom_components/
 
 # Test imports
 python3 -c "from custom_components.ge_spot.module import NewClass"
+
+# Format with black
+black custom_components/ tests/
 ```
 
 ## Code Standards
+
+**Format with Black:** All Python code must be formatted with `black` (line length 88) before committing. Run `black .` at project root or use pre-commit hooks.
 
 **Imports:** Group as stdlib, third-party, local. Relative imports within `custom_components/ge_spot/`.
 

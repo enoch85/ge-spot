@@ -7,7 +7,6 @@ from typing import Dict, Any, Optional
 from .base.api_client import ApiClient
 from ..const.sources import Source
 from ..const.currencies import Currency
-from ..const.network import Network
 from .parsers.energy_charts_parser import EnergyChartsParser
 from .base.base_price_api import BasePriceAPI
 from .base.error_handler import ErrorHandler
@@ -39,7 +38,7 @@ class EnergyChartsAPI(BasePriceAPI):
         """
         super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
-        self.parser = EnergyChartsParser()
+        self.parser = EnergyChartsParser(timezone_service=timezone_service)
 
     def _get_source_type(self) -> str:
         """Get the source type identifier.
@@ -106,6 +105,45 @@ class EnergyChartsAPI(BasePriceAPI):
 
         _LOGGER.debug(f"Fetching Energy-Charts data for area: {area}, bzn: {bzn}")
 
+        # Check if we need to fetch yesterday's data due to timezone offset
+        # Energy-Charts returns data in Europe/Berlin timezone
+        extended_ranges = self.needs_extended_date_range(
+            "Europe/Berlin", reference_time
+        )
+
+        _LOGGER.debug(
+            f"Energy-Charts timezone check for {area}: need_yesterday={extended_ranges['need_yesterday']}, "
+            f"need_tomorrow={extended_ranges['need_tomorrow']}"
+        )
+
+        # Fetch yesterday's data if needed for timezone offset
+        yesterday_response = None
+        if extended_ranges["need_yesterday"]:
+            yesterday_date = (reference_time - timedelta(days=1)).strftime("%Y-%m-%d")
+            yesterday_params = {
+                "bzn": bzn,
+                "start": yesterday_date,
+                "end": yesterday_date,
+            }
+
+            _LOGGER.debug(f"Energy-Charts fetching yesterday's data: {yesterday_date}")
+
+            try:
+                yesterday_response = await client.fetch(
+                    f"{self.base_url}/price", params=yesterday_params
+                )
+                if isinstance(yesterday_response, dict) and not yesterday_response.get(
+                    "error"
+                ):
+                    _LOGGER.info(
+                        f"Successfully fetched yesterday's Energy-Charts data for {area}"
+                    )
+                else:
+                    yesterday_response = None
+            except Exception as e:
+                _LOGGER.warning(f"Failed to fetch yesterday's data (non-critical): {e}")
+                yesterday_response = None
+
         # Request 2 days of data (today + tomorrow) to reduce API load
         # Energy-Charts is slower with larger date ranges
         # Start from today to ensure we capture current prices
@@ -147,8 +185,10 @@ class EnergyChartsAPI(BasePriceAPI):
             )
 
             # Return standardized structure for parser
-            return {
-                "raw_data": response,
+            result = {
+                "raw_data": {
+                    "today": response,
+                },
                 "timezone": "Europe/Berlin",  # Energy-Charts API uses CET/CEST
                 "currency": Currency.EUR,  # Energy-Charts always returns EUR
                 "area": area,
@@ -157,6 +197,12 @@ class EnergyChartsAPI(BasePriceAPI):
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
                 "license_info": response.get("license_info", ""),
             }
+
+            # Add yesterday's data if fetched (for timezone offset handling)
+            if yesterday_response:
+                result["raw_data"]["yesterday"] = yesterday_response
+
+            return result
 
         except Exception as e:
             _LOGGER.error(f"Error fetching Energy-Charts data for {area}: {e}")

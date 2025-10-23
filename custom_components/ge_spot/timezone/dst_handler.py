@@ -6,7 +6,7 @@ from typing import Tuple, Optional
 
 from homeassistant.util import dt as dt_util
 
-from ..const.time import DSTTransitionType, TimezoneConstants
+from ..const.time import DSTTransitionType
 
 _LOGGER = logging.getLogger(__name__)
 

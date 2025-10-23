@@ -4,12 +4,10 @@ import logging
 import json
 import re
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 
 from ...const.sources import Source
-from ...timezone.timezone_utils import normalize_hour_value
 from ...const.currencies import Currency
-from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
 from ...const.api import ComEd, SourceTimezone
 from ..interval_expander import convert_to_target_intervals

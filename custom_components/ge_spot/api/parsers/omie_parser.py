@@ -1,16 +1,14 @@
 """Parser for OMIE API responses."""
 
 import logging
-import csv
-from io import StringIO
 import json
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional, List, Tuple
+from io import StringIO
+from datetime import datetime, timezone
+from typing import Dict, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ...const.sources import Source
 from ...const.currencies import Currency
-from ...utils.validation import validate_data
 from ..base.price_parser import BasePriceParser
 from ..interval_expander import convert_to_target_intervals
 
@@ -68,9 +66,9 @@ class OmieParser(BasePriceParser):
             )
             return result
 
-        # --- Parsing Logic for Today and Tomorrow ---
-        # Process only today and tomorrow data
-        days_to_parse = ["today", "tomorrow"]
+        # --- Parsing Logic for Yesterday, Today and Tomorrow ---
+        # Process yesterday (for timezone offset), today and tomorrow data
+        days_to_parse = ["yesterday", "today", "tomorrow"]
 
         for day_key in days_to_parse:
             raw_text = raw_data_payload.get(day_key)

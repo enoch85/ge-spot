@@ -287,59 +287,48 @@ except Exception as e:
 
 print()
 
-# Test 6: AEMO Aggregation Logic
-print("TEST 6: AEMO 5-min to 15-min Aggregation")
+# Test 6: AEMO Expansion Logic (30-min to 15-min)
+print("TEST 6: AEMO 30-min to 15-min Expansion")
 print("-" * 80)
 try:
     from custom_components.ge_spot.api.parsers.aemo_parser import AemoParser
 
     parser = AemoParser()
 
-    # Create 5-minute mock data
+    # Create proper NEMWEB CSV format (AEMO uses 30-minute intervals)
+    csv_content = """C,PREDISPATCH
+I,PREDISPATCH,REGION_PRICES,1,PREDISPATCH_RUN_DATETIME,REGIONID,PERIODID,INTERVENTION,DATETIME,RRP,EEP,RAISE6SECRRP
+D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,1,0,2025/10/01 00:00:00,100.0,100.0,0.0
+D,PREDISPATCH,REGION_PRICES,1,2025/10/01 00:00:00,NSW1,2,0,2025/10/01 00:30:00,104.0,104.0,0.0"""
+
     mock_data = {
-        "ELEC_NEM_SUMMARY": [
-            {
-                "REGIONID": "NSW1",
-                "PRICE": 100.0,
-                "SETTLEMENTDATE": "2025-10-01T00:00:00+00:00",
-            },
-            {
-                "REGIONID": "NSW1",
-                "PRICE": 102.0,
-                "SETTLEMENTDATE": "2025-10-01T00:05:00+00:00",
-            },
-            {
-                "REGIONID": "NSW1",
-                "PRICE": 104.0,
-                "SETTLEMENTDATE": "2025-10-01T00:10:00+00:00",
-            },
-            {
-                "REGIONID": "NSW1",
-                "PRICE": 110.0,
-                "SETTLEMENTDATE": "2025-10-01T00:15:00+00:00",
-            },
-        ]
+        "csv_content": csv_content,
+        "area": "NSW1",
+        "timezone": "Australia/Sydney",
+        "currency": "AUD",
+        "raw_data": {},
     }
 
-    result = parser.parse(mock_data, area="NSW1")
+    result = parser.parse(mock_data)
     interval_raw = result["interval_raw"]
 
-    # Should have 2 fifteen-minute intervals
+    # AEMO provides 30-min intervals, which get expanded to 15-min
+    # 2 x 30-min intervals -> 4 x 15-min intervals
     assert (
-        len(interval_raw) == 2
-    ), f"Should have 2 fifteen-minute intervals, got {len(interval_raw)}"
+        len(interval_raw) == 4
+    ), f"Should have 4 fifteen-minute intervals (expanded from 2 x 30-min), got {len(interval_raw)}"
     print(
-        f"✅ AEMO aggregates to 15-min intervals: {len(interval_raw)} intervals created"
+        f"✅ AEMO expands 30-min to 15-min intervals: {len(interval_raw)} intervals created"
     )
 
-    # Check averaging: (100 + 102 + 104) / 3 = 102.0
+    # Check that prices are duplicated (30-min price copied to two 15-min intervals)
     prices = list(interval_raw.values())
     assert (
-        abs(prices[0] - 102.0) < 0.01
-    ), f"First interval should average to 102.0, got {prices[0]}"
-    print(f"✅ Prices correctly averaged: {prices[0]:.2f}")
+        abs(prices[0] - 100.0) < 0.01 and abs(prices[1] - 100.0) < 0.01
+    ), f"First two intervals should both be 100.0, got {prices[0]:.2f}, {prices[1]:.2f}"
+    print(f"✅ Prices correctly duplicated: {prices[0]:.2f}, {prices[1]:.2f}")
 
-    print("✅ TEST 6 PASSED: AEMO aggregation works correctly")
+    print("✅ TEST 6 PASSED: AEMO 30-min to 15-min expansion works correctly")
 except AssertionError as e:
     print(f"❌ TEST 6 FAILED: {e}")
     sys.exit(1)

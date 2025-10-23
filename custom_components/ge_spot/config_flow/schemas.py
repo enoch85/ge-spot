@@ -5,13 +5,12 @@ from typing import Dict, Any
 import voluptuous as vol
 
 from homeassistant.helpers import selector
-import homeassistant.helpers.config_validation as cv
 
+from ..const.areas import AreaMapping
 from ..const.config import Config
 from ..const.defaults import Defaults
 from ..const.sources import Source
 from ..const.display import DisplayUnit, UpdateInterval
-from ..const.areas import AreaMapping
 from ..const.time import TimezoneReference
 from ..utils.form_helper import FormHelper
 from ..api import get_sources_for_region
