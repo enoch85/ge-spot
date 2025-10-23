@@ -45,7 +45,7 @@ class CurrencyConverter:
         interval_prices: Dict[str, float],  # Prices in source currency/unit
         source_currency: str,
         source_unit: str = EnergyUnit.MWH,  # Assume MWh default if not specified
-    ) -> Tuple[Dict[str, float], Optional[float], Optional[str]]:
+    ) -> Tuple[Dict[str, float], Dict[str, float], Optional[float], Optional[str]]:
         """Converts a dictionary of interval prices to the target currency and display unit.
 
         Args:
@@ -55,12 +55,13 @@ class CurrencyConverter:
 
         Returns:
             A tuple containing:
-            - Dictionary of converted interval prices {'HH:MM': converted_price}.
+            - Dictionary of converted interval prices {'HH:MM': converted_price} (with VAT/taxes/tariffs).
+            - Dictionary of raw interval prices {'HH:MM': raw_price} (without VAT/taxes/tariffs, only currency + unit conversion).
             - The exchange rate used (or None if no conversion needed).
             - The timestamp of the exchange rate used.
         """
         if not interval_prices:
-            return {}, None, None
+            return {}, {}, None, None
 
         _LOGGER.debug(
             "Converting %d prices from %s/%s to %s/%s (VAT included: %s, Rate: %.2f%%, Additional tariff: %.4f, Energy tax: %.4f, Use Subunit/Cents: %s)",
@@ -77,6 +78,7 @@ class CurrencyConverter:
         )
 
         converted_prices = {}
+        raw_prices = {}  # Store raw prices (currency + unit converted, no VAT/taxes)
         exchange_rate = None
         rate_timestamp = None
 
@@ -112,10 +114,10 @@ class CurrencyConverter:
                         source_currency,
                         self.target_currency,
                     )
-                    return {}, None, None
+                    return {}, {}, None, None
             except Exception as e:
                 _LOGGER.error("Error getting exchange rate: %s", e, exc_info=True)
-                return {}, None, None
+                return {}, {}, None, None
         else:
             _LOGGER.debug(
                 "Source and target currency (%s) are the same. No exchange rate needed.",
@@ -130,6 +132,7 @@ class CurrencyConverter:
         for interval_key, price in interval_prices.items():
             if price is None:
                 converted_prices[interval_key] = None
+                raw_prices[interval_key] = None
                 continue
 
             try:
@@ -142,7 +145,20 @@ class CurrencyConverter:
                 if needs_currency_conversion and exchange_rate is not None:
                     converted_value = price * exchange_rate
 
-                # Use a central conversion function to handle unit conversion and VAT
+                # Calculate RAW price (currency + unit conversion only, NO VAT/taxes/tariffs)
+                raw_price = convert_energy_price(
+                    price=converted_value,
+                    source_unit=source_unit,
+                    target_unit=EnergyUnit.KWH,
+                    vat_rate=0.0,  # No VAT for raw price
+                    display_unit_multiplier=display_unit_multiplier,
+                    additional_tariff=0.0,  # No tariff for raw price
+                    energy_tax=0.0,  # No tax for raw price
+                    tariff_in_subunit=False,
+                )
+                raw_prices[interval_key] = raw_price
+
+                # Calculate FINAL price (with VAT, taxes, tariffs)
                 converted_price = convert_energy_price(
                     price=converted_value,
                     source_unit=source_unit,
@@ -166,10 +182,11 @@ class CurrencyConverter:
                 converted_prices[interval_key] = (
                     None  # Mark as None on conversion error
                 )
+                raw_prices[interval_key] = None
 
         _LOGGER.debug(
             "Conversion complete. Example converted price for first interval: %s",
             next(iter(converted_prices.items())) if converted_prices else "N/A",
         )
 
-        return converted_prices, exchange_rate, rate_timestamp
+        return converted_prices, raw_prices, exchange_rate, rate_timestamp

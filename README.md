@@ -328,30 +328,45 @@ The price sensors expose interval prices through attributes in a standardized fo
 ```json
 {
   "today_interval_prices": [
-    {"time": "2025-10-14T00:00:00+02:00", "value": 0.0856},
-    {"time": "2025-10-14T00:15:00+02:00", "value": 0.0842},
+    {"time": "2025-10-14T00:00:00+02:00", "value": 0.0856, "raw_value": 0.0754},
+    {"time": "2025-10-14T00:15:00+02:00", "value": 0.0842, "raw_value": 0.0740},
     ...
   ],
   "tomorrow_interval_prices": [
-    {"time": "2025-10-15T00:00:00+02:00", "value": 0.0891},
+    {"time": "2025-10-15T00:00:00+02:00", "value": 0.0891, "raw_value": 0.0789},
     ...
   ]
 }
 ```
 
 **Key Points:**
-- Each price entry contains a `time` (ISO 8601 datetime string) and `value` (float)
-- Times are in your Home Assistant's configured timezone
+- Each price entry contains:
+  - `time`: ISO 8601 datetime string in your Home Assistant timezone
+  - `value`: Final consumer price (with VAT, tariffs, and energy taxes applied)
+  - `raw_value`: Market spot price (currency and unit converted only, no VAT/fees) _(New in v1.6.0)_
 - List contains 96 entries for a normal day (15-minute intervals)
 - During DST transitions: 92 entries (spring) or 100 entries (fall)
 - Compatible with EV Smart Charging, ApexCharts, and custom automations
 
+**Price Calculation:**
+```
+value = ((raw_value + additional_tariff + energy_tax) × (1 + VAT%)) × display_unit_multiplier
+```
+
+When no VAT, tariffs, or taxes are configured, `raw_value` equals `value`.
+
 **Using in Templates:**
 ```yaml
-# Get price at 14:00
+# Get final consumer price at 14:00
 {{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
    | selectattr('time', 'search', 'T14:00') 
    | map(attribute='value') 
+   | first }}
+
+# Get raw market price at 14:00 (without VAT/fees)
+{{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
+   | selectattr('time', 'search', 'T14:00') 
+   | map(attribute='raw_value') 
    | first }}
 
 # Get all prices above 0.10
@@ -360,9 +375,15 @@ The price sensors expose interval prices through attributes in a standardized fo
    | select('>', 0.10) 
    | list }}
 
-# Count hours with negative prices
+# Compare market prices to final prices
+{% set prices = state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') %}
+Market avg: {{ prices | map(attribute='raw_value') | average | round(4) }}
+Final avg: {{ prices | map(attribute='value') | average | round(4) }}
+Difference: {{ ((prices | map(attribute='value') | average) - (prices | map(attribute='raw_value') | average)) | round(4) }}
+
+# Count hours with negative prices (on market)
 {{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
-   | map(attribute='value') 
+   | map(attribute='raw_value') 
    | select('<', 0) 
    | list 
    | length }}

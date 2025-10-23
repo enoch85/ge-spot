@@ -229,6 +229,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Convert today's prices from HH:MM dict to list of datetime objects
         if "today_interval_prices" in self.coordinator.data:
             today_prices = self.coordinator.data["today_interval_prices"]
+            today_raw_prices = self.coordinator.data.get("today_raw_prices", {})
 
             if isinstance(today_prices, dict) and today_prices:
                 now = dt_util.now().astimezone(target_tz)
@@ -248,12 +249,18 @@ class BaseElectricityPriceSensor(SensorEntity):
                             tzinfo=target_tz,
                         )
                         price = today_prices[hhmm_key]
-                        today_list.append(
-                            {
-                                "time": dt,  # datetime object (not ISO string!)
-                                "value": round(float(price), 4),
-                            }
-                        )
+                        raw_price = today_raw_prices.get(hhmm_key)
+
+                        entry = {
+                            "time": dt,  # datetime object (not ISO string!)
+                            "value": round(float(price), 4),
+                        }
+
+                        # Add raw_value if available (Issue #40)
+                        if raw_price is not None:
+                            entry["raw_value"] = round(float(raw_price), 4)
+
+                        today_list.append(entry)
                     except (ValueError, AttributeError) as e:
                         _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
                         continue
@@ -267,6 +274,7 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Convert tomorrow's prices from HH:MM dict to list of datetime objects
         if "tomorrow_interval_prices" in self.coordinator.data:
             tomorrow_prices = self.coordinator.data["tomorrow_interval_prices"]
+            tomorrow_raw_prices = self.coordinator.data.get("tomorrow_raw_prices", {})
 
             if isinstance(tomorrow_prices, dict) and tomorrow_prices:
                 now = dt_util.now().astimezone(target_tz)
@@ -286,12 +294,18 @@ class BaseElectricityPriceSensor(SensorEntity):
                             tzinfo=target_tz,
                         )
                         price = tomorrow_prices[hhmm_key]
-                        tomorrow_list.append(
-                            {
-                                "time": dt,  # datetime object (not ISO string!)
-                                "value": round(float(price), 4),
-                            }
-                        )
+                        raw_price = tomorrow_raw_prices.get(hhmm_key)
+
+                        entry = {
+                            "time": dt,  # datetime object (not ISO string!)
+                            "value": round(float(price), 4),
+                        }
+
+                        # Add raw_value if available (Issue #40)
+                        if raw_price is not None:
+                            entry["raw_value"] = round(float(raw_price), 4)
+
+                        tomorrow_list.append(entry)
                     except (ValueError, AttributeError) as e:
                         _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
                         continue
