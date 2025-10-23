@@ -162,9 +162,22 @@ The first selected source becomes your highest priority, and the integration wil
 - **Rate limiting** - Minimum 15-minute intervals 
 - **Automatic retries** - Exponential backoff for failed requests (2s → 6s → 18s)
 - **Data caching** - Persistent storage with TTL
-- **Source fallback** - Try all sources in priority order
+- **Intelligent interval validation** - DST-aware validation ensures complete data:
+  - **Normal days**: Expects 96 intervals (15-min × 96 = 24 hours)
+  - **DST spring forward**: Expects 92 intervals (23 hours)
+  - **DST fall back**: Expects 100 intervals (25 hours)
+  - **Strict validation**: Allows only 1 missing interval (15 minutes) tolerance
+  - **Automatic fallback**: Switches to alternative sources when data is incomplete
+- **Source fallback** - Try all sources in priority order until complete data is found
 - **Daily health check** - All configured sources validated once per day during special windows
 - **Source health monitoring** - Track which sources are working vs failed, with retry schedules
+
+**Example:** If ENTSO-E returns 94/96 intervals (missing 30 minutes), the system automatically:
+1. Detects incomplete data (94 < 95 minimum required)
+2. Logs warning about missing intervals
+3. Tries next configured source (e.g., Energy Charts)
+4. Uses complete data from working source
+5. Caches complete result for future requests
 
 ## Architecture
 
@@ -178,7 +191,12 @@ The first selected source becomes your highest priority, and the integration wil
 ### Timezone & Interval Handling
 
 - **Source timezone detection** - Each API has known timezone behavior
-- **DST transitions** - Handles 92-100 intervals on transition days  
+- **DST transitions** - Handles 92-100 intervals on transition days automatically
+- **Interval validation** - Ensures data completeness before acceptance:
+  - Validates exact interval count matches expected (92/96/100 depending on DST)
+  - Tolerates 1 missing interval (15 minutes) for API timing edge cases
+  - Rejects incomplete data (2+ missing intervals = 30+ minutes)
+  - Automatically tries alternative sources when primary source is incomplete
 - **15-minute alignment** - All data normalized to :00, :15, :30, :45 boundaries
 - **Home Assistant integration** - Displays in your configured timezone
 
@@ -328,30 +346,45 @@ The price sensors expose interval prices through attributes in a standardized fo
 ```json
 {
   "today_interval_prices": [
-    {"time": "2025-10-14T00:00:00+02:00", "value": 0.0856},
-    {"time": "2025-10-14T00:15:00+02:00", "value": 0.0842},
+    {"time": "2025-10-14T00:00:00+02:00", "value": 0.0856, "raw_value": 0.0754},
+    {"time": "2025-10-14T00:15:00+02:00", "value": 0.0842, "raw_value": 0.0740},
     ...
   ],
   "tomorrow_interval_prices": [
-    {"time": "2025-10-15T00:00:00+02:00", "value": 0.0891},
+    {"time": "2025-10-15T00:00:00+02:00", "value": 0.0891, "raw_value": 0.0789},
     ...
   ]
 }
 ```
 
 **Key Points:**
-- Each price entry contains a `time` (ISO 8601 datetime string) and `value` (float)
-- Times are in your Home Assistant's configured timezone
+- Each price entry contains:
+  - `time`: ISO 8601 datetime string in your Home Assistant timezone
+  - `value`: Final consumer price (with VAT, tariffs, and energy taxes applied)
+  - `raw_value`: Market spot price (currency and unit converted only, no VAT/fees) _(New in v1.6.0)_
 - List contains 96 entries for a normal day (15-minute intervals)
 - During DST transitions: 92 entries (spring) or 100 entries (fall)
 - Compatible with EV Smart Charging, ApexCharts, and custom automations
 
+**Price Calculation:**
+```
+value = ((raw_value + additional_tariff + energy_tax) × (1 + VAT%)) × display_unit_multiplier
+```
+
+When no VAT, tariffs, or taxes are configured, `raw_value` equals `value`.
+
 **Using in Templates:**
 ```yaml
-# Get price at 14:00
+# Get final consumer price at 14:00
 {{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
    | selectattr('time', 'search', 'T14:00') 
    | map(attribute='value') 
+   | first }}
+
+# Get raw market price at 14:00 (without VAT/fees)
+{{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
+   | selectattr('time', 'search', 'T14:00') 
+   | map(attribute='raw_value') 
    | first }}
 
 # Get all prices above 0.10
@@ -360,9 +393,15 @@ The price sensors expose interval prices through attributes in a standardized fo
    | select('>', 0.10) 
    | list }}
 
-# Count hours with negative prices
+# Compare market prices to final prices
+{% set prices = state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') %}
+Market avg: {{ prices | map(attribute='raw_value') | average | round(4) }}
+Final avg: {{ prices | map(attribute='value') | average | round(4) }}
+Difference: {{ ((prices | map(attribute='value') | average) - (prices | map(attribute='raw_value') | average)) | round(4) }}
+
+# Count hours with negative prices (on market)
 {{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
-   | map(attribute='value') 
+   | map(attribute='raw_value') 
    | select('<', 0) 
    | list 
    | length }}
@@ -404,7 +443,12 @@ Then set this sensor as your energy cost sensor in the Energy Dashboard settings
 - **No data** - Check area is supported by selected source
 - **API key errors** - Verify ENTSO-E API key if using that source  
 - **Missing tomorrow prices** - Available after 13:00 CET daily
-- **96 data points** - Correct! 15-minute intervals = 96 per day
+- **96 data points** - Correct! 15-minute intervals = 96 per day (92 on DST spring, 100 on DST fall)
+- **Incomplete data warnings** - If you see warnings about incomplete intervals:
+  - System automatically tries alternative sources
+  - Check `active_source` in sensor attributes to see which source is being used
+  - Configure multiple sources for better reliability
+  - Example: `[NL] Incomplete today data from entsoe: 94/96 intervals (missing 2)` → System switches to Energy Charts
 
 **Source Health Monitoring:**
 

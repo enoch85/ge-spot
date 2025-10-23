@@ -206,6 +206,10 @@ class DataProcessor:
                 final_today_prices = cached_today
                 final_tomorrow_prices = cached_tomorrow
 
+                # Extract raw prices from cache (added for Issue #40)
+                raw_today_prices = data.get("today_raw_prices", {})
+                raw_tomorrow_prices = data.get("tomorrow_raw_prices", {})
+
                 # Preserve exchange rate info from cache
                 ecb_rate = data.get("ecb_rate")
                 ecb_updated = data.get("ecb_updated")
@@ -417,6 +421,7 @@ class DataProcessor:
             ecb_rate = None
             ecb_updated = None
             final_today_prices = {}
+            raw_today_prices = {}  # Store raw prices (without VAT/taxes/tariffs)
             # Get source unit from the input data, default to MWh if not present
             # For cached data, this might be inside the 'data' dict, or from the original fetch context
             source_unit = data.get("source_unit", EnergyUnit.MWH)
@@ -425,7 +430,7 @@ class DataProcessor:
             )
 
             if normalized_today:
-                converted_today, rate, rate_ts = (
+                converted_today, raw_today, rate, rate_ts = (
                     await self._currency_converter.convert_interval_prices(
                         interval_prices=normalized_today,
                         source_currency=input_source_currency,  # Use determined input_source_currency
@@ -434,12 +439,14 @@ class DataProcessor:
                     )
                 )
                 final_today_prices = converted_today
+                raw_today_prices = raw_today
                 if rate is not None:
                     ecb_rate = rate
                     ecb_updated = rate_ts
             final_tomorrow_prices = {}
+            raw_tomorrow_prices = {}  # Store raw prices (without VAT/taxes/tariffs)
             if normalized_tomorrow:
-                converted_tomorrow, rate, rate_ts = (
+                converted_tomorrow, raw_tomorrow, rate, rate_ts = (
                     await self._currency_converter.convert_interval_prices(
                         interval_prices=normalized_tomorrow,
                         source_currency=input_source_currency,  # Use determined input_source_currency
@@ -448,6 +455,7 @@ class DataProcessor:
                     )
                 )
                 final_tomorrow_prices = converted_tomorrow
+                raw_tomorrow_prices = raw_tomorrow
                 if ecb_rate is None and rate is not None:
                     ecb_rate = rate
                     ecb_updated = rate_ts
@@ -469,6 +477,8 @@ class DataProcessor:
             ),
             "today_interval_prices": final_today_prices,
             "tomorrow_interval_prices": final_tomorrow_prices,
+            "today_raw_prices": raw_today_prices,  # Raw prices without VAT/taxes/tariffs
+            "tomorrow_raw_prices": raw_tomorrow_prices,  # Raw prices without VAT/taxes/tariffs
             "raw_interval_prices_original": input_interval_raw,  # Store the raw prices that went INTO normalization
             "current_price": None,
             "next_interval_price": None,

@@ -119,6 +119,10 @@ class TestEntsoeAreasValidation:
                 "NO1",
                 "NO5",
             ],  # NO1 and NO5 might share (verify this is intentional)
+            "10Y1001A1001A82H": [
+                "DE",
+                "DE-LU",
+            ],  # Germany and Germany-Luxembourg bidding zone share code
         }
 
         for eic, areas in duplicates.items():

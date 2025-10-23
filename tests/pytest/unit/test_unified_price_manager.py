@@ -67,18 +67,30 @@ async def cancel_health_check_tasks(manager):
                     pass
 
 
+# Helper function to generate complete interval data (96 intervals for a full day)
+def _generate_complete_intervals(base_date_str, base_price=1.0):
+    """Generate 96 intervals (15-minute intervals for 24 hours) with HH:MM keys."""
+    from datetime import datetime, timedelta
+
+    intervals = {}
+    base_dt = datetime.fromisoformat(base_date_str)
+    for i in range(96):  # 24 hours * 4 intervals/hour = 96
+        interval_time = base_dt + timedelta(minutes=i * 15)
+        # Use HH:MM format for keys, as expected by data_validity.py
+        interval_key = interval_time.strftime("%H:%M")
+        intervals[interval_key] = base_price + (i * 0.01)
+    return intervals
+
+
 # Mock data for successful fetch
 # Using 15-minute intervals (HH:MM format) to match TimeInterval.QUARTER_HOURLY configuration
 MOCK_SUCCESS_RESULT = {
     "data_source": Source.NORDPOOL,
     "area": "SE1",
     "currency": "SEK",  # Original currency from source
-    "today_interval_prices": {
-        "2025-04-26T10:00:00+00:00": 1.0,
-        "2025-04-26T10:15:00+00:00": 1.1,
-        "2025-04-26T10:30:00+00:00": 1.2,
-        "2025-04-26T10:45:00+00:00": 1.3,
-    },
+    "today_interval_prices": _generate_complete_intervals(
+        "2025-04-26T00:00:00+00:00", 1.0
+    ),
     "attempted_sources": [Source.NORDPOOL],
     # Note: No "error" key for successful fetch
 }
@@ -90,18 +102,12 @@ MOCK_PROCESSED_RESULT = {
     "source": Source.NORDPOOL,  # Parser source (from data structure)
     "area": "SE1",
     "target_currency": "SEK",  # Added target currency
-    "today_interval_prices": {
-        "2025-04-26T10:00:00+02:00": 1.1,
-        "2025-04-26T10:15:00+02:00": 1.2,
-        "2025-04-26T10:30:00+02:00": 1.3,
-        "2025-04-26T10:45:00+02:00": 1.4,
-    },  # Example processed data with 15-min intervals
-    "tomorrow_interval_prices": {
-        "2025-04-27T10:00:00+02:00": 1.5,
-        "2025-04-27T10:15:00+02:00": 1.6,
-        "2025-04-27T10:30:00+02:00": 1.7,
-        "2025-04-27T10:45:00+02:00": 1.8,
-    },  # Add tomorrow data to make this complete dataset
+    "today_interval_prices": _generate_complete_intervals(
+        "2025-04-26T00:00:00+02:00", 1.1
+    ),
+    "tomorrow_interval_prices": _generate_complete_intervals(
+        "2025-04-27T00:00:00+02:00", 1.5
+    ),
     "attempted_sources": [Source.NORDPOOL],
     "fallback_sources": [],
     "using_cached_data": False,

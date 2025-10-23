@@ -364,6 +364,10 @@ class TestDataProcessor:
                 "2025-10-11 17:30": 1.5,
                 "2025-10-11 17:45": 2.0,
             },  # Converted prices (same as input)
+            {
+                "2025-10-11 17:30": 1.5,
+                "2025-10-11 17:45": 2.0,
+            },  # Raw prices (same as input since no VAT/taxes in mock)
             None,  # No exchange rate
             None,  # No rate timestamp
         )
@@ -439,6 +443,7 @@ class TestDataProcessor:
                 mock_currency_converter.convert_interval_prices = AsyncMock(
                     return_value=(
                         {"10:00": 1.5, "11:00": 2.0},  # Converted prices
+                        {"10:00": 1.2, "11:00": 1.8},  # Raw prices (without VAT/taxes)
                         10.5,  # Exchange rate
                         datetime.now(timezone.utc).isoformat(),  # Rate timestamp
                     )
