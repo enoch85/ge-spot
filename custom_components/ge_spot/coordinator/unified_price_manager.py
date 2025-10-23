@@ -908,12 +908,12 @@ class UnifiedPriceManager:
                     expected_tomorrow = expected_intervals  # 96
 
                 # Check if the data is complete (correct number of intervals)
-                # Allow 1-2 missing intervals for edge cases (API timing, rounding)
-                # But this catches genuinely incomplete data like 94/96
+                # Allow only 1 missing interval for edge cases (API timing, rounding)
+                # Stricter validation to catch incomplete data like 94/96
                 min_acceptable_today = max(
-                    expected_today - 2, 90
+                    expected_today - 1, 90
                 )  # Never accept less than 90
-                min_acceptable_tomorrow = max(expected_tomorrow - 2, 90)
+                min_acceptable_tomorrow = max(expected_tomorrow - 1, 90)
 
                 today_complete = (
                     today_count >= min_acceptable_today if has_today else False
