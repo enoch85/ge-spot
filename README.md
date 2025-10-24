@@ -1,12 +1,14 @@
 # GE-Spot: Global Electricity Spot Prices Integration for Home Assistant
 
-![Version](https://img.shields.io/badge/version-1.6.1-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg) [![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
+![Version](https://img.shields.io/badge/version-1.6.1-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg) [![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration) [![Sponsor on GitHub](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-1f425f?logo=github&style=for-the-badge)](https://github.com/sponsors/enoch85)
 
 > *"Hit the right spot with your energy prices"*
 
 <img src="https://github.com/user-attachments/assets/7d765596-50b2-4d2a-926c-209da7120179" width="200" title="GE-Spot Logo" alt="GE-Spot Logo"/>
 
 Home Assistant custom integration providing **electricity spot prices** from global markets with intelligent interval handling (15-minute, hourly, 5-minute) and automatic source fallback.
+
+If you find this project useful, please consider sponsoring the development on GitHub Sponsors: https://github.com/sponsors/enoch85
 
 ## Table of Contents
 
