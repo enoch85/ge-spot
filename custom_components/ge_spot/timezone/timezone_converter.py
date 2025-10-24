@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 # Importing timezone_utils directly instead of from ..timezone to avoid circular import
 from .timezone_utils import get_timezone_object
+from ..const.time import TimeInterval
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -190,11 +191,10 @@ class TimezoneConverter:
                 elif date_part == tomorrow_date_str:
                     tomorrow_prices[interval_part] = price
         else:
-            # Use the original logic with interval ranges
-            today_intervals = self._tz_service.get_today_range()
-            tomorrow_intervals = self._tz_service.get_tomorrow_range()
+            # Fallback: No date in keys - need to infer from embedded date or position
+            # First pass: handle prices that have embedded date metadata
+            unassigned_prices = {}
 
-            # Since we can't differentiate by date, use the API price date if available
             for interval_key, price in normalized_prices.items():
                 if isinstance(price, dict) and "date" in price:
                     price_date = price["date"]
@@ -205,10 +205,51 @@ class TimezoneConverter:
                         today_prices[interval_key] = price_without_date
                     elif price_date == tomorrow_date_str:
                         tomorrow_prices[interval_key] = price_without_date
-                elif interval_key in today_intervals:
-                    today_prices[interval_key] = price
-                elif interval_key in tomorrow_intervals:
-                    tomorrow_prices[interval_key] = price
+                    else:
+                        # Date doesn't match today or tomorrow, skip
+                        _LOGGER.debug(
+                            f"Skipping interval {interval_key} with date {price_date} (not today or tomorrow)"
+                        )
+                else:
+                    # No date metadata - save for second pass
+                    unassigned_prices[interval_key] = price
+
+            # Second pass: assign unassigned prices based on position
+            # Assumption: first 96 intervals are today, next 96 are tomorrow
+            # This handles the case where APIs return concatenated data without dates
+            if unassigned_prices:
+                _LOGGER.warning(
+                    f"split_into_today_tomorrow: {len(unassigned_prices)} prices without date info. "
+                    "Attempting to split based on position (first 96=today, next 96=tomorrow). "
+                    "This may be inaccurate - API should provide date information!"
+                )
+
+                # Sort keys to ensure consistent ordering
+                sorted_keys = sorted(unassigned_prices.keys())
+                intervals_per_day = TimeInterval.get_intervals_per_day()
+
+                for idx, interval_key in enumerate(sorted_keys):
+                    price = unassigned_prices[interval_key]
+                    if idx < intervals_per_day:
+                        # First 96 intervals -> today
+                        if (
+                            interval_key not in today_prices
+                        ):  # Avoid overwriting dated prices
+                            today_prices[interval_key] = price
+                        else:
+                            _LOGGER.debug(
+                                f"Skipping duplicate interval {interval_key} for today (already assigned from date metadata)"
+                            )
+                    else:
+                        # Next 96 intervals -> tomorrow
+                        if (
+                            interval_key not in tomorrow_prices
+                        ):  # Avoid overwriting dated prices
+                            tomorrow_prices[interval_key] = price
+                        else:
+                            _LOGGER.debug(
+                                f"Skipping duplicate interval {interval_key} for tomorrow (already assigned from date metadata)"
+                            )
 
         _LOGGER.debug(
             f"Split prices into today ({len(today_prices)} intervals) and tomorrow ({len(tomorrow_prices)} intervals)"
