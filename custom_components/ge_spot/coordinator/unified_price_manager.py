@@ -541,6 +541,41 @@ class UnifiedPriceManager:
             area=self.area, target_date=today_date
         )
 
+        # During special window (13:00-15:00), if cached data has "tomorrow" prices,
+        # verify they're actually for tomorrow (not stale data from yesterday).
+        # This prevents skipping fetch when we think we have tomorrow but it's actually old.
+        if cached_data_for_decision:
+            try:
+                hour = now.hour
+                start_hour, end_hour = Network.Defaults.SPECIAL_HOUR_WINDOWS[1]  # 13-15
+                in_tomorrow_window = start_hour <= hour < end_hour
+
+                if in_tomorrow_window:
+                    tomorrow_prices = cached_data_for_decision.get(
+                        "tomorrow_interval_prices", {}
+                    )
+                    if tomorrow_prices:
+                        # Check the fetched_at timestamp to see if this cache is from today
+                        fetched_at_str = cached_data_for_decision.get("fetched_at")
+                        if fetched_at_str:
+                            fetched_at = dt_util.parse_datetime(fetched_at_str)
+                            if fetched_at and fetched_at.date() < today_date:
+                                # Cache is from before today - tomorrow data is stale
+                                _LOGGER.debug(
+                                    f"[{self.area}] Cached tomorrow data is stale (fetched {fetched_at.date()}), "
+                                    f"clearing it to force fresh fetch"
+                                )
+                                cached_data_for_decision = dict(
+                                    cached_data_for_decision
+                                )
+                                cached_data_for_decision["tomorrow_interval_prices"] = (
+                                    {}
+                                )
+            except Exception as e:
+                _LOGGER.debug(
+                    f"[{self.area}] Error checking tomorrow data staleness: {e}"
+                )
+
         # Extract data validity from cache if available
         from .data_validity import DataValidity
 
