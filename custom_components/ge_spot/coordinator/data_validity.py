@@ -8,8 +8,50 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Dict
 import logging
+import re
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def parse_interval_key(interval_key: str) -> tuple[int, int]:
+    """Parse interval key to hour and minute, handling DST suffixes.
+
+    Args:
+        interval_key: Key in format "HH:MM" or "HH:MM_1" or "HH:MM_2"
+
+    Returns:
+        Tuple of (hour, minute)
+
+    Raises:
+        ValueError: If key format is invalid
+
+    Examples:
+        >>> parse_interval_key("14:30")
+        (14, 30)
+        >>> parse_interval_key("02:15_1")
+        (2, 15)
+        >>> parse_interval_key("02:15_2")
+        (2, 15)
+    """
+    # Match format: HH:MM optionally followed by _1 or _2
+    # This is strict - only allows valid DST suffixes, not any arbitrary suffix
+    match = re.match(r"^(\d{1,2}):(\d{2})(?:_[12])?$", interval_key)
+
+    if not match:
+        raise ValueError(
+            f"Invalid interval key format: '{interval_key}' (expected HH:MM or HH:MM_1 or HH:MM_2)"
+        )
+
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+
+    # Validate ranges
+    if not (0 <= hour <= 23):
+        raise ValueError(f"Hour must be 0-23, got {hour}")
+    if not (0 <= minute <= 59):
+        raise ValueError(f"Minute must be 0-59, got {minute}")
+
+    return hour, minute
 
 
 @dataclass
@@ -222,7 +264,8 @@ def calculate_data_validity(
     # Parse today's intervals
     for interval_key in interval_prices.keys():
         try:
-            hour, minute = map(int, interval_key.split(":"))
+            # Use the validation function that handles DST suffixes
+            hour, minute = parse_interval_key(interval_key)
             interval_dt = datetime.combine(
                 today_date, datetime.min.time().replace(hour=hour, minute=minute)
             )
@@ -243,7 +286,8 @@ def calculate_data_validity(
     tomorrow_date = today_date + timedelta(days=1)
     for interval_key in tomorrow_interval_prices.keys():
         try:
-            hour, minute = map(int, interval_key.split(":"))
+            # Use the validation function that handles DST suffixes
+            hour, minute = parse_interval_key(interval_key)
             interval_dt = datetime.combine(
                 tomorrow_date, datetime.min.time().replace(hour=hour, minute=minute)
             )

@@ -2,6 +2,7 @@
 
 import logging
 import math
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
@@ -26,6 +27,48 @@ from ..const.attributes import Attributes
 from ..api.base.price_parser import BasePriceParser
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def parse_interval_key(interval_key: str) -> tuple[int, int]:
+    """Parse interval key to hour and minute, handling DST suffixes.
+
+    Args:
+        interval_key: Key in format "HH:MM" or "HH:MM_1" or "HH:MM_2"
+
+    Returns:
+        Tuple of (hour, minute)
+
+    Raises:
+        ValueError: If key format is invalid
+
+    Examples:
+        >>> parse_interval_key("14:30")
+        (14, 30)
+        >>> parse_interval_key("02:15_1")
+        (2, 15)
+        >>> parse_interval_key("02:15_2")
+        (2, 15)
+    """
+    # Match format: HH:MM optionally followed by _1 or _2
+    # This is strict - only allows valid DST suffixes, not any arbitrary suffix
+    match = re.match(r"^(\d{1,2}):(\d{2})(?:_[12])?$", interval_key)
+
+    if not match:
+        raise ValueError(
+            f"Invalid interval key format: '{interval_key}' (expected HH:MM or HH:MM_1 or HH:MM_2)"
+        )
+
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+
+    # Validate ranges
+    if not (0 <= hour <= 23):
+        raise ValueError(f"Hour must be 0-23, got {hour}")
+    if not (0 <= minute <= 59):
+        raise ValueError(f"Minute must be 0-59, got {minute}")
+
+    return hour, minute
+
 
 # NOTE: All API modules should return raw, unprocessed data in this standardized format:
 # {
@@ -768,7 +811,8 @@ class DataProcessor:
             if price == min_price and min_timestamp is None:
                 # Convert HH:MM key to full timestamp using target date
                 try:
-                    hour, minute = map(int, interval_key.split(":"))
+                    # Use the validation function that handles DST suffixes
+                    hour, minute = parse_interval_key(interval_key)
                     timestamp_dt = datetime.combine(
                         target_date,
                         datetime.min.time().replace(hour=hour, minute=minute),
@@ -792,7 +836,8 @@ class DataProcessor:
             if price == max_price and max_timestamp is None:
                 # Convert HH:MM key to full timestamp using target date
                 try:
-                    hour, minute = map(int, interval_key.split(":"))
+                    # Use the validation function that handles DST suffixes
+                    hour, minute = parse_interval_key(interval_key)
                     timestamp_dt = datetime.combine(
                         target_date,
                         datetime.min.time().replace(hour=hour, minute=minute),
