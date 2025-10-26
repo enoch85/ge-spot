@@ -1,9 +1,12 @@
 """Tests for DST-aware validation in production code.
 
-This module tests that interval count validation correctly handles DST transitions:
+This module tests that production code (ApiValidator, DataProcessor) correctly handles
+DST transitions when validating interval counts:
 - Spring forward days (92 intervals)
 - Fall back days (100 intervals)
 - Normal days (96 intervals)
+
+Note: Basic TimeInterval.get_expected_intervals_for_date() tests are in test_time_interval_dst.py
 """
 
 import pytest
@@ -11,42 +14,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from unittest.mock import Mock, patch
 
-from custom_components.ge_spot.const.time import TimeInterval
 from custom_components.ge_spot.api.base.api_validator import ApiValidator
-
-
-class TestDSTAwareIntervalCounting:
-    """Test that TimeInterval.get_expected_intervals_for_date() works correctly."""
-
-    def test_normal_day(self):
-        """Normal day should return 96 intervals."""
-        tz = ZoneInfo("Europe/Stockholm")
-        # June 15, 2025 - no DST transition
-        normal_day = datetime(2025, 6, 15, 12, 0, 0, tzinfo=tz)
-
-        result = TimeInterval.get_expected_intervals_for_date(normal_day, tz)
-
-        assert result == 96, "Normal day should have 96 intervals"
-
-    def test_spring_forward_day(self):
-        """Spring forward day should return 92 intervals."""
-        tz = ZoneInfo("Europe/Stockholm")
-        # March 30, 2025 - spring forward (02:00 -> 03:00)
-        spring_day = datetime(2025, 3, 30, 12, 0, 0, tzinfo=tz)
-
-        result = TimeInterval.get_expected_intervals_for_date(spring_day, tz)
-
-        assert result == 92, "Spring forward day should have 92 intervals (23 hours)"
-
-    def test_fall_back_day(self):
-        """Fall back day should return 100 intervals."""
-        tz = ZoneInfo("Europe/Stockholm")
-        # October 26, 2025 - fall back (03:00 -> 02:00)
-        fall_day = datetime(2025, 10, 26, 12, 0, 0, tzinfo=tz)
-
-        result = TimeInterval.get_expected_intervals_for_date(fall_day, tz)
-
-        assert result == 100, "Fall back day should have 100 intervals (25 hours)"
 
 
 class TestApiValidatorDSTAware:
