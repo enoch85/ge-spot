@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.const import Platform
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
 from .const.config import Config
@@ -19,6 +20,9 @@ from .price.currency_service import get_default_currency
 
 PLATFORMS = [Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)
+
+# This integration is config-entry only (configured via UI, not YAML)
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 # UnifiedPriceCoordinator is the sole supported approach; legacy coordinator has been removed.
 
