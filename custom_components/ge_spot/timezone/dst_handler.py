@@ -1,7 +1,7 @@
 """DST transition handling utilities."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Tuple, Optional
 
 from homeassistant.util import dt as dt_util
@@ -36,12 +36,27 @@ class DSTHandler:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=self.timezone)
 
-        # Get the day at midnight in the relevant timezone
-        day = dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        # Get the next day at midnight
-        day_plus_1 = day + timedelta(days=1)
-        # Calculate the difference in hours
-        diff_hours = (day_plus_1 - day).total_seconds() / 3600
+        # Get timezone - use dt's timezone if available, otherwise use self.timezone
+        tz = dt.tzinfo if dt.tzinfo else self.timezone
+
+        # Extract date components
+        year, month, day_num = dt.year, dt.month, dt.day
+
+        # Create aware datetime at midnight for current day and next day
+        # Using ZoneInfo-style: create with tzinfo directly
+        day = datetime(year, month, day_num, 0, 0, 0, tzinfo=tz)
+        day_plus_1 = datetime(year, month, day_num, 0, 0, 0, tzinfo=tz) + timedelta(
+            days=1
+        )
+
+        # Convert to UTC to calculate actual elapsed time (not wall clock time)
+        # This is necessary because datetime arithmetic ignores DST transitions
+        day_utc = day.astimezone(timezone.utc)
+        day_plus_1_utc = day_plus_1.astimezone(timezone.utc)
+
+        # Calculate the difference in hours using UTC times
+        # This will be 23, 24, or 25 hours depending on DST transition
+        diff_hours = (day_plus_1_utc - day_utc).total_seconds() / 3600
 
         # Check if it's a DST transition day
         if abs(diff_hours - 24) < 0.1:
