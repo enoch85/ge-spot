@@ -14,6 +14,7 @@ from ..const.config import Config
 from ..const.currencies import CurrencyInfo
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
+from ..coordinator.data_processor import parse_interval_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -238,7 +239,7 @@ class BaseElectricityPriceSensor(SensorEntity):
                 today_list = []
                 for hhmm_key in sorted(today_prices.keys()):
                     try:
-                        hour, minute = map(int, hhmm_key.split(":"))
+                        hour, minute = parse_interval_key(hhmm_key)
                         dt = datetime(
                             today_date.year,
                             today_date.month,
@@ -283,7 +284,7 @@ class BaseElectricityPriceSensor(SensorEntity):
                 tomorrow_list = []
                 for hhmm_key in sorted(tomorrow_prices.keys()):
                     try:
-                        hour, minute = map(int, hhmm_key.split(":"))
+                        hour, minute = parse_interval_key(hhmm_key)
                         dt = datetime(
                             tomorrow_date.year,
                             tomorrow_date.month,
