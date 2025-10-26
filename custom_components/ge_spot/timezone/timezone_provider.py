@@ -402,3 +402,77 @@ class TimezoneProvider:
                     return dt - timedelta(hours=1)
 
         return dt
+
+
+def get_day_hours(date, timezone):
+    """Get all hours for a day with DST awareness.
+
+    Args:
+        date: Date object or datetime object
+        timezone: ZoneInfo timezone object or string
+
+    Returns:
+        List of dict with {"hour": int, "suffix": str} for each hour in the day.
+        Normal day: 24 hours (0-23)
+        DST fall-back: 25 hours (0-1, 2 (first), 2 (second), 3-23)
+        DST spring-forward: 23 hours (0-1, 3-23, hour 2 is skipped)
+
+    Example:
+        Normal day: [{"hour": 0}, {"hour": 1}, ..., {"hour": 23}]
+        Fall-back: [{"hour": 0}, {"hour": 1}, {"hour": 2, "suffix": "_1"},
+                    {"hour": 2, "suffix": "_2"}, {"hour": 3}, ..., {"hour": 23}]
+        Spring-forward: [{"hour": 0}, {"hour": 1}, {"hour": 3}, ..., {"hour": 23}]
+    """
+    from ..const.time import DSTTransitionType
+    from .dst_handler import DSTHandler
+    from zoneinfo import ZoneInfo
+
+    # Convert date to datetime if needed
+    if hasattr(date, "date"):
+        # It's already a datetime
+        dt = date
+    else:
+        # It's a date, convert to datetime at midnight
+        dt = datetime.combine(date, datetime.min.time())
+
+    # Ensure timezone is ZoneInfo object
+    if isinstance(timezone, str):
+        timezone = ZoneInfo(timezone)
+
+    # Make datetime timezone-aware if it isn't
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone)
+
+    # Check for DST transition
+    dst_handler = DSTHandler(timezone)
+    is_dst, dst_type = dst_handler.is_dst_transition_day(dt)
+
+    result = []
+
+    if is_dst and dst_type == DSTTransitionType.FALL_BACK:
+        # Fall-back: 25 hours (hour 2 appears twice)
+        # Hours 0-1
+        for hour in range(0, 2):
+            result.append({"hour": hour})
+        # Hour 2 first occurrence (DST)
+        for suffix in ["_1", "_2"]:
+            result.append({"hour": 2, "suffix": suffix})
+        # Hours 3-23
+        for hour in range(3, 24):
+            result.append({"hour": hour})
+
+    elif is_dst and dst_type == DSTTransitionType.SPRING_FORWARD:
+        # Spring-forward: 23 hours (hour 2 is skipped)
+        # Hours 0-1
+        for hour in range(0, 2):
+            result.append({"hour": hour})
+        # Hour 2 is skipped
+        # Hours 3-23
+        for hour in range(3, 24):
+            result.append({"hour": hour})
+    else:
+        # Normal day: 24 hours
+        for hour in range(0, 24):
+            result.append({"hour": hour})
+
+    return result

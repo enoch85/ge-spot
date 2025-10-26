@@ -351,25 +351,81 @@ class TimezoneService:
         return self.interval_calculator.get_interval_key_for_datetime(next_interval)
 
     def get_today_range(self) -> List[str]:
-        """Get list of interval keys for today."""
-        # Generate all intervals for the day based on configured interval duration
+        """Get list of interval keys for today.
+
+        Returns DST-aware interval keys:
+        - Normal day: 96 intervals (00:00 to 23:45)
+        - DST fall-back: 100 intervals (includes 02:00_1, 02:15_1, etc. and 02:00_2, 02:15_2, etc.)
+        - DST spring-forward: 92 intervals (02:00-02:45 are skipped)
+        """
+        from homeassistant.util import dt as dt_util
+
+        # Get today's date in the target timezone
+        now = dt_util.now()
+        if hasattr(now, "tzinfo") and now.tzinfo:
+            today = now.astimezone(self.target_timezone).date()
+        else:
+            today = now.date()
+
+        # Use the timezone provider to get DST-aware intervals
+        from .timezone_provider import get_day_hours
+
+        day_hours = get_day_hours(today, self.target_timezone)
+
+        # Generate interval keys for all hours
         interval_minutes = TimeInterval.get_interval_minutes()
         intervals_per_hour = TimeInterval.get_intervals_per_hour()
         result = []
-        for hour in range(24):
+
+        for hour_info in day_hours:
+            hour = hour_info["hour"]
+            suffix = hour_info.get("suffix", "")
+
             for i in range(intervals_per_hour):
                 minute = i * interval_minutes
-                result.append(f"{hour:02d}:{minute:02d}")
+                key = f"{hour:02d}:{minute:02d}"
+                if suffix:
+                    key += suffix
+                result.append(key)
+
         return result
 
     def get_tomorrow_range(self) -> List[str]:
-        """Get list of interval keys for tomorrow."""
-        # Same as today but represents tomorrow's intervals
+        """Get list of interval keys for tomorrow.
+
+        Returns DST-aware interval keys:
+        - Normal day: 96 intervals (00:00 to 23:45)
+        - DST fall-back: 100 intervals (includes 02:00_1, 02:15_1, etc. and 02:00_2, 02:15_2, etc.)
+        - DST spring-forward: 92 intervals (02:00-02:45 are skipped)
+        """
+        from homeassistant.util import dt as dt_util
+
+        # Get tomorrow's date in the target timezone
+        now = dt_util.now()
+        if hasattr(now, "tzinfo") and now.tzinfo:
+            tomorrow = (now.astimezone(self.target_timezone) + timedelta(days=1)).date()
+        else:
+            tomorrow = (now + timedelta(days=1)).date()
+
+        # Use the timezone provider to get DST-aware intervals
+        from .timezone_provider import get_day_hours
+
+        day_hours = get_day_hours(tomorrow, self.target_timezone)
+
+        # Generate interval keys for all hours
         interval_minutes = TimeInterval.get_interval_minutes()
         intervals_per_hour = TimeInterval.get_intervals_per_hour()
         result = []
-        for hour in range(24):
+
+        for hour_info in day_hours:
+            hour = hour_info["hour"]
+            suffix = hour_info.get("suffix", "")
+
             for i in range(intervals_per_hour):
                 minute = i * interval_minutes
-                result.append(f"{hour:02d}:{minute:02d}")
+                key = f"{hour:02d}:{minute:02d}"
+                if suffix:
+                    key += suffix
+                result.append(key)
+
         return result
