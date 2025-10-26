@@ -643,6 +643,8 @@ class DataProcessor:
                 found_keys = set(final_tomorrow_prices.keys())
                 # Allow statistics if at least 80% of intervals are present
                 from ..const.time import TimeInterval
+                from homeassistant.util import dt as dt_util
+                from ..const.sources import Source
 
                 expected_intervals = TimeInterval.get_intervals_per_day()
                 tomorrow_complete_enough = len(found_keys) >= math.ceil(
@@ -662,10 +664,31 @@ class DataProcessor:
                     )  # Log tomorrow's stats
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
-                    # Update warning message threshold
-                    _LOGGER.warning(
-                        f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}"
+
+                    # Time-aware validation: Use DEBUG before publication time, WARNING after
+                    now_utc = dt_util.utcnow()
+                    publication_hour_utc = Source.get_publication_time_utc(
+                        self.source if hasattr(self, "source") else "unknown"
                     )
+                    data_should_be_available = now_utc.hour >= publication_hour_utc
+
+                    log_message = (
+                        f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, "
+                        f"need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. "
+                        f"Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}"
+                    )
+
+                    if data_should_be_available:
+                        # After publication time - this is concerning
+                        _LOGGER.warning(
+                            f"{log_message} (after expected publication time {publication_hour_utc}:00 UTC)"
+                        )
+                    else:
+                        # Before publication time - this is expected
+                        _LOGGER.debug(
+                            f"{log_message} (before publication time {publication_hour_utc}:00 UTC, this is normal)"
+                        )
+
                     processed_result["tomorrow_statistics"] = (
                         PriceStatistics().to_dict()
                     )

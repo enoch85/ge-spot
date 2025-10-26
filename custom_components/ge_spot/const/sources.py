@@ -55,6 +55,38 @@ class Source:
         AMBER: "Amber Electric",
     }
 
+    # Tomorrow data publication times (UTC hour when tomorrow data becomes available)
+    # These are approximate times based on market schedules
+    # - Nordpool: Day-ahead auction results published around 12:42 CET (~11:42 UTC winter, ~10:42 UTC summer)
+    # - ENTSO-E: Similar to Nordpool, around 13:00 CET
+    # - Energi Data Service: Based on Nordpool, around 13:00 CET
+    # - OMIE: Day-ahead auction results published around 14:00 CET
+    # - Energy-Charts: Data aggregation may take longer, around 14:00 CET
+    # Using conservative estimates (1-2 hours after typical publication)
+    PUBLICATION_TIMES_UTC = {
+        NORDPOOL: 13,  # ~13:00 UTC (safe buffer after 12:42 CET)
+        ENTSOE: 13,
+        ENERGI_DATA_SERVICE: 13,
+        OMIE: 14,  # Spanish market publishes slightly later
+        STROMLIGNING: 13,
+        AEMO: 14,  # Australian market, different schedule
+        AMBER: 14,
+        COMED: 14,
+        ENERGY_CHARTS: 14,
+    }
+
+    @staticmethod
+    def get_publication_time_utc(source: str) -> int:
+        """Get expected UTC hour when tomorrow data becomes available.
+
+        Args:
+            source: Source identifier
+
+        Returns:
+            UTC hour (0-23) when tomorrow data should be available
+        """
+        return Source.PUBLICATION_TIMES_UTC.get(source, 14)  # Default to 14:00 UTC
+
     @staticmethod
     def get_display_name(source: str) -> str:
         """Get display name for a source.
