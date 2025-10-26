@@ -7,24 +7,33 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from ..utils.exchange_service import ExchangeRateService
 from ..const.config import Config
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
-from ..timezone.service import TimezoneService
-from ..api.base.data_structure import PriceStatistics
-from ..const.energy import EnergyUnit
-
-from ..timezone.timezone_converter import TimezoneConverter  # Import TimezoneConverter
-from ..price.currency_converter import CurrencyConverter  # Import CurrencyConverter
-
-# Use relative import for sources
+from ..const.time import TimeInterval
 from ..const.sources import Source
 from ..const.attributes import Attributes
-
-# Import BasePriceParser for type hinting
+from ..const.energy import EnergyUnit
+from ..timezone.service import TimezoneService
+from ..api.base.data_structure import PriceStatistics
+from ..timezone.timezone_converter import TimezoneConverter
+from ..price.currency_converter import CurrencyConverter
 from ..api.base.price_parser import BasePriceParser
+from .data_validity import DataValidity, calculate_data_validity, parse_interval_key
+
+# Parser imports for get_parser method
+from ..api.parsers.entsoe_parser import EntsoeParser
+from ..api.parsers.nordpool_parser import NordpoolParser
+from ..api.parsers.stromligning_parser import StromligningParser
+from ..api.parsers.energi_data_parser import EnergiDataParser
+from ..api.parsers.omie_parser import OmieParser
+from ..api.parsers.aemo_parser import AemoParser
+from ..api.parsers.energy_charts_parser import EnergyChartsParser
+from ..api.parsers.comed_parser import ComedParser
+from ..api.parsers.amber_parser import AmberParser
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -610,9 +619,11 @@ class DataProcessor:
                 today_keys = set(self._tz_service.get_today_range())
                 found_keys = set(final_today_prices.keys())
                 # Allow statistics if at least 80% of intervals are present
-                from ..const.time import TimeInterval
-
-                expected_intervals = TimeInterval.get_intervals_per_day()
+                # Use DST-aware interval counting for today's date
+                today_date = dt_util.now(self._tz_service.area_timezone)
+                expected_intervals = TimeInterval.get_expected_intervals_for_date(
+                    today_date, self._tz_service.area_timezone
+                )
                 today_complete_enough = len(found_keys) >= math.ceil(
                     expected_intervals * 0.8
                 )
@@ -642,9 +653,19 @@ class DataProcessor:
                 tomorrow_keys = set(self._tz_service.get_tomorrow_range())
                 found_keys = set(final_tomorrow_prices.keys())
                 # Allow statistics if at least 80% of intervals are present
-                from ..const.time import TimeInterval
-
-                expected_intervals = TimeInterval.get_intervals_per_day()
+                # Use DST-aware interval counting for tomorrow's date
+                tomorrow_date = dt_util.now(self._tz_service.area_timezone) + timedelta(
+                    days=1
+                )
+                # Reconvert to timezone to update DST offset after timedelta
+                # Only reconvert if area_timezone is a real timezone object (not a Mock)
+                if hasattr(self._tz_service.area_timezone, "tzname"):
+                    tomorrow_date = tomorrow_date.astimezone(
+                        self._tz_service.area_timezone
+                    )
+                expected_intervals = TimeInterval.get_expected_intervals_for_date(
+                    tomorrow_date, self._tz_service.area_timezone
+                )
                 tomorrow_complete_enough = len(found_keys) >= math.ceil(
                     expected_intervals * 0.8
                 )
@@ -662,10 +683,31 @@ class DataProcessor:
                     )  # Log tomorrow's stats
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
-                    # Update warning message threshold
-                    _LOGGER.warning(
-                        f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}"
+
+                    # Time-aware validation: Use DEBUG before publication time, WARNING after
+                    now_utc = dt_util.utcnow()
+                    publication_hour_utc = Source.get_publication_time_utc(
+                        self.source if hasattr(self, "source") else "unknown"
                     )
+                    data_should_be_available = now_utc.hour >= publication_hour_utc
+
+                    log_message = (
+                        f"Insufficient data for tomorrow ({len(found_keys)}/{len(tomorrow_keys)} keys found, "
+                        f"need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. "
+                        f"Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}"
+                    )
+
+                    if data_should_be_available:
+                        # After publication time - this is concerning
+                        _LOGGER.warning(
+                            f"{log_message} (after expected publication time {publication_hour_utc}:00 UTC)"
+                        )
+                    else:
+                        # Before publication time - this is expected
+                        _LOGGER.debug(
+                            f"{log_message} (before publication time {publication_hour_utc}:00 UTC, this is normal)"
+                        )
+
                     processed_result["tomorrow_statistics"] = (
                         PriceStatistics().to_dict()
                     )
@@ -704,9 +746,6 @@ class DataProcessor:
         # --- Step 6: Calculate Data Validity ---
         # This tracks how far into the future we have valid price data
         try:
-            from .data_validity import calculate_data_validity
-            from homeassistant.util import dt as dt_util
-
             now = dt_util.now()
             current_interval_key = (
                 processed_result.get("current_interval_key")
@@ -731,8 +770,6 @@ class DataProcessor:
                 f"Error calculating data validity for {self.area}: {e}", exc_info=True
             )
             # Add empty validity on error
-            from .data_validity import DataValidity
-
             processed_result["data_validity"] = DataValidity().to_dict()
 
         _LOGGER.info(
@@ -742,19 +779,6 @@ class DataProcessor:
 
     def _get_parser(self, source_name: str) -> Optional[BasePriceParser]:
         """Get the appropriate parser instance based on the source name."""
-        # Import parsers here to avoid circular dependencies
-        from ..api.parsers.entsoe_parser import EntsoeParser
-        from ..api.parsers.nordpool_parser import NordpoolParser
-        from ..api.parsers.stromligning_parser import StromligningParser
-        from ..api.parsers.energi_data_parser import EnergiDataParser
-        from ..api.parsers.omie_parser import OmieParser
-        from ..api.parsers.aemo_parser import AemoParser
-        from ..api.parsers.energy_charts_parser import EnergyChartsParser
-        from ..api.parsers.comed_parser import ComedParser
-        from ..api.parsers.amber_parser import AmberParser
-
-        # Add other parsers as needed
-        # ...
 
         parser_map = {
             # Use lowercase source names from Source constants
@@ -802,8 +826,6 @@ class DataProcessor:
         max_timestamp = None
 
         # Get the target date based on day_offset
-        from homeassistant.util import dt as dt_util
-
         now = dt_util.now()
         target_date = (now + timedelta(days=day_offset)).date()
 

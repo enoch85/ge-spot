@@ -4,11 +4,13 @@ import logging
 import re
 from datetime import datetime, timedelta, tzinfo
 from typing import Dict, Any, Optional, List, Tuple
-import zoneinfo
+from zoneinfo import ZoneInfo
 
 from ..const.config import Config
 from ..const.defaults import Defaults
+from ..const.time import TimeInterval, DSTTransitionType
 from .timezone_utils import get_source_timezone
+from .dst_handler import DSTHandler
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,7 +49,7 @@ class TimezoneProvider:
 
         try:
             # Get timezone from zoneinfo
-            tz = zoneinfo.ZoneInfo(timezone_id)
+            tz = ZoneInfo(timezone_id)
 
             # Cache timezone
             self._timezone_cache[timezone_id] = tz
@@ -63,7 +65,7 @@ class TimezoneProvider:
         Returns:
             Local timezone object
         """
-        return self.get_timezone(self.local_timezone) or zoneinfo.ZoneInfo("UTC")
+        return self.get_timezone(self.local_timezone) or ZoneInfo("UTC")
 
     def get_source_timezone(self, source: str, area: Optional[str] = None) -> tzinfo:
         """Get the timezone for a source.
@@ -79,7 +81,7 @@ class TimezoneProvider:
         timezone_id = get_source_timezone(source, area)
 
         # Get timezone object
-        return self.get_timezone(timezone_id) or zoneinfo.ZoneInfo("UTC")
+        return self.get_timezone(timezone_id) or ZoneInfo("UTC")
 
     def localize_datetime(
         self, dt: datetime, timezone_id: Optional[str] = None
@@ -124,7 +126,7 @@ class TimezoneProvider:
             return dt.astimezone(local_tz)
 
         # Assume UTC if not localized
-        utc_dt = dt.replace(tzinfo=zoneinfo.ZoneInfo("UTC"))
+        utc_dt = dt.replace(tzinfo=ZoneInfo("UTC"))
         return utc_dt.astimezone(local_tz)
 
     def convert_from_source(
@@ -327,14 +329,14 @@ class TimezoneProvider:
         Returns:
             List of interval start datetimes
         """
-        from ..const.time import TimeInterval
-
         # Get start of day
         day_start = self.get_day_start(dt)
 
-        # Get all intervals for the day
+        # Get all intervals for the day (DST-aware)
         interval_minutes = TimeInterval.get_interval_minutes()
-        intervals_per_day = TimeInterval.get_intervals_per_day()
+        intervals_per_day = TimeInterval.get_expected_intervals_for_date(
+            dt, self.timezone
+        )
         return [
             day_start + timedelta(minutes=i * interval_minutes)
             for i in range(intervals_per_day)
@@ -402,3 +404,73 @@ class TimezoneProvider:
                     return dt - timedelta(hours=1)
 
         return dt
+
+
+def get_day_hours(date, timezone):
+    """Get all hours for a day with DST awareness.
+
+    Args:
+        date: Date object or datetime object
+        timezone: ZoneInfo timezone object or string
+
+    Returns:
+        List of dict with {"hour": int, "suffix": str} for each hour in the day.
+        Normal day: 24 hours (0-23)
+        DST fall-back: 25 hours (0-1, 2 (first), 2 (second), 3-23)
+        DST spring-forward: 23 hours (0-1, 3-23, hour 2 is skipped)
+
+    Example:
+        Normal day: [{"hour": 0}, {"hour": 1}, ..., {"hour": 23}]
+        Fall-back: [{"hour": 0}, {"hour": 1}, {"hour": 2, "suffix": "_1"},
+                    {"hour": 2, "suffix": "_2"}, {"hour": 3}, ..., {"hour": 23}]
+        Spring-forward: [{"hour": 0}, {"hour": 1}, {"hour": 3}, ..., {"hour": 23}]
+    """
+    # Convert date to datetime if needed
+    if hasattr(date, "date"):
+        # It's already a datetime
+        dt = date
+    else:
+        # It's a date, convert to datetime at midnight
+        dt = datetime.combine(date, datetime.min.time())
+
+    # Ensure timezone is ZoneInfo object
+    if isinstance(timezone, str):
+        timezone = ZoneInfo(timezone)
+
+    # Make datetime timezone-aware if it isn't
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone)
+
+    # Check for DST transition
+    dst_handler = DSTHandler(timezone)
+    is_dst, dst_type = dst_handler.is_dst_transition_day(dt)
+
+    result = []
+
+    if is_dst and dst_type == DSTTransitionType.FALL_BACK:
+        # Fall-back: 25 hours (hour 2 appears twice)
+        # Hours 0-1
+        for hour in range(0, 2):
+            result.append({"hour": hour})
+        # Hour 2 first occurrence (DST)
+        for suffix in ["_1", "_2"]:
+            result.append({"hour": 2, "suffix": suffix})
+        # Hours 3-23
+        for hour in range(3, 24):
+            result.append({"hour": hour})
+
+    elif is_dst and dst_type == DSTTransitionType.SPRING_FORWARD:
+        # Spring-forward: 23 hours (hour 2 is skipped)
+        # Hours 0-1
+        for hour in range(0, 2):
+            result.append({"hour": hour})
+        # Hour 2 is skipped
+        # Hours 3-23
+        for hour in range(3, 24):
+            result.append({"hour": hour})
+    else:
+        # Normal day: 24 hours
+        for hour in range(0, 24):
+            result.append({"hour": hour})
+
+    return result

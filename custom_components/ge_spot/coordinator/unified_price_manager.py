@@ -15,7 +15,7 @@ from ..const.sources import Source
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..const.network import Network
-from ..const.time import ValidationRetry
+from ..const.time import ValidationRetry, DSTTransitionType
 from ..const.errors import Errors, ErrorDetails
 from ..api import get_sources_for_region
 from ..timezone.service import TimezoneService  # Added import
@@ -883,12 +883,8 @@ class UnifiedPriceManager:
                 processed_data = await self._process_result(result)
 
                 # Check data completeness with interval count validation
-                from ..const.time import TimeInterval, DSTTransitionType
+                from ..const.time import TimeInterval
                 from ..timezone.dst_handler import DSTHandler
-
-                expected_intervals = (
-                    TimeInterval.get_intervals_per_day()
-                )  # 96 for non-DST days
 
                 today_prices = (
                     processed_data.get("today_interval_prices", {})
@@ -908,39 +904,40 @@ class UnifiedPriceManager:
                 has_today = bool(today_prices)
                 has_tomorrow = bool(tomorrow_prices)
 
-                # Check for DST transitions to adjust expected interval counts
-                dst_handler = DSTHandler(self._tz_service.target_timezone)
-
-                # Check today
-                is_today_dst, today_dst_type = dst_handler.is_dst_transition_day(now)
-                if is_today_dst:
-                    if today_dst_type == DSTTransitionType.SPRING_FORWARD:
-                        expected_today = (
-                            TimeInterval.get_intervals_per_day_dst_spring()
-                        )  # 92
-                    else:  # FALL_BACK
-                        expected_today = (
-                            TimeInterval.get_intervals_per_day_dst_fall()
-                        )  # 100
-                else:
-                    expected_today = expected_intervals  # 96
-
-                # Check tomorrow
-                tomorrow = now + timedelta(days=1)
-                is_tomorrow_dst, tomorrow_dst_type = dst_handler.is_dst_transition_day(
-                    tomorrow
+                # Use DST-aware interval counting
+                expected_today = TimeInterval.get_expected_intervals_for_date(
+                    now, self._tz_service.target_timezone
                 )
-                if is_tomorrow_dst:
-                    if tomorrow_dst_type == DSTTransitionType.SPRING_FORWARD:
-                        expected_tomorrow = (
-                            TimeInterval.get_intervals_per_day_dst_spring()
-                        )  # 92
-                    else:  # FALL_BACK
-                        expected_tomorrow = (
-                            TimeInterval.get_intervals_per_day_dst_fall()
-                        )  # 100
-                else:
-                    expected_tomorrow = expected_intervals  # 96
+                tomorrow = now + timedelta(days=1)
+                # Reconvert to timezone to update DST offset after timedelta
+                # Only reconvert if target_timezone is a real timezone object (not a Mock)
+                if hasattr(self._tz_service.target_timezone, "tzname"):
+                    tomorrow = tomorrow.astimezone(self._tz_service.target_timezone)
+                expected_tomorrow = TimeInterval.get_expected_intervals_for_date(
+                    tomorrow, self._tz_service.target_timezone
+                )
+
+                # Check for DST transitions for logging
+                is_today_dst = expected_today != 96
+                is_tomorrow_dst = expected_tomorrow != 96
+                today_dst_type = (
+                    DSTTransitionType.SPRING_FORWARD
+                    if expected_today == 92
+                    else (
+                        DSTTransitionType.FALL_BACK
+                        if expected_today == 100
+                        else "normal"
+                    )
+                )
+                tomorrow_dst_type = (
+                    DSTTransitionType.SPRING_FORWARD
+                    if expected_tomorrow == 92
+                    else (
+                        DSTTransitionType.FALL_BACK
+                        if expected_tomorrow == 100
+                        else "normal"
+                    )
+                )
 
                 # Check if the data is complete (correct number of intervals)
                 # Allow only 1 missing interval for edge cases (API timing, rounding)

@@ -16,6 +16,13 @@ echo -e "${YELLOW}Running GE Spot pytest tests...${NC}"
 echo "================================================"
 echo ""
 
+# Clean up cache directories before running tests
+echo -e "${YELLOW}Cleaning up cache directories...${NC}"
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+echo -e "${GREEN}Cache cleaned!${NC}"
+echo ""
+
 # Run unit tests
 echo -e "${YELLOW}Running unit tests...${NC}"
 python -m pytest tests/pytest/unit/ -v

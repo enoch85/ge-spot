@@ -1,5 +1,7 @@
 """Time and timezone-related constants for GE-Spot integration."""
 
+from zoneinfo import ZoneInfo
+
 
 class TimezoneName:
     """IANA timezone name constants."""
@@ -91,6 +93,50 @@ class TimeInterval:
         return (
             TimeInterval.get_intervals_per_day() + TimeInterval.get_intervals_per_hour()
         )
+
+    @staticmethod
+    def get_expected_intervals_for_date(date, timezone_str) -> int:
+        """Get expected number of intervals for a specific date.
+
+        Args:
+            date: The date to check (datetime object)
+            timezone_str: The timezone string or ZoneInfo for DST calculation (e.g., 'Europe/Copenhagen' or ZoneInfo('Europe/Copenhagen'))
+
+        Returns:
+            92 (spring forward), 96 (normal), or 100 (fall back)
+        """
+        # Import here to avoid circular dependency (DSTHandler uses TimeInterval)
+        from ..timezone.dst_handler import DSTHandler
+
+        # Normalize timezone to ZoneInfo object
+        # Handle both string and ZoneInfo inputs (also handles str() conversion for other types)
+        if isinstance(timezone_str, str):
+            tz = ZoneInfo(timezone_str)
+        elif isinstance(timezone_str, ZoneInfo):
+            tz = timezone_str
+        else:
+            # If it's some other type (like a Mock or unknown object), try to convert to string first
+            try:
+                tz = ZoneInfo(str(timezone_str))
+            except Exception:
+                # Last resort: assume it's already a timezone-like object
+                tz = timezone_str
+
+        # Create timezone-aware datetime if needed
+        if hasattr(date, "tzinfo") and date.tzinfo is None:
+            date = date.replace(tzinfo=tz)
+
+        # Use DST handler to check if this is a transition day
+        dst_handler = DSTHandler(timezone=tz)
+        is_dst, dst_type = dst_handler.is_dst_transition_day(dt=date)
+
+        if is_dst:
+            if dst_type == DSTTransitionType.SPRING_FORWARD:
+                return TimeInterval.get_intervals_per_day_dst_spring()  # 92
+            else:  # FALL_BACK
+                return TimeInterval.get_intervals_per_day_dst_fall()  # 100
+        else:
+            return TimeInterval.get_intervals_per_day()  # 96
 
 
 class TimeFormat:

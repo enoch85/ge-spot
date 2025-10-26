@@ -127,8 +127,6 @@ class ExtremaPriceSensor(PriceValueSensor):
             return value
 
         def get_timestamp(data):
-            from homeassistant.util import dt as dt_util
-
             stats = data.get(self._stats_key, {})  # Use .get() for safety
             timestamp_key = f"{self._extrema_type}_timestamp"
             price_key = "min" if self._extrema_type == "min" else "max"

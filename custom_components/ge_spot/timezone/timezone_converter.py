@@ -269,23 +269,27 @@ class TimezoneConverter:
                     unassigned_prices[interval_key] = price
 
             # Second pass: assign unassigned prices based on position
-            # Assumption: first 96 intervals are today, next 96 are tomorrow
+            # Use DST-aware interval counts for today and tomorrow
             # This handles the case where APIs return concatenated data without dates
             if unassigned_prices:
+                # Calculate expected intervals for today (DST-aware)
+                intervals_per_day = TimeInterval.get_expected_intervals_for_date(
+                    self.now, self.target_timezone
+                )
+
                 _LOGGER.warning(
                     f"split_into_today_tomorrow: {len(unassigned_prices)} prices without date info. "
-                    "Attempting to split based on position (first 96=today, next 96=tomorrow). "
-                    "This may be inaccurate - API should provide date information!"
+                    f"Attempting to split based on position (first {intervals_per_day}=today, remaining=tomorrow). "
+                    "This may be inaccurate on DST transition days - API should provide date information!"
                 )
 
                 # Sort keys to ensure consistent ordering
                 sorted_keys = sorted(unassigned_prices.keys())
-                intervals_per_day = TimeInterval.get_intervals_per_day()
 
                 for idx, interval_key in enumerate(sorted_keys):
                     price = unassigned_prices[interval_key]
                     if idx < intervals_per_day:
-                        # First 96 intervals -> today
+                        # First N intervals -> today (N=92/96/100 depending on DST)
                         if (
                             interval_key not in today_prices
                         ):  # Avoid overwriting dated prices
@@ -295,7 +299,7 @@ class TimezoneConverter:
                                 f"Skipping duplicate interval {interval_key} for today (already assigned from date metadata)"
                             )
                     else:
-                        # Next 96 intervals -> tomorrow
+                        # Remaining intervals -> tomorrow
                         if (
                             interval_key not in tomorrow_prices
                         ):  # Avoid overwriting dated prices

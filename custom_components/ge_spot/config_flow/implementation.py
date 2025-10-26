@@ -30,6 +30,7 @@ from .schemas import (
     get_user_schema,
     get_default_values,
 )
+from .options import GSpotOptionsFlow
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -294,6 +295,4 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         """Get the options flow for this handler."""
-        from .options import GSpotOptionsFlow
-
         return GSpotOptionsFlow(config_entry)

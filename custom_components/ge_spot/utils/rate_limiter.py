@@ -6,6 +6,8 @@ from typing import Optional, Tuple
 
 from ..const.network import Network
 from ..const.sources import Source
+from ..const.intervals import SourceIntervals
+from ..const.time import TimeInterval
 from ..utils.debug_utils import log_rate_limiting
 
 _LOGGER = logging.getLogger(__name__)
@@ -141,8 +143,6 @@ class RateLimiter:
         # Use specified min_interval or fall back to default
         if min_interval is None:
             if source:
-                from ..const.intervals import SourceIntervals
-
                 min_interval = SourceIntervals.get_interval(source)
             else:
                 min_interval = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
@@ -155,8 +155,6 @@ class RateLimiter:
 
         # PRIORITY 5: Force update at interval boundaries (configuration-driven)
         # This runs last so it respects all the above constraints
-        from ..const.time import TimeInterval
-
         interval_minutes = TimeInterval.get_interval_minutes()
 
         # Calculate interval keys for both timestamps
