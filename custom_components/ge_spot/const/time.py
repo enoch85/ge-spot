@@ -92,6 +92,43 @@ class TimeInterval:
             TimeInterval.get_intervals_per_day() + TimeInterval.get_intervals_per_hour()
         )
 
+    @staticmethod
+    def get_expected_intervals_for_date(date, timezone_str) -> int:
+        """Get expected number of intervals for a specific date.
+
+        Args:
+            date: The date to check (datetime object)
+            timezone_str: The timezone string for DST calculation (e.g., 'Europe/Copenhagen')
+
+        Returns:
+            92 (spring forward), 96 (normal), or 100 (fall back)
+        """
+        from ..timezone.dst_handler import DSTHandler
+        from zoneinfo import ZoneInfo
+
+        # Create timezone-aware datetime if needed
+        if hasattr(date, "tzinfo") and date.tzinfo is None:
+            tz = ZoneInfo(timezone_str)
+            date = date.replace(tzinfo=tz)
+
+        # Use DST handler to check if this is a transition day
+        dst_handler = DSTHandler(
+            timezone=(
+                timezone_str
+                if isinstance(timezone_str, ZoneInfo)
+                else ZoneInfo(timezone_str)
+            )
+        )
+        is_dst, dst_type = dst_handler.is_dst_transition_day(dt=date)
+
+        if is_dst:
+            if dst_type == DSTTransitionType.SPRING_FORWARD:
+                return TimeInterval.get_intervals_per_day_dst_spring()  # 92
+            else:  # FALL_BACK
+                return TimeInterval.get_intervals_per_day_dst_fall()  # 100
+        else:
+            return TimeInterval.get_intervals_per_day()  # 96
+
 
 class TimeFormat:
     """Time format constants."""
