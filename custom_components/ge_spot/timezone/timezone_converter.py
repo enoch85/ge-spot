@@ -106,21 +106,45 @@ class TimezoneConverter:
                     target_key = f"{target_dt.hour:02d}:{target_dt.minute:02d}"
 
                 # Handle potential DST fallback duplicates
-                # Only log as DST fallback if the keys don't have dates (when preserve_date=False)
-                # With preserve_date=True, duplicates across days are normal (e.g. "2025-10-02 00:00" and "2025-10-03 00:00")
+                # On DST fall-back days, the same hour repeats (e.g., 02:00 happens twice)
+                # We need to preserve BOTH occurrences, not overwrite
                 if target_key in normalized_prices:
                     if preserve_date:
-                        # With dates, this is just a different day - overwrite is expected
-                        _LOGGER.debug(
-                            f"Duplicate interval key found: {target_key} - overwriting with newer value (likely next day)"
-                        )
+                        # Check if this is the same date - if so, it's a DST fall-back duplicate
+                        # Extract date from key (format: "YYYY-MM-DD HH:MM")
+                        existing_date = target_key.split()[0]
+
+                        # This is a DST fall-back duplicate on the same day
+                        # Keep the first occurrence and add the second with a suffix
+                        # Check if we already have a _1 version
+                        base_key = target_key
+                        if f"{base_key}_1" in normalized_prices:
+                            # First occurrence already renamed, this is the second
+                            target_key = f"{base_key}_2"
+                            _LOGGER.debug(
+                                f"DST fall-back: Storing second occurrence as {target_key}"
+                            )
+                        else:
+                            # This is the second time we see this key
+                            # Rename the existing one to _1 and store this as _2
+                            existing_value = normalized_prices.pop(target_key)
+                            normalized_prices[f"{base_key}_1"] = existing_value
+                            target_key = f"{base_key}_2"
+                            _LOGGER.debug(
+                                f"DST fall-back detected: Renamed first occurrence to {base_key}_1, storing second as {base_key}_2"
+                            )
                     else:
                         # Without dates, this could be genuine DST fallback (same hour repeating in one day)
                         _LOGGER.debug(
-                            f"Duplicate interval found: {target_key} - handling DST fallback"
+                            f"Duplicate interval found: {target_key} - keeping both for DST"
                         )
-                    # In case of DST fallback, use the second occurrence
-                    # This aligns with how most energy markets handle the extra interval
+                        # Add suffix to differentiate
+                        if f"{target_key}_1" in normalized_prices:
+                            target_key = f"{target_key}_2"
+                        else:
+                            existing_value = normalized_prices.pop(target_key)
+                            normalized_prices[f"{target_key}_1"] = existing_value
+                            target_key = f"{target_key}_2"
 
                 # Store the price
                 normalized_prices[target_key] = (
@@ -183,13 +207,43 @@ class TimezoneConverter:
         if has_date_in_keys:
             # Keys already have date info, we can directly separate today and tomorrow
             for key, price in normalized_prices.items():
-                date_part = key.split(" ")[0]
-                interval_part = key.split(" ")[1]
+                # Handle DST suffixes (_1, _2) in the key
+                # Extract the base key and check for suffix
+                parts = key.split(" ", 1)
+                if len(parts) == 2:
+                    date_part = parts[0]
+                    interval_with_suffix = parts[1]
+
+                    # Remove DST suffix if present (_1 or _2)
+                    if interval_with_suffix.endswith(
+                        "_1"
+                    ) or interval_with_suffix.endswith("_2"):
+                        interval_part = interval_with_suffix[
+                            :-2
+                        ]  # Remove last 2 chars (_1 or _2)
+                        dst_suffix = interval_with_suffix[-2:]
+                        _LOGGER.debug(
+                            f"Found DST interval: {key} -> base: {interval_part}, suffix: {dst_suffix}"
+                        )
+                    else:
+                        interval_part = interval_with_suffix
+                        dst_suffix = ""
+                else:
+                    # Malformed key, skip
+                    _LOGGER.warning(f"Malformed key with date: {key}")
+                    continue
 
                 if date_part == today_date_str:
-                    today_prices[interval_part] = price
+                    # Keep the suffix in the output key to preserve both DST occurrences
+                    output_key = (
+                        f"{interval_part}{dst_suffix}" if dst_suffix else interval_part
+                    )
+                    today_prices[output_key] = price
                 elif date_part == tomorrow_date_str:
-                    tomorrow_prices[interval_part] = price
+                    output_key = (
+                        f"{interval_part}{dst_suffix}" if dst_suffix else interval_part
+                    )
+                    tomorrow_prices[output_key] = price
         else:
             # Fallback: No date in keys - need to infer from embedded date or position
             # First pass: handle prices that have embedded date metadata
