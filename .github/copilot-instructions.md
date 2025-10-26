@@ -170,7 +170,7 @@ def test_mock_returns_structure():
 ### Debugging Prices
 1. Check logs: "Normalized N timestamps", "Split prices into today (X) tomorrow (Y)"
 2. Verify X and Y = `TimeInterval.get_intervals_per_day()` (usually 96)
-3. Check `get_day_hours()` in `timezone_provider.py` generates correct count
+3. Check `get_day_hours()` in `dst_handler.py` generates correct count
 4. Test API response: `curl` endpoint, verify interval count
 5. Verify `IntervalCalculator` generates HH:MM keys with correct spacing
 

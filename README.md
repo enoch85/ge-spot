@@ -571,7 +571,6 @@ custom_components/ge_spot/
 │   ├── service.py            # Timezone service orchestrator
 │   ├── source_tz.py          # Source-specific timezone logic
 │   ├── timezone_converter.py # Core timezone conversion
-│   ├── timezone_provider.py  # Timezone provider interface
 │   └── timezone_utils.py     # Timezone utility functions
 ├── translations/         # UI translations
 │   ├── en.json           # English translations

@@ -15,11 +15,10 @@ from ..const.areas import Timezone
 from ..const.config import Config
 from ..const.time import TimezoneConstants, TimezoneReference, TimeInterval
 from .timezone_converter import TimezoneConverter
-from .dst_handler import DSTHandler
+from .dst_handler import DSTHandler, get_day_hours
 from .interval_calculator import IntervalCalculator
 from .parser import TimestampParser
 from .timezone_utils import get_source_timezone, get_timezone_object
-from .timezone_provider import get_day_hours
 
 
 _LOGGER = logging.getLogger(__name__)
