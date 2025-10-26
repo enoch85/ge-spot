@@ -189,9 +189,11 @@ def auto_mock_core_dependencies():
         mock_data_processor.return_value.process = AsyncMock(
             return_value=MOCK_PROCESSED_RESULT
         )
-        mock_tz_service.return_value = (
-            MagicMock()
-        )  # Basic mock for TimezoneService instance
+        # Configure TimezoneService mock with real timezone objects for DST handling
+        mock_tz_service_instance = MagicMock()
+        mock_tz_service_instance.target_timezone = timezone.utc
+        mock_tz_service_instance.area_timezone = timezone.utc
+        mock_tz_service.return_value = mock_tz_service_instance
         mock_get_exchange_service.return_value = (
             AsyncMock()
         )  # Mock the service instance itself

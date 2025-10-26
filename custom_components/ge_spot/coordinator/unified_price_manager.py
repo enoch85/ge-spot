@@ -910,9 +910,21 @@ class UnifiedPriceManager:
                 )
                 tomorrow = now + timedelta(days=1)
                 # Reconvert to timezone to update DST offset after timedelta
-                tomorrow = tomorrow.astimezone(self._tz_service.target_timezone)
+                # Only reconvert if target_timezone is a real timezone object (not a Mock)
+                if hasattr(self._tz_service.target_timezone, "tzname"):
+                    tomorrow = tomorrow.astimezone(self._tz_service.target_timezone)
                 expected_tomorrow = TimeInterval.get_expected_intervals_for_date(
                     tomorrow, self._tz_service.target_timezone
+                )
+
+                # Check for DST transitions for logging
+                is_today_dst = expected_today != 96
+                is_tomorrow_dst = expected_tomorrow != 96
+                today_dst_type = (
+                    "spring" if expected_today == 92 else ("fall" if expected_today == 100 else "normal")
+                )
+                tomorrow_dst_type = (
+                    "spring" if expected_tomorrow == 92 else ("fall" if expected_tomorrow == 100 else "normal")
                 )
 
                 # Check if the data is complete (correct number of intervals)

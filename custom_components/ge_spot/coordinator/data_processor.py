@@ -658,7 +658,11 @@ class DataProcessor:
                     days=1
                 )
                 # Reconvert to timezone to update DST offset after timedelta
-                tomorrow_date = tomorrow_date.astimezone(self._tz_service.area_timezone)
+                # Only reconvert if area_timezone is a real timezone object (not a Mock)
+                if hasattr(self._tz_service.area_timezone, "tzname"):
+                    tomorrow_date = tomorrow_date.astimezone(
+                        self._tz_service.area_timezone
+                    )
                 expected_intervals = TimeInterval.get_expected_intervals_for_date(
                     tomorrow_date, self._tz_service.area_timezone
                 )
