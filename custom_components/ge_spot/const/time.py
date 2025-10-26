@@ -1,5 +1,7 @@
 """Time and timezone-related constants for GE-Spot integration."""
 
+from zoneinfo import ZoneInfo
+
 
 class TimezoneName:
     """IANA timezone name constants."""
@@ -103,8 +105,8 @@ class TimeInterval:
         Returns:
             92 (spring forward), 96 (normal), or 100 (fall back)
         """
+        # Import here to avoid circular dependency (DSTHandler uses TimeInterval)
         from ..timezone.dst_handler import DSTHandler
-        from zoneinfo import ZoneInfo
 
         # Create timezone-aware datetime if needed
         if hasattr(date, "tzinfo") and date.tzinfo is None:

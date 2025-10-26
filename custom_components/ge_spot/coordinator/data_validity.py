@@ -5,10 +5,15 @@ replacing the old 'complete_data' boolean with clear timestamp-based validity.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Dict
 import logging
 import re
+from zoneinfo import ZoneInfo
+
+from homeassistant.util import dt as dt_util
+
+from ..const.time import TimeInterval
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,8 +110,6 @@ class DataValidity:
         if not self.data_valid_until:
             return 0
 
-        from ..const.time import TimeInterval
-
         # Simple: remaining seconds / interval seconds
         remaining_seconds = (self.data_valid_until - now).total_seconds()
         remaining_intervals = int(
@@ -159,8 +162,6 @@ class DataValidity:
         Returns:
             DataValidity instance
         """
-        from homeassistant.util import dt as dt_util
-
         return cls(
             last_valid_interval=(
                 dt_util.parse_datetime(data["last_valid_interval"])
@@ -218,9 +219,6 @@ def calculate_data_validity(
     Returns:
         DataValidity object with calculated values
     """
-    from homeassistant.util import dt as dt_util
-    from zoneinfo import ZoneInfo
-
     validity = DataValidity()
 
     # Count intervals
@@ -281,8 +279,6 @@ def calculate_data_validity(
             continue
 
     # Parse tomorrow's intervals
-    from datetime import timedelta
-
     tomorrow_date = today_date + timedelta(days=1)
     for interval_key in tomorrow_interval_prices.keys():
         try:
@@ -308,8 +304,6 @@ def calculate_data_validity(
         validity.last_valid_interval = all_intervals[-1]
 
         # Add interval duration (15 minutes) to get data_valid_until
-        from datetime import timedelta
-
         validity.data_valid_until = validity.last_valid_interval + timedelta(minutes=15)
 
         # Check if we have minimum data (at least rest of today)
