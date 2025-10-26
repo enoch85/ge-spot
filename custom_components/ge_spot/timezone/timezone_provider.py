@@ -49,7 +49,7 @@ class TimezoneProvider:
 
         try:
             # Get timezone from zoneinfo
-            tz = zoneinfo.ZoneInfo(timezone_id)
+            tz = ZoneInfo(timezone_id)
 
             # Cache timezone
             self._timezone_cache[timezone_id] = tz
@@ -65,7 +65,7 @@ class TimezoneProvider:
         Returns:
             Local timezone object
         """
-        return self.get_timezone(self.local_timezone) or zoneinfo.ZoneInfo("UTC")
+        return self.get_timezone(self.local_timezone) or ZoneInfo("UTC")
 
     def get_source_timezone(self, source: str, area: Optional[str] = None) -> tzinfo:
         """Get the timezone for a source.
@@ -81,7 +81,7 @@ class TimezoneProvider:
         timezone_id = get_source_timezone(source, area)
 
         # Get timezone object
-        return self.get_timezone(timezone_id) or zoneinfo.ZoneInfo("UTC")
+        return self.get_timezone(timezone_id) or ZoneInfo("UTC")
 
     def localize_datetime(
         self, dt: datetime, timezone_id: Optional[str] = None
@@ -126,7 +126,7 @@ class TimezoneProvider:
             return dt.astimezone(local_tz)
 
         # Assume UTC if not localized
-        utc_dt = dt.replace(tzinfo=zoneinfo.ZoneInfo("UTC"))
+        utc_dt = dt.replace(tzinfo=ZoneInfo("UTC"))
         return utc_dt.astimezone(local_tz)
 
     def convert_from_source(
