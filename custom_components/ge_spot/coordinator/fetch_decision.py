@@ -104,9 +104,10 @@ class FetchDecisionMaker:
             from homeassistant.util import dt as dt_util
 
             # Use DST-aware interval counting for today's date
-            today = dt_util.now(area_timezone)
+            area_tz = self._tz_service.area_timezone
+            today = dt_util.now(area_tz)
             required_today_intervals = TimeInterval.get_expected_intervals_for_date(
-                today, area_timezone
+                today, area_tz
             )
 
             if data_validity.today_interval_count < required_today_intervals:
