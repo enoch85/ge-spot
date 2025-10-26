@@ -332,9 +332,11 @@ class TimezoneProvider:
         # Get start of day
         day_start = self.get_day_start(dt)
 
-        # Get all intervals for the day
+        # Get all intervals for the day (DST-aware)
         interval_minutes = TimeInterval.get_interval_minutes()
-        intervals_per_day = TimeInterval.get_intervals_per_day()
+        intervals_per_day = TimeInterval.get_expected_intervals_for_date(
+            dt, self.timezone
+        )
         return [
             day_start + timedelta(minutes=i * interval_minutes)
             for i in range(intervals_per_day)

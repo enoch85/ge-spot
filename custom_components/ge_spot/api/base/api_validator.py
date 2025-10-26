@@ -1,10 +1,14 @@
 """Data validation utilities for API responses."""
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from zoneinfo import ZoneInfo
+
+from homeassistant.util import dt as dt_util
 
 from ...timezone.service import TimezoneService
 from ...const.sources import Source
+from ...const.time import TimeInterval
 from ...utils.data_validator import DataValidator
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,7 +25,8 @@ class ApiValidator:
         data: Dict[str, Any],
         source_name: str = "unknown",
         require_current_hour: bool = True,
-        min_intervals: int = 48,
+        min_intervals: Optional[int] = None,
+        timezone: Optional[str] = None,
     ) -> bool:
         """Check if the data is adequate for use.
 
@@ -29,7 +34,8 @@ class ApiValidator:
             data: API response data
             source_name: Name of the API source
             require_current_hour: Whether current interval price is required
-            min_intervals: Minimum number of interval prices required
+            min_intervals: Minimum number of interval prices required (if None, uses 50% of expected for date)
+            timezone: Timezone string for DST-aware validation (e.g., "Europe/Stockholm")
 
         Returns:
             True if data is valid and usable
@@ -53,6 +59,29 @@ class ApiValidator:
         # Check number of intervals available
         interval_count = len(data.get("today_interval_prices", {}))
 
+        # Calculate expected intervals for today (DST-aware if timezone provided)
+        if timezone:
+            try:
+                tz = ZoneInfo(timezone)
+                today = dt_util.now(tz)
+                expected_today = TimeInterval.get_expected_intervals_for_date(today, tz)
+                # Use 50% of expected as minimum if not explicitly provided
+                default_min = expected_today // 2
+                _LOGGER.debug(
+                    f"DST-aware validation for {source_name}: expected={expected_today}, "
+                    f"min={min_intervals or default_min} (today={today.date()}, tz={timezone})"
+                )
+            except Exception as e:
+                _LOGGER.warning(
+                    f"Error calculating DST-aware intervals for {timezone}: {e}, using default"
+                )
+                default_min = 48
+        else:
+            default_min = 48
+
+        # Use provided min_intervals or calculated default
+        effective_min = min_intervals if min_intervals is not None else default_min
+
         # Special handling for sources with different data availability patterns
         if source_name.lower() == Source.AEMO.lower():
             # For AEMO, we only require at least 16 intervals of data (4 hours with 15-min intervals)
@@ -70,9 +99,9 @@ class ApiValidator:
                     f"Insufficient interval prices from {source_name}: {interval_count}/24"
                 )
                 return False
-        elif interval_count < min_intervals:
+        elif interval_count < effective_min:
             _LOGGER.warning(
-                f"Insufficient interval prices from {source_name}: {interval_count}/{min_intervals}"
+                f"Insufficient interval prices from {source_name}: {interval_count}/{effective_min}"
             )
             return False
 

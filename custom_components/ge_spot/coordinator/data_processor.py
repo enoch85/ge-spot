@@ -619,7 +619,11 @@ class DataProcessor:
                 today_keys = set(self._tz_service.get_today_range())
                 found_keys = set(final_today_prices.keys())
                 # Allow statistics if at least 80% of intervals are present
-                expected_intervals = TimeInterval.get_intervals_per_day()
+                # Use DST-aware interval counting for today's date
+                today_date = dt_util.now(self._tz_service.area_timezone)
+                expected_intervals = TimeInterval.get_expected_intervals_for_date(
+                    today_date, self._tz_service.area_timezone
+                )
                 today_complete_enough = len(found_keys) >= math.ceil(
                     expected_intervals * 0.8
                 )
@@ -649,7 +653,17 @@ class DataProcessor:
                 tomorrow_keys = set(self._tz_service.get_tomorrow_range())
                 found_keys = set(final_tomorrow_prices.keys())
                 # Allow statistics if at least 80% of intervals are present
-                expected_intervals = TimeInterval.get_intervals_per_day()
+                # Use DST-aware interval counting for tomorrow's date
+                tomorrow_date = dt_util.now(self._tz_service.area_timezone) + timedelta(
+                    days=1
+                )
+                # Reconvert to timezone to update DST offset after timedelta
+                tomorrow_date = tomorrow_date.astimezone(
+                    self._tz_service.area_timezone
+                )
+                expected_intervals = TimeInterval.get_expected_intervals_for_date(
+                    tomorrow_date, self._tz_service.area_timezone
+                )
                 tomorrow_complete_enough = len(found_keys) >= math.ceil(
                     expected_intervals * 0.8
                 )

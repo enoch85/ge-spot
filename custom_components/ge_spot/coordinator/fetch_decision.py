@@ -101,8 +101,13 @@ class FetchDecisionMaker:
         # This handles cases where old cache has only tomorrow's data (0 today, 96 tomorrow)
         if in_grace_period:
             from ..const.time import TimeInterval
+            from homeassistant.util import dt as dt_util
 
-            required_today_intervals = TimeInterval.get_intervals_per_day()
+            # Use DST-aware interval counting for today's date
+            today = dt_util.now(area_timezone)
+            required_today_intervals = TimeInterval.get_expected_intervals_for_date(
+                today, area_timezone
+            )
 
             if data_validity.today_interval_count < required_today_intervals:
                 reason = (
