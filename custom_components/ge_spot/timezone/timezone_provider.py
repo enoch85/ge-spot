@@ -4,11 +4,13 @@ import logging
 import re
 from datetime import datetime, timedelta, tzinfo
 from typing import Dict, Any, Optional, List, Tuple
-import zoneinfo
+from zoneinfo import ZoneInfo
 
 from ..const.config import Config
 from ..const.defaults import Defaults
+from ..const.time import TimeInterval, DSTTransitionType
 from .timezone_utils import get_source_timezone
+from .dst_handler import DSTHandler
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -327,8 +329,6 @@ class TimezoneProvider:
         Returns:
             List of interval start datetimes
         """
-        from ..const.time import TimeInterval
-
         # Get start of day
         day_start = self.get_day_start(dt)
 
@@ -423,10 +423,6 @@ def get_day_hours(date, timezone):
                     {"hour": 2, "suffix": "_2"}, {"hour": 3}, ..., {"hour": 23}]
         Spring-forward: [{"hour": 0}, {"hour": 1}, {"hour": 3}, ..., {"hour": 23}]
     """
-    from ..const.time import DSTTransitionType
-    from .dst_handler import DSTHandler
-    from zoneinfo import ZoneInfo
-
     # Convert date to datetime if needed
     if hasattr(date, "date"):
         # It's already a datetime

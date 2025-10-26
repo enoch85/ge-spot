@@ -19,6 +19,7 @@ from .dst_handler import DSTHandler
 from .interval_calculator import IntervalCalculator
 from .parser import TimestampParser
 from .timezone_utils import get_source_timezone, get_timezone_object
+from .timezone_provider import get_day_hours
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -358,8 +359,6 @@ class TimezoneService:
         - DST fall-back: 100 intervals (includes 02:00_1, 02:15_1, etc. and 02:00_2, 02:15_2, etc.)
         - DST spring-forward: 92 intervals (02:00-02:45 are skipped)
         """
-        from homeassistant.util import dt as dt_util
-
         # Get today's date in the target timezone
         now = dt_util.now()
         if hasattr(now, "tzinfo") and now.tzinfo:
@@ -368,8 +367,6 @@ class TimezoneService:
             today = now.date()
 
         # Use the timezone provider to get DST-aware intervals
-        from .timezone_provider import get_day_hours
-
         day_hours = get_day_hours(today, self.target_timezone)
 
         # Generate interval keys for all hours
@@ -398,8 +395,6 @@ class TimezoneService:
         - DST fall-back: 100 intervals (includes 02:00_1, 02:15_1, etc. and 02:00_2, 02:15_2, etc.)
         - DST spring-forward: 92 intervals (02:00-02:45 are skipped)
         """
-        from homeassistant.util import dt as dt_util
-
         # Get tomorrow's date in the target timezone
         now = dt_util.now()
         if hasattr(now, "tzinfo") and now.tzinfo:
@@ -408,8 +403,6 @@ class TimezoneService:
             tomorrow = (now + timedelta(days=1)).date()
 
         # Use the timezone provider to get DST-aware intervals
-        from .timezone_provider import get_day_hours
-
         day_hours = get_day_hours(tomorrow, self.target_timezone)
 
         # Generate interval keys for all hours

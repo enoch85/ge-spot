@@ -264,8 +264,6 @@ class GSpotOptionsFlow(OptionsFlow):
             return self._data.get(Config.API_KEY)
 
         # Then check other entries
-        from ..const import DOMAIN
-
         existing_entries = self.hass.config_entries.async_entries(DOMAIN)
         for entry in existing_entries:
             if entry.entry_id == self.entry_id:

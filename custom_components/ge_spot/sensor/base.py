@@ -15,6 +15,7 @@ from ..const.currencies import CurrencyInfo
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..coordinator.data_processor import parse_interval_key
+from ..coordinator.data_validity import DataValidity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -192,8 +193,6 @@ class BaseElectricityPriceSensor(SensorEntity):
 
                 # Calculate intervals remaining (if we have validity data)
                 if validity_dict.get("data_valid_until"):
-                    from ..coordinator.data_validity import DataValidity
-
                     try:
                         # Reconstruct DataValidity to calculate intervals_remaining
                         validity = DataValidity.from_dict(validity_dict)
