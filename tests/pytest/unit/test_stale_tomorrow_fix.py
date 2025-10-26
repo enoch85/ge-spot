@@ -83,7 +83,11 @@ def auto_mock_core_dependencies():
         mock_cache_manager.return_value.get_data = MagicMock(return_value=None)
         mock_cache_manager.return_value.store = MagicMock()
         mock_data_processor.return_value.process = AsyncMock(return_value={})
-        mock_tz_service.return_value = MagicMock()
+        # Configure timezone service with real timezone.utc objects to support DST checks
+        mock_tz_service_instance = MagicMock()
+        mock_tz_service_instance.target_timezone = timezone.utc
+        mock_tz_service_instance.area_timezone = timezone.utc
+        mock_tz_service.return_value = mock_tz_service_instance
         mock_get_exchange_service.return_value = AsyncMock()
         mock_get_session.return_value = MagicMock()
 

@@ -15,7 +15,7 @@ from ..const.sources import Source
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..const.network import Network
-from ..const.time import ValidationRetry
+from ..const.time import ValidationRetry, DSTTransitionType
 from ..const.errors import Errors, ErrorDetails
 from ..api import get_sources_for_region
 from ..timezone.service import TimezoneService  # Added import
@@ -921,10 +921,22 @@ class UnifiedPriceManager:
                 is_today_dst = expected_today != 96
                 is_tomorrow_dst = expected_tomorrow != 96
                 today_dst_type = (
-                    "spring" if expected_today == 92 else ("fall" if expected_today == 100 else "normal")
+                    DSTTransitionType.SPRING_FORWARD
+                    if expected_today == 92
+                    else (
+                        DSTTransitionType.FALL_BACK
+                        if expected_today == 100
+                        else "normal"
+                    )
                 )
                 tomorrow_dst_type = (
-                    "spring" if expected_tomorrow == 92 else ("fall" if expected_tomorrow == 100 else "normal")
+                    DSTTransitionType.SPRING_FORWARD
+                    if expected_tomorrow == 92
+                    else (
+                        DSTTransitionType.FALL_BACK
+                        if expected_tomorrow == 100
+                        else "normal"
+                    )
                 )
 
                 # Check if the data is complete (correct number of intervals)
