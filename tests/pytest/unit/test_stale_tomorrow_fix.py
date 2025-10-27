@@ -467,3 +467,106 @@ class TestStaleTomorrowDataFix:
             # Should not crash, will use cached data or fetch normally
             result = await manager.fetch_data()
             assert result is not None, "Should handle malformed fetched_at gracefully"
+
+    @pytest.mark.asyncio
+    @freeze_time("2025-01-15 14:00:00 UTC")  # During special window
+    async def test_data_validity_cleared_with_stale_tomorrow(
+        self, manager, auto_mock_core_dependencies
+    ):
+        """Test that data_validity is cleared along with stale tomorrow_interval_prices.
+
+        This is the CRITICAL test for the fix in commit c974d05.
+
+        The bug was that when stale tomorrow_interval_prices were cleared,
+        data_validity was NOT cleared, causing fetch decision to use stale
+        validity showing tomorrow=96 when tomorrow was actually empty.
+
+        This test validates that BOTH are cleared, forcing recalculation
+        of data_validity with correct tomorrow_count=0.
+
+        Scenario:
+        - Current time: 2025-01-15 14:00 (during special window)
+        - Cache from yesterday has data_validity with tomorrow=96
+        - Cache from yesterday has tomorrow_interval_prices
+        - Staleness check should clear BOTH
+        - System should recalculate validity showing tomorrow=0
+        - This triggers fresh API fetch
+        """
+        mock_cache = auto_mock_core_dependencies["cache_manager"].return_value
+        mock_fallback = auto_mock_core_dependencies[
+            "fallback_manager"
+        ].return_value.fetch_with_fallback
+        mock_processor = auto_mock_core_dependencies[
+            "data_processor"
+        ].return_value.process
+
+        # Stale cached data from YESTERDAY with BOTH tomorrow prices AND validity
+        stale_cached_data = {
+            "area": "SE1",
+            "currency": "SEK",
+            "data_source": Source.NORDPOOL,
+            "today_interval_prices": _generate_complete_intervals(50.0),
+            "tomorrow_interval_prices": _generate_complete_intervals(60.0),  # STALE!
+            "fetched_at": "2025-01-14 13:30:00",  # YESTERDAY
+            "source_timezone": "Europe/Stockholm",
+            "data_validity": {  # STALE! Shows tomorrow=96 but data is from yesterday
+                "today_interval_count": 96,
+                "tomorrow_interval_count": 96,  # This is the problem - stale validity
+            },
+        }
+
+        # Fresh API data
+        fresh_api_data = {
+            "area": "SE1",
+            "currency": "SEK",
+            "data_source": Source.NORDPOOL,
+            "today_interval_prices": _generate_complete_intervals(55.0),
+            "tomorrow_interval_prices": _generate_complete_intervals(65.0),
+            "attempted_sources": [Source.NORDPOOL],
+        }
+
+        # Processed fresh data
+        processed_fresh_data = {
+            **fresh_api_data,
+            "source": Source.NORDPOOL,
+            "target_currency": "SEK",
+            "has_data": True,
+            "using_cached_data": False,
+            "data_validity": {
+                "today_interval_count": 96,
+                "tomorrow_interval_count": 96,
+            },
+        }
+
+        mock_cache.get_data.return_value = stale_cached_data.copy()
+        mock_fallback.return_value = fresh_api_data
+        mock_processor.return_value = processed_fresh_data
+        manager._tz_service.get_current_interval_key.return_value = "14:00"
+        manager._tz_service.get_target_timezone.return_value = timezone.utc
+
+        # Execute
+        result = await manager.fetch_data()
+
+        # CRITICAL ASSERTION: Verify fresh data was fetched
+        # If data_validity was NOT cleared (the bug), system would think tomorrow=96
+        # and skip the fetch, returning cached data with using_cached_data=True
+        #
+        # With the fix, data_validity IS cleared, system recalculates it as tomorrow=0,
+        # and triggers fresh fetch, returning using_cached_data=False
+        assert result is not None, "fetch_data should return data"
+        assert (
+            result["using_cached_data"] is False
+        ), "Should fetch fresh data when both tomorrow AND data_validity are stale"
+
+        # Verify the fetch was actually called (not using cache)
+        mock_fallback.assert_awaited_once(), (
+            "Should call API fetch when stale data_validity is cleared"
+        )
+
+        # Verify we got fresh tomorrow data
+        assert (
+            "tomorrow_interval_prices" in result
+        ), "Result should have tomorrow prices"
+        assert (
+            len(result["tomorrow_interval_prices"]) == 96
+        ), "Should have 96 fresh tomorrow intervals"
