@@ -253,6 +253,68 @@ class CacheManager:
                             ]
                             data_copy["tomorrow_interval_prices"] = {}
 
+                            # Also move tomorrow's raw prices if present (Issue #40 compatibility)
+                            if "tomorrow_raw_prices" in data_copy:
+                                data_copy["today_raw_prices"] = data_copy[
+                                    "tomorrow_raw_prices"
+                                ]
+                                data_copy["tomorrow_raw_prices"] = {}
+
+                            # Clear tomorrow statistics since we have no tomorrow data
+                            if "tomorrow_statistics" in data_copy:
+                                from ..api.base.data_structure import PriceStatistics
+
+                                data_copy["tomorrow_statistics"] = (
+                                    PriceStatistics().to_dict()
+                                )
+
+                            # CRITICAL FIX for Issue #44: Recalculate data_validity after migration
+                            # The old validity claimed tomorrow=96 but we just emptied tomorrow_interval_prices
+                            # This mismatch caused the system to think it had complete data when it didn't
+                            if self._timezone_service:
+                                try:
+                                    from .data_validity import calculate_data_validity
+
+                                    current_interval_key = (
+                                        self._timezone_service.get_current_interval_key()
+                                    )
+                                    target_timezone = str(
+                                        self._timezone_service.target_timezone
+                                    )
+
+                                    new_validity = calculate_data_validity(
+                                        interval_prices=data_copy[
+                                            "today_interval_prices"
+                                        ],
+                                        tomorrow_interval_prices={},  # Explicitly empty after migration
+                                        now=now,
+                                        current_interval_key=current_interval_key,
+                                        target_timezone=target_timezone,
+                                    )
+
+                                    data_copy["data_validity"] = new_validity.to_dict()
+
+                                    _LOGGER.info(
+                                        f"Recalculated data validity after midnight migration for {area}: {new_validity}"
+                                    )
+                                except Exception as e:
+                                    _LOGGER.warning(
+                                        f"Failed to recalculate data validity during migration for {area}: {e}",
+                                        exc_info=True,
+                                    )
+                                    # If recalculation fails, at least remove the stale validity
+                                    # to force recalculation downstream
+                                    if "data_validity" in data_copy:
+                                        del data_copy["data_validity"]
+                            else:
+                                _LOGGER.warning(
+                                    f"Timezone service not available for validity recalculation during migration for {area}. "
+                                    "Removing stale validity to force recalculation."
+                                )
+                                # Remove stale validity if we can't recalculate
+                                if "data_validity" in data_copy:
+                                    del data_copy["data_validity"]
+
                             # Mark as migrated for debugging purposes
                             data_copy["migrated_from_tomorrow"] = True
                             data_copy["original_cache_date"] = yesterday.isoformat()
