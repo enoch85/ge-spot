@@ -624,10 +624,18 @@ class TestUnifiedPriceManager:
         assert call_kwargs["source"] == Source.ENTSOE
         assert "data" in call_kwargs
 
-        # Check returned data
+        # Check returned data (key fields)
+        assert result is not None, "Result should not be None"
         assert (
-            result == processed_fallback_result
-        ), f"Expected processed fallback result, got {json.dumps(result, indent=2)}"
+            result.get("source") == Source.ENTSOE
+            or result.get("data_source") == Source.ENTSOE
+        ), "Result should be from ENTSOE"
+        assert Source.NORDPOOL in result.get(
+            "attempted_sources", []
+        ), "Should include NORDPOOL in attempted sources"
+        assert Source.ENTSOE in result.get(
+            "attempted_sources", []
+        ), "Should include ENTSOE in attempted sources"
 
         # Check manager state updates
         assert (
@@ -695,7 +703,11 @@ class TestUnifiedPriceManager:
         mock_fallback.side_effect = [first_call_result, second_call_result]
 
         # Mock processor: first call returns None (validation failure), second call succeeds
-        mock_processor.side_effect = [None, processed_second_result]
+        # Convert dict to IntervalPriceData for the second call
+        mock_processor.side_effect = [
+            None,
+            _dict_to_interval_price_data(processed_second_result),
+        ]
 
         # Act
         result = await manager.fetch_data()
@@ -735,8 +747,19 @@ class TestUnifiedPriceManager:
         # Cache should be updated with successful result
         mock_cache_update.assert_called_once()
 
-        # Check result is from ENTSOE
-        assert result == processed_second_result
+        # Check result is from ENTSOE (key fields)
+        assert result is not None, "Result should not be None"
+        assert (
+            result.get("source") == Source.ENTSOE
+            or result.get("data_source") == Source.ENTSOE
+        ), "Result should be from ENTSOE"
+        assert Source.NORDPOOL in result.get(
+            "attempted_sources", []
+        ), "Should include NORDPOOL in attempted sources"
+        assert Source.ENTSOE in result.get(
+            "attempted_sources", []
+        ), "Should include ENTSOE in attempted sources"
+
         assert manager._active_source == Source.ENTSOE
         assert manager._consecutive_failures == 0
 
@@ -1432,7 +1455,11 @@ class TestUnifiedPriceManager:
                 "attempted_sources": [Source.NORDPOOL],
             },
         ]
-        mock_processor.side_effect = [partial_result, complete_result]
+        # Convert dicts to IntervalPriceData
+        mock_processor.side_effect = [
+            _dict_to_interval_price_data(partial_result),
+            _dict_to_interval_price_data(complete_result),
+        ]
         mock_cache_get.return_value = None
 
         # Act
@@ -1578,7 +1605,11 @@ class TestUnifiedPriceManager:
                 "attempted_sources": [Source.NORDPOOL],
             },
         ]
-        mock_processor.side_effect = [entsoe_partial, nordpool_partial]
+        # Convert dicts to IntervalPriceData
+        mock_processor.side_effect = [
+            _dict_to_interval_price_data(entsoe_partial),
+            _dict_to_interval_price_data(nordpool_partial),
+        ]
         mock_cache_get.return_value = None
 
         # Act

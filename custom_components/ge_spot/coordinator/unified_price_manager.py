@@ -1686,6 +1686,16 @@ class UnifiedPriceManager:
         try:
             processed_price_data = await self._data_processor.process(result)
 
+            # Check if processor returned None (validation failure)
+            if processed_price_data is None:
+                _LOGGER.warning(
+                    f"[{self.area}] Data processor returned None (validation failure)"
+                )
+                return await self._generate_empty_result(
+                    error="Validation failed - processor returned None",
+                    error_code=Errors.INVALID_DATA,
+                )
+
             # Convert to dict format for sensors
             processed_data = processed_price_data.to_processed_result()
 
