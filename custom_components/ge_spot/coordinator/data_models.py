@@ -409,18 +409,14 @@ class IntervalPriceData:
         """Create from cache dictionary.
 
         Converts stored cache data back into an IntervalPriceData instance.
-        Handles both new format (source data only) and old format (with
-        computed fields) for backward compatibility.
 
         Args:
-            data: Dictionary from cache (source data)
+            data: Dictionary from cache (source data only)
             tz_service: Timezone service for computing properties
 
         Returns:
             IntervalPriceData instance
         """
-        # Backward compatibility: If old format has computed fields, ignore them
-        # They'll be recomputed as properties
         return cls(
             # Price data
             today_interval_prices=data.get("today_interval_prices", {}),
@@ -459,70 +455,6 @@ class IntervalPriceData:
             # Timezone service (for property computation)
             _tz_service=tz_service,
         )
-
-    def to_processed_result(self) -> Dict[str, Any]:
-        """Convert to processed result format for backward compatibility.
-
-        This generates the OLD format with all computed fields.
-        Used during migration period for compatibility with existing
-        sensors and code that expects the old structure.
-
-        Once all consumers are updated to use the data model directly,
-        this method can be deprecated.
-
-        Returns:
-            Dictionary in old processed_result format
-        """
-        # Get computed properties
-        validity = self.data_validity
-        stats = self.statistics
-        tomorrow_stats = self.tomorrow_statistics
-
-        return {
-            # Source data (as before)
-            "source": self.source,
-            "area": self.area,
-            "source_currency": self.source_currency,
-            "target_currency": self.target_currency,
-            "source_timezone": self.source_timezone,
-            "target_timezone": self.target_timezone,
-            "today_interval_prices": self.today_interval_prices,
-            "tomorrow_interval_prices": self.tomorrow_interval_prices,
-            "today_raw_prices": self.today_raw_prices,
-            "tomorrow_raw_prices": self.tomorrow_raw_prices,
-            "raw_interval_prices_original": self.raw_interval_prices_original,
-            # Computed properties (for backward compatibility)
-            "data_validity": validity.to_dict(),
-            "statistics": stats.to_dict(),
-            "tomorrow_statistics": tomorrow_stats.to_dict(),
-            "has_tomorrow_prices": self.has_tomorrow_prices,
-            "current_price": self.current_price,
-            "next_interval_price": self.next_interval_price,
-            "current_interval_key": self.current_interval_key,
-            "next_interval_key": self.next_interval_key,
-            "tomorrow_valid": self.tomorrow_valid,
-            # Display configuration
-            "vat_rate": self.vat_rate,
-            "vat_included": self.vat_included,
-            "display_unit": self.display_unit,
-            # Timestamps
-            "fetched_at": self.fetched_at,
-            "last_updated": self.last_updated,
-            # Migration tracking
-            "migrated_from_tomorrow": self.migrated_from_tomorrow,
-            "original_cache_date": self.original_cache_date,
-            # Currency conversion
-            "ecb_rate": self.ecb_rate,
-            "ecb_updated": self.ecb_updated,
-            # Fallback information
-            "attempted_sources": self.attempted_sources,
-            "fallback_sources": self.fallback_sources,
-            "using_cached_data": self.using_cached_data,
-            # Attribution
-            "data_source_attribution": self.data_source_attribution,
-            # Raw data
-            "raw_data": self.raw_data,
-        }
 
     def __repr__(self) -> str:
         """String representation for debugging."""

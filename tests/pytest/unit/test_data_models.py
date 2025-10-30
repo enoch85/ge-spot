@@ -429,34 +429,7 @@ class TestSerialization:
         assert data.today_interval_prices == sample_today_prices
         assert data.source == "nordpool"
 
-        # Computed fields ignored (will be recomputed as properties)
-        # The properties will compute fresh values
-
-    def test_to_processed_result_includes_computed_fields(
-        self, sample_today_prices, mock_timezone_service
-    ):
-        """Test to_processed_result includes all computed fields."""
-        data = IntervalPriceData(
-            today_interval_prices=sample_today_prices,
-            source="nordpool",
-            area="SE3",
-            target_timezone="Europe/Stockholm",
-            _tz_service=mock_timezone_service,
-        )
-
-        result = data.to_processed_result()
-
-        # Source data present
-        assert result["today_interval_prices"] == sample_today_prices
-        assert result["source"] == "nordpool"
-
-        # Computed fields also present (for backward compatibility)
-        assert "data_validity" in result
-        assert "statistics" in result
-        assert "tomorrow_statistics" in result
-        assert "has_tomorrow_prices" in result
-        assert "current_price" in result
-        assert "next_interval_price" in result
+        # Computed fields are ignored - properties will compute fresh values
 
     def test_round_trip_serialization(
         self, sample_today_prices, sample_tomorrow_prices, mock_timezone_service
@@ -489,63 +462,6 @@ class TestSerialization:
         assert reconstructed.area == original.area
         assert reconstructed.ecb_rate == original.ecb_rate
         assert reconstructed.vat_rate == original.vat_rate
-
-
-class TestBackwardCompatibility:
-    """Test backward compatibility with old cache format."""
-
-    def test_old_cache_format_with_computed_fields(self, sample_today_prices):
-        """Test loading old cache that has computed fields."""
-        old_cache = {
-            "today_interval_prices": sample_today_prices,
-            "tomorrow_interval_prices": {},
-            "source": "nordpool",
-            "area": "SE3",
-            # Old format: computed fields in cache (should be ignored)
-            "data_validity": {
-                "interval_count": 96,
-                "has_current_interval": True,
-            },
-            "statistics": {"avg": 110.5, "min": 100.0, "max": 123.0},
-            "tomorrow_statistics": {},
-            "has_tomorrow_prices": False,
-        }
-
-        data = IntervalPriceData.from_cache_dict(old_cache)
-
-        # Source data loads correctly
-        assert len(data.today_interval_prices) == 96
-        assert data.source == "nordpool"
-
-        # Properties compute fresh (ignore old cached values)
-        stats = data.statistics
-        assert stats.avg is not None  # Recomputed
-        assert stats.min == 100.0
-        assert stats.max == 123.0
-
-    def test_mixed_cache_versions(self):
-        """Test system works with mix of old and new cache entries."""
-        # Some old format entries
-        old_entry = {
-            "today_interval_prices": {"14:00": 100.0},
-            "source": "nordpool",
-            "data_validity": {"interval_count": 1},  # Old
-        }
-
-        # Some new format entries
-        new_entry = {
-            "today_interval_prices": {"14:00": 100.0},
-            "source": "nordpool",
-            # No computed fields
-        }
-
-        # Both load correctly
-        old_data = IntervalPriceData.from_cache_dict(old_entry)
-        new_data = IntervalPriceData.from_cache_dict(new_entry)
-
-        # Both compute properties correctly
-        assert old_data.has_tomorrow_prices is False
-        assert new_data.has_tomorrow_prices is False
 
 
 class TestEdgeCases:
