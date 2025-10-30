@@ -685,7 +685,10 @@ class TestUnifiedPriceManager:
         second_call_result = {
             **MOCK_SUCCESS_RESULT,
             "data_source": Source.ENTSOE,
-            "attempted_sources": [Source.ENTSOE],
+            "attempted_sources": [
+                Source.NORDPOOL,
+                Source.ENTSOE,
+            ],  # Should include both
         }
         processed_second_result = {
             **MOCK_PROCESSED_RESULT,
@@ -2268,7 +2271,9 @@ class TestHealthCheck:
                 **MOCK_SUCCESS_RESULT,
                 "raw_data": {"test": "data"},
             }
-            mock_process.return_value = _dict_to_interval_price_data(MOCK_PROCESSED_RESULT)
+            mock_process.return_value = _dict_to_interval_price_data(
+                MOCK_PROCESSED_RESULT
+            )
 
             # Act
             result = await manager.fetch_data(force=False)
@@ -2314,7 +2319,9 @@ class TestHealthCheck:
                 **MOCK_SUCCESS_RESULT,
                 "raw_data": {"test": "data"},
             }
-            mock_process.return_value = _dict_to_interval_price_data(MOCK_PROCESSED_RESULT)
+            mock_process.return_value = _dict_to_interval_price_data(
+                MOCK_PROCESSED_RESULT
+            )
 
             # Act
             result = await manager.fetch_data(force=False)
@@ -2360,7 +2367,9 @@ class TestHealthCheck:
                 **MOCK_SUCCESS_RESULT,
                 "raw_data": {"test": "data"},
             }
-            mock_process.return_value = _dict_to_interval_price_data(MOCK_PROCESSED_RESULT)
+            mock_process.return_value = _dict_to_interval_price_data(
+                MOCK_PROCESSED_RESULT
+            )
 
             # Act
             result = await manager.fetch_data(force=False)
@@ -2401,7 +2410,9 @@ class TestHealthCheck:
                 **MOCK_SUCCESS_RESULT,
                 "raw_data": {"test": "data"},
             }
-            mock_process.return_value = _dict_to_interval_price_data(MOCK_PROCESSED_RESULT)
+            mock_process.return_value = _dict_to_interval_price_data(
+                MOCK_PROCESSED_RESULT
+            )
 
             # Act
             await manager.fetch_data(force=False)
@@ -2438,10 +2449,12 @@ class TestHealthCheck:
                 "raw_data": {"test": "data"},
                 "attempted_sources": [Source.NORDPOOL, Source.ENTSOE],
             }
-            mock_process.return_value = _dict_to_interval_price_data({
-                **MOCK_PROCESSED_RESULT,
-                "attempted_sources": [Source.NORDPOOL, Source.ENTSOE],
-            })
+            mock_process.return_value = _dict_to_interval_price_data(
+                {
+                    **MOCK_PROCESSED_RESULT,
+                    "attempted_sources": [Source.NORDPOOL, Source.ENTSOE],
+                }
+            )
 
             # Act
             await manager.fetch_data(force=False)
