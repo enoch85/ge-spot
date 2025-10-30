@@ -440,9 +440,9 @@ class HourlyAverageSensor(PriceValueSensor):
         """
         # Get the appropriate interval prices based on day offset
         if self._day_offset == 0:
-            interval_prices = data.get("today_interval_prices", {})
+            interval_prices = data.today_interval_prices if data else {}
         else:
-            interval_prices = data.get("tomorrow_interval_prices", {})
+            interval_prices = data.tomorrow_interval_prices if data else {}
 
         if not interval_prices:
             return {}

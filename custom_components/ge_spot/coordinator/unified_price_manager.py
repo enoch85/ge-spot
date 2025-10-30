@@ -848,14 +848,10 @@ class UnifiedPriceManager:
                 from ..timezone.dst_handler import DSTHandler
 
                 today_prices = (
-                    processed_data.get("today_interval_prices", {})
-                    if processed_data
-                    else {}
+                    processed_data.today_interval_prices if processed_data else {}
                 )
                 tomorrow_prices = (
-                    processed_data.get("tomorrow_interval_prices", {})
-                    if processed_data
-                    else {}
+                    processed_data.tomorrow_interval_prices if processed_data else {}
                 )
 
                 today_count = len(today_prices)
@@ -992,24 +988,21 @@ class UnifiedPriceManager:
                 if (
                     processed_data
                     and has_complete_data
-                    and "error" not in processed_data
+                    and not hasattr(processed_data, "_error")
                 ):
                     _LOGGER.info(
                         f"[{self.area}] Complete data from {result.get('data_source', 'unknown')}. "
-                        f"Today: {len(processed_data.get('today_interval_prices', {}))}, "
-                        f"Tomorrow: {len(processed_data.get('tomorrow_interval_prices', {}))}"
+                        f"Today: {len(processed_data.today_interval_prices)}, "
+                        f"Tomorrow: {len(processed_data.tomorrow_interval_prices)}"
                     )
                     self._consecutive_failures = 0
                     self._last_api_fetch = now
-                    self._active_source = processed_data.get("data_source", "unknown")
-                    self._attempted_sources = processed_data.get(
-                        "attempted_sources", []
-                    )
+                    self._active_source = processed_data.source
+                    self._attempted_sources = processed_data.attempted_sources
                     self._fallback_sources = [
                         s for s in self._attempted_sources if s != self._active_source
                     ]
                     self._using_cached_data = False
-                    processed_data["using_cached_data"] = False
 
                     # Track all attempted sources
                     for source_name in self._attempted_sources:
@@ -1026,16 +1019,11 @@ class UnifiedPriceManager:
                             f"[{self.area}] Source '{self._active_source}' marked as working"
                         )
 
-                    # Cache the data - convert dict back to IntervalPriceData for storage
-                    from .data_models import IntervalPriceData
-
-                    cache_data = IntervalPriceData.from_cache_dict(
-                        processed_data, self._tz_service
-                    )
+                    # Cache the data
                     self._cache_manager.store(
-                        data=cache_data,
+                        data=processed_data,
                         area=self.area,
-                        source=processed_data.get("data_source", "unknown"),
+                        source=processed_data.source,
                         timestamp=now,
                     )
                     return processed_data
@@ -1044,7 +1032,7 @@ class UnifiedPriceManager:
                 elif (
                     processed_data
                     and has_partial_data
-                    and "error" not in processed_data
+                    and not hasattr(processed_data, "_error")
                 ):
                     missing = "tomorrow" if has_today else "today"
 
@@ -1052,8 +1040,8 @@ class UnifiedPriceManager:
                         # Case 2: Partial data with remaining sources - try next source
                         _LOGGER.info(
                             f"[{self.area}] Partial data from {result.get('data_source', 'unknown')} "
-                            f"(missing {missing}: today={len(processed_data.get('today_interval_prices', {}))}, "
-                            f"tomorrow={len(processed_data.get('tomorrow_interval_prices', {}))}) "
+                            f"(missing {missing}: today={len(processed_data.today_interval_prices)}, "
+                            f"tomorrow={len(processed_data.tomorrow_interval_prices)}) "
                             f"- trying next source: {', '.join(remaining_sources)}"
                         )
                         # Mark this source as providing partial data (not a failure, but incomplete)
@@ -1105,10 +1093,10 @@ class UnifiedPriceManager:
                                     retry_result
                                 )
                                 has_today_retry = processed_retry and bool(
-                                    processed_retry.get("today_interval_prices")
+                                    processed_retry.today_interval_prices
                                 )
                                 has_tomorrow_retry = processed_retry and bool(
-                                    processed_retry.get("tomorrow_interval_prices")
+                                    processed_retry.tomorrow_interval_prices
                                 )
                                 has_complete_retry = (
                                     has_today_retry and has_tomorrow_retry
@@ -1139,21 +1127,21 @@ class UnifiedPriceManager:
 
                         # Now check what we got from the remaining sources
                         has_any_retry = processed_retry and (
-                            bool(processed_retry.get("today_interval_prices"))
-                            or bool(processed_retry.get("tomorrow_interval_prices"))
+                            bool(processed_retry.today_interval_prices)
+                            or bool(processed_retry.tomorrow_interval_prices)
                         )
 
                         if (
                             processed_retry
                             and has_any_retry
-                            and "error" not in processed_retry
+                            and not hasattr(processed_retry, "_error")
                         ):
                             # Get retry data details
                             has_today_retry = bool(
-                                processed_retry.get("today_interval_prices")
+                                processed_retry.today_interval_prices
                             )
                             has_tomorrow_retry = bool(
-                                processed_retry.get("tomorrow_interval_prices")
+                                processed_retry.tomorrow_interval_prices
                             )
                             has_complete_retry = has_today_retry and has_tomorrow_retry
 
@@ -1165,12 +1153,9 @@ class UnifiedPriceManager:
                                 )
                                 self._consecutive_failures = 0
                                 self._last_api_fetch = now
-                                self._active_source = processed_retry.get(
-                                    "data_source", "unknown"
-                                )
+                                self._active_source = processed_retry.source
                                 self._attempted_sources = (
-                                    attempted_so_far
-                                    + processed_retry.get("attempted_sources", [])
+                                    attempted_so_far + processed_retry.attempted_sources
                                 )
                                 self._fallback_sources = [
                                     s
@@ -1178,10 +1163,6 @@ class UnifiedPriceManager:
                                     if s != self._active_source
                                 ]
                                 self._using_cached_data = False
-                                processed_retry["using_cached_data"] = False
-                                processed_retry["attempted_sources"] = (
-                                    self._attempted_sources
-                                )
 
                                 # Track all attempted sources
                                 for source_name in self._attempted_sources:
@@ -1198,14 +1179,9 @@ class UnifiedPriceManager:
                                         f"[{self.area}] Source '{self._active_source}' marked as working"
                                     )
 
-                                # Cache the data - convert dict back to IntervalPriceData
-                                from .data_models import IntervalPriceData
-
-                                cache_data = IntervalPriceData.from_cache_dict(
-                                    processed_retry, self._tz_service
-                                )
+                                # Cache the data
                                 self._cache_manager.store(
-                                    data=cache_data,
+                                    data=processed_retry,
                                     area=self.area,
                                     source=self._active_source,
                                     timestamp=now,
@@ -1214,7 +1190,7 @@ class UnifiedPriceManager:
                             else:
                                 # Retry also provided partial data - prefer TODAY's data over tomorrow's
                                 has_today_backup = bool(
-                                    partial_data_backup.get("today_interval_prices")
+                                    partial_data_backup.today_interval_prices
                                 )
 
                                 if has_today_retry:
@@ -1224,12 +1200,10 @@ class UnifiedPriceManager:
                                     )
                                     self._consecutive_failures = 0
                                     self._last_api_fetch = now
-                                    self._active_source = processed_retry.get(
-                                        "data_source", "unknown"
-                                    )
+                                    self._active_source = processed_retry.source
                                     self._attempted_sources = (
                                         attempted_so_far
-                                        + processed_retry.get("attempted_sources", [])
+                                        + processed_retry.attempted_sources
                                     )
                                     self._fallback_sources = [
                                         s
@@ -1237,10 +1211,6 @@ class UnifiedPriceManager:
                                         if s != self._active_source
                                     ]
                                     self._using_cached_data = False
-                                    processed_retry["using_cached_data"] = False
-                                    processed_retry["attempted_sources"] = (
-                                        self._attempted_sources
-                                    )
 
                                     # Track all attempted sources
                                     for source_name in self._attempted_sources:
@@ -1261,14 +1231,9 @@ class UnifiedPriceManager:
                                             f"[{self.area}] Source '{self._active_source}' marked as working"
                                         )
 
-                                    # Cache the data - convert dict back to IntervalPriceData
-                                    from .data_models import IntervalPriceData
-
-                                    cache_data = IntervalPriceData.from_cache_dict(
-                                        processed_retry, self._tz_service
-                                    )
+                                    # Cache the data
                                     self._cache_manager.store(
-                                        data=cache_data,
+                                        data=processed_retry,
                                         area=self.area,
                                         source=self._active_source,
                                         timestamp=now,
@@ -1281,7 +1246,7 @@ class UnifiedPriceManager:
                                     )
                                     attempted_so_far = (
                                         attempted_so_far
-                                        + processed_retry.get("attempted_sources", [])
+                                        + processed_retry.attempted_sources
                                     )
                                 else:
                                     # Both only have tomorrow - use first partial (backup)
@@ -1290,7 +1255,7 @@ class UnifiedPriceManager:
                                     )
                                     attempted_so_far = (
                                         attempted_so_far
-                                        + processed_retry.get("attempted_sources", [])
+                                        + processed_retry.attempted_sources
                                     )
                         else:
                             # All remaining sources failed or had errors
@@ -1304,9 +1269,7 @@ class UnifiedPriceManager:
                         )
                         self._consecutive_failures = 0
                         self._last_api_fetch = now
-                        self._active_source = partial_data_backup.get(
-                            "data_source", "unknown"
-                        )
+                        self._active_source = partial_data_backup.source
                         self._attempted_sources = list(set(attempted_so_far))
                         self._fallback_sources = [
                             s
@@ -1318,14 +1281,9 @@ class UnifiedPriceManager:
                         for source_name in self._attempted_sources:
                             self._mark_source_attempted(source_name)
 
-                        # Cache partial data - convert dict back to IntervalPriceData
-                        from .data_models import IntervalPriceData
-
-                        cache_data = IntervalPriceData.from_cache_dict(
-                            partial_data_backup, self._tz_service
-                        )
+                        # Cache partial data
                         self._cache_manager.store(
-                            data=cache_data,
+                            data=partial_data_backup,
                             area=self.area,
                             source=self._active_source,
                             timestamp=now,
@@ -1337,24 +1295,19 @@ class UnifiedPriceManager:
                         _LOGGER.info(
                             f"[{self.area}] Accepting partial data from {result.get('data_source', 'unknown')} "
                             f"(missing {missing}, no remaining sources). "
-                            f"Today: {len(processed_data.get('today_interval_prices', {}))}, "
-                            f"Tomorrow: {len(processed_data.get('tomorrow_interval_prices', {}))}"
+                            f"Today: {len(processed_data.today_interval_prices)}, "
+                            f"Tomorrow: {len(processed_data.tomorrow_interval_prices)}"
                         )
                         self._consecutive_failures = 0
                         self._last_api_fetch = now
-                        self._active_source = processed_data.get(
-                            "data_source", "unknown"
-                        )
-                        self._attempted_sources = processed_data.get(
-                            "attempted_sources", []
-                        )
+                        self._active_source = processed_data.source
+                        self._attempted_sources = processed_data.attempted_sources
                         self._fallback_sources = [
                             s
                             for s in self._attempted_sources
                             if s != self._active_source
                         ]
                         self._using_cached_data = False
-                        processed_data["using_cached_data"] = False
 
                         # Track attempted sources
                         for source_name in self._attempted_sources:
@@ -1368,16 +1321,11 @@ class UnifiedPriceManager:
                         ):
                             self._failed_sources[self._active_source] = None
 
-                        # Cache the partial data - convert dict back to IntervalPriceData
-                        from .data_models import IntervalPriceData
-
-                        cache_data = IntervalPriceData.from_cache_dict(
-                            processed_data, self._tz_service
-                        )
+                        # Cache the partial data
                         self._cache_manager.store(
-                            data=cache_data,
+                            data=processed_data,
                             area=self.area,
-                            source=processed_data.get("data_source", "unknown"),
+                            source=processed_data.source,
                             timestamp=now,
                         )
                         return processed_data
@@ -1387,8 +1335,10 @@ class UnifiedPriceManager:
                     # Processing/validation failed
                     failed_source = result.get("data_source", "unknown")
                     error_info = (
-                        processed_data.get(
-                            "error", "Processing failed to produce valid data"
+                        getattr(
+                            processed_data,
+                            "_error",
+                            "Processing failed to produce valid data",
                         )
                         if processed_data
                         else "Processing returned None or empty"
@@ -1429,10 +1379,10 @@ class UnifiedPriceManager:
                         ):
                             processed_retry = await self._process_result(retry_result)
                             has_today_retry = processed_retry and bool(
-                                processed_retry.get("today_interval_prices")
+                                processed_retry.today_interval_prices
                             )
                             has_tomorrow_retry = processed_retry and bool(
-                                processed_retry.get("tomorrow_interval_prices")
+                                processed_retry.tomorrow_interval_prices
                             )
                             has_complete_retry = has_today_retry and has_tomorrow_retry
                             has_any_retry = has_today_retry or has_tomorrow_retry
@@ -1440,7 +1390,7 @@ class UnifiedPriceManager:
                             if (
                                 processed_retry
                                 and has_any_retry
-                                and "error" not in processed_retry
+                                and not hasattr(processed_retry, "_error")
                             ):
                                 # Retry source succeeded!
                                 success_type = (
@@ -1451,9 +1401,7 @@ class UnifiedPriceManager:
                                 )
                                 self._consecutive_failures = 0
                                 self._last_api_fetch = now
-                                self._active_source = processed_retry.get(
-                                    "data_source", "unknown"
-                                )
+                                self._active_source = processed_retry.source
                                 self._attempted_sources = (
                                     attempted_so_far
                                     + retry_result.get("attempted_sources", [])
@@ -1464,10 +1412,6 @@ class UnifiedPriceManager:
                                     if s != self._active_source
                                 ]
                                 self._using_cached_data = False
-                                processed_retry["using_cached_data"] = False
-                                processed_retry["attempted_sources"] = (
-                                    self._attempted_sources
-                                )
 
                                 # Track all attempted sources
                                 for source_name in self._attempted_sources:
@@ -1484,14 +1428,9 @@ class UnifiedPriceManager:
                                         f"[{self.area}] Source '{self._active_source}' marked as working"
                                     )
 
-                                # Cache the data - convert dict back to IntervalPriceData
-                                from .data_models import IntervalPriceData
-
-                                cache_data = IntervalPriceData.from_cache_dict(
-                                    processed_retry, self._tz_service
-                                )
+                                # Cache the data
                                 self._cache_manager.store(
-                                    data=cache_data,
+                                    data=processed_retry,
                                     area=self.area,
                                     source=self._active_source,
                                     timestamp=now,

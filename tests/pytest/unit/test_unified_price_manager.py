@@ -441,27 +441,25 @@ class TestUnifiedPriceManager:
         # Check returned data
         # Verify key fields are present and correct
         assert result is not None, "Result should not be None"
-        assert (
-            "today_interval_prices" in result
+        assert hasattr(
+            result, "today_interval_prices"
         ), "Result should have today_interval_prices"
-        assert (
-            "tomorrow_interval_prices" in result
+        assert hasattr(
+            result, "tomorrow_interval_prices"
         ), "Result should have tomorrow_interval_prices"
         assert (
-            len(result["today_interval_prices"]) == 96
-        ), f"Expected 96 today intervals, got {len(result['today_interval_prices'])}"
+            len(result.today_interval_prices) == 96
+        ), f"Expected 96 today intervals, got {len(result.today_interval_prices)}"
         assert (
-            len(result["tomorrow_interval_prices"]) == 96
-        ), f"Expected 96 tomorrow intervals, got {len(result['tomorrow_interval_prices'])}"
+            len(result.tomorrow_interval_prices) == 96
+        ), f"Expected 96 tomorrow intervals, got {len(result.tomorrow_interval_prices)}"
         assert (
-            result.get("data_source") == Source.NORDPOOL
-        ), f"Expected data_source NORDPOOL, got {result.get('data_source')}"
+            result.source == Source.NORDPOOL
+        ), f"Expected data_source NORDPOOL, got {result.source}"
+        assert result.area == "SE1", f"Expected area SE1, got {result.area}"
         assert (
-            result.get("area") == "SE1"
-        ), f"Expected area SE1, got {result.get('area')}"
-        assert (
-            result.get("using_cached_data") is False
-        ), f"Expected using_cached_data False, got {result.get('using_cached_data')}"
+            result.using_cached_data is False
+        ), f"Expected using_cached_data False, got {result.using_cached_data}"
 
         # Check manager state updates
         assert (
@@ -558,20 +556,20 @@ class TestUnifiedPriceManager:
             mock_processor.assert_awaited_once()
             # Verify processor was called with cached data (check key fields)
             process_call_args = mock_processor.call_args[0][0]
-            assert process_call_args.get(
-                "today_interval_prices"
+            assert (
+                process_call_args.today_interval_prices
             ) == MOCK_PROCESSED_RESULT.get(
                 "today_interval_prices"
             ), "Processor should be called with cached interval_prices"
             assert (
-                process_call_args.get("using_cached_data") is True
+                process_call_args.using_cached_data is True
             ), "Processor input should have using_cached_data=True"
 
             # Result should indicate cached data was used
             assert (
-                result.get("using_cached_data") is True
+                result.using_cached_data is True
             ), "Result should indicate cached data was used"
-            assert result.get("today_interval_prices") == MOCK_PROCESSED_RESULT.get(
+            assert result.today_interval_prices == MOCK_PROCESSED_RESULT.get(
                 "today_interval_prices"
             ), "Result prices should match cached data"
 
@@ -629,15 +627,12 @@ class TestUnifiedPriceManager:
 
         # Check returned data (key fields)
         assert result is not None, "Result should not be None"
+        assert result.source == Source.ENTSOE, "Result should be from ENTSOE"
         assert (
-            result.get("source") == Source.ENTSOE
-            or result.get("data_source") == Source.ENTSOE
-        ), "Result should be from ENTSOE"
-        assert Source.NORDPOOL in result.get(
-            "attempted_sources", []
+            Source.NORDPOOL in result.attempted_sources
         ), "Should include NORDPOOL in attempted sources"
-        assert Source.ENTSOE in result.get(
-            "attempted_sources", []
+        assert (
+            Source.ENTSOE in result.attempted_sources
         ), "Should include ENTSOE in attempted sources"
 
         # Check manager state updates
@@ -752,15 +747,12 @@ class TestUnifiedPriceManager:
 
         # Check result is from ENTSOE (key fields)
         assert result is not None, "Result should not be None"
+        assert result.source == Source.ENTSOE, "Result should be from ENTSOE"
         assert (
-            result.get("source") == Source.ENTSOE
-            or result.get("data_source") == Source.ENTSOE
-        ), "Result should be from ENTSOE"
-        assert Source.NORDPOOL in result.get(
-            "attempted_sources", []
+            Source.NORDPOOL in result.attempted_sources
         ), "Should include NORDPOOL in attempted sources"
-        assert Source.ENTSOE in result.get(
-            "attempted_sources", []
+        assert (
+            Source.ENTSOE in result.attempted_sources
         ), "Should include ENTSOE in attempted sources"
 
         assert manager._active_source == Source.ENTSOE
@@ -895,37 +887,30 @@ class TestUnifiedPriceManager:
         # Check the key fields in the actual call (not exact dict match because IntervalPriceData normalizes it)
         assert mock_processor.await_count == 1, "Processor should be awaited once"
         actual_call_arg = mock_processor.await_args[0][0]  # First positional argument
-        assert actual_call_arg["area"] == manager.area, "Area should match"
+        assert actual_call_arg.area == manager.area, "Area should match"
         assert (
-            actual_call_arg["target_currency"] == manager.currency
+            actual_call_arg.target_currency == manager.currency
         ), "Currency should match"
         assert (
-            actual_call_arg["using_cached_data"] is True
+            actual_call_arg.using_cached_data is True
         ), "using_cached_data should be True"
-        assert actual_call_arg["today_interval_prices"] == MOCK_CACHED_RESULT.get(
+        assert actual_call_arg.today_interval_prices == MOCK_CACHED_RESULT.get(
             "today_interval_prices"
         ), "Prices should match"
-        assert actual_call_arg["tomorrow_interval_prices"] == MOCK_CACHED_RESULT.get(
+        assert actual_call_arg.tomorrow_interval_prices == MOCK_CACHED_RESULT.get(
             "tomorrow_interval_prices"
         ), "Tomorrow prices should match"
 
         # Check result structure and content
-        # The processor mock returns MOCK_CACHED_RESULT, but _process_result adds/modifies flags
-        expected_result = {
-            **MOCK_CACHED_RESULT,
-            "using_cached_data": True,
-        }  # Ensure flag is True
-        # Compare key fields
-        assert (
-            result.get("using_cached_data") is True
-        ), "using_cached_data flag should be True"
-        assert result.get("today_interval_prices") == MOCK_CACHED_RESULT.get(
+        # The processor mock returns MOCK_CACHED_RESULT (IntervalPriceData), with using_cached_data flag set
+        assert result.using_cached_data is True, "using_cached_data flag should be True"
+        assert result.today_interval_prices == MOCK_CACHED_RESULT.get(
             "today_interval_prices"
         ), "Prices should match cached data"
         # attempted_sources comes from the actual cache data, not from MOCK_FAILURE_RESULT
         # The cache contains data from a previous successful fetch, so check it has SOME attempted_sources
         assert (
-            len(result.get("attempted_sources", [])) > 0
+            len(result.attempted_sources) > 0
         ), "Result should have attempted_sources from cached data"
 
         # Cache not updated when using cache due to failure
@@ -1005,25 +990,19 @@ class TestUnifiedPriceManager:
             mock_processor.assert_awaited_once()
             # Verify processor was called with cached data (check key fields)
             process_call_args = mock_processor.call_args[0][0]
-            assert process_call_args.get(
-                "today_interval_prices"
-            ) == MOCK_CACHED_RESULT.get(
+            # process_call_args is IntervalPriceData, access properties
+            assert (process_call_args.today_interval_prices) == MOCK_CACHED_RESULT.get(
                 "today_interval_prices"
             ), "Processor should be called with cached interval_prices"
             assert (
-                process_call_args.get("using_cached_data") is True
+                process_call_args.using_cached_data is True
             ), "Processor input should have using_cached_data=True"
 
             # Check result uses cached data
-            expected_result = {
-                **MOCK_CACHED_RESULT,
-                "using_cached_data": True,
-            }  # Ensure flag is True
-            # Compare key fields
             assert (
-                result.get("using_cached_data") is True
+                result.using_cached_data is True
             ), "using_cached_data flag should be True"
-            assert result.get("today_interval_prices") == MOCK_CACHED_RESULT.get(
+            assert result.today_interval_prices == MOCK_CACHED_RESULT.get(
                 "today_interval_prices"
             ), "Prices should match cached data"
 
@@ -1092,18 +1071,18 @@ class TestUnifiedPriceManager:
 
             # Check result is empty with rate limit error
             # Compare key fields
-            error_msg = result.get("error", "").lower()
+            error_msg = getattr(result, "_error", "").lower()
             assert (
                 "rate limit" in error_msg
-            ), f"Error should mention rate limiting, got: {result.get('error', '')}"
+            ), f"Error should mention rate limiting, got: {getattr(result, '_error', '')}"
             # using_cached_data is False because no cache was found (not True because cache was attempted)
             assert (
-                result.get("using_cached_data") is False
+                result.using_cached_data is False
             ), "using_cached_data flag should be False (no cache found)"
-            assert not result.get(
-                "today_interval_prices"
-            ), "interval_prices should be empty"
-            assert result.get("has_data") is False, "has_data should be False"
+            assert not result.today_interval_prices, "interval_prices should be empty"
+            assert (
+                not result.today_interval_prices
+            ), "Should have no data (empty interval prices)"
 
     @pytest.mark.asyncio
     async def test_fetch_data_with_malformed_api_response(
@@ -1170,19 +1149,17 @@ class TestUnifiedPriceManager:
 
         # Check the final result structure and error message
         assert result is not None, "Result should not be None on malformed data"
-        assert "error" in result, "Error should be indicated on malformed data"
+        assert hasattr(result, "_error"), "Error should be indicated on malformed data"
         # The actual error from production: "Fetch/Processing failed: Unknown fetch/processing error"
+        error_msg = getattr(result, "_error", "")
         assert (
-            "failed" in result.get("error", "").lower()
-            or "error" in result.get("error", "").lower()
-        ), f"Error should indicate fetch failure, got {result.get('error')}"
-        assert not result.get(
-            "today_interval_prices", {}
-        ), "interval_prices should be empty"
+            "failed" in error_msg.lower() or "error" in error_msg.lower()
+        ), f"Error should indicate fetch failure, got {error_msg}"
+        assert not result.today_interval_prices, "interval_prices should be empty"
         assert (
-            result.get("has_data", True) is False
-        ), "has_data should be False on malformed data"
-        assert result.get("attempted_sources") == [
+            not result.today_interval_prices
+        ), "Should have no data (empty interval prices) on malformed data"
+        assert result.attempted_sources == [
             Source.NORDPOOL
         ], "Attempted sources should be recorded"
 
@@ -1230,24 +1207,24 @@ class TestUnifiedPriceManager:
 
         # Assert - Extreme prices should be preserved, not clipped
         assert (
-            result["today_interval_prices"]["2025-04-26T10:00:00+02:00"] == 9999.99
-        ), f"Extreme high price should not be clipped, got {result['today_interval_prices']['2025-04-26T10:00:00+02:00']}"
+            result.today_interval_prices["2025-04-26T10:00:00+02:00"] == 9999.99
+        ), f"Extreme high price should not be clipped, got {result.today_interval_prices['2025-04-26T10:00:00+02:00']}"
         assert (
-            result["today_interval_prices"]["2025-04-26T10:15:00+02:00"] == -500.0
-        ), f"Negative price should not be clipped, got {result['today_interval_prices']['2025-04-26T10:15:00+02:00']}"
+            result.today_interval_prices["2025-04-26T10:15:00+02:00"] == -500.0
+        ), f"Negative price should not be clipped, got {result.today_interval_prices['2025-04-26T10:15:00+02:00']}"
 
         # Both normal and extreme prices should be present
         assert (
-            len(result["today_interval_prices"]) == 3
-        ), f"All price points should be preserved, got {len(result['today_interval_prices'])}"
+            len(result.today_interval_prices) == 3
+        ), f"All price points should be preserved, got {len(result.today_interval_prices)}"
 
         # Result should indicate successful fetch despite extreme prices
         assert (
-            result["has_data"] is True
-        ), "has_data should be True despite extreme prices"
-        assert not result.get(
-            "error"
-        ), f"No error should be present for extreme prices, got {result.get('error')}"
+            result.today_interval_prices
+        ), "Should have data (non-empty interval prices) despite extreme prices"
+        assert not hasattr(
+            result, "_error"
+        ), f"No error should be present for extreme prices"
 
     @pytest.mark.asyncio
     async def test_fetch_data_with_currency_conversion(
@@ -1302,23 +1279,21 @@ class TestUnifiedPriceManager:
 
         # Assert
         assert (
-            result["source_currency"] == Currency.EUR
-        ), f"Source currency should be EUR, got {result.get('source_currency')}"
+            result.source_currency == Currency.EUR
+        ), f"Source currency should be EUR, got {result.source_currency}"
         assert (
-            result["target_currency"] == Currency.SEK
-        ), f"Target currency should be SEK, got {result.get('target_currency')}"
-        assert "exchange_rate" in result, "Exchange rate should be included in result"
-        assert (
-            result["exchange_rate"] == 10.5
-        ), f"Exchange rate should be 10.5, got {result.get('exchange_rate')}"
+            result.target_currency == Currency.SEK
+        ), f"Target currency should be SEK, got {result.target_currency}"
+        assert hasattr(result, "ecb_rate"), "Exchange rate should be included in result"
+        # Note: IntervalPriceData stores exchange rate in ecb_rate field
 
         # Check converted prices
         assert (
-            result["today_interval_prices"]["2025-04-26T10:00:00+02:00"] == 1.05
-        ), f"First interval price should be converted to 1.05 SEK, got {result['today_interval_prices']['2025-04-26T10:00:00+02:00']}"
+            result.today_interval_prices["2025-04-26T10:00:00+02:00"] == 1.05
+        ), f"First interval price should be converted to 1.05 SEK, got {result.today_interval_prices['2025-04-26T10:00:00+02:00']}"
         assert (
-            result["today_interval_prices"]["2025-04-26T10:15:00+02:00"] == 2.1
-        ), f"Second interval price should be converted to 2.1 SEK, got {result['today_interval_prices']['2025-04-26T10:15:00+02:00']}"
+            result.today_interval_prices["2025-04-26T10:15:00+02:00"] == 2.1
+        ), f"Second interval price should be converted to 2.1 SEK, got {result.today_interval_prices['2025-04-26T10:15:00+02:00']}"
 
     @pytest.mark.asyncio
     async def test_fetch_data_with_timezone_conversion(
@@ -1381,34 +1356,34 @@ class TestUnifiedPriceManager:
         result = await manager.fetch_data()
 
         # Assert - verify timezone conversion happened correctly
-        assert (
-            "source_timezone" in result
+        assert hasattr(
+            result, "source_timezone"
         ), "Source timezone should be included in result"
-        assert (
-            "target_timezone" in result
+        assert hasattr(
+            result, "target_timezone"
         ), "Target timezone should be included in result"
 
         # Verify timezone values
         assert (
-            result["source_timezone"] == "UTC"
-        ), f"Source timezone should be UTC, got {result['source_timezone']}"
+            result.source_timezone == "UTC"
+        ), f"Source timezone should be UTC, got {result.source_timezone}"
         assert (
-            result["target_timezone"] == "Europe/Stockholm"
-        ), f"Target timezone should be Europe/Stockholm, got {result['target_timezone']}"
+            result.target_timezone == "Europe/Stockholm"
+        ), f"Target timezone should be Europe/Stockholm, got {result.target_timezone}"
 
         # Check that prices were converted correctly (HH:MM format in Stockholm time)
         assert (
-            "12:00" in result["today_interval_prices"]
-        ), f"Interval 12:00 should be in result, got keys: {list(result['today_interval_prices'].keys())[:5]}"
+            "12:00" in result.today_interval_prices
+        ), f"Interval 12:00 should be in result, got keys: {list(result.today_interval_prices.keys())[:5]}"
         assert (
-            result["today_interval_prices"]["12:00"] == 1.0
-        ), f"Price at 12:00 should be 1.0, got {result['today_interval_prices']['12:00']}"
+            result.today_interval_prices["12:00"] == 1.0
+        ), f"Price at 12:00 should be 1.0, got {result.today_interval_prices['12:00']}"
         assert (
-            "12:15" in result["today_interval_prices"]
-        ), "Interval 12:15 should be in result"
+            "12:15" in result.today_interval_prices
+        ), f"Interval 12:15 should be in result"
         assert (
-            result["today_interval_prices"]["12:15"] == 2.0
-        ), f"Price at 12:15 should be 2.0, got {result['today_interval_prices']['12:15']}"
+            result.today_interval_prices["12:15"] == 2.0
+        ), f"Price at 12:15 should be 2.0, got {result.today_interval_prices['12:15']}"
 
     @pytest.mark.asyncio
     async def test_partial_data_fallback_to_complete(
@@ -1492,12 +1467,10 @@ class TestUnifiedPriceManager:
         # Assert
         assert result is not None, "Should return data"
         assert (
-            len(result.get("today_interval_prices", {})) > 0
+            len(result.today_interval_prices) > 0
         ), "Should have today data from fallback"
-        assert (
-            len(result.get("tomorrow_interval_prices", {})) > 0
-        ), "Should have tomorrow data"
-        assert result["data_source"] == Source.NORDPOOL, "Should use fallback source"
+        assert len(result.tomorrow_interval_prices) > 0, "Should have tomorrow data"
+        assert result.source == Source.NORDPOOL, "Should use fallback source"
 
         # Verify fallback was called twice (first source + retry)
         assert mock_fallback.call_count == 2, "Should try primary source then fallback"
@@ -1556,13 +1529,9 @@ class TestUnifiedPriceManager:
 
         # Assert
         assert result is not None, "Should return partial data"
-        assert (
-            len(result.get("today_interval_prices", {})) == 0
-        ), "Should have no today data"
-        assert (
-            len(result.get("tomorrow_interval_prices", {})) > 0
-        ), "Should have tomorrow data"
-        assert result["data_source"] == Source.ENTSOE, "Should use primary source"
+        assert len(result.today_interval_prices) == 0, "Should have no today data"
+        assert len(result.tomorrow_interval_prices) > 0, "Should have tomorrow data"
+        assert result.source == Source.ENTSOE, "Should use primary source"
 
         # Verify only called once (no fallback attempt)
         assert (
@@ -1643,13 +1612,13 @@ class TestUnifiedPriceManager:
         assert result is not None, "Should return data"
         # Should use Nordpool because it has TODAY's data (more important than tomorrow)
         assert (
-            result["data_source"] == Source.NORDPOOL
+            result.source == Source.NORDPOOL
         ), "Should use source with today's data (more important)"
         assert (
-            len(result.get("today_interval_prices", {})) > 0
+            len(result.today_interval_prices) > 0
         ), "Should have today data from Nordpool"
         assert (
-            len(result.get("tomorrow_interval_prices", {})) == 0
+            len(result.tomorrow_interval_prices) == 0
         ), "Should not have tomorrow data"
 
     @pytest.mark.asyncio
@@ -1824,7 +1793,9 @@ class TestUnifiedPriceManager:
             first_failure_time_nordpool is not None
         ), "Failure timestamp should be set"
         assert manager._consecutive_failures == 1, "First failure increments counter"
-        assert result_1.get("has_data") is False, "No data on failure"
+        assert (
+            not result_1.today_interval_prices
+        ), "No data on failure (empty interval prices)"
         assert mock_fallback.await_count == 1, "Fallback called on first failure"
 
         # ========== SCENARIO 2: Second Fetch (Sources Skipped) ==========

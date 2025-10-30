@@ -263,9 +263,13 @@ class TestStaleTomorrowDataFix:
         }
 
         # Setup mocks
-        mock_cache.get_data.mock.return_value = stale_cached_data.copy()
+        mock_cache.get_data.mock.return_value = _dict_to_interval_price_data(
+            stale_cached_data.copy()
+        )
         mock_fallback.return_value = fresh_data_from_api
-        mock_processor.mock.return_value = processed_fresh_data
+        mock_processor.mock.return_value = _dict_to_interval_price_data(
+            processed_fresh_data
+        )
 
         # Mock timezone service to indicate we're in special window
         manager._tz_service.get_current_interval_key.return_value = "14:00"
@@ -277,11 +281,14 @@ class TestStaleTomorrowDataFix:
         # Verify: System should have detected stale tomorrow data and fetched fresh
         assert result is not None, "fetch_data should return data"
         # Result is IntervalPriceData instance
-        assert (
-            "tomorrow_interval_prices" in result
+        assert hasattr(
+            result, "today_interval_prices"
+        ), "Result should have today_interval_prices"
+        assert hasattr(
+            result, "tomorrow_interval_prices"
         ), "Result should contain tomorrow prices"
         assert (
-            len(result["tomorrow_interval_prices"]) == 96
+            len(result.tomorrow_interval_prices) == 96
         ), "Should have 96 fresh tomorrow intervals"
 
         # Verify fresh data was fetched (not cached)
@@ -297,7 +304,7 @@ class TestStaleTomorrowDataFix:
         # If tomorrow was NOT cleared, the system would have used cached data
         # Since we see a fetch happened, the staleness check worked
         assert (
-            result["using_cached_data"] is False
+            result.using_cached_data is False
         ), "Should not use cached data when tomorrow is stale"
 
     @pytest.mark.asyncio
@@ -419,7 +426,9 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.mock.return_value = stale_cached_data.copy()
+        mock_cache.get_data.mock.return_value = _dict_to_interval_price_data(
+            stale_cached_data.copy()
+        )
         manager._tz_service.get_current_interval_key.return_value = "10:00"
         manager._tz_service.get_target_timezone.return_value = timezone.utc
 
@@ -431,7 +440,7 @@ class TestStaleTomorrowDataFix:
         # System will use cached data if rate limit prevents fetch
         assert result is not None
         # The cached data will be used (with stale tomorrow) because we're outside special window
-        assert result["using_cached_data"] is True
+        assert result.using_cached_data is True
 
     @pytest.mark.asyncio
     @freeze_time("2025-01-15 14:00:00 UTC")
@@ -604,9 +613,13 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.mock.return_value = stale_cached_data.copy()
+        mock_cache.get_data.mock.return_value = _dict_to_interval_price_data(
+            stale_cached_data.copy()
+        )
         mock_fallback.return_value = fresh_api_data
-        mock_processor.mock.return_value = processed_fresh_data
+        mock_processor.mock.return_value = _dict_to_interval_price_data(
+            processed_fresh_data
+        )
         manager._tz_service.get_current_interval_key.return_value = "14:00"
         manager._tz_service.get_target_timezone.return_value = timezone.utc
 
@@ -621,7 +634,7 @@ class TestStaleTomorrowDataFix:
         # and triggers fresh fetch, returning using_cached_data=False
         assert result is not None, "fetch_data should return data"
         assert (
-            result["using_cached_data"] is False
+            result.using_cached_data is False
         ), "Should fetch fresh data when both tomorrow AND data_validity are stale"
 
         # Verify the fetch was actually called (not using cache)
@@ -630,9 +643,9 @@ class TestStaleTomorrowDataFix:
         )
 
         # Verify we got fresh tomorrow data
-        assert (
-            "tomorrow_interval_prices" in result
+        assert hasattr(
+            result, "tomorrow_interval_prices"
         ), "Result should have tomorrow prices"
         assert (
-            len(result["tomorrow_interval_prices"]) == 96
+            len(result.tomorrow_interval_prices) == 96
         ), "Should have 96 fresh tomorrow intervals"
