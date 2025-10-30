@@ -116,6 +116,8 @@ class UnifiedPriceManager:
         self._cache_manager = CacheManager(
             hass=hass, config=config
         )  # Instantiate CacheManager
+        # Set timezone service on cache manager for midnight migration validity recalculation
+        self._cache_manager._timezone_service = self._tz_service
         self._exchange_service: ExchangeRateService | None = (
             None  # Initialize exchange service attribute
         )
