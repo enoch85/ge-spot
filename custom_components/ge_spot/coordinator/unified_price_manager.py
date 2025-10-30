@@ -539,43 +539,34 @@ class UnifiedPriceManager:
 
         # --- Decision to Fetch (using DataValidity) ---
         # Get current cache status to inform fetch decision
-        cached_data_for_decision = self._cache_manager.get_data(
+        cached_price_data = self._cache_manager.get_data(
             area=self.area, target_date=today_date
         )
 
         # During special window (13:00-15:00), if cached data has "tomorrow" prices,
         # verify they're actually for tomorrow (not stale data from yesterday).
         # This prevents skipping fetch when we think we have tomorrow but it's actually old.
-        if cached_data_for_decision:
+        if cached_price_data:
             try:
                 hour = now.hour
                 start_hour, end_hour = Network.Defaults.SPECIAL_HOUR_WINDOWS[1]  # 13-15
                 in_tomorrow_window = start_hour <= hour < end_hour
 
-                if in_tomorrow_window:
-                    tomorrow_prices = cached_data_for_decision.get(
-                        "tomorrow_interval_prices", {}
-                    )
-                    if tomorrow_prices:
-                        # Check the fetched_at timestamp to see if this cache is from today
-                        fetched_at_str = cached_data_for_decision.get("fetched_at")
-                        if fetched_at_str:
-                            fetched_at = dt_util.parse_datetime(fetched_at_str)
-                            if fetched_at and fetched_at.date() < today_date:
-                                # Cache is from before today - tomorrow data is stale
-                                _LOGGER.debug(
-                                    f"[{self.area}] Cached tomorrow data is stale (fetched {fetched_at.date()}), "
-                                    f"clearing it to force fresh fetch"
-                                )
-                                cached_data_for_decision = dict(
-                                    cached_data_for_decision
-                                )
-                                cached_data_for_decision["tomorrow_interval_prices"] = (
-                                    {}
-                                )
-                                # Also clear data_validity to force recalculation
-                                # Otherwise fetch decision will use stale validity showing tomorrow=96
-                                cached_data_for_decision.pop("data_validity", None)
+                if in_tomorrow_window and cached_price_data.has_tomorrow_prices:
+                    # Check the fetched_at timestamp to see if this cache is from today
+                    if cached_price_data.fetched_at:
+                        fetched_at = dt_util.parse_datetime(
+                            cached_price_data.fetched_at
+                        )
+                        if fetched_at and fetched_at.date() < today_date:
+                            # Cache is from before today - tomorrow data is stale
+                            _LOGGER.debug(
+                                f"[{self.area}] Cached tomorrow data is stale (fetched {fetched_at.date()}), "
+                                f"clearing it to force fresh fetch"
+                            )
+                            # Clear tomorrow prices to force fetch
+                            cached_price_data.tomorrow_interval_prices = {}
+                            cached_price_data.tomorrow_raw_prices = {}
             except Exception as e:
                 _LOGGER.debug(
                     f"[{self.area}] Error checking tomorrow data staleness: {e}"
@@ -586,46 +577,10 @@ class UnifiedPriceManager:
 
         data_validity = DataValidity()  # Default: no valid data
 
-        if cached_data_for_decision:
-            # Extract DataValidity from cached data
-            if "data_validity" in cached_data_for_decision:
-                try:
-                    data_validity = DataValidity.from_dict(
-                        cached_data_for_decision["data_validity"]
-                    )
-                    _LOGGER.debug(
-                        f"[{self.area}] Loaded data validity from cache: {data_validity}"
-                    )
-                except Exception as e:
-                    _LOGGER.warning(
-                        f"[{self.area}] Failed to load data validity from cache: {e}"
-                    )
-            else:
-                # Fallback: calculate validity from cached price data
-                try:
-                    from .data_validity import calculate_data_validity
-
-                    current_interval_key = self._tz_service.get_current_interval_key()
-                    # Cached interval keys are in target_timezone
-                    target_timezone = str(self._tz_service.target_timezone)
-                    data_validity = calculate_data_validity(
-                        interval_prices=cached_data_for_decision.get(
-                            "today_interval_prices", {}
-                        ),
-                        tomorrow_interval_prices=cached_data_for_decision.get(
-                            "tomorrow_interval_prices", {}
-                        ),
-                        now=now,
-                        current_interval_key=current_interval_key,
-                        target_timezone=target_timezone,  # Keys are in this timezone
-                    )
-                    _LOGGER.debug(
-                        f"[{self.area}] Calculated data validity from cache: {data_validity}"
-                    )
-                except Exception as e:
-                    _LOGGER.warning(
-                        f"[{self.area}] Failed to calculate data validity from cache: {e}"
-                    )
+        if cached_price_data:
+            # Data validity is computed automatically as a property!
+            data_validity = cached_price_data.data_validity
+            _LOGGER.debug(f"[{self.area}] Data validity from cache: {data_validity}")
         else:
             _LOGGER.debug(f"[{self.area}] No cached data found for decision making.")
 
@@ -655,15 +610,14 @@ class UnifiedPriceManager:
 
         if not force and not should_fetch_from_api:
             _LOGGER.debug(f"Skipping API fetch for area {self.area}: {fetch_reason}")
-            if cached_data_for_decision:
+            if cached_price_data:
                 _LOGGER.debug("Returning cached data for %s", self.area)
-                # Work on a shallow copy to prevent cache corruption
-                # (We only modify top-level keys, so shallow copy is sufficient and much faster)
-                data_copy = dict(cached_data_for_decision)
-                # Ensure the copied data is marked correctly
-                data_copy["using_cached_data"] = True
+                # Convert IntervalPriceData to dict for processing
+                data_dict = cached_price_data.to_cache_dict()
+                # Ensure the data is marked correctly
+                data_dict["using_cached_data"] = True
                 # Re-process to ensure current/next prices are updated
-                return await self._process_result(data_copy, is_cached=True)
+                return await self._process_result(data_dict, is_cached=True)
             else:
                 # No cache available - this can happen when:
                 # 1. Rate-limited with no current interval data (common after config reload/HA restart)
@@ -802,11 +756,12 @@ class UnifiedPriceManager:
                         _LOGGER.warning(
                             "No APIs configured for %s, using cached data.", self.area
                         )
-                        cached_data["using_cached_data"] = True
+                        # Convert to dict for processing
+                        cached_dict = cached_data.to_cache_dict()
+                        cached_dict["using_cached_data"] = True
                         processed_cached_data = await self._process_result(
-                            cached_data, is_cached=True
+                            cached_dict, is_cached=True
                         )
-                        processed_cached_data["using_cached_data"] = True
                         return processed_cached_data
                     return await self._generate_empty_result(
                         error=error_msg, error_code=Errors.NO_SOURCES_CONFIGURED
@@ -835,11 +790,12 @@ class UnifiedPriceManager:
                         _LOGGER.info(
                             "All sources disabled, using cached data for %s.", self.area
                         )
-                        cached_data["using_cached_data"] = True
+                        # Convert to dict for processing
+                        cached_dict = cached_data.to_cache_dict()
+                        cached_dict["using_cached_data"] = True
                         processed_cached_data = await self._process_result(
-                            cached_data, is_cached=True
+                            cached_dict, is_cached=True
                         )
-                        processed_cached_data["using_cached_data"] = True
                         # Add error info to indicate temporary situation
                         processed_cached_data["error"] = error_msg
                         processed_cached_data["error_code"] = (
@@ -1070,9 +1026,14 @@ class UnifiedPriceManager:
                             f"[{self.area}] Source '{self._active_source}' marked as working"
                         )
 
-                    # Cache the data
+                    # Cache the data - convert dict back to IntervalPriceData for storage
+                    from .data_models import IntervalPriceData
+
+                    cache_data = IntervalPriceData.from_cache_dict(
+                        processed_data, self._tz_service
+                    )
                     self._cache_manager.store(
-                        data=processed_data,
+                        data=cache_data,
                         area=self.area,
                         source=processed_data.get("data_source", "unknown"),
                         timestamp=now,
@@ -1237,9 +1198,14 @@ class UnifiedPriceManager:
                                         f"[{self.area}] Source '{self._active_source}' marked as working"
                                     )
 
-                                # Cache the data
+                                # Cache the data - convert dict back to IntervalPriceData
+                                from .data_models import IntervalPriceData
+
+                                cache_data = IntervalPriceData.from_cache_dict(
+                                    processed_retry, self._tz_service
+                                )
                                 self._cache_manager.store(
-                                    data=processed_retry,
+                                    data=cache_data,
                                     area=self.area,
                                     source=self._active_source,
                                     timestamp=now,
@@ -1295,9 +1261,14 @@ class UnifiedPriceManager:
                                             f"[{self.area}] Source '{self._active_source}' marked as working"
                                         )
 
-                                    # Cache the data
+                                    # Cache the data - convert dict back to IntervalPriceData
+                                    from .data_models import IntervalPriceData
+
+                                    cache_data = IntervalPriceData.from_cache_dict(
+                                        processed_retry, self._tz_service
+                                    )
                                     self._cache_manager.store(
-                                        data=processed_retry,
+                                        data=cache_data,
                                         area=self.area,
                                         source=self._active_source,
                                         timestamp=now,
@@ -1347,9 +1318,14 @@ class UnifiedPriceManager:
                         for source_name in self._attempted_sources:
                             self._mark_source_attempted(source_name)
 
-                        # Cache partial data
+                        # Cache partial data - convert dict back to IntervalPriceData
+                        from .data_models import IntervalPriceData
+
+                        cache_data = IntervalPriceData.from_cache_dict(
+                            partial_data_backup, self._tz_service
+                        )
                         self._cache_manager.store(
-                            data=partial_data_backup,
+                            data=cache_data,
                             area=self.area,
                             source=self._active_source,
                             timestamp=now,
@@ -1392,9 +1368,14 @@ class UnifiedPriceManager:
                         ):
                             self._failed_sources[self._active_source] = None
 
-                        # Cache the partial data
+                        # Cache the partial data - convert dict back to IntervalPriceData
+                        from .data_models import IntervalPriceData
+
+                        cache_data = IntervalPriceData.from_cache_dict(
+                            processed_data, self._tz_service
+                        )
                         self._cache_manager.store(
-                            data=processed_data,
+                            data=cache_data,
                             area=self.area,
                             source=processed_data.get("data_source", "unknown"),
                             timestamp=now,
@@ -1503,9 +1484,14 @@ class UnifiedPriceManager:
                                         f"[{self.area}] Source '{self._active_source}' marked as working"
                                     )
 
-                                # Cache the data
+                                # Cache the data - convert dict back to IntervalPriceData
+                                from .data_models import IntervalPriceData
+
+                                cache_data = IntervalPriceData.from_cache_dict(
+                                    processed_retry, self._tz_service
+                                )
                                 self._cache_manager.store(
-                                    data=processed_retry,
+                                    data=cache_data,
                                     area=self.area,
                                     source=self._active_source,
                                     timestamp=now,
@@ -1601,12 +1587,13 @@ class UnifiedPriceManager:
                     self.area,
                 )
                 self._using_cached_data = True
-                cached_data["using_cached_data"] = True  # Mark as cached
+                # Convert to dict for processing
+                cached_dict = cached_data.to_cache_dict()
+                cached_dict["using_cached_data"] = True  # Mark as cached
                 # Re-process cached data
                 processed_cached_data = await self._process_result(
-                    cached_data, is_cached=True
+                    cached_dict, is_cached=True
                 )
-                processed_cached_data["using_cached_data"] = True  # Ensure flag is set
                 return processed_cached_data
             else:
                 # Format the list of attempted sources for user-friendly error message
@@ -1650,11 +1637,12 @@ class UnifiedPriceManager:
                     "Using cached data for %s due to unexpected error: %s", self.area, e
                 )
                 self._using_cached_data = True
-                cached_data["using_cached_data"] = True
+                # Convert to dict for processing
+                cached_dict = cached_data.to_cache_dict()
+                cached_dict["using_cached_data"] = True
                 processed_cached_data = await self._process_result(
-                    cached_data, is_cached=True
+                    cached_dict, is_cached=True
                 )
-                processed_cached_data["using_cached_data"] = True  # Ensure flag is set
                 return processed_cached_data
             else:
                 # Generate empty result if no cache
@@ -1696,14 +1684,24 @@ class UnifiedPriceManager:
 
         # Use data processor to generate final result
         try:
-            processed_data = await self._data_processor.process(result)
-            # Set has_data flag if we have either today OR tomorrow prices
-            has_today = bool(processed_data.get("today_interval_prices"))
-            has_tomorrow = bool(processed_data.get("tomorrow_interval_prices"))
-            processed_data["has_data"] = has_today or has_tomorrow
-            processed_data["last_update"] = (
-                dt_util.now().isoformat()
-            )  # Timestamp the processing time
+            processed_price_data = await self._data_processor.process(result)
+
+            # Convert to dict format for sensors
+            processed_data = processed_price_data.to_processed_result()
+
+            # If processing resulted in empty prices, mark as error
+            # This prevents empty data from being accepted as valid
+            if (
+                not processed_price_data.today_interval_prices
+                and not processed_price_data.tomorrow_interval_prices
+            ):
+                processed_data["error"] = "Processing failed - no price data available"
+                _LOGGER.warning(
+                    f"[{self.area}] Data processor returned empty prices - marking as error"
+                )
+
+            # Add runtime metadata that wasn't available during processing
+            processed_data["last_update"] = dt_util.now().isoformat()
 
             # Get source info directly from the input result dictionary
             attempted_sources = result.get("attempted_sources", [])

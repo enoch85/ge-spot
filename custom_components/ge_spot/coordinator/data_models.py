@@ -456,6 +456,37 @@ class IntervalPriceData:
             _tz_service=tz_service,
         )
 
+    def to_processed_result(self) -> Dict[str, Any]:
+        """Convert to processed result format for sensors.
+
+        This generates the current format expected by sensors, combining
+        source data with computed properties.
+
+        Returns:
+            Dictionary with source data AND all computed fields
+        """
+        result = {
+            # Source data
+            **self.to_cache_dict(),
+            # Computed properties
+            "data_validity": self.data_validity.to_dict(),
+            "statistics": self.statistics.to_dict(),
+            "tomorrow_statistics": self.tomorrow_statistics.to_dict(),
+            "has_tomorrow_prices": self.has_tomorrow_prices,
+            "tomorrow_valid": self.tomorrow_valid,
+            "current_price": self.current_price,
+            "next_interval_price": self.next_interval_price,
+            "current_interval_key": self.current_interval_key,
+            "next_interval_key": self.next_interval_key,
+            # Add data_source as alias for source (sensors expect this)
+            "data_source": self.source,
+            # Add has_data flag
+            "has_data": bool(self.today_interval_prices)
+            or bool(self.tomorrow_interval_prices),
+        }
+
+        return result
+
     def __repr__(self) -> str:
         """String representation for debugging."""
         return (
