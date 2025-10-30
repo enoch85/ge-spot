@@ -612,12 +612,16 @@ class UnifiedPriceManager:
             _LOGGER.debug(f"Skipping API fetch for area {self.area}: {fetch_reason}")
             if cached_price_data:
                 _LOGGER.debug("Returning cached data for %s", self.area)
-                # Convert IntervalPriceData to dict for processing
-                data_dict = cached_price_data.to_cache_dict()
-                # Ensure the data is marked correctly
-                data_dict["using_cached_data"] = True
-                # Re-process to ensure current/next prices are updated
-                return await self._process_result(data_dict, is_cached=True)
+                # Return cached IntervalPriceData directly - no conversion or reprocessing needed
+                # The cached data is already fully processed (currency converted, VAT applied, etc.)
+                # Just update the using_cached_data flag and timestamp
+                from dataclasses import replace
+
+                return replace(
+                    cached_price_data,
+                    using_cached_data=True,
+                    last_updated=dt_util.now().isoformat(),
+                )
             else:
                 # No cache available - this can happen when:
                 # 1. Rate-limited with no current interval data (common after config reload/HA restart)
@@ -756,13 +760,14 @@ class UnifiedPriceManager:
                         _LOGGER.warning(
                             "No APIs configured for %s, using cached data.", self.area
                         )
-                        # Convert to dict for processing
-                        cached_dict = cached_data.to_cache_dict()
-                        cached_dict["using_cached_data"] = True
-                        processed_cached_data = await self._process_result(
-                            cached_dict, is_cached=True
+                        # Return cached data directly - no conversion needed
+                        from dataclasses import replace
+
+                        return replace(
+                            cached_data,
+                            using_cached_data=True,
+                            last_updated=dt_util.now().isoformat(),
                         )
-                        return processed_cached_data
                     return await self._generate_empty_result(
                         error=error_msg, error_code=Errors.NO_SOURCES_CONFIGURED
                     )
@@ -790,18 +795,20 @@ class UnifiedPriceManager:
                         _LOGGER.info(
                             "All sources disabled, using cached data for %s.", self.area
                         )
-                        # Convert to dict for processing
-                        cached_dict = cached_data.to_cache_dict()
-                        cached_dict["using_cached_data"] = True
-                        processed_cached_data = await self._process_result(
-                            cached_dict, is_cached=True
+                        # Return cached data directly - no conversion needed
+                        # Note: We can't add error/error_code to IntervalPriceData via replace()
+                        # since they're not dataclass fields. We use dynamic attributes instead.
+                        from dataclasses import replace
+
+                        result = replace(
+                            cached_data,
+                            using_cached_data=True,
+                            last_updated=dt_util.now().isoformat(),
                         )
-                        # Add error info to indicate temporary situation
-                        processed_cached_data["error"] = error_msg
-                        processed_cached_data["error_code"] = (
-                            Errors.ALL_SOURCES_DISABLED
-                        )
-                        return processed_cached_data
+                        # Add error info as dynamic attributes to indicate temporary situation
+                        setattr(result, "_error", error_msg)
+                        setattr(result, "_error_code", Errors.ALL_SOURCES_DISABLED)
+                        return result
                     return await self._generate_empty_result(
                         error=error_msg, error_code=Errors.ALL_SOURCES_DISABLED
                     )
@@ -1526,14 +1533,14 @@ class UnifiedPriceManager:
                     self.area,
                 )
                 self._using_cached_data = True
-                # Convert to dict for processing
-                cached_dict = cached_data.to_cache_dict()
-                cached_dict["using_cached_data"] = True  # Mark as cached
-                # Re-process cached data
-                processed_cached_data = await self._process_result(
-                    cached_dict, is_cached=True
+                # Return cached data directly - no conversion needed
+                from dataclasses import replace
+
+                return replace(
+                    cached_data,
+                    using_cached_data=True,
+                    last_updated=dt_util.now().isoformat(),
                 )
-                return processed_cached_data
             else:
                 # Format the list of attempted sources for user-friendly error message
                 attempted_sources_str = (
@@ -1576,13 +1583,14 @@ class UnifiedPriceManager:
                     "Using cached data for %s due to unexpected error: %s", self.area, e
                 )
                 self._using_cached_data = True
-                # Convert to dict for processing
-                cached_dict = cached_data.to_cache_dict()
-                cached_dict["using_cached_data"] = True
-                processed_cached_data = await self._process_result(
-                    cached_dict, is_cached=True
+                # Return cached data directly - no conversion needed
+                from dataclasses import replace
+
+                return replace(
+                    cached_data,
+                    using_cached_data=True,
+                    last_updated=dt_util.now().isoformat(),
                 )
-                return processed_cached_data
             else:
                 # Generate empty result if no cache
                 return await self._generate_empty_result(

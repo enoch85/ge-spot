@@ -504,7 +504,9 @@ class TestUnifiedPriceManager:
             # --- First call: Successful fetch, populates cache ---
             # Time is frozen at 12:00:00 UTC
             mock_fallback.return_value = MOCK_SUCCESS_RESULT
-            mock_processor.return_value = MOCK_PROCESSED_RESULT
+            mock_processor.return_value = _dict_to_interval_price_data(
+                MOCK_PROCESSED_RESULT
+            )
             await manager.fetch_data()
 
             # Verify cache was updated - store() is called with keyword args
@@ -527,9 +529,13 @@ class TestUnifiedPriceManager:
 
             # Configure cache get to return the data from the first call
             # Simulate CacheManager returning the previously stored data
-            mock_cache_get.return_value = MOCK_PROCESSED_RESULT
+            mock_cache_get.return_value = _dict_to_interval_price_data(
+                MOCK_PROCESSED_RESULT
+            )
             # Configure processor to return this cached data when called
-            mock_processor.return_value = MOCK_PROCESSED_RESULT
+            mock_processor.return_value = _dict_to_interval_price_data(
+                MOCK_PROCESSED_RESULT
+            )
 
             # Advance time slightly (e.g. 1 minute), still within rate limit
             freezer = freeze_time("2025-04-26 12:01:00 UTC")
@@ -552,18 +558,8 @@ class TestUnifiedPriceManager:
                 call_kwargs.get("area") == manager.area
             ), "Cache should be called with correct area"
 
-            # Check processor was called once (don't check exact args since code adds metadata)
-            mock_processor.assert_awaited_once()
-            # Verify processor was called with cached data (check key fields)
-            process_call_args = mock_processor.call_args[0][0]
-            assert (
-                process_call_args.today_interval_prices
-            ) == MOCK_PROCESSED_RESULT.get(
-                "today_interval_prices"
-            ), "Processor should be called with cached interval_prices"
-            assert (
-                process_call_args.using_cached_data is True
-            ), "Processor input should have using_cached_data=True"
+            # Processor should NOT be called - cached data is returned directly
+            mock_processor.assert_not_awaited(), "Processor should NOT be called for cached data"
 
             # Result should indicate cached data was used
             assert (
@@ -600,12 +596,15 @@ class TestUnifiedPriceManager:
         }
         processed_fallback_result = {
             **MOCK_PROCESSED_RESULT,
+            "data_source": Source.ENTSOE,
             "source": Source.ENTSOE,
             "attempted_sources": [Source.NORDPOOL, Source.ENTSOE],
             "fallback_sources": [Source.NORDPOOL],
         }
         mock_fallback.return_value = fallback_success_result
-        mock_processor.return_value = processed_fallback_result
+        mock_processor.return_value = _dict_to_interval_price_data(
+            processed_fallback_result
+        )
 
         # Act
         result = await manager.fetch_data()
@@ -690,6 +689,7 @@ class TestUnifiedPriceManager:
         }
         processed_second_result = {
             **MOCK_PROCESSED_RESULT,
+            "data_source": Source.ENTSOE,
             "source": Source.ENTSOE,
             "attempted_sources": [
                 Source.NORDPOOL,
@@ -859,9 +859,11 @@ class TestUnifiedPriceManager:
         ].return_value.store
 
         mock_fallback.return_value = MOCK_FAILURE_RESULT  # Simulate failure
-        mock_cache_get.return_value = MOCK_CACHED_RESULT  # Provide cached data
+        mock_cache_get.return_value = _dict_to_interval_price_data(
+            MOCK_CACHED_RESULT
+        )  # Provide cached data
         # Processor will be called with the cached data via _process_result
-        mock_processor.return_value = (
+        mock_processor.return_value = _dict_to_interval_price_data(
             MOCK_CACHED_RESULT  # Assume processor returns it as is
         )
 
@@ -883,26 +885,11 @@ class TestUnifiedPriceManager:
             call_kwargs.get("area") == manager.area
         ), "Cache should be called with correct area"
 
-        # Processor will be called with the cached data
-        # Check the key fields in the actual call (not exact dict match because IntervalPriceData normalizes it)
-        assert mock_processor.await_count == 1, "Processor should be awaited once"
-        actual_call_arg = mock_processor.await_args[0][0]  # First positional argument
-        assert actual_call_arg.area == manager.area, "Area should match"
-        assert (
-            actual_call_arg.target_currency == manager.currency
-        ), "Currency should match"
-        assert (
-            actual_call_arg.using_cached_data is True
-        ), "using_cached_data should be True"
-        assert actual_call_arg.today_interval_prices == MOCK_CACHED_RESULT.get(
-            "today_interval_prices"
-        ), "Prices should match"
-        assert actual_call_arg.tomorrow_interval_prices == MOCK_CACHED_RESULT.get(
-            "tomorrow_interval_prices"
-        ), "Tomorrow prices should match"
+        # Processor should NOT be called - cached data is returned directly when all sources fail
+        mock_processor.assert_not_awaited(), "Processor should NOT be called for cached fallback data"
 
         # Check result structure and content
-        # The processor mock returns MOCK_CACHED_RESULT (IntervalPriceData), with using_cached_data flag set
+        # The cached IntervalPriceData is returned directly with using_cached_data flag updated
         assert result.using_cached_data is True, "using_cached_data flag should be True"
         assert result.today_interval_prices == MOCK_CACHED_RESULT.get(
             "today_interval_prices"
@@ -956,16 +943,22 @@ class TestUnifiedPriceManager:
             now_time = datetime(2025, 4, 26, 12, 0, 0, tzinfo=timezone.utc)
             mock_now.return_value = now_time
             mock_fallback.return_value = MOCK_SUCCESS_RESULT
-            mock_processor.return_value = MOCK_PROCESSED_RESULT
+            mock_processor.return_value = _dict_to_interval_price_data(
+                MOCK_PROCESSED_RESULT
+            )
             await manager.fetch_data()
 
             # Reset mocks for second call
             mock_fallback.reset_mock()
             mock_processor.reset_mock()
             mock_cache_get.reset_mock()  # Reset get_data mock
-            mock_cache_get.return_value = MOCK_CACHED_RESULT  # Make cache available
+            mock_cache_get.return_value = _dict_to_interval_price_data(
+                MOCK_CACHED_RESULT
+            )  # Make cache available
             # Assume processor returns cached data when processing cached input
-            mock_processor.return_value = MOCK_CACHED_RESULT
+            mock_processor.return_value = _dict_to_interval_price_data(
+                MOCK_CACHED_RESULT
+            )
 
             # Advance time slightly, but less than min interval (e.g. 3 minutes for a 5 minute interval)
             min_interval_minutes = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
@@ -986,17 +979,8 @@ class TestUnifiedPriceManager:
                 call_kwargs.get("area") == manager.area
             ), "Cache should be called with correct area"
 
-            # Check processor was called once (don't check exact args since code adds metadata)
-            mock_processor.assert_awaited_once()
-            # Verify processor was called with cached data (check key fields)
-            process_call_args = mock_processor.call_args[0][0]
-            # process_call_args is IntervalPriceData, access properties
-            assert (process_call_args.today_interval_prices) == MOCK_CACHED_RESULT.get(
-                "today_interval_prices"
-            ), "Processor should be called with cached interval_prices"
-            assert (
-                process_call_args.using_cached_data is True
-            ), "Processor input should have using_cached_data=True"
+            # Processor should NOT be called - cached data is returned directly
+            mock_processor.assert_not_awaited(), "Processor should NOT be called for cached data"
 
             # Check result uses cached data
             assert (
@@ -1846,7 +1830,9 @@ class TestUnifiedPriceManager:
 
         # Configure for successful retry
         mock_fallback.return_value = MOCK_SUCCESS_RESULT
-        mock_processor.return_value = MOCK_PROCESSED_RESULT
+        mock_processor.return_value = _dict_to_interval_price_data(
+            MOCK_PROCESSED_RESULT
+        )
 
         result_3 = await manager.fetch_data(force=True)
 
@@ -1860,10 +1846,8 @@ class TestUnifiedPriceManager:
         ), "Successful source clears failure marker"
         # Note: ENTSOE was never tried because NORDPOOL succeeded (fallback stops at first success)
         # So ENTSOE still has its failure marker - this is correct behavior
-        assert result_3.get("has_data") is True, "Data available on success"
-        assert (
-            result_3.get("data_source") == Source.NORDPOOL
-        ), "Correct source in result"
+        assert result_3.today_interval_prices, "Data available on success"
+        assert result_3.source == Source.NORDPOOL, "Correct source in result"
 
         # ========== SCENARIO 4: New Failure After Previous Success ==========
         # Sources fail again, get new failure timestamps
@@ -1897,7 +1881,7 @@ class TestUnifiedPriceManager:
             second_failure_time_nordpool > first_failure_time_nordpool
         ), "New timestamp is later than first"
         assert manager._consecutive_failures == 1, "Consecutive failures restart at 1"
-        assert result_4.get("has_data") is False, "No data on second failure"
+        assert not result_4.today_interval_prices, "No data on second failure"
 
         # Cleanup background tasks before finishing
         await cancel_health_check_tasks(manager)
@@ -2284,7 +2268,7 @@ class TestHealthCheck:
                 **MOCK_SUCCESS_RESULT,
                 "raw_data": {"test": "data"},
             }
-            mock_process.return_value = MOCK_PROCESSED_RESULT
+            mock_process.return_value = _dict_to_interval_price_data(MOCK_PROCESSED_RESULT)
 
             # Act
             result = await manager.fetch_data(force=False)
@@ -2300,7 +2284,7 @@ class TestHealthCheck:
 
             # Verify result is valid
             assert result is not None
-            assert result.get("has_data") == True
+            assert result.today_interval_prices, "Result should have data"
 
     @pytest.mark.asyncio
     async def test_grace_period_ignores_failures(self, manager):
@@ -2330,7 +2314,7 @@ class TestHealthCheck:
                 **MOCK_SUCCESS_RESULT,
                 "raw_data": {"test": "data"},
             }
-            mock_process.return_value = MOCK_PROCESSED_RESULT
+            mock_process.return_value = _dict_to_interval_price_data(MOCK_PROCESSED_RESULT)
 
             # Act
             result = await manager.fetch_data(force=False)
@@ -2344,7 +2328,7 @@ class TestHealthCheck:
             ), "Grace period should try ALL sources regardless of failures"
 
             assert result is not None
-            assert result.get("has_data") == True
+            assert result.today_interval_prices, "Result should have data"
 
     @pytest.mark.asyncio
     async def test_after_grace_period_skips_failed_sources(self, manager):
@@ -2376,7 +2360,7 @@ class TestHealthCheck:
                 **MOCK_SUCCESS_RESULT,
                 "raw_data": {"test": "data"},
             }
-            mock_process.return_value = MOCK_PROCESSED_RESULT
+            mock_process.return_value = _dict_to_interval_price_data(MOCK_PROCESSED_RESULT)
 
             # Act
             result = await manager.fetch_data(force=False)
@@ -2417,7 +2401,7 @@ class TestHealthCheck:
                 **MOCK_SUCCESS_RESULT,
                 "raw_data": {"test": "data"},
             }
-            mock_process.return_value = MOCK_PROCESSED_RESULT
+            mock_process.return_value = _dict_to_interval_price_data(MOCK_PROCESSED_RESULT)
 
             # Act
             await manager.fetch_data(force=False)
@@ -2454,10 +2438,10 @@ class TestHealthCheck:
                 "raw_data": {"test": "data"},
                 "attempted_sources": [Source.NORDPOOL, Source.ENTSOE],
             }
-            mock_process.return_value = {
+            mock_process.return_value = _dict_to_interval_price_data({
                 **MOCK_PROCESSED_RESULT,
                 "attempted_sources": [Source.NORDPOOL, Source.ENTSOE],
-            }
+            })
 
             # Act
             await manager.fetch_data(force=False)
