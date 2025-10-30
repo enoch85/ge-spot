@@ -480,6 +480,8 @@ class IntervalPriceData:
             "next_interval_key": self.next_interval_key,
             # Add data_source as alias for source (sensors expect this)
             "data_source": self.source,
+            # Add exchange_rate as alias for ecb_rate (backward compatibility)
+            "exchange_rate": self.ecb_rate,
             # Add has_data flag
             "has_data": bool(self.today_interval_prices)
             or bool(self.tomorrow_interval_prices),

@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from custom_components.ge_spot.coordinator.unified_price_manager import (
     UnifiedPriceManager,
 )
+from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.defaults import Defaults
 from custom_components.ge_spot.const.config import Config
@@ -46,6 +47,43 @@ def _generate_complete_intervals(base_price=1.0):
             interval_key = f"{h:02d}:{m:02d}"
             intervals[interval_key] = base_price
     return intervals
+
+
+def _dict_to_interval_price_data(data_dict):
+    """Convert a test dict to IntervalPriceData (for backward compatibility with existing tests).
+
+    This helps migrate tests that were creating dict mocks.
+    """
+    return IntervalPriceData(
+        source=data_dict.get("data_source", data_dict.get("source", Source.NORDPOOL)),
+        area=data_dict.get("area", "SE1"),
+        target_currency=data_dict.get(
+            "target_currency", data_dict.get("currency", "SEK")
+        ),
+        source_currency=data_dict.get(
+            "source_currency", data_dict.get("currency", "EUR")
+        ),
+        source_timezone=data_dict.get("source_timezone", "UTC"),
+        target_timezone=data_dict.get("target_timezone", "UTC"),
+        today_interval_prices=data_dict.get("today_interval_prices", {}),
+        tomorrow_interval_prices=data_dict.get("tomorrow_interval_prices", {}),
+        today_raw_prices=data_dict.get("today_raw_prices", {}),
+        tomorrow_raw_prices=data_dict.get("tomorrow_raw_prices", {}),
+        attempted_sources=data_dict.get("attempted_sources", []),
+        fallback_sources=data_dict.get("fallback_sources", []),
+        using_cached_data=data_dict.get("using_cached_data", False),
+        last_updated=data_dict.get("last_update", data_dict.get("last_updated")),
+        fetched_at=data_dict.get("fetched_at"),
+        vat_rate=data_dict.get("vat_rate", 0.0),
+        vat_included=data_dict.get("vat_included", False),
+        display_unit=data_dict.get("display_unit", "EUR/kWh"),
+        ecb_rate=data_dict.get("ecb_rate", data_dict.get("exchange_rate")),
+        ecb_updated=data_dict.get("ecb_updated"),
+        migrated_from_tomorrow=data_dict.get("migrated_from_tomorrow", False),
+        original_cache_date=data_dict.get("original_cache_date"),
+        raw_data=data_dict.get("raw_data"),
+        _tz_service=None,  # Tests usually don't need this
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -80,9 +118,36 @@ def auto_mock_core_dependencies():
         mock_fallback_manager.return_value.fetch_with_fallback = AsyncMock(
             return_value={}
         )
-        mock_cache_manager.return_value.get_data = MagicMock(return_value=None)
+
+        # Add auto-conversion wrapper for CacheManager.get_data()
+        original_get_data = MagicMock(return_value=None)
+
+        def get_data_wrapper(*args, **kwargs):
+            result = original_get_data(*args, **kwargs)
+            if result is not None and isinstance(result, dict):
+                return _dict_to_interval_price_data(result)
+            return result
+
+        mock_cache_manager.return_value.get_data = get_data_wrapper
+        mock_cache_manager.return_value.get_data.mock = (
+            original_get_data  # Store original for test configuration
+        )
         mock_cache_manager.return_value.store = MagicMock()
-        mock_data_processor.return_value.process = AsyncMock(return_value={})
+
+        # Add auto-conversion wrapper for DataProcessor.process()
+        original_process = AsyncMock(return_value={})
+
+        async def process_wrapper(*args, **kwargs):
+            result = await original_process(*args, **kwargs)
+            if result is not None and isinstance(result, dict):
+                return _dict_to_interval_price_data(result)
+            return result
+
+        mock_data_processor.return_value.process = process_wrapper
+        mock_data_processor.return_value.process.mock = (
+            original_process  # Store original for test configuration
+        )
+
         # Configure timezone service with real timezone.utc objects to support DST checks
         mock_tz_service_instance = MagicMock()
         mock_tz_service_instance.target_timezone = timezone.utc
@@ -198,9 +263,9 @@ class TestStaleTomorrowDataFix:
         }
 
         # Setup mocks
-        mock_cache.get_data.return_value = stale_cached_data.copy()
+        mock_cache.get_data.mock.return_value = stale_cached_data.copy()
         mock_fallback.return_value = fresh_data_from_api
-        mock_processor.return_value = processed_fresh_data
+        mock_processor.mock.return_value = processed_fresh_data
 
         # Mock timezone service to indicate we're in special window
         manager._tz_service.get_current_interval_key.return_value = "14:00"
@@ -211,6 +276,7 @@ class TestStaleTomorrowDataFix:
 
         # Verify: System should have detected stale tomorrow data and fetched fresh
         assert result is not None, "fetch_data should return data"
+        # Result is now a dict (from to_processed_result())
         assert (
             "tomorrow_interval_prices" in result
         ), "Result should contain tomorrow prices"
@@ -224,7 +290,7 @@ class TestStaleTomorrowDataFix:
         )
 
         # Verify cache.get_data was called to retrieve the stale cache
-        mock_cache.get_data.assert_called()
+        mock_cache.get_data.mock.assert_called()
 
         # The key assertion: verify the logic cleared stale tomorrow data
         # We can't directly assert on internal state, but we can verify the behavior:
@@ -292,9 +358,9 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.return_value = fresh_cached_data.copy()
+        mock_cache.get_data.mock.return_value = fresh_cached_data.copy()
         mock_fallback.return_value = fresh_api_data
-        mock_processor.return_value = processed_data
+        mock_processor.mock.return_value = processed_data
         manager._tz_service.get_current_interval_key.return_value = "14:00"
         manager._tz_service.get_target_timezone.return_value = timezone.utc
 
@@ -309,13 +375,13 @@ class TestStaleTomorrowDataFix:
         #  the system would think tomorrow was missing.
         #  Since we're in special window, it would trigger fetch.
         #  But fresh data's fetched_at is from TODAY, so staleness check should skip it.
-        calls = mock_cache.get_data.call_args_list
+        calls = mock_cache.get_data.mock.call_args_list
         assert len(calls) > 0, "Cache should be checked"
 
         # The cache returned tomorrow_interval_prices with 96 intervals
         # If staleness check worked correctly, it didn't clear them
         # We can verify this by checking that the returned tomorrow count matches
-        cached_data = mock_cache.get_data.return_value
+        cached_data = mock_cache.get_data.mock.return_value
         assert "tomorrow_interval_prices" in cached_data
         assert len(cached_data["tomorrow_interval_prices"]) == 96
 
@@ -353,7 +419,7 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.return_value = stale_cached_data.copy()
+        mock_cache.get_data.mock.return_value = stale_cached_data.copy()
         manager._tz_service.get_current_interval_key.return_value = "10:00"
         manager._tz_service.get_target_timezone.return_value = timezone.utc
 
@@ -418,9 +484,9 @@ class TestStaleTomorrowDataFix:
             "using_cached_data": False,
         }
 
-        mock_cache.get_data.return_value = cached_data_no_timestamp.copy()
+        mock_cache.get_data.mock.return_value = cached_data_no_timestamp.copy()
         mock_fallback.return_value = fresh_api_data
-        mock_processor.return_value = processed_data
+        mock_processor.mock.return_value = processed_data
         manager._tz_service.get_current_interval_key.return_value = "14:00"
 
         # Should not crash
@@ -459,7 +525,7 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.return_value = cached_data_bad_timestamp.copy()
+        mock_cache.get_data.mock.return_value = cached_data_bad_timestamp.copy()
         manager._tz_service.get_current_interval_key.return_value = "14:00"
 
         # Mock grace period
@@ -538,9 +604,9 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.return_value = stale_cached_data.copy()
+        mock_cache.get_data.mock.return_value = stale_cached_data.copy()
         mock_fallback.return_value = fresh_api_data
-        mock_processor.return_value = processed_fresh_data
+        mock_processor.mock.return_value = processed_fresh_data
         manager._tz_service.get_current_interval_key.return_value = "14:00"
         manager._tz_service.get_target_timezone.return_value = timezone.utc
 

@@ -784,11 +784,11 @@ class DataProcessor:
         _LOGGER.info(
             f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['today_interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}"
         )
-        # Convert to IntervalPriceData, then back to dict with computed properties
+        # Convert to IntervalPriceData and return it directly (not converted to dict)
         price_data = IntervalPriceData.from_cache_dict(
             processed_result, self._tz_service
         )
-        return price_data.to_processed_result()
+        return price_data
 
     def _get_parser(self, source_name: str) -> Optional[BasePriceParser]:
         """Get the appropriate parser instance based on the source name."""
@@ -950,6 +950,6 @@ class DataProcessor:
             "fetched_at": data.get("fetched_at"),
         }
 
-        # Convert to IntervalPriceData, then back to dict with computed properties
+        # Convert to IntervalPriceData and return it directly (not converted to dict)
         price_data = IntervalPriceData.from_cache_dict(empty_dict, self._tz_service)
-        return price_data.to_processed_result()
+        return price_data

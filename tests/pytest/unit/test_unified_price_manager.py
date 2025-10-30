@@ -128,6 +128,8 @@ def _dict_to_interval_price_data(data_dict):
         area=data_dict.get("area", "SE1"),
         target_currency=data_dict.get("target_currency", "SEK"),
         source_currency=data_dict.get("source_currency", "EUR"),
+        source_timezone=data_dict.get("source_timezone", "UTC"),
+        target_timezone=data_dict.get("target_timezone", "UTC"),
         today_interval_prices=data_dict.get("today_interval_prices", {}),
         tomorrow_interval_prices=data_dict.get("tomorrow_interval_prices", {}),
         today_raw_prices=data_dict.get("today_raw_prices", {}),
@@ -140,7 +142,9 @@ def _dict_to_interval_price_data(data_dict):
         vat_rate=data_dict.get("vat_rate", 0.0),
         vat_included=data_dict.get("vat_included", False),
         display_unit=data_dict.get("display_unit", "EUR/kWh"),
-        ecb_rate=data_dict.get("ecb_rate"),
+        ecb_rate=data_dict.get(
+            "ecb_rate", data_dict.get("exchange_rate")
+        ),  # Support both names
         ecb_updated=data_dict.get("ecb_updated"),
         migrated_from_tomorrow=data_dict.get("migrated_from_tomorrow", False),
         original_cache_date=data_dict.get("original_cache_date"),
@@ -889,23 +893,22 @@ class TestUnifiedPriceManager:
         ), "Cache should be called with correct area"
 
         # Processor will be called with the cached data
-        # mock_processor.assert_awaited_once_with(MOCK_CACHED_RESULT, is_cached=True), \
-        #      f"Processor should be called with cached data, got {mock_processor.call_args}"
-        # CORRECTION: is_cached is not passed to process, it's handled after.
-        # Check the first argument passed to process matches the cached data structure.
-        # Need to reconstruct the exact dict passed to _process_result
-        expected_process_arg = MOCK_CACHED_RESULT.copy()
-        expected_process_arg["area"] = manager.area
-        expected_process_arg["target_currency"] = manager.currency
-        expected_process_arg["using_cached_data"] = (
-            True  # Set by manager before calling _process_result
-        )
-        expected_process_arg["vat_rate"] = manager.vat_rate * 100
-        expected_process_arg["include_vat"] = manager.include_vat
-        expected_process_arg["display_unit"] = manager.display_unit
-        mock_processor.assert_awaited_once_with(
-            expected_process_arg
-        ), f"Processor should be called with cached data structure, got {mock_processor.call_args}"
+        # Check the key fields in the actual call (not exact dict match because IntervalPriceData normalizes it)
+        assert mock_processor.await_count == 1, "Processor should be awaited once"
+        actual_call_arg = mock_processor.await_args[0][0]  # First positional argument
+        assert actual_call_arg["area"] == manager.area, "Area should match"
+        assert (
+            actual_call_arg["target_currency"] == manager.currency
+        ), "Currency should match"
+        assert (
+            actual_call_arg["using_cached_data"] is True
+        ), "using_cached_data should be True"
+        assert actual_call_arg["today_interval_prices"] == MOCK_CACHED_RESULT.get(
+            "today_interval_prices"
+        ), "Prices should match"
+        assert actual_call_arg["tomorrow_interval_prices"] == MOCK_CACHED_RESULT.get(
+            "tomorrow_interval_prices"
+        ), "Tomorrow prices should match"
 
         # Check result structure and content
         # The processor mock returns MOCK_CACHED_RESULT, but _process_result adds/modifies flags
@@ -1346,45 +1349,67 @@ class TestUnifiedPriceManager:
         }
         mock_fallback.return_value = utc_result
 
-        # Configure timezone service
-        mock_tz_service.get_area_timezone.return_value = "Europe/Stockholm"
+        # Configure timezone service - set it on the manager's actual tz_service
+        # The mock tz_service instance needs target_timezone as an object, not a string
+        import zoneinfo
 
-        # Expected processed result with converted timezone
-        converted_tz_result = {
-            **MOCK_PROCESSED_RESULT,
-            "source_timezone": "UTC",
-            "target_timezone": "Europe/Stockholm",
-            "today_interval_prices": {
-                "2025-04-26T12:00:00+02:00": 1.0,  # UTC+2 for Stockholm at :00
-                "2025-04-26T12:15:00+02:00": 2.0,  # UTC+2 for Stockholm at :15
+        stockholm_tz = zoneinfo.ZoneInfo("Europe/Stockholm")
+        manager._tz_service.target_timezone = stockholm_tz
+        manager._tz_service.area_timezone = stockholm_tz
+
+        # Create IntervalPriceData directly with the manager's tz_service
+        # This ensures timezone properties work correctly
+        converted_tz_data = IntervalPriceData(
+            source=Source.NORDPOOL,
+            area="SE1",
+            target_currency="SEK",
+            source_currency="SEK",
+            source_timezone="UTC",
+            target_timezone="Europe/Stockholm",
+            today_interval_prices={
+                "12:00": 1.0,  # HH:MM format after timezone conversion
+                "12:15": 2.0,
             },
-        }
-        mock_processor.return_value = converted_tz_result
+            tomorrow_interval_prices=_generate_complete_intervals(
+                "2025-04-27T00:00:00", 1.5
+            ),
+            attempted_sources=[Source.NORDPOOL],
+            _tz_service=manager._tz_service,  # Pass the configured tz_service
+        )
+        mock_processor.return_value = converted_tz_data
 
         # Act
         result = await manager.fetch_data()
 
-        # Assert
+        # Assert - verify timezone conversion happened correctly
         assert (
             "source_timezone" in result
         ), "Source timezone should be included in result"
         assert (
             "target_timezone" in result
         ), "Target timezone should be included in result"
+
+        # Verify timezone values
         assert (
             result["source_timezone"] == "UTC"
-        ), f"Source timezone should be UTC, got {result.get('source_timezone')}"
+        ), f"Source timezone should be UTC, got {result['source_timezone']}"
         assert (
             result["target_timezone"] == "Europe/Stockholm"
-        ), f"Target timezone should be Europe/Stockholm, got {result.get('target_timezone')}"
+        ), f"Target timezone should be Europe/Stockholm, got {result['target_timezone']}"
 
-        # Check converted timestamps (15-minute intervals)
+        # Check that prices were converted correctly (HH:MM format in Stockholm time)
         assert (
-            "2025-04-26T12:00:00+02:00" in result["today_interval_prices"]
-        ), f"First interval should be converted to local time, got keys: {list(result['today_interval_prices'].keys())}"
+            "12:00" in result["today_interval_prices"]
+        ), f"Interval 12:00 should be in result, got keys: {list(result['today_interval_prices'].keys())[:5]}"
         assert (
-            "2025-04-26T12:15:00+02:00" in result["today_interval_prices"]
-        ), f"Second interval should be converted to local time, got keys: {list(result['today_interval_prices'].keys())}"
+            result["today_interval_prices"]["12:00"] == 1.0
+        ), f"Price at 12:00 should be 1.0, got {result['today_interval_prices']['12:00']}"
+        assert (
+            "12:15" in result["today_interval_prices"]
+        ), "Interval 12:15 should be in result"
+        assert (
+            result["today_interval_prices"]["12:15"] == 2.0
+        ), f"Price at 12:15 should be 2.0, got {result['today_interval_prices']['12:15']}"
 
     @pytest.mark.asyncio
     async def test_partial_data_fallback_to_complete(
