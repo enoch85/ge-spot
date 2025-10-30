@@ -12,7 +12,6 @@ Core Principle: Single Source of Truth
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, Dict, Optional
 
 from homeassistant.util import dt as dt_util
