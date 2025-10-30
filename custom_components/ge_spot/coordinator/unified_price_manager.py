@@ -1696,49 +1696,36 @@ class UnifiedPriceManager:
                     error_code=Errors.INVALID_DATA,
                 )
 
-            # Convert to dict format for sensors
-            processed_data = processed_price_data.to_processed_result()
-
             # If processing resulted in empty prices, mark as error
             # This prevents empty data from being accepted as valid
             if (
                 not processed_price_data.today_interval_prices
                 and not processed_price_data.tomorrow_interval_prices
             ):
-                processed_data["error"] = "Processing failed - no price data available"
                 _LOGGER.warning(
-                    f"[{self.area}] Data processor returned empty prices - marking as error"
+                    f"[{self.area}] Data processor returned empty prices - returning empty result"
+                )
+                return await self._generate_empty_result(
+                    error="Processing failed - no price data available",
+                    error_code=Errors.INVALID_DATA,
                 )
 
-            # Add runtime metadata that wasn't available during processing
-            processed_data["last_update"] = dt_util.now().isoformat()
+            # Add runtime metadata directly to IntervalPriceData
+            processed_price_data.last_updated = dt_util.now().isoformat()
 
-            # Get source info directly from the input result dictionary
-            attempted_sources = result.get("attempted_sources", [])
-            active_source = result.get(
-                "data_source", "unknown"
-            )  # Source determined by FallbackManager or cache
-            fallback_sources = [s for s in attempted_sources if s != active_source]
+            # Add metadata that's not available during processing
+            processed_price_data.attempted_sources = result.get("attempted_sources", [])
+            processed_price_data.using_cached_data = is_cached
 
-            # Ensure fallback/attempt info is preserved using data from the result
-            processed_data["attempted_sources"] = attempted_sources
-            processed_data["fallback_sources"] = fallback_sources
-            processed_data["data_source"] = (
-                active_source  # Reflect the source determined during fetch/cache retrieval
-            )
-
-            # Ensure the final flag reflects the input is_cached status
-            processed_data["using_cached_data"] = is_cached
-
-            # Add validated sources (what's been tested and working)
-            processed_data["validated_sources"] = self.get_validated_sources()
-
-            # Add failed source details with timestamps
+            # Store validated/failed sources for diagnostics (these are manager-specific)
+            # We'll add them as dynamic attributes
+            processed_price_data._validated_sources = self.get_validated_sources()
             failed_source_details = self.get_failed_source_details()
             if failed_source_details:
-                processed_data["failed_sources"] = failed_source_details
+                processed_price_data._failed_sources = failed_source_details
 
-            return processed_data
+            # Return IntervalPriceData directly - sensors will access properties
+            return processed_price_data
         except Exception as proc_err:
             _LOGGER.error(
                 f"Error processing data for area {self.area}: {proc_err}", exc_info=True
@@ -1749,7 +1736,7 @@ class UnifiedPriceManager:
 
     async def _generate_empty_result(
         self, error: Optional[str] = None, error_code: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> "IntervalPriceData":
         """Generate an empty result when data is unavailable.
 
         Args:
@@ -1757,55 +1744,52 @@ class UnifiedPriceManager:
             error_code: Machine-readable error code for programmatic handling
 
         Returns:
-            Empty result dictionary with standard structure.
+            Empty IntervalPriceData instance with error information.
         """
+        from .data_models import IntervalPriceData
+
         # Ensure exchange service is initialized before processing empty result
         await self._ensure_exchange_service()
 
         now = dt_util.now()
 
-        # Create complete empty data structure without calling _process_result again
-        empty_data = {
-            "source": "None",
-            "area": self.area,
-            "currency": self.currency,
-            "target_currency": self.currency,
-            "today_interval_prices": {},
-            "raw_data": None,
-            "source_timezone": None,
-            "attempted_sources": self._attempted_sources,
-            "all_attempted_sources": self._all_attempted_sources,  # Complete history including validation
-            "fallback_sources": self._fallback_sources,
-            "using_cached_data": self._using_cached_data
-            or (error == "Rate limited, no cache available"),
-            "consecutive_failures": self._consecutive_failures,
-            "last_fetch_attempt": (
-                _LAST_FETCH_TIME.get(self.area, now).isoformat()
-                if _LAST_FETCH_TIME.get(self.area)
-                else now.isoformat()
+        # Create empty IntervalPriceData with error information
+        empty_data = IntervalPriceData(
+            source="None",
+            area=self.area,
+            source_currency=self.currency,
+            target_currency=self.currency,
+            today_interval_prices={},
+            tomorrow_interval_prices={},
+            source_timezone=None,
+            target_timezone=(
+                str(self._tz_service.target_timezone) if self._tz_service else "UTC"
             ),
-            "error": error
-            or f"Failed to fetch data after {self._consecutive_failures} attempts",
-            "error_code": error_code,  # Add error code for programmatic handling
-            "has_data": False,
-            "last_update": now.isoformat(),
-            "vat_rate": self.vat_rate * 100,
-            "include_vat": self.include_vat,
-            "display_unit": self.display_unit,
-            "current_price": None,
-            "average_price": None,
-            "min_price": None,
-            "max_price": None,
-            "off_peak_1": None,
-            "peak": None,
-            "off_peak_2": None,
-            "weighted_average_price": None,
-            "data_source": "None",
-            "price_in_cents": False,
-            "validated_sources": self.get_validated_sources(),
-        }
+            attempted_sources=self._attempted_sources,
+            fallback_sources=self._fallback_sources,
+            using_cached_data=self._using_cached_data
+            or (error == "Rate limited, no cache available"),
+            last_updated=now.isoformat(),
+            vat_rate=self.vat_rate,
+            vat_included=self.include_vat,
+            display_unit=self.display_unit,
+            _tz_service=self._tz_service,
+        )
 
-        # Directly return the structured empty data without processing
+        # Add error tracking as dynamic attributes (not stored in cache)
+        empty_data._error = (
+            error or f"Failed to fetch data after {self._consecutive_failures} attempts"
+        )
+        empty_data._error_code = error_code
+        empty_data._consecutive_failures = self._consecutive_failures
+        empty_data._all_attempted_sources = self._all_attempted_sources
+        empty_data._last_fetch_attempt = (
+            _LAST_FETCH_TIME.get(self.area, now).isoformat()
+            if _LAST_FETCH_TIME.get(self.area)
+            else now.isoformat()
+        )
+        empty_data._validated_sources = self.get_validated_sources()
+
         return empty_data
 
     def get_cache_stats(self) -> Dict[str, Any]:
@@ -1925,15 +1909,22 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         )
 
     async def _async_update_data(self):
-        """Fetch data from price manager."""
+        """Fetch data from price manager.
+
+        Returns:
+            IntervalPriceData instance with price data and computed properties
+        """
         try:
             # Fetch data using the manager's logic (includes rate limiting, fallback, caching)
             data = await self.price_manager.fetch_data()
-            # Manager always returns a dict; check 'has_data' flag or 'error' key for success
-            if not data.get("has_data"):
+            # Manager returns IntervalPriceData; check has_data property for success
+            if not hasattr(data, "today_interval_prices") or (
+                not data.today_interval_prices and not data.tomorrow_interval_prices
+            ):
                 # Log specific error if available
-                error_msg = data.get(
-                    "error",
+                error_msg = getattr(
+                    data,
+                    "_error",
                     "No data returned from price manager or data marked as invalid",
                 )
 
@@ -1954,7 +1945,7 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                         "Update failed for area %s: %s", self.area, error_msg
                     )
 
-                # Return the empty/error data structure from the manager
+                # Return the empty IntervalPriceData from the manager
                 return data
             # Data is valid
             return data
@@ -1972,8 +1963,7 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                 )
                 return self.data
             else:
-                # If no previous data, return an empty structure consistent with manager's output
-                # Use try-except in case manager itself fails during error generation
+                # If no previous data, return empty IntervalPriceData
                 try:
                     return await self.price_manager._generate_empty_result(
                         error=f"Coordinator update error: {e}",
@@ -1984,11 +1974,15 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                         "Failed to generate empty result during coordinator error handling: %s",
                         gen_err,
                     )
-                    # Return a minimal dict if empty result generation fails
-                    return {
-                        "error": f"Coordinator update error and failed to generate empty result: {e}",
-                        "has_data": False,
-                    }
+                    # Return a minimal IntervalPriceData if empty result generation fails
+                    from .data_models import IntervalPriceData
+
+                    minimal_data = IntervalPriceData(
+                        area=self.area,
+                        source="None",
+                    )
+                    minimal_data._error = f"Coordinator update error and failed to generate empty result: {e}"
+                    return minimal_data
 
     async def force_update(self):
         """Force an update regardless of schedule and rate limits."""

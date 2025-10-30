@@ -276,7 +276,7 @@ class TestStaleTomorrowDataFix:
 
         # Verify: System should have detected stale tomorrow data and fetched fresh
         assert result is not None, "fetch_data should return data"
-        # Result is now a dict (from to_processed_result())
+        # Result is IntervalPriceData instance
         assert (
             "tomorrow_interval_prices" in result
         ), "Result should contain tomorrow prices"

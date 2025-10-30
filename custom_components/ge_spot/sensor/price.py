@@ -170,8 +170,8 @@ class TomorrowSensorMixin:
         """Return if entity is available."""
         if not super().available:
             return False
-        # Only available if tomorrow data is valid
-        return self.coordinator.data.get("tomorrow_valid", False)
+        # Only available if tomorrow data is valid (computed property)
+        return self.coordinator.data.tomorrow_valid if self.coordinator.data else False
 
 
 class TomorrowExtremaPriceSensor(TomorrowSensorMixin, ExtremaPriceSensor):
@@ -531,9 +531,15 @@ class HourlyAverageSensor(PriceValueSensor):
         today_hourly = {}
         tomorrow_hourly = {}
 
-        # Get interval prices from coordinator data
-        today_intervals = self.coordinator.data.get("today_interval_prices", {})
-        tomorrow_intervals = self.coordinator.data.get("tomorrow_interval_prices", {})
+        # Get interval prices from coordinator data (properties)
+        today_intervals = (
+            self.coordinator.data.today_interval_prices if self.coordinator.data else {}
+        )
+        tomorrow_intervals = (
+            self.coordinator.data.tomorrow_interval_prices
+            if self.coordinator.data
+            else {}
+        )
 
         # Calculate hourly averages for today
         if today_intervals:
