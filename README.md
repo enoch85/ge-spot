@@ -802,13 +802,21 @@ flowchart TD
     subgraph Integration["Integration Flow"]
         FetchRequest["Fetch Request"] --> RLCheck
         Blocked --> CacheGet
+        CacheGet --> LoadIPD["Load IntervalPriceData<br/>(from cache)"]
+        
         AllowFetch --> PreFilter["Pre-filter disabled sources<br/>(sources with failure timestamp)"]
         PreFilter --> APICall["API Call with<br/>Exponential Backoff"]
         APICall --> |"Success"| OnSuccess
         APICall --> |"Failure (all attempts)"| OnFailure
-        OnSuccess --> CacheStore
+        
+        OnSuccess --> ProcessData["Create IntervalPriceData<br/>(from API response)"]
+        ProcessData --> CacheStore
+        CacheStore --> NewIPD["IntervalPriceData<br/>(in memory)"]
+        
         OnFailure --> CacheGet
-        RLUpdate --> CacheStore
+        
+        LoadIPD --> Sensors["Sensors access via<br/>@property"]
+        NewIPD --> Sensors
     end
 ```
 
