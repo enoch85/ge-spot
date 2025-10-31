@@ -1736,11 +1736,6 @@ class UnifiedPriceManager:
         empty_data._error_code = error_code
         empty_data._consecutive_failures = self._consecutive_failures
         empty_data._all_attempted_sources = self._all_attempted_sources
-        empty_data._last_fetch_attempt = (
-            _LAST_FETCH_TIME.get(self.area, now).isoformat()
-            if _LAST_FETCH_TIME.get(self.area)
-            else now.isoformat()
-        )
         empty_data._validated_sources = self.get_validated_sources()
 
         return empty_data

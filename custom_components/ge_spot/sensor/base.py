@@ -147,18 +147,6 @@ class BaseElectricityPriceSensor(SensorEntity):
         ):
             source_info["active_source"] = self.coordinator.data.source
 
-        # Add API key status if available (dynamic attribute)
-        if self.coordinator.data and hasattr(self.coordinator.data, "_api_key_status"):
-            source_info["api_key_status"] = self.coordinator.data._api_key_status
-
-        # Add rate limit info (dynamic only)
-        if self.coordinator.data and hasattr(
-            self.coordinator.data, "_next_fetch_allowed_in_seconds"
-        ):
-            source_info["next_fetch_allowed_in_seconds"] = (
-                self.coordinator.data._next_fetch_allowed_in_seconds
-            )
-
         # Only add source_info if it contains data
         if source_info:
             attrs["source_info"] = source_info

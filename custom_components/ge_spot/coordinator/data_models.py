@@ -95,9 +95,6 @@ class IntervalPriceData:
     _failed_sources: Dict[str, Any] = field(
         default_factory=dict
     )  # Failed sources with details
-    _last_fetch_attempt: Optional[str] = None  # Last API fetch attempt timestamp
-    _api_key_status: Optional[str] = None  # API key validation status
-    _next_fetch_allowed_in_seconds: Optional[int] = None  # Rate limit countdown
 
     # Attribution (for sources requiring it)
     data_source_attribution: Optional[str] = None
@@ -406,9 +403,6 @@ class IntervalPriceData:
             "using_cached_data": self.using_cached_data,
             "_validated_sources": self._validated_sources,
             "_failed_sources": self._failed_sources,
-            "_last_fetch_attempt": self._last_fetch_attempt,
-            "_api_key_status": self._api_key_status,
-            "_next_fetch_allowed_in_seconds": self._next_fetch_allowed_in_seconds,
             # Attribution
             "data_source_attribution": self.data_source_attribution,
             # Raw data
@@ -463,9 +457,6 @@ class IntervalPriceData:
             using_cached_data=data.get("using_cached_data", False),
             _validated_sources=data.get("_validated_sources", []),
             _failed_sources=data.get("_failed_sources", {}),
-            _last_fetch_attempt=data.get("_last_fetch_attempt"),
-            _api_key_status=data.get("_api_key_status"),
-            _next_fetch_allowed_in_seconds=data.get("_next_fetch_allowed_in_seconds"),
             # Attribution
             data_source_attribution=data.get("data_source_attribution"),
             # Raw data
