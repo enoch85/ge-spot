@@ -426,6 +426,9 @@ class TestUnifiedPriceManager:
         # Act
         result = await manager.fetch_data()
 
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
+
         # Assert
         mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallback should be called once"
 
@@ -508,6 +511,9 @@ class TestUnifiedPriceManager:
                 MOCK_PROCESSED_RESULT
             )
             await manager.fetch_data()
+
+            # Cleanup background tasks
+            await cancel_health_check_tasks(manager)
 
             # Verify cache was updated - store() is called with keyword args
             mock_cache_update.assert_called_once()
@@ -608,6 +614,9 @@ class TestUnifiedPriceManager:
 
         # Act
         result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # Assert
         mock_fallback.assert_awaited_once(), "FallbackManager.fetch_with_fallback should be called once"
@@ -712,6 +721,9 @@ class TestUnifiedPriceManager:
 
         # Act
         result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # Assert
         assert (
@@ -951,6 +963,9 @@ class TestUnifiedPriceManager:
             )
             await manager.fetch_data()
 
+            # Cleanup background tasks
+            await cancel_health_check_tasks(manager)
+
             # Reset mocks for second call
             mock_fallback.reset_mock()
             mock_processor.reset_mock()
@@ -1016,6 +1031,9 @@ class TestUnifiedPriceManager:
             mock_fallback.return_value = MOCK_SUCCESS_RESULT
             mock_processor.return_value = MOCK_PROCESSED_RESULT
             await manager.fetch_data()
+
+            # Cleanup background tasks
+            await cancel_health_check_tasks(manager)
 
             # Reset mocks for second call
             mock_fallback.reset_mock()
@@ -1192,6 +1210,9 @@ class TestUnifiedPriceManager:
         # Act
         result = await manager.fetch_data()
 
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
+
         # Assert - Extreme prices should be preserved, not clipped
         assert (
             result.today_interval_prices["2025-04-26T10:00:00+02:00"] == 9999.99
@@ -1209,9 +1230,9 @@ class TestUnifiedPriceManager:
         assert (
             result.today_interval_prices
         ), "Should have data (non-empty interval prices) despite extreme prices"
-        assert not hasattr(
-            result, "_error"
-        ), f"No error should be present for extreme prices"
+        assert not getattr(
+            result, "_error", None
+        ), f"No error should be present for extreme prices, got: {getattr(result, '_error', None)}"
 
     @pytest.mark.asyncio
     async def test_fetch_data_with_currency_conversion(
@@ -1263,6 +1284,9 @@ class TestUnifiedPriceManager:
 
         # Act
         result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # Assert
         assert (
@@ -1341,6 +1365,9 @@ class TestUnifiedPriceManager:
 
         # Act
         result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # Assert - verify timezone conversion happened correctly
         assert hasattr(
@@ -1451,6 +1478,9 @@ class TestUnifiedPriceManager:
         # Act
         result = await manager.fetch_data()
 
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
+
         # Assert
         assert result is not None, "Should return data"
         assert (
@@ -1513,6 +1543,9 @@ class TestUnifiedPriceManager:
 
         # Act
         result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # Assert
         assert result is not None, "Should return partial data"
@@ -1594,6 +1627,9 @@ class TestUnifiedPriceManager:
 
         # Act
         result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # Assert
         assert result is not None, "Should return data"
@@ -1952,6 +1988,9 @@ class TestHealthCheck:
             # Act
             await manager.fetch_data()
 
+            # Cleanup background tasks
+            await cancel_health_check_tasks(manager)
+
             # Assert
             assert (
                 manager._health_check_scheduled is True
@@ -1981,6 +2020,9 @@ class TestHealthCheck:
 
             await manager.fetch_data()
             await manager.fetch_data()
+
+            # Cleanup background tasks
+            await cancel_health_check_tasks(manager)
 
             # Assert - flag set once
             assert (

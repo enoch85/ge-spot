@@ -1001,7 +1001,7 @@ class UnifiedPriceManager:
                 if (
                     processed_data
                     and has_complete_data
-                    and not hasattr(processed_data, "_error")
+                    and not getattr(processed_data, "_error", None)
                 ):
                     _LOGGER.info(
                         f"[{self.area}] Complete data from {result.get('data_source', 'unknown')}. "
@@ -1045,7 +1045,7 @@ class UnifiedPriceManager:
                 elif (
                     processed_data
                     and has_partial_data
-                    and not hasattr(processed_data, "_error")
+                    and not getattr(processed_data, "_error", None)
                 ):
                     missing = "tomorrow" if has_today else "today"
 
@@ -1147,7 +1147,7 @@ class UnifiedPriceManager:
                         if (
                             processed_retry
                             and has_any_retry
-                            and not hasattr(processed_retry, "_error")
+                            and not getattr(processed_retry, "_error", None)
                         ):
                             # Get retry data details
                             has_today_retry = bool(
@@ -1403,7 +1403,7 @@ class UnifiedPriceManager:
                             if (
                                 processed_retry
                                 and has_any_retry
-                                and not hasattr(processed_retry, "_error")
+                                and not getattr(processed_retry, "_error", None)
                             ):
                                 # Retry source succeeded!
                                 success_type = (

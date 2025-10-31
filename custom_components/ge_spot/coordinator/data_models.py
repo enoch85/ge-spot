@@ -96,6 +96,12 @@ class IntervalPriceData:
         default_factory=dict
     )  # Failed sources with details
 
+    # Error tracking
+    _error: Optional[str] = None  # Error message from last fetch attempt
+    _error_code: Optional[str] = None  # Error code for categorization
+    _consecutive_failures: int = field(default=0)  # Number of consecutive failures
+    _all_attempted_sources: list = field(default_factory=list)  # All sources tried
+
     # Attribution (for sources requiring it)
     data_source_attribution: Optional[str] = None
 
@@ -403,6 +409,11 @@ class IntervalPriceData:
             "using_cached_data": self.using_cached_data,
             "_validated_sources": self._validated_sources,
             "_failed_sources": self._failed_sources,
+            # Error tracking
+            "_error": self._error,
+            "_error_code": self._error_code,
+            "_consecutive_failures": self._consecutive_failures,
+            "_all_attempted_sources": self._all_attempted_sources,
             # Attribution
             "data_source_attribution": self.data_source_attribution,
             # Raw data
@@ -457,6 +468,11 @@ class IntervalPriceData:
             using_cached_data=data.get("using_cached_data", False),
             _validated_sources=data.get("_validated_sources", []),
             _failed_sources=data.get("_failed_sources", {}),
+            # Error tracking
+            _error=data.get("_error"),
+            _error_code=data.get("_error_code"),
+            _consecutive_failures=data.get("_consecutive_failures", 0),
+            _all_attempted_sources=data.get("_all_attempted_sources", []),
             # Attribution
             data_source_attribution=data.get("data_source_attribution"),
             # Raw data

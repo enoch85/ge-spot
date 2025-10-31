@@ -39,6 +39,25 @@ from custom_components.ge_spot.const.config import Config
 from tests.lib.mocks.hass import MockHass
 
 
+async def cancel_health_check_tasks(manager):
+    """Cancel all background health check tasks to prevent lingering tasks in tests."""
+    import asyncio
+
+    # Cancel all pending tasks with schedule_health_check
+    for task in asyncio.all_tasks():
+        if hasattr(task, "get_coro"):
+            coro_str = str(task.get_coro())
+            if (
+                "_schedule_health_check" in coro_str
+                or "_validate_all_sources" in coro_str
+            ):
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+
 def _generate_complete_intervals(base_price=1.0):
     """Generate 96 intervals (15-minute intervals for 24 hours) with HH:MM keys."""
     intervals = {}
@@ -278,6 +297,9 @@ class TestStaleTomorrowDataFix:
         # Execute
         result = await manager.fetch_data()
 
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
+
         # Verify: System should have detected stale tomorrow data and fetched fresh
         assert result is not None, "fetch_data should return data"
         # Result is IntervalPriceData instance
@@ -374,6 +396,9 @@ class TestStaleTomorrowDataFix:
         # Execute
         result = await manager.fetch_data()
 
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
+
         # Verify: Result should exist
         assert result is not None
 
@@ -435,6 +460,9 @@ class TestStaleTomorrowDataFix:
         # Mock grace period check
         with patch.object(manager, "is_in_grace_period", return_value=False):
             result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # Verify: Outside special window, stale check doesn't apply
         # System will use cached data if rate limit prevents fetch
@@ -625,6 +653,9 @@ class TestStaleTomorrowDataFix:
 
         # Execute
         result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # CRITICAL ASSERTION: Verify fresh data was fetched
         # If data_validity was NOT cleared (the bug), system would think tomorrow=96
