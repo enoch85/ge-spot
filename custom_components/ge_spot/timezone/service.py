@@ -24,6 +24,10 @@ from .timezone_utils import get_source_timezone, get_timezone_object
 _LOGGER = logging.getLogger(__name__)
 
 
+# Performance tracking: count TimezoneService instantiations
+_TZ_SERVICE_COUNT = 0
+
+
 class TimezoneService:
     """Service for unified timezone handling across the integration."""
 
@@ -34,9 +38,17 @@ class TimezoneService:
         config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize with optional Home Assistant instance, area, and config."""
+        global _TZ_SERVICE_COUNT
+        _TZ_SERVICE_COUNT += 1
+
         self.hass = hass
         self.area = area
         self.config = config or {}
+
+        # Log instantiation for performance monitoring
+        _LOGGER.debug(
+            f"TimezoneService #{_TZ_SERVICE_COUNT} created for area='{area or 'None'}'"
+        )
 
         # Always store system timezone for reference
         self.system_timezone = (

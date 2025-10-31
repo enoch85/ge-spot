@@ -968,10 +968,18 @@ class UnifiedPriceManager:
                         if is_tomorrow_dst
                         else ""
                     )
-                    _LOGGER.warning(
-                        f"[{self.area}] Incomplete tomorrow data from {result.get('data_source', 'unknown')}: "
-                        f"{tomorrow_count}/{expected_tomorrow} intervals (missing {expected_tomorrow - tomorrow_count}){dst_note}"
-                    )
+                    # Only warn if after expected release time (13:00-14:00 local)
+                    # Before that, it's normal for tomorrow data to be incomplete
+                    if current_hour >= 14:
+                        _LOGGER.warning(
+                            f"[{self.area}] Incomplete tomorrow data from {result.get('data_source', 'unknown')}: "
+                            f"{tomorrow_count}/{expected_tomorrow} intervals (missing {expected_tomorrow - tomorrow_count}){dst_note}"
+                        )
+                    else:
+                        _LOGGER.debug(
+                            f"[{self.area}] Tomorrow data not yet available (before 14:00): "
+                            f"{tomorrow_count}/{expected_tomorrow} intervals{dst_note}"
+                        )
 
                 # Get remaining sources for potential retry
                 attempted_so_far = (
