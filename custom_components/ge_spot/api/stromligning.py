@@ -22,6 +22,8 @@ _LOGGER = logging.getLogger(__name__)
 class StromligningAPI(BasePriceAPI):
     """API client for Stromligning.dk."""
 
+    SOURCE_TYPE = Source.STROMLIGNING
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -38,14 +40,6 @@ class StromligningAPI(BasePriceAPI):
         super().__init__(config, session, timezone_service)
         # Store config to access supplier later
         self.config = config or {}
-
-    def _get_source_type(self) -> str:
-        """Get the source type identifier.
-
-        Returns:
-            Source type identifier
-        """
-        return Source.STROMLIGNING
 
     def _get_base_url(self) -> str:
         """Get the base URL for the API.

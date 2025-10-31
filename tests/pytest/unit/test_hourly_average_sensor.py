@@ -7,6 +7,23 @@ from custom_components.ge_spot.sensor.price import (
     HourlyAverageSensor,
     TomorrowHourlyAverageSensor,
 )
+from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
+
+
+def _dict_to_interval_price_data(data: dict) -> IntervalPriceData:
+    """Convert dict to IntervalPriceData for tests."""
+    return IntervalPriceData(**data)
+
+
+def _generate_full_day_intervals(base_price: float = 50.0) -> dict:
+    """Generate 96 15-minute intervals for a full day."""
+    intervals = {}
+    for hour in range(24):
+        for minute in [0, 15, 30, 45]:
+            key = f"{hour:02d}:{minute:02d}"
+            # Add some variation to the price
+            intervals[key] = base_price + (hour * 0.5) + (minute / 100)
+    return intervals
 
 
 class TestHourlyAverageSensor:
@@ -15,9 +32,11 @@ class TestHourlyAverageSensor:
     @pytest.fixture
     def mock_coordinator(self):
         """Create a mock coordinator."""
+        from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
+
         coordinator = Mock()
-        coordinator.data = {
-            "today_interval_prices": {
+        coordinator.data = IntervalPriceData(
+            today_interval_prices={
                 "00:00": 10.0,
                 "00:15": 12.0,
                 "00:30": 14.0,
@@ -31,7 +50,7 @@ class TestHourlyAverageSensor:
                 "02:30": 34.0,
                 "02:45": 36.0,
             },
-            "tomorrow_interval_prices": {
+            tomorrow_interval_prices={
                 "00:00": 15.0,
                 "00:15": 17.0,
                 "00:30": 19.0,
@@ -41,7 +60,9 @@ class TestHourlyAverageSensor:
                 "01:30": 29.0,
                 "01:45": 31.0,
             },
-        }
+            source="nordpool",
+            area="SE3",
+        )
         coordinator.last_update_success = True
         return coordinator
 
@@ -95,10 +116,12 @@ class TestHourlyAverageSensor:
     def test_empty_interval_prices(self, config_data):
         """Test handling of empty interval prices."""
         coordinator = Mock()
-        coordinator.data = {
-            "today_interval_prices": {},
-            "tomorrow_interval_prices": {},
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {},
+                "tomorrow_interval_prices": {},
+            }
+        )
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
@@ -115,17 +138,19 @@ class TestHourlyAverageSensor:
     def test_partial_hour_data(self, config_data):
         """Test handling when an hour has fewer than 4 intervals."""
         coordinator = Mock()
-        coordinator.data = {
-            "today_interval_prices": {
-                "00:00": 10.0,
-                "00:15": 12.0,
-                # Missing 00:30 and 00:45
-                "01:00": 20.0,
-                "01:15": 22.0,
-                "01:30": 24.0,
-                "01:45": 26.0,
-            },
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "00:00": 10.0,
+                    "00:15": 12.0,
+                    # Missing 00:30 and 00:45
+                    "01:00": 20.0,
+                    "01:15": 22.0,
+                    "01:30": 24.0,
+                    "01:45": 26.0,
+                },
+            }
+        )
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
@@ -164,8 +189,13 @@ class TestHourlyAverageSensor:
 
     def test_tomorrow_sensor_mixin(self, mock_coordinator, config_data):
         """Test that TomorrowHourlyAverageSensor uses TomorrowSensorMixin."""
-        # Test with no tomorrow data
-        mock_coordinator.data["tomorrow_valid"] = False
+        # Test with no tomorrow data - recreate data without tomorrow prices
+        mock_coordinator.data = IntervalPriceData(
+            today_interval_prices=_generate_full_day_intervals(50.0),
+            tomorrow_interval_prices={},  # No tomorrow data
+            source="nordpool",
+            area="SE3",
+        )
 
         sensor = TomorrowHourlyAverageSensor(
             mock_coordinator,
@@ -178,8 +208,13 @@ class TestHourlyAverageSensor:
         # Sensor should not be available when tomorrow_valid is False
         assert sensor.available is False
 
-        # Now make it valid
-        mock_coordinator.data["tomorrow_valid"] = True
+        # Now make it valid by adding full tomorrow data (96 intervals required)
+        mock_coordinator.data = IntervalPriceData(
+            today_interval_prices=_generate_full_day_intervals(50.0),
+            tomorrow_interval_prices=_generate_full_day_intervals(60.0),
+            source="nordpool",
+            area="SE3",
+        )
         assert sensor.available is True
 
     @patch("custom_components.ge_spot.sensor.base.dt_util.get_default_time_zone")
@@ -217,18 +252,22 @@ class TestHourlyAverageSensor:
         """
         coordinator = Mock()
         # Only 20% of day's data (less than the 80% threshold for statistics)
-        coordinator.data = {
-            "today_interval_prices": {
-                "00:00": 10.0,
-                "00:15": 12.0,
-                "00:30": 14.0,
-                "00:45": 16.0,
-                "01:00": 20.0,
-                "01:15": 22.0,
-                # Missing most of the day
-            },
-            "statistics": {},  # No statistics due to insufficient data
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "00:00": 10.0,
+                    "00:15": 12.0,
+                    "00:30": 14.0,
+                    "00:45": 16.0,
+                    "01:00": 20.0,
+                    "01:15": 22.0,
+                    # Missing most of the day
+                },
+                # Note: statistics is a computed property, not stored data
+                "source": "test",
+                "area": "BE",
+            }
+        )
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
@@ -254,14 +293,16 @@ class TestHourlyAverageSensor:
         and at 00:15, we should calculate hour 00:00's average.
         """
         coordinator = Mock()
-        coordinator.data = {
-            "today_interval_prices": {
-                "23:00": 50.0,
-                "23:15": 52.0,
-                "23:30": 54.0,
-                "23:45": 56.0,
-            },
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "23:00": 50.0,
+                    "23:15": 52.0,
+                    "23:30": 54.0,
+                    "23:45": 56.0,
+                },
+            }
+        )
         coordinator.last_update_success = True
 
         # Test at 23:30 (before midnight)
@@ -280,14 +321,16 @@ class TestHourlyAverageSensor:
         assert value == 53.0  # Average of 23:00 hour
 
         # Test at 00:15 (after midnight) - different day's data
-        coordinator.data = {
-            "today_interval_prices": {
-                "00:00": 10.0,
-                "00:15": 12.0,
-                "00:30": 14.0,
-                "00:45": 16.0,
-            },
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "00:00": 10.0,
+                    "00:15": 12.0,
+                    "00:30": 14.0,
+                    "00:45": 16.0,
+                },
+            }
+        )
         mock_dt = datetime(2025, 10, 23, 0, 15, 0, tzinfo=timezone.utc)
         mock_now.return_value = mock_dt
 
@@ -309,22 +352,24 @@ class TestHourlyAverageSensor:
         We should average the available intervals rather than skip the hour.
         """
         coordinator = Mock()
-        coordinator.data = {
-            "today_interval_prices": {
-                "10:00": 100.0,
-                "10:15": 102.0,
-                "10:30": 104.0,
-                # Missing 10:45
-                "11:00": 110.0,
-                "11:15": 112.0,
-                # Missing 11:30
-                "11:45": 116.0,
-                "12:00": 120.0,
-                # Missing 12:15
-                # Missing 12:30
-                "12:45": 126.0,
-            },
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "10:00": 100.0,
+                    "10:15": 102.0,
+                    "10:30": 104.0,
+                    # Missing 10:45
+                    "11:00": 110.0,
+                    "11:15": 112.0,
+                    # Missing 11:30
+                    "11:45": 116.0,
+                    "12:00": 120.0,
+                    # Missing 12:15
+                    # Missing 12:30
+                    "12:45": 126.0,
+                },
+            }
+        )
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
@@ -359,19 +404,21 @@ class TestHourlyAverageSensor:
         """
         coordinator = Mock()
         # Simulating DST spring forward: hour 02:xx is missing
-        coordinator.data = {
-            "today_interval_prices": {
-                "01:00": 10.0,
-                "01:15": 12.0,
-                "01:30": 14.0,
-                "01:45": 16.0,
-                # Hour 02:xx missing due to DST
-                "03:00": 30.0,
-                "03:15": 32.0,
-                "03:30": 34.0,
-                "03:45": 36.0,
-            },
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "01:00": 10.0,
+                    "01:15": 12.0,
+                    "01:30": 14.0,
+                    "01:45": 16.0,
+                    # Hour 02:xx missing due to DST
+                    "03:00": 30.0,
+                    "03:15": 32.0,
+                    "03:30": 34.0,
+                    "03:45": 36.0,
+                },
+            }
+        )
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
@@ -400,26 +447,28 @@ class TestHourlyAverageSensor:
         """
         coordinator = Mock()
         # Simulating DST fall back: hour 02:xx appears with extra intervals
-        coordinator.data = {
-            "today_interval_prices": {
-                "01:00": 10.0,
-                "01:15": 12.0,
-                "01:30": 14.0,
-                "01:45": 16.0,
-                # First occurrence of 02:xx
-                "02:00": 20.0,
-                "02:15": 22.0,
-                "02:30": 24.0,
-                "02:45": 26.0,
-                # During DST fall back, we might get 8 intervals for hour 02
-                # (This is handled by timezone normalization in the coordinator,
-                # but we should handle gracefully if we receive more intervals)
-                "03:00": 30.0,
-                "03:15": 32.0,
-                "03:30": 34.0,
-                "03:45": 36.0,
-            },
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "01:00": 10.0,
+                    "01:15": 12.0,
+                    "01:30": 14.0,
+                    "01:45": 16.0,
+                    # First occurrence of 02:xx
+                    "02:00": 20.0,
+                    "02:15": 22.0,
+                    "02:30": 24.0,
+                    "02:45": 26.0,
+                    # During DST fall back, we might get 8 intervals for hour 02
+                    # (This is handled by timezone normalization in the coordinator,
+                    # but we should handle gracefully if we receive more intervals)
+                    "03:00": 30.0,
+                    "03:15": 32.0,
+                    "03:30": 34.0,
+                    "03:45": 36.0,
+                },
+            }
+        )
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
@@ -448,15 +497,17 @@ class TestHourlyAverageSensor:
         The sensor should return None for native_value if current hour has no data.
         """
         coordinator = Mock()
-        coordinator.data = {
-            "today_interval_prices": {
-                "07:00": 70.0,
-                "07:15": 72.0,
-                "07:30": 74.0,
-                "07:45": 76.0,
-                # Current hour 08:xx has no data yet
-            },
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "07:00": 70.0,
+                    "07:15": 72.0,
+                    "07:30": 74.0,
+                    "07:45": 76.0,
+                    # Current hour 08:xx has no data yet
+                },
+            }
+        )
         coordinator.last_update_success = True
 
         with patch("custom_components.ge_spot.sensor.price.dt_util.now") as mock_now:
@@ -486,14 +537,16 @@ class TestHourlyAverageSensor:
         Ensure we don't lose precision in averaging (important for accurate billing).
         """
         coordinator = Mock()
-        coordinator.data = {
-            "today_interval_prices": {
-                "10:00": 0.12345,
-                "10:15": 0.12346,
-                "10:30": 0.12347,
-                "10:45": 0.12348,
-            },
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "10:00": 0.12345,
+                    "10:15": 0.12346,
+                    "10:30": 0.12347,
+                    "10:45": 0.12348,
+                },
+            }
+        )
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
@@ -517,17 +570,19 @@ class TestHourlyAverageSensor:
         and skip them rather than crash.
         """
         coordinator = Mock()
-        coordinator.data = {
-            "today_interval_prices": {
-                "10:00": 100.0,
-                "10:15": 102.0,
-                "invalid_key": 999.0,  # Bad format
-                "10:30": 104.0,
-                "10:45": 106.0,
-                "11": 110.0,  # Missing minutes
-                "11:15": 112.0,
-            },
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {
+                    "10:00": 100.0,
+                    "10:15": 102.0,
+                    "invalid_key": 999.0,  # Bad format
+                    "10:30": 104.0,
+                    "10:45": 106.0,
+                    "11": 110.0,  # Missing minutes
+                    "11:15": 112.0,
+                },
+            }
+        )
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(
@@ -641,10 +696,12 @@ class TestHourlyAverageSensor:
     def test_hourly_attributes_with_empty_data(self, config_data):
         """Test that empty hourly prices don't cause errors."""
         coordinator = Mock()
-        coordinator.data = {
-            "today_interval_prices": {},
-            "tomorrow_interval_prices": {},
-        }
+        coordinator.data = _dict_to_interval_price_data(
+            {
+                "today_interval_prices": {},
+                "tomorrow_interval_prices": {},
+            }
+        )
         coordinator.last_update_success = True
 
         sensor = HourlyAverageSensor(

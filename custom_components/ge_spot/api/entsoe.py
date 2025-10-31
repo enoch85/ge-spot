@@ -27,6 +27,8 @@ _LOGGER = logging.getLogger(__name__)
 class EntsoeAPI(BasePriceAPI):
     """API implementation for ENTSO-E Transparency Platform."""
 
+    SOURCE_TYPE = Source.ENTSOE
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -43,14 +45,6 @@ class EntsoeAPI(BasePriceAPI):
         super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
         self.parser = EntsoeParser(timezone_service=timezone_service)
-
-    def _get_source_type(self) -> str:
-        """Get the source type identifier.
-
-        Returns:
-            Source type identifier
-        """
-        return Source.ENTSOE
 
     def _get_base_url(self) -> str:
         """Get the base URL for the API.

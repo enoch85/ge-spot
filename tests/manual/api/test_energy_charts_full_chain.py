@@ -50,16 +50,22 @@ async def test_single_area(api: EnergyChartsAPI, area: str):
         assert "area" in raw_data, "Missing 'area' key"
         assert "source" in raw_data, "Missing 'source' key"
 
-        # Validate raw API response
+        # Validate raw API response structure (nested under 'today')
         raw_api_response = raw_data["raw_data"]
         assert isinstance(
             raw_api_response, dict
         ), f"raw_data should be dict, got {type(raw_api_response)}"
-        assert "unix_seconds" in raw_api_response, "Missing 'unix_seconds' in raw_data"
-        assert "price" in raw_api_response, "Missing 'price' in raw_data"
+        assert "today" in raw_api_response, "Missing 'today' in raw_data"
 
-        unix_seconds = raw_api_response["unix_seconds"]
-        prices = raw_api_response["price"]
+        today_data = raw_api_response["today"]
+        assert isinstance(
+            today_data, dict
+        ), f"today data should be dict, got {type(today_data)}"
+        assert "unix_seconds" in today_data, "Missing 'unix_seconds' in today data"
+        assert "price" in today_data, "Missing 'price' in today data"
+
+        unix_seconds = today_data["unix_seconds"]
+        prices = today_data["price"]
 
         print(f"   Timezone: {raw_data['timezone']}")
         print(f"   Currency: {raw_data['currency']}")

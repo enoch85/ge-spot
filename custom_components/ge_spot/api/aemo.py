@@ -34,6 +34,8 @@ class AemoAPI(BasePriceAPI):
     - VIC1 - Victoria
     """
 
+    SOURCE_TYPE = Source.AEMO
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -48,10 +50,6 @@ class AemoAPI(BasePriceAPI):
             timezone_service: Timezone service instance
         """
         super().__init__(config, session, timezone_service)
-
-    def _get_source_type(self) -> str:
-        """Get the source type identifier."""
-        return Source.AEMO
 
     def _get_base_url(self) -> str:
         """Get the base URL for the API."""

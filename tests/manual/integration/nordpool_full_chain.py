@@ -129,9 +129,14 @@ class DebugCacheManager(CacheManager):
         logger.debug(f"CACHE STORE: Storing data for key '{cache_key}'")
         logger.debug(f"  - Timestamp: {timestamp}")
         logger.debug(f"  - Data size: {len(str(data))} bytes")
+
+        # Access IntervalPriceData properties
+        total_intervals = len(data.today_interval_prices) + len(
+            data.tomorrow_interval_prices
+        )
         logger.debug(
-            f"  - Contains {len(data.get('interval_prices', {}))} price points"
-        )  # Note: interval_prices in cache for compatibility
+            f"  - Contains {total_intervals} price points (today: {len(data.today_interval_prices)}, tomorrow: {len(data.tomorrow_interval_prices)})"
+        )
 
         # Call original method
         result = super().store(area, source, data, timestamp)
@@ -160,10 +165,18 @@ class DebugCacheManager(CacheManager):
         result = super().get_data(area, target_date, source, max_age_minutes)
 
         if result:
-            logger.debug(
-                f"CACHE HIT: Found data with {len(result.get('interval_prices', {}))} price points"
-            )  # Note: interval_prices in cache
-            ts = result.get("last_updated")
+            # Access IntervalPriceData properties
+            total_intervals = len(result.today_interval_prices) + len(
+                result.tomorrow_interval_prices
+            )
+            logger.debug(f"CACHE HIT: Found data with {total_intervals} price points")
+
+            # Access timestamp from metadata
+            ts = (
+                result.metadata.get("last_updated")
+                if hasattr(result, "metadata") and result.metadata
+                else None
+            )
             if ts:
                 try:
                     dt = datetime.fromisoformat(ts)
@@ -697,11 +710,19 @@ async def main():
                 }
 
                 # Store in cache for future use (production behavior)
+                # Convert dict to IntervalPriceData before storing
+                from custom_components.ge_spot.coordinator.data_models import (
+                    IntervalPriceData,
+                )
+
                 logger.info("\nStoring data in cache for future use...")
+                price_data = IntervalPriceData.from_cache_dict(
+                    processed_data_for_cache, tz_service
+                )
                 cache_manager.store(
                     area=area,
                     source=Source.NORDPOOL,
-                    data=processed_data_for_cache,  # Use renamed variable
+                    data=price_data,
                     timestamp=timestamp,
                 )
                 logger.info("✓ Data stored in cache")

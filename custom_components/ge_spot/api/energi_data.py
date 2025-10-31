@@ -27,13 +27,7 @@ BASE_URL = "https://api.energidataservice.dk/dataset/DayAheadPrices"
 class EnergiDataAPI(BasePriceAPI):
     """API client for Energi Data Service."""
 
-    def _get_source_type(self) -> str:
-        """Get the source type identifier.
-
-        Returns:
-            Source type identifier
-        """
-        return Source.ENERGI_DATA_SERVICE
+    SOURCE_TYPE = Source.ENERGI_DATA_SERVICE
 
     def _get_base_url(self) -> str:
         """Get the base URL for the API.

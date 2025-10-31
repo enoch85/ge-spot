@@ -676,10 +676,14 @@ flowchart TD
         Stats --> CalcValidity["Calculate DataValidity"]
     end
     
-    DataProcessor --> CacheStore["CacheManager.store()<br/>(with DataValidity)"]
-    CacheStore --> Sensors["Home Assistant Sensors"]
+    DataProcessor --> CreateIPD["Create IntervalPriceData<br/>(source data + metadata)"]
+    CreateIPD --> CacheStore["CacheManager.store()<br/>(stores IntervalPriceData)"]
+    CacheStore --> IPDObject["IntervalPriceData Object<br/>(in memory)"]
     
-    UseCache --> Sensors
+    UseCache --> LoadIPD["Load IntervalPriceData<br/>(from cache)"]
+    LoadIPD --> IPDObject
+    
+    IPDObject --> Sensors["Home Assistant Sensors<br/>(access via @property)"]
 ```
 
 ### 2. Fetch Decision Logic
@@ -736,10 +740,13 @@ flowchart TD
     AllFailed --> UseCache
     
     Success --> ClearFailed["Clear failure status<br/>(timestamp = None)"]
-    ClearFailed --> ProcessData["Process & Cache<br/>(with new DataValidity)"]
-    ProcessData --> UpdateSensors["Update Sensors"]
+    ClearFailed --> ProcessData["Process & Cache<br/>(create IntervalPriceData)"]
+    ProcessData --> IPDNew["IntervalPriceData<br/>(in memory)"]
     
-    UseCache --> UpdateSensors
+    UseCache --> IPDCached["IntervalPriceData<br/>(from cache)"]
+    
+    IPDNew --> UpdateSensors["Update Sensors<br/>(via @property access)"]
+    IPDCached --> UpdateSensors
     UpdateSensors --> End["Wait for Next Update"]
 ```
 
@@ -795,13 +802,21 @@ flowchart TD
     subgraph Integration["Integration Flow"]
         FetchRequest["Fetch Request"] --> RLCheck
         Blocked --> CacheGet
+        CacheGet --> LoadIPD["Load IntervalPriceData<br/>(from cache)"]
+        
         AllowFetch --> PreFilter["Pre-filter disabled sources<br/>(sources with failure timestamp)"]
         PreFilter --> APICall["API Call with<br/>Exponential Backoff"]
         APICall --> |"Success"| OnSuccess
         APICall --> |"Failure (all attempts)"| OnFailure
-        OnSuccess --> CacheStore
+        
+        OnSuccess --> ProcessData["Create IntervalPriceData<br/>(from API response)"]
+        ProcessData --> CacheStore
+        CacheStore --> NewIPD["IntervalPriceData<br/>(in memory)"]
+        
         OnFailure --> CacheGet
-        RLUpdate --> CacheStore
+        
+        LoadIPD --> Sensors["Sensors access via<br/>@property"]
+        NewIPD --> Sensors
     end
 ```
 
@@ -874,6 +889,12 @@ flowchart TD
         DK1 --> |"5th"| Stromligning["Strømligning"]
     end
 ```
+
+---
+
+**For detailed cache architecture documentation**, see [docs/cache_compute_on_demand.md](/docs/cache_compute_on_demand.md)
+
+---
 
 ## License
 

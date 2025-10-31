@@ -24,6 +24,8 @@ _LOGGER = logging.getLogger(__name__)
 class NordpoolAPI(BasePriceAPI):
     """Nordpool API implementation."""
 
+    SOURCE_TYPE = Source.NORDPOOL
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -40,14 +42,6 @@ class NordpoolAPI(BasePriceAPI):
         super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
         self.parser = NordpoolParser(timezone_service=timezone_service)
-
-    def _get_source_type(self) -> str:
-        """Get the source type identifier.
-
-        Returns:
-            Source type identifier
-        """
-        return Source.NORDPOOL
 
     def _get_base_url(self) -> str:
         """Get the base URL for the API.

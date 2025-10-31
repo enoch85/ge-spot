@@ -111,107 +111,106 @@ class BaseElectricityPriceSensor(SensorEntity):
             "vat": f"{self._vat * 100:.1f}%",
             "display_unit": self._display_unit,
             "use_subunit": self._use_subunit,
-            # Corrected: Use 'data_source' from coordinator data
-            "data_source": self.coordinator.data.get("data_source", "unknown"),
+            # Access source directly from IntervalPriceData
+            "data_source": (
+                self.coordinator.data.source if self.coordinator.data else "unknown"
+            ),
         }
 
         # Add timestamps if available
-        # Corrected: Use 'last_fetch_attempt' key
-        if "last_fetch_attempt" in self.coordinator.data:
-            attrs["last_api_fetch"] = self.coordinator.data["last_fetch_attempt"]
+        if self.coordinator.data and hasattr(
+            self.coordinator.data, "_last_fetch_attempt"
+        ):
+            attrs["last_api_fetch"] = self.coordinator.data._last_fetch_attempt
 
         # Add simplified source info
         source_info = {}
 
         # Show validated sources (what's been tested and working)
-        validated_sources = self.coordinator.data.get("validated_sources")
-        if validated_sources:
-            source_info["validated_sources"] = validated_sources
+        if self.coordinator.data and hasattr(self.coordinator, "price_manager"):
+            # Get live validated sources from coordinator's price manager (not cached snapshot)
+            validated_sources = self.coordinator.price_manager.get_validated_sources()
+            if validated_sources:
+                source_info["validated_sources"] = validated_sources
 
         # Show failed sources with details
-        failed_sources = self.coordinator.data.get("failed_sources")
-        if failed_sources:
-            source_info["failed_sources"] = failed_sources
+        if self.coordinator.data and hasattr(self.coordinator, "price_manager"):
+            # Get live failed source details from coordinator's price manager
+            failed_source_details = (
+                self.coordinator.price_manager.get_failed_source_details()
+            )
+            if failed_source_details:
+                source_info["failed_sources"] = failed_source_details
 
-        # Show active source (what's currently used)
-        active_source = self.coordinator.data.get("data_source")
-        if active_source and active_source not in ("unknown", "None"):
-            source_info["active_source"] = active_source
-
-        # Add API key status if available
-        if "api_key_status" in self.coordinator.data:
-            source_info["api_key_status"] = self.coordinator.data["api_key_status"]
-
-        # Add rate limit info (dynamic only)
-        if "next_fetch_allowed_in_seconds" in self.coordinator.data:
-            source_info["next_fetch_allowed_in_seconds"] = self.coordinator.data[
-                "next_fetch_allowed_in_seconds"
-            ]
+        # Show active source (what's currently used) - but not if it's redundant with Data source
+        # Only show active_source in source_info if we have other info to display
+        # (Otherwise users see it twice: once as "Data source" and once as "active_source")
 
         # Only add source_info if it contains data
         if source_info:
+            # Add active source to source_info only if we have other diagnostic info
+            if self.coordinator.data and self.coordinator.data.source not in (
+                "unknown",
+                "None",
+            ):
+                source_info["active_source"] = self.coordinator.data.source
             attrs["source_info"] = source_info
 
         # Add timezone info
-        # Corrected: Use 'target_timezone' key for HA timezone
-        if "target_timezone" in self.coordinator.data:
-            attrs["ha_timezone"] = self.coordinator.data["target_timezone"]
+        if self.coordinator.data and self.coordinator.data.target_timezone:
+            attrs["ha_timezone"] = self.coordinator.data.target_timezone
 
-        # Corrected: Use 'source_timezone' key for API timezone
-        if "source_timezone" in self.coordinator.data:
-            attrs["api_timezone"] = self.coordinator.data["source_timezone"]
+        if self.coordinator.data and self.coordinator.data.source_timezone:
+            attrs["api_timezone"] = self.coordinator.data.source_timezone
 
-        # Add data validity information
-        if "data_validity" in self.coordinator.data:
-            validity_dict = self.coordinator.data["data_validity"]
-            if isinstance(validity_dict, dict):
+        # Add data validity information (computed property)
+        if self.coordinator.data:
+            validity = self.coordinator.data.data_validity
+            if validity:
                 # Add data validity info for monitoring
                 data_validity_info = {}
 
-                if validity_dict.get("data_valid_until"):
-                    data_validity_info["data_valid_until"] = validity_dict[
-                        "data_valid_until"
-                    ]
+                if validity.data_valid_until:
+                    data_validity_info["data_valid_until"] = (
+                        validity.data_valid_until.isoformat()
+                        if hasattr(validity.data_valid_until, "isoformat")
+                        else str(validity.data_valid_until)
+                    )
 
-                if validity_dict.get("last_valid_interval"):
-                    data_validity_info["last_valid_interval"] = validity_dict[
-                        "last_valid_interval"
-                    ]
+                if validity.last_valid_interval:
+                    data_validity_info["last_valid_interval"] = (
+                        validity.last_valid_interval
+                    )
 
-                data_validity_info["interval_count"] = validity_dict.get(
-                    "interval_count", 0
+                data_validity_info["interval_count"] = validity.interval_count
+                data_validity_info["today_intervals"] = validity.today_interval_count
+                data_validity_info["tomorrow_intervals"] = (
+                    validity.tomorrow_interval_count
                 )
-                data_validity_info["today_intervals"] = validity_dict.get(
-                    "today_interval_count", 0
-                )
-                data_validity_info["tomorrow_intervals"] = validity_dict.get(
-                    "tomorrow_interval_count", 0
-                )
-                data_validity_info["has_current_interval"] = validity_dict.get(
-                    "has_current_interval", False
+                data_validity_info["has_current_interval"] = (
+                    validity.has_current_interval
                 )
 
-                # Calculate intervals remaining (if we have validity data)
-                if validity_dict.get("data_valid_until"):
-                    try:
-                        # Reconstruct DataValidity to calculate intervals_remaining
-                        validity = DataValidity.from_dict(validity_dict)
-                        now = dt_util.now()
-                        intervals_remaining = validity.intervals_remaining(now)
-                        data_validity_info["intervals_remaining"] = intervals_remaining
-                    except Exception as e:
-                        _LOGGER.warning(f"Failed to calculate intervals_remaining: {e}")
+                # Calculate intervals remaining
+                try:
+                    now = dt_util.now()
+                    intervals_remaining = validity.intervals_remaining(now)
+                    data_validity_info["intervals_remaining"] = intervals_remaining
+                except Exception as e:
+                    _LOGGER.warning(f"Failed to calculate intervals_remaining: {e}")
 
                 attrs["data_validity"] = data_validity_info
 
         # Add error information if present (for diagnostics)
-        if "error" in self.coordinator.data and self.coordinator.data["error"]:
-            error_info = {"message": self.coordinator.data["error"]}
-            if (
-                "error_code" in self.coordinator.data
-                and self.coordinator.data["error_code"]
-            ):
-                error_info["code"] = self.coordinator.data["error_code"]
+        if self.coordinator.data and hasattr(self.coordinator.data, "_error"):
+            error_msg = self.coordinator.data._error
+            if error_msg:
+                error_info = {"message": error_msg}
+                if (
+                    hasattr(self.coordinator.data, "_error_code")
+                    and self.coordinator.data._error_code
+                ):
+                    error_info["code"] = self.coordinator.data._error_code
                 attrs["error"] = error_info
 
         # Add interval prices in list format with datetime objects (v1.5.0)
@@ -227,9 +226,9 @@ class BaseElectricityPriceSensor(SensorEntity):
             target_tz = dt_util.get_default_time_zone()
 
         # Convert today's prices from HH:MM dict to list of datetime objects
-        if "today_interval_prices" in self.coordinator.data:
-            today_prices = self.coordinator.data["today_interval_prices"]
-            today_raw_prices = self.coordinator.data.get("today_raw_prices", {})
+        if self.coordinator.data and self.coordinator.data.today_interval_prices:
+            today_prices = self.coordinator.data.today_interval_prices
+            today_raw_prices = self.coordinator.data.today_raw_prices
 
             if isinstance(today_prices, dict) and today_prices:
                 now = dt_util.now().astimezone(target_tz)
@@ -272,9 +271,9 @@ class BaseElectricityPriceSensor(SensorEntity):
             attrs["today_interval_prices"] = []
 
         # Convert tomorrow's prices from HH:MM dict to list of datetime objects
-        if "tomorrow_interval_prices" in self.coordinator.data:
-            tomorrow_prices = self.coordinator.data["tomorrow_interval_prices"]
-            tomorrow_raw_prices = self.coordinator.data.get("tomorrow_raw_prices", {})
+        if self.coordinator.data and self.coordinator.data.tomorrow_interval_prices:
+            tomorrow_prices = self.coordinator.data.tomorrow_interval_prices
+            tomorrow_raw_prices = self.coordinator.data.tomorrow_raw_prices
 
             if isinstance(tomorrow_prices, dict) and tomorrow_prices:
                 now = dt_util.now().astimezone(target_tz)
@@ -315,10 +314,6 @@ class BaseElectricityPriceSensor(SensorEntity):
                 attrs["tomorrow_interval_prices"] = []
         else:
             attrs["tomorrow_interval_prices"] = []
-
-        # Add error message if available
-        if "error" in self.coordinator.data and self.coordinator.data["error"]:
-            attrs["error"] = self.coordinator.data["error"]
 
         return attrs
 

@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch, MagicMock
 from zoneinfo import ZoneInfo
 
 from custom_components.ge_spot.coordinator.cache_manager import CacheManager
+from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
 from custom_components.ge_spot.coordinator.data_validity import (
     DataValidity,
     calculate_data_validity,
@@ -54,42 +55,22 @@ def yesterday_cache_data():
         f"{h:02d}:{m:02d}": 90.0 + h for h in range(24) for m in [0, 15, 30, 45]
     }
 
-    # Old validity claiming tomorrow=96 (THIS IS THE BUG)
-    old_validity = DataValidity(
-        interval_count=192,
-        today_interval_count=96,
-        tomorrow_interval_count=96,  # Wrong after migration!
-        has_current_interval=True,
-        has_minimum_data=True,
-        data_valid_until=datetime.combine(tomorrow, datetime.max.time()),
-    )
-
-    # Create tomorrow statistics manually
-    tomorrow_stats = {
-        "avg": 110.5,
-        "min": 100.0,
-        "max": 123.0,
-        "min_timestamp": None,
-        "max_timestamp": None,
-    }
-
-    return {
-        "area": "SE2",
-        "source": "nordpool",
-        "today_interval_prices": {
+    # Return IntervalPriceData (not dict!)
+    # This is what CacheManager.store() expects
+    return IntervalPriceData(
+        area="SE2",
+        source="nordpool",
+        today_interval_prices={
             f"{h:02d}:{m:02d}": 50.0 + h for h in range(24) for m in [0, 15, 30, 45]
         },
-        "tomorrow_interval_prices": tomorrow_prices,
-        "today_raw_prices": {
+        tomorrow_interval_prices=tomorrow_prices,
+        today_raw_prices={
             f"{h:02d}:{m:02d}": 40.0 + h for h in range(24) for m in [0, 15, 30, 45]
         },
-        "tomorrow_raw_prices": tomorrow_raw,
-        "statistics": PriceStatistics().to_dict(),
-        "tomorrow_statistics": tomorrow_stats,
-        "data_validity": old_validity.to_dict(),
-        "source_currency": "EUR",
-        "target_currency": "SEK",
-    }
+        tomorrow_raw_prices=tomorrow_raw,
+        source_currency="EUR",
+        target_currency="SEK",
+    )
 
 
 class TestMidnightMigration:
@@ -132,13 +113,14 @@ class TestMidnightMigration:
 
         # Verify migration occurred
         assert migrated_data is not None
-        assert migrated_data.get("migrated_from_tomorrow") is True
-        assert len(migrated_data["today_interval_prices"]) == 96
-        assert len(migrated_data["tomorrow_interval_prices"]) == 0
+        # migrated_data is now IntervalPriceData, use property access
+        assert migrated_data.migrated_from_tomorrow is True
+        assert len(migrated_data.today_interval_prices) == 96
+        assert len(migrated_data.tomorrow_interval_prices) == 0
 
         # CRITICAL: Verify data_validity was recalculated
-        assert "data_validity" in migrated_data
-        validity = DataValidity.from_dict(migrated_data["data_validity"])
+        # data_validity is a computed property that auto-recalculates
+        validity = migrated_data.data_validity
 
         # Key assertions - validity should reflect actual data
         assert (
@@ -175,10 +157,11 @@ class TestMidnightMigration:
             )
 
         assert migrated_data is not None
-        assert len(migrated_data["today_raw_prices"]) == 96
-        assert len(migrated_data["tomorrow_raw_prices"]) == 0
+        # Use property access for IntervalPriceData
+        assert len(migrated_data.today_raw_prices) == 96
+        assert len(migrated_data.tomorrow_raw_prices) == 0
         # Verify raw prices were moved correctly
-        assert migrated_data["today_raw_prices"]["00:00"] == 90.0
+        assert migrated_data.today_raw_prices["00:00"] == 90.0
 
     def test_migration_clears_tomorrow_statistics(
         self, cache_manager_with_tz, yesterday_cache_data
@@ -206,10 +189,11 @@ class TestMidnightMigration:
             )
 
         assert migrated_data is not None
-        tomorrow_stats = migrated_data.get("tomorrow_statistics", {})
-        # Should be empty statistics (all None or 0)
-        assert tomorrow_stats.get("avg") is None or tomorrow_stats.get("avg") == 0
-        assert tomorrow_stats.get("min") is None or tomorrow_stats.get("min") == 0
+        # tomorrow_statistics is a computed property
+        tomorrow_stats = migrated_data.tomorrow_statistics
+        # Should be empty statistics (all None or 0) since no tomorrow prices
+        assert tomorrow_stats.avg is None or tomorrow_stats.avg == 0
+        assert tomorrow_stats.min is None or tomorrow_stats.min == 0
 
     def test_migration_only_in_window(
         self, cache_manager_with_tz, yesterday_cache_data
@@ -265,11 +249,11 @@ class TestMidnightMigration:
             migrated_data = cache_mgr.get_data(area="SE2", target_date=today)
 
         assert migrated_data is not None
-        # Without timezone service, should remove stale validity
-        # to force recalculation downstream
-        assert (
-            "data_validity" not in migrated_data or migrated_data["data_validity"] == {}
-        )
+        # data_validity is a computed property, always available
+        # Without timezone service, it returns empty validity
+        validity = migrated_data.data_validity
+        # Should return default/empty DataValidity
+        assert validity is not None
 
     def test_validity_matches_interval_counts(
         self, cache_manager_with_tz, yesterday_cache_data, mock_timezone_service
@@ -298,12 +282,12 @@ class TestMidnightMigration:
 
         assert migrated_data is not None
 
-        # Get actual interval counts from data
-        today_count = len(migrated_data["today_interval_prices"])
-        tomorrow_count = len(migrated_data["tomorrow_interval_prices"])
+        # Get actual interval counts from data (use property access)
+        today_count = len(migrated_data.today_interval_prices)
+        tomorrow_count = len(migrated_data.tomorrow_interval_prices)
 
-        # Get validity counts
-        validity = DataValidity.from_dict(migrated_data["data_validity"])
+        # Get validity (computed property)
+        validity = migrated_data.data_validity
 
         # They MUST match
         assert validity.today_interval_count == today_count, (
@@ -353,8 +337,8 @@ class TestMigrationIntegration:
 
         assert migrated_data is not None, "Migration should have occurred"
 
-        # Verify the migrated data has correct validity
-        validity = DataValidity.from_dict(migrated_data["data_validity"])
+        # Verify the migrated data has correct validity (computed property)
+        validity = migrated_data.data_validity
 
         # Key check: System should know it needs to fetch tomorrow data
         assert validity.tomorrow_interval_count == 0

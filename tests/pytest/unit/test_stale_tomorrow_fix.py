@@ -32,10 +32,30 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from custom_components.ge_spot.coordinator.unified_price_manager import (
     UnifiedPriceManager,
 )
+from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
 from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.defaults import Defaults
 from custom_components.ge_spot.const.config import Config
 from tests.lib.mocks.hass import MockHass
+
+
+async def cancel_health_check_tasks(manager):
+    """Cancel all background health check tasks to prevent lingering tasks in tests."""
+    import asyncio
+
+    # Cancel all pending tasks with schedule_health_check
+    for task in asyncio.all_tasks():
+        if hasattr(task, "get_coro"):
+            coro_str = str(task.get_coro())
+            if (
+                "_schedule_health_check" in coro_str
+                or "_validate_all_sources" in coro_str
+            ):
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
 
 def _generate_complete_intervals(base_price=1.0):
@@ -46,6 +66,43 @@ def _generate_complete_intervals(base_price=1.0):
             interval_key = f"{h:02d}:{m:02d}"
             intervals[interval_key] = base_price
     return intervals
+
+
+def _dict_to_interval_price_data(data_dict):
+    """Convert a test dict to IntervalPriceData (for backward compatibility with existing tests).
+
+    This helps migrate tests that were creating dict mocks.
+    """
+    return IntervalPriceData(
+        source=data_dict.get("data_source", data_dict.get("source", Source.NORDPOOL)),
+        area=data_dict.get("area", "SE1"),
+        target_currency=data_dict.get(
+            "target_currency", data_dict.get("currency", "SEK")
+        ),
+        source_currency=data_dict.get(
+            "source_currency", data_dict.get("currency", "EUR")
+        ),
+        source_timezone=data_dict.get("source_timezone", "UTC"),
+        target_timezone=data_dict.get("target_timezone", "UTC"),
+        today_interval_prices=data_dict.get("today_interval_prices", {}),
+        tomorrow_interval_prices=data_dict.get("tomorrow_interval_prices", {}),
+        today_raw_prices=data_dict.get("today_raw_prices", {}),
+        tomorrow_raw_prices=data_dict.get("tomorrow_raw_prices", {}),
+        attempted_sources=data_dict.get("attempted_sources", []),
+        fallback_sources=data_dict.get("fallback_sources", []),
+        using_cached_data=data_dict.get("using_cached_data", False),
+        last_updated=data_dict.get("last_update", data_dict.get("last_updated")),
+        fetched_at=data_dict.get("fetched_at"),
+        vat_rate=data_dict.get("vat_rate", 0.0),
+        vat_included=data_dict.get("vat_included", False),
+        display_unit=data_dict.get("display_unit", "EUR/kWh"),
+        ecb_rate=data_dict.get("ecb_rate", data_dict.get("exchange_rate")),
+        ecb_updated=data_dict.get("ecb_updated"),
+        migrated_from_tomorrow=data_dict.get("migrated_from_tomorrow", False),
+        original_cache_date=data_dict.get("original_cache_date"),
+        raw_data=data_dict.get("raw_data"),
+        _tz_service=None,  # Tests usually don't need this
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -80,9 +137,36 @@ def auto_mock_core_dependencies():
         mock_fallback_manager.return_value.fetch_with_fallback = AsyncMock(
             return_value={}
         )
-        mock_cache_manager.return_value.get_data = MagicMock(return_value=None)
+
+        # Add auto-conversion wrapper for CacheManager.get_data()
+        original_get_data = MagicMock(return_value=None)
+
+        def get_data_wrapper(*args, **kwargs):
+            result = original_get_data(*args, **kwargs)
+            if result is not None and isinstance(result, dict):
+                return _dict_to_interval_price_data(result)
+            return result
+
+        mock_cache_manager.return_value.get_data = get_data_wrapper
+        mock_cache_manager.return_value.get_data.mock = (
+            original_get_data  # Store original for test configuration
+        )
         mock_cache_manager.return_value.store = MagicMock()
-        mock_data_processor.return_value.process = AsyncMock(return_value={})
+
+        # Add auto-conversion wrapper for DataProcessor.process()
+        original_process = AsyncMock(return_value={})
+
+        async def process_wrapper(*args, **kwargs):
+            result = await original_process(*args, **kwargs)
+            if result is not None and isinstance(result, dict):
+                return _dict_to_interval_price_data(result)
+            return result
+
+        mock_data_processor.return_value.process = process_wrapper
+        mock_data_processor.return_value.process.mock = (
+            original_process  # Store original for test configuration
+        )
+
         # Configure timezone service with real timezone.utc objects to support DST checks
         mock_tz_service_instance = MagicMock()
         mock_tz_service_instance.target_timezone = timezone.utc
@@ -198,9 +282,13 @@ class TestStaleTomorrowDataFix:
         }
 
         # Setup mocks
-        mock_cache.get_data.return_value = stale_cached_data.copy()
+        mock_cache.get_data.mock.return_value = _dict_to_interval_price_data(
+            stale_cached_data.copy()
+        )
         mock_fallback.return_value = fresh_data_from_api
-        mock_processor.return_value = processed_fresh_data
+        mock_processor.mock.return_value = _dict_to_interval_price_data(
+            processed_fresh_data
+        )
 
         # Mock timezone service to indicate we're in special window
         manager._tz_service.get_current_interval_key.return_value = "14:00"
@@ -209,13 +297,20 @@ class TestStaleTomorrowDataFix:
         # Execute
         result = await manager.fetch_data()
 
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
+
         # Verify: System should have detected stale tomorrow data and fetched fresh
         assert result is not None, "fetch_data should return data"
-        assert (
-            "tomorrow_interval_prices" in result
+        # Result is IntervalPriceData instance
+        assert hasattr(
+            result, "today_interval_prices"
+        ), "Result should have today_interval_prices"
+        assert hasattr(
+            result, "tomorrow_interval_prices"
         ), "Result should contain tomorrow prices"
         assert (
-            len(result["tomorrow_interval_prices"]) == 96
+            len(result.tomorrow_interval_prices) == 96
         ), "Should have 96 fresh tomorrow intervals"
 
         # Verify fresh data was fetched (not cached)
@@ -224,14 +319,14 @@ class TestStaleTomorrowDataFix:
         )
 
         # Verify cache.get_data was called to retrieve the stale cache
-        mock_cache.get_data.assert_called()
+        mock_cache.get_data.mock.assert_called()
 
         # The key assertion: verify the logic cleared stale tomorrow data
         # We can't directly assert on internal state, but we can verify the behavior:
         # If tomorrow was NOT cleared, the system would have used cached data
         # Since we see a fetch happened, the staleness check worked
         assert (
-            result["using_cached_data"] is False
+            result.using_cached_data is False
         ), "Should not use cached data when tomorrow is stale"
 
     @pytest.mark.asyncio
@@ -292,14 +387,17 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.return_value = fresh_cached_data.copy()
+        mock_cache.get_data.mock.return_value = fresh_cached_data.copy()
         mock_fallback.return_value = fresh_api_data
-        mock_processor.return_value = processed_data
+        mock_processor.mock.return_value = processed_data
         manager._tz_service.get_current_interval_key.return_value = "14:00"
         manager._tz_service.get_target_timezone.return_value = timezone.utc
 
         # Execute
         result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # Verify: Result should exist
         assert result is not None
@@ -309,13 +407,13 @@ class TestStaleTomorrowDataFix:
         #  the system would think tomorrow was missing.
         #  Since we're in special window, it would trigger fetch.
         #  But fresh data's fetched_at is from TODAY, so staleness check should skip it.
-        calls = mock_cache.get_data.call_args_list
+        calls = mock_cache.get_data.mock.call_args_list
         assert len(calls) > 0, "Cache should be checked"
 
         # The cache returned tomorrow_interval_prices with 96 intervals
         # If staleness check worked correctly, it didn't clear them
         # We can verify this by checking that the returned tomorrow count matches
-        cached_data = mock_cache.get_data.return_value
+        cached_data = mock_cache.get_data.mock.return_value
         assert "tomorrow_interval_prices" in cached_data
         assert len(cached_data["tomorrow_interval_prices"]) == 96
 
@@ -353,7 +451,9 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.return_value = stale_cached_data.copy()
+        mock_cache.get_data.mock.return_value = _dict_to_interval_price_data(
+            stale_cached_data.copy()
+        )
         manager._tz_service.get_current_interval_key.return_value = "10:00"
         manager._tz_service.get_target_timezone.return_value = timezone.utc
 
@@ -361,11 +461,14 @@ class TestStaleTomorrowDataFix:
         with patch.object(manager, "is_in_grace_period", return_value=False):
             result = await manager.fetch_data()
 
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
+
         # Verify: Outside special window, stale check doesn't apply
         # System will use cached data if rate limit prevents fetch
         assert result is not None
         # The cached data will be used (with stale tomorrow) because we're outside special window
-        assert result["using_cached_data"] is True
+        assert result.using_cached_data is True
 
     @pytest.mark.asyncio
     @freeze_time("2025-01-15 14:00:00 UTC")
@@ -418,9 +521,9 @@ class TestStaleTomorrowDataFix:
             "using_cached_data": False,
         }
 
-        mock_cache.get_data.return_value = cached_data_no_timestamp.copy()
+        mock_cache.get_data.mock.return_value = cached_data_no_timestamp.copy()
         mock_fallback.return_value = fresh_api_data
-        mock_processor.return_value = processed_data
+        mock_processor.mock.return_value = processed_data
         manager._tz_service.get_current_interval_key.return_value = "14:00"
 
         # Should not crash
@@ -459,7 +562,7 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.return_value = cached_data_bad_timestamp.copy()
+        mock_cache.get_data.mock.return_value = cached_data_bad_timestamp.copy()
         manager._tz_service.get_current_interval_key.return_value = "14:00"
 
         # Mock grace period
@@ -538,14 +641,21 @@ class TestStaleTomorrowDataFix:
             },
         }
 
-        mock_cache.get_data.return_value = stale_cached_data.copy()
+        mock_cache.get_data.mock.return_value = _dict_to_interval_price_data(
+            stale_cached_data.copy()
+        )
         mock_fallback.return_value = fresh_api_data
-        mock_processor.return_value = processed_fresh_data
+        mock_processor.mock.return_value = _dict_to_interval_price_data(
+            processed_fresh_data
+        )
         manager._tz_service.get_current_interval_key.return_value = "14:00"
         manager._tz_service.get_target_timezone.return_value = timezone.utc
 
         # Execute
         result = await manager.fetch_data()
+
+        # Cleanup background tasks
+        await cancel_health_check_tasks(manager)
 
         # CRITICAL ASSERTION: Verify fresh data was fetched
         # If data_validity was NOT cleared (the bug), system would think tomorrow=96
@@ -555,7 +665,7 @@ class TestStaleTomorrowDataFix:
         # and triggers fresh fetch, returning using_cached_data=False
         assert result is not None, "fetch_data should return data"
         assert (
-            result["using_cached_data"] is False
+            result.using_cached_data is False
         ), "Should fetch fresh data when both tomorrow AND data_validity are stale"
 
         # Verify the fetch was actually called (not using cache)
@@ -564,9 +674,9 @@ class TestStaleTomorrowDataFix:
         )
 
         # Verify we got fresh tomorrow data
-        assert (
-            "tomorrow_interval_prices" in result
+        assert hasattr(
+            result, "tomorrow_interval_prices"
         ), "Result should have tomorrow prices"
         assert (
-            len(result["tomorrow_interval_prices"]) == 96
+            len(result.tomorrow_interval_prices) == 96
         ), "Should have 96 fresh tomorrow intervals"

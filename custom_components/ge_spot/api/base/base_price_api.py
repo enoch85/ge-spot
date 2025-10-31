@@ -9,7 +9,13 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class BasePriceAPI(ABC):
-    """Abstract base class for all price APIs."""
+    """Abstract base class for all price APIs.
+
+    Subclasses must define SOURCE_TYPE as a class attribute.
+    This allows accessing source type without instantiation.
+    """
+
+    SOURCE_TYPE: str = None  # Override in subclasses
 
     def __init__(
         self,
@@ -31,14 +37,20 @@ class BasePriceAPI(ABC):
         self.client = None
         self.timezone_service = timezone_service
 
-    @abstractmethod
     def _get_source_type(self) -> str:
-        """Get the source type identifier.
+        """Get the source type identifier from class attribute.
 
         Returns:
             Source type identifier
+
+        Raises:
+            NotImplementedError: If SOURCE_TYPE is not defined in subclass
         """
-        pass
+        if self.SOURCE_TYPE is None:
+            raise NotImplementedError(
+                f"{self.__class__.__name__} must define SOURCE_TYPE class attribute"
+            )
+        return self.SOURCE_TYPE
 
     @abstractmethod
     def _get_base_url(self) -> str:

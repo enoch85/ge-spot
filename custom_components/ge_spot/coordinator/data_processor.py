@@ -23,6 +23,7 @@ from ..timezone.timezone_converter import TimezoneConverter
 from ..price.currency_converter import CurrencyConverter
 from ..api.base.price_parser import BasePriceParser
 from .data_validity import DataValidity, calculate_data_validity, parse_interval_key
+from .data_models import IntervalPriceData
 
 # Parser imports for get_parser method
 from ..api.parsers.entsoe_parser import EntsoeParser
@@ -196,7 +197,15 @@ class DataProcessor:
             _LOGGER.error("Failed to initialize currency converter")
             raise RuntimeError("Currency converter could not be initialized.")
 
-    async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def process(self, data: Dict[str, Any]) -> IntervalPriceData:
+        """Process raw API data and return IntervalPriceData.
+
+        Args:
+            data: Raw data from API adapter
+
+        Returns:
+            IntervalPriceData instance with processed prices and metadata
+        """
         # Accepts raw data from API adapter (e.g. entsoe.py)
         # Expects keys: 'interval_raw', 'timezone', 'currency', 'source_name', ...
         await self._ensure_exchange_service()
@@ -775,7 +784,11 @@ class DataProcessor:
         _LOGGER.info(
             f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['today_interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}"
         )
-        return processed_result
+        # Convert to IntervalPriceData and return it directly (not converted to dict)
+        price_data = IntervalPriceData.from_cache_dict(
+            processed_result, self._tz_service
+        )
+        return price_data
 
     def _get_parser(self, source_name: str) -> Optional[BasePriceParser]:
         """Get the appropriate parser instance based on the source name."""
@@ -893,9 +906,25 @@ class DataProcessor:
         )
 
     def _generate_empty_processed_result(self, data, error=None):
-        # No need to ensure exchange service here as it doesn't use it directly
-        # when generating the *initial* empty structure.
-        return {
+        """Generate empty IntervalPriceData when processing fails.
+
+        IMPORTANT: This returns IntervalPriceData with EMPTY price dicts.
+        This is INTENTIONAL and SAFE because:
+        1. unified_price_manager checks for empty prices and adds "error" field
+        2. Validation logic rejects data with "error" field
+        3. Fallback sources or cache are tried instead
+        4. Empty prices NEVER reach sensors
+
+        This method preserves source metadata while signaling processing failure.
+
+        Args:
+            data: Original data dict with metadata
+            error: Error message (currently unused, kept for API compatibility)
+
+        Returns:
+            IntervalPriceData with empty prices (will be rejected by validation)
+        """
+        empty_dict = {
             "source": data.get("source", "unknown"),
             "area": self.area,
             "source_currency": data.get("currency"),
@@ -903,28 +932,24 @@ class DataProcessor:
             "source_timezone": data.get("source_timezone"),
             "target_timezone": (
                 str(self._tz_service.area_timezone) if self._tz_service else None
-            ),  # Use area_timezone as suggested by error
+            ),
             "today_interval_prices": {},
             "tomorrow_interval_prices": {},
             "raw_interval_prices_original": data.get(
                 "today_interval_prices"
             ),  # Store original if available
-            "current_price": None,
-            "next_interval_price": None,
-            "current_interval_key": None,
-            "next_interval_key": None,
-            "statistics": PriceStatistics().to_dict(),
-            "tomorrow_statistics": PriceStatistics().to_dict(),
-            "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
+            "vat_rate": self.vat_rate if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,
             "raw_data": data.get("raw_data"),
             "ecb_rate": None,
             "ecb_updated": None,
-            "has_tomorrow_prices": False,
             "attempted_sources": data.get("attempted_sources", []),
             "fallback_sources": data.get("fallback_sources", []),
             "using_cached_data": data.get("using_cached_data", False),
-            "error": error or "No data available",
             "fetched_at": data.get("fetched_at"),
         }
+
+        # Convert to IntervalPriceData and return it directly (not converted to dict)
+        price_data = IntervalPriceData.from_cache_dict(empty_dict, self._tz_service)
+        return price_data

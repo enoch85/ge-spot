@@ -8,7 +8,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..utils.advanced_cache import AdvancedCache
-from ..const.defaults import Defaults  # Import Defaults for CACHE_TTL
+from ..const.defaults import Defaults
+from .data_models import IntervalPriceData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class CacheManager:
         self,
         area: str,
         source: str,
-        data: Dict[str, Any],
+        data: IntervalPriceData,
         timestamp: Optional[datetime] = None,
         target_date: Optional[date] = None,
     ) -> None:
@@ -45,22 +46,19 @@ class CacheManager:
         Args:
             area: The area code
             source: The source identifier
-            data: The data to store
+            data: IntervalPriceData instance to store
             timestamp: Optional timestamp of when the data was fetched (defaults to now)
             target_date: Optional specific date the data is for (defaults to timestamp's date)
         """
+        # Convert IntervalPriceData to cache dict (only source data, no computed fields)
+        cache_dict = data.to_cache_dict()
+
         if not timestamp:
-            timestamp = (
-                dt_util.utcnow()
-            )  # Use aware UTC timestamp by default if none provided
+            timestamp = dt_util.utcnow()
         elif timestamp.tzinfo is None:
-            # Do not assume UTC for naive timestamps. This indicates an issue.
             _LOGGER.error(
                 f"Attempted to store data for {area} from {source} with a naive timestamp: {timestamp}. Timezone information is required."
             )
-            # Option 1: Raise an error
-            # raise ValueError("Naive timestamp provided to cache store. Timezone-aware timestamp is required.")
-            # Option 2: Log error and skip caching this entry (safer for now)
             return
 
         # Use provided target_date if available, otherwise use timestamp's date
@@ -70,30 +68,24 @@ class CacheManager:
 
         cache_key = self._generate_cache_key(area, source, actual_target_date)
 
-        # FIX: Ensure the data dictionary itself contains source_timezone before storing
-        source_timezone = data.get("source_timezone")
+        source_timezone = cache_dict.get("source_timezone")
         if not source_timezone:
-            # This is normal during validation when storing raw data (before processing adds timezone)
             _LOGGER.debug(
-                f"No source_timezone in data for area {area}, source {source} - may be raw validation data"
+                f"No source_timezone in data for area {area}, source {source}"
             )
-            # Optionally, add a default or raise an error if this should never happen
-        else:
-            # Ensure the key is present in the data dictionary being stored
-            data["source_timezone"] = source_timezone
 
         metadata = {
             "area": area,
             "source": source,
-            "target_date": actual_target_date.isoformat(),  # Store target date in metadata
-            "timestamp": timestamp.isoformat(),  # Store as UTC ISO string
-            "source_timezone": source_timezone,  # Store in metadata as well
+            "target_date": actual_target_date.isoformat(),
+            "timestamp": timestamp.isoformat(),
+            "source_timezone": source_timezone,
         }
 
-        # Use AdvancedCache.set() - TTL is handled by AdvancedCache based on its config
-        self._price_cache.set(cache_key, data, metadata=metadata)
+        # Store only source data (no computed fields)
+        self._price_cache.set(cache_key, cache_dict, metadata=metadata)
         _LOGGER.debug(
-            f"Stored cache entry for key: {cache_key} with source_timezone: {source_timezone}"
+            f"Stored IntervalPriceData for {area}/{source}/{actual_target_date}"
         )
 
     def _generate_cache_key(self, area: str, source: str, target_date: date) -> str:
@@ -107,7 +99,7 @@ class CacheManager:
         target_date: date,
         source: Optional[str] = None,
         max_age_minutes: Optional[int] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[IntervalPriceData]:
         """Retrieve data from cache for a specific date if valid.
 
         Args:
@@ -118,7 +110,28 @@ class CacheManager:
                              If None, only the entry's TTL is checked.
 
         Returns:
-            Dictionary with cached data, or None if not available or too old.
+            IntervalPriceData instance, or None if not available or too old.
+        """
+        # Get raw dict from cache
+        cache_dict = self._get_data_dict(area, target_date, source, max_age_minutes)
+
+        if not cache_dict:
+            return None
+
+        # Convert to IntervalPriceData (properties will compute automatically)
+        return IntervalPriceData.from_cache_dict(cache_dict, self._timezone_service)
+
+    def _get_data_dict(
+        self,
+        area: str,
+        target_date: date,
+        source: Optional[str] = None,
+        max_age_minutes: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Internal method to retrieve raw dict from cache.
+
+        Returns:
+            Dictionary with source data only, or None if not available.
         """
         # If source is specified, try that first using AdvancedCache.get()
         if source:
@@ -237,99 +250,37 @@ class CacheManager:
                         ):
                             found_source = metadata.get("source", "unknown")
                             _LOGGER.info(
-                                "Found yesterday's cached data from %s with tomorrow's prices for area %s. "
-                                "Using it for today's prices after midnight transition.",
+                                "Found yesterday's cache from %s with tomorrow's prices for %s. "
+                                "Migrating to today.",
                                 found_source,
                                 area,
                             )
 
-                            # Create a shallow copy to prevent cache corruption
-                            # (We only modify top-level keys, so shallow copy is sufficient and much faster)
-                            data_copy = dict(entry_data)
+                            # Create IntervalPriceData from cache
+                            price_data = IntervalPriceData.from_cache_dict(
+                                entry_data, self._timezone_service
+                            )
 
-                            # Move tomorrow's prices to today's prices
-                            data_copy["today_interval_prices"] = data_copy[
-                                "tomorrow_interval_prices"
-                            ]
-                            data_copy["tomorrow_interval_prices"] = {}
+                            # Migration is now trivial!
+                            price_data.migrate_to_new_day()
 
-                            # Also move tomorrow's raw prices if present (Issue #40 compatibility)
-                            if "tomorrow_raw_prices" in data_copy:
-                                data_copy["today_raw_prices"] = data_copy[
-                                    "tomorrow_raw_prices"
-                                ]
-                                data_copy["tomorrow_raw_prices"] = {}
+                            _LOGGER.info(
+                                f"Migration complete for {area}. Validity auto-recalculated: "
+                                f"today={price_data.data_validity.today_interval_count}, "
+                                f"tomorrow={price_data.data_validity.tomorrow_interval_count}"
+                            )
 
-                            # Clear tomorrow statistics since we have no tomorrow data
-                            if "tomorrow_statistics" in data_copy:
-                                from ..api.base.data_structure import PriceStatistics
-
-                                data_copy["tomorrow_statistics"] = (
-                                    PriceStatistics().to_dict()
-                                )
-
-                            # CRITICAL FIX for Issue #44: Recalculate data_validity after migration
-                            # The old validity claimed tomorrow=96 but we just emptied tomorrow_interval_prices
-                            # This mismatch caused the system to think it had complete data when it didn't
-                            if self._timezone_service:
-                                try:
-                                    from .data_validity import calculate_data_validity
-
-                                    current_interval_key = (
-                                        self._timezone_service.get_current_interval_key()
-                                    )
-                                    target_timezone = str(
-                                        self._timezone_service.target_timezone
-                                    )
-
-                                    new_validity = calculate_data_validity(
-                                        interval_prices=data_copy[
-                                            "today_interval_prices"
-                                        ],
-                                        tomorrow_interval_prices={},  # Explicitly empty after migration
-                                        now=now,
-                                        current_interval_key=current_interval_key,
-                                        target_timezone=target_timezone,
-                                    )
-
-                                    data_copy["data_validity"] = new_validity.to_dict()
-
-                                    _LOGGER.info(
-                                        f"Recalculated data validity after midnight migration for {area}: {new_validity}"
-                                    )
-                                except Exception as e:
-                                    _LOGGER.warning(
-                                        f"Failed to recalculate data validity during migration for {area}: {e}",
-                                        exc_info=True,
-                                    )
-                                    # If recalculation fails, at least remove the stale validity
-                                    # to force recalculation downstream
-                                    if "data_validity" in data_copy:
-                                        del data_copy["data_validity"]
-                            else:
-                                _LOGGER.warning(
-                                    f"Timezone service not available for validity recalculation during migration for {area}. "
-                                    "Removing stale validity to force recalculation."
-                                )
-                                # Remove stale validity if we can't recalculate
-                                if "data_validity" in data_copy:
-                                    del data_copy["data_validity"]
-
-                            # Mark as migrated for debugging purposes
-                            data_copy["migrated_from_tomorrow"] = True
-                            data_copy["original_cache_date"] = yesterday.isoformat()
-
-                            # Store this migrated data with today's date so we don't need to migrate again
+                            # Store migrated data
                             self.store(
                                 area=area,
                                 source=found_source,
-                                data=data_copy,
+                                data=price_data,
                                 timestamp=now,
                                 target_date=current_date,
                             )
 
-                            # Return the migrated data
-                            return data_copy
+                            # Return as dict for now (will be converted back to IntervalPriceData by get_data)
+                            return price_data.to_cache_dict()
 
         if not valid_entries_with_timestamp:
             _LOGGER.debug(
@@ -351,7 +302,7 @@ class CacheManager:
         """Check if a cache entry info dict is within the specified max age."""
         created_at_str = entry_info.get("created_at")
         if not created_at_str:
-            return False  # Cannot determine age
+            return False
 
         try:
             created_at = dt_util.parse_datetime(created_at_str)
@@ -359,7 +310,7 @@ class CacheManager:
                 return False
 
             if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)  # Assume UTC
+                created_at = created_at.replace(tzinfo=timezone.utc)
 
             now_utc = datetime.now(timezone.utc)
             max_age_delta = timedelta(minutes=max_age_minutes)
@@ -375,7 +326,7 @@ class CacheManager:
                 _LOGGER.debug(
                     f"Cache entry timestamp {created_at_str} is slightly in the future. Capping at current time for age check."
                 )
-                created_at = now_utc  # Cap at current time for age calculation
+                created_at = now_utc
 
             return (now_utc - created_at) <= max_age_delta
         except Exception as e:
@@ -438,51 +389,38 @@ class CacheManager:
         self._price_cache._evict_if_needed()
         _LOGGER.debug("Cache cleanup triggered.")
 
-    def update_cache(self, processed_data: Dict[str, Any]):
-        """Update the cache using the store method, extracting the target date."""
-        if not processed_data or not isinstance(processed_data, dict):
+    def update_cache(self, price_data: IntervalPriceData):
+        """Update the cache with IntervalPriceData.
+
+        Args:
+            price_data: IntervalPriceData instance to cache
+        """
+        if not price_data or not isinstance(price_data, IntervalPriceData):
             _LOGGER.warning("Attempted to update cache with invalid data.")
             return
 
-        area = processed_data.get("area")
-        # Use 'data_source' if available (set by processor), fallback to 'source'
-        source = processed_data.get("data_source") or processed_data.get("source")
-        # Determine the target date - needs logic based on processed_data content
-        # Assuming 'last_updated' or similar field reflects the primary date
-        # THIS IS A PLACEHOLDER - Needs proper logic based on how processed_data indicates its date scope
-        target_date = dt_util.now().date()  # Default to today, needs refinement
-        last_updated_str = processed_data.get("last_updated")
-        try:
-            if last_updated_str:
-                # Attempt to parse the date from last_updated timestamp
-                ts = dt_util.parse_datetime(last_updated_str)
-                if ts:
-                    # Use the date part of the timestamp, assuming it reflects the data's target day
-                    # Consider the timezone of the timestamp if available
-                    target_date = ts.date()
-            else:
-                _LOGGER.warning(
-                    "Could not determine target_date from processed_data, defaulting to today."
-                )
-        except Exception as e:
-            _LOGGER.warning(
-                f"Error parsing date from last_updated '{last_updated_str}', defaulting to today: {e}"
-            )
+        area = price_data.area
+        source = price_data.source
 
         if not area or not source:
             _LOGGER.warning(
-                "Cannot update cache: Area or Source missing in processed data."
+                "Cannot update cache: Area or Source missing in price data."
             )
             return
 
-        _LOGGER.debug(
-            f"Updating cache for area {area}, source {source}, date {target_date.isoformat()} via store method."
-        )
-        # Delegate saving to the store method which correctly uses AdvancedCache.set
-        # Pass the processed data itself as the value to store
-        self.store(
-            area=area, source=source, data=processed_data, target_date=target_date
-        )  # Corrected parameter order
+        # Determine target date from fetched_at or use today
+        target_date = dt_util.now().date()
+        if price_data.fetched_at:
+            try:
+                ts = dt_util.parse_datetime(price_data.fetched_at)
+                if ts:
+                    target_date = ts.date()
+            except Exception as e:
+                _LOGGER.warning(f"Error parsing fetched_at, using today: {e}")
+
+        _LOGGER.debug(f"Updating cache for {area}/{source}/{target_date.isoformat()}")
+
+        self.store(area=area, source=source, data=price_data, target_date=target_date)
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get statistics about the cache."""

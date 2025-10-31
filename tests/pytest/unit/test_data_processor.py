@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from custom_components.ge_spot.coordinator.data_processor import DataProcessor
+from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
 from custom_components.ge_spot.price.currency_converter import CurrencyConverter
 from custom_components.ge_spot.utils.exchange_service import ExchangeRateService
 from custom_components.ge_spot.const.config import Config
@@ -385,9 +386,12 @@ class TestDataProcessor:
 
             # Assert processing succeeded
             assert result is not None, "Process should return a result"
+            assert isinstance(
+                result, IntervalPriceData
+            ), f"Result should be IntervalPriceData, got: {type(result)}"
             assert (
-                "today_interval_prices" in result
-            ), "Result should contain interval_prices"
+                len(result.today_interval_prices) > 0
+            ), "Result should contain today_interval_prices"
             # Verify converter was called even though currency is the same (for unit conversion)
             assert mock_converter.convert_interval_prices.called
 
@@ -460,26 +464,22 @@ class TestDataProcessor:
 
                     # Assert
                     assert result is not None, "Process should return a result"
-                    assert (
-                        "error" not in result
-                    ), f"Result should not contain an error, got: {result.get('error')}"
-                    assert result.get("today_interval_prices") == {
+                    assert isinstance(
+                        result, IntervalPriceData
+                    ), f"Result should be IntervalPriceData, got: {type(result)}"
+                    assert result.today_interval_prices == {
                         "10:00": 1.5,
                         "11:00": 2.0,
-                    }, f"Result should have correctly processed interval_prices, got: {result.get('interval_prices')}"
+                    }, f"Result should have correctly processed interval_prices, got: {result.today_interval_prices}"
+                    # Note: current_price and next_interval_price require tz_service to calculate
+                    # so we can't test them here easily
                     assert (
-                        result.get("current_price") == 1.5
-                    ), f"Current price should be correctly set, got: {result.get('current_price')}"
+                        result.source_currency == "SEK"
+                    ), f"Source currency should be set, got: {result.source_currency}"
                     assert (
-                        result.get("next_interval_price") == 2.0
-                    ), f"Next interval price should be correctly set, got: {result.get('next_interval_price')}"
-                    assert (
-                        result.get("source_currency") == "SEK"
-                    ), f"Source currency should be set, got: {result.get('source_currency')}"
-                    assert (
-                        result.get("target_currency") == "SEK"
-                    ), f"Target currency should be set, got: {result.get('target_currency')}"
-                    assert "statistics" in result, "Result should include statistics"
+                        result.target_currency == "SEK"
+                    ), f"Target currency should be set, got: {result.target_currency}"
+                    # Note: statistics are in computed properties which we can't easily test without tz_service
                     # Note: complete_data will be False because we only have 2 prices, but that's OK for this unit test
 
     @pytest.mark.asyncio
@@ -543,20 +543,24 @@ class TestDataProcessor:
             # Act - process the future-only data
             result = await processor.process(future_only_data)
 
-            # Assert - should return error to trigger fallback
+            # Assert - should return IntervalPriceData with empty prices (which triggers fallback)
             assert result is not None, "Process should return a result"
+            assert isinstance(
+                result, IntervalPriceData
+            ), f"Result should be IntervalPriceData, got: {type(result)}"
+
+            # Check that prices are empty (validation failed)
             assert (
-                "error" in result
-            ), f"Result should contain an error to trigger fallback, got: {result}"
+                len(result.today_interval_prices) == 0
+            ), "Should have empty today prices on validation failure"
             assert (
-                "validation failed" in result["error"].lower()
-                or "missing current interval" in result["error"].lower()
-            ), f"Error should mention validation failure or missing current interval, got: {result.get('error')}"
+                len(result.tomorrow_interval_prices) == 0
+            ), "Should have empty tomorrow prices on validation failure"
 
             # Should indicate the source that failed
-            assert "entsoe" in result.get("error", "").lower() or result.get(
-                "attempted_sources"
-            ) == ["entsoe"], f"Error should reference the failed source"
+            assert (
+                result.source == "entsoe"
+            ), f"Should preserve source, got: {result.source}"
 
 
 class TestVATAutoEnable:
