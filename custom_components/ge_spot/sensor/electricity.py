@@ -66,9 +66,7 @@ async def async_setup_entry(
     get_next_interval_price = lambda data: data.next_interval_price
     # Define a simple additional attributes function
     get_base_attrs = lambda data: {
-        "tomorrow_valid": (
-            data.data_validity.tomorrow_interval_count > 0 if data else False
-        )
+        "tomorrow_valid": data.tomorrow_valid if data else False
     }
 
     entities = []
