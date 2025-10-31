@@ -105,49 +105,55 @@ class ExtremaPriceSensor(PriceValueSensor):
         """Initialize the extrema price sensor."""
         self._day_offset = day_offset
         self._extrema_type = extrema_type
-        # Use the correct keys used by DataProcessor
-        self._stats_key = "statistics" if day_offset == 0 else "tomorrow_statistics"
 
         # Create value extraction function
         def extract_value(data):
-            if (
-                self._stats_key not in data or not data[self._stats_key]
-            ):  # Check if stats dict exists and is not empty
+            if not data:
+                _LOGGER.debug(f"ExtremaSensor {self.entity_id}: No data available")
+                return None
+
+            # data is IntervalPriceData object - use properties
+            stats = data.statistics if day_offset == 0 else data.tomorrow_statistics
+            if not stats:
                 _LOGGER.debug(
-                    f"Stats key '{self._stats_key}' not found or empty in data for {self.entity_id}"
+                    f"ExtremaSensor {self.entity_id}: statistics not available for day_offset={day_offset}"
                 )
                 return None
-            stats_dict = data[self._stats_key]
-            key = "min" if self._extrema_type == "min" else "max"
-            value = stats_dict.get(key)
-            # Add specific logging for this sensor type
+
+            # stats is PriceStatistics object - access as attribute
+            value = stats.min if extrema_type == "min" else stats.max
             _LOGGER.debug(
-                f"ExtremaSensor {self.entity_id}: Reading '{key}' from '{self._stats_key}'. Found value: {value}. Stats dict: {stats_dict}"
+                f"ExtremaSensor {self.entity_id}: Reading '{extrema_type}' from statistics. Found value: {value}."
             )
             return value
 
         def get_timestamp(data):
-            stats = data.get(self._stats_key, {})  # Use .get() for safety
-            timestamp_key = f"{self._extrema_type}_timestamp"
-            price_key = "min" if self._extrema_type == "min" else "max"
-            price_value = stats.get(price_key)
+            if not data:
+                return {}
+
+            # data is IntervalPriceData object - use properties
+            stats = data.statistics if day_offset == 0 else data.tomorrow_statistics
+            if not stats:
+                return {}
+
+            # Get timestamp and price from PriceStatistics object
+            timestamp = (
+                stats.min_timestamp if extrema_type == "min" else stats.max_timestamp
+            )
+            price_value = stats.min if extrema_type == "min" else stats.max
 
             # Format the price value
             if isinstance(price_value, (int, float)):
                 price_value = round(price_value, 2)
 
-            if timestamp_key in stats:
-                timestamp = stats[timestamp_key]
-                if timestamp:
-                    try:
-                        dt = datetime.fromisoformat(timestamp)
-                        # Use HA's datetime format
-                        formatted_time = dt_util.as_local(dt).isoformat(
-                            timespec="minutes"
-                        )
-                        return {"timestamp": formatted_time, "value": price_value}
-                    except (ValueError, TypeError):
-                        return {"timestamp": timestamp, "value": price_value}
+            if timestamp:
+                try:
+                    dt = datetime.fromisoformat(timestamp)
+                    # Use HA's datetime format
+                    formatted_time = dt_util.as_local(dt).isoformat(timespec="minutes")
+                    return {"timestamp": formatted_time, "value": price_value}
+                except (ValueError, TypeError):
+                    return {"timestamp": timestamp, "value": price_value}
                 return {"timestamp": timestamp, "value": price_value}
             return {}
 
@@ -197,16 +203,24 @@ class PriceStatisticSensor(PriceValueSensor):
 
         # Create value extraction function
         def extract_value(data):
-            # Use .get() for safety and the correct key "statistics"
-            stats = data.get("statistics", {})
-            if not stats:
+            # data is IntervalPriceData object, not dict - use properties
+            if not data:
                 _LOGGER.debug(
-                    f"PriceStatisticSensor {self.entity_id}: 'statistics' dictionary not found or empty in data."
+                    f"PriceStatisticSensor {self.entity_id}: No data available."
                 )
                 return None
-            value = stats.get(stat_type)
+
+            stats = data.statistics
+            if not stats:
+                _LOGGER.debug(
+                    f"PriceStatisticSensor {self.entity_id}: statistics property returned empty."
+                )
+                return None
+
+            # stats is PriceStatistics object - access as attribute
+            value = getattr(stats, stat_type, None)
             _LOGGER.debug(
-                f"PriceStatisticSensor {self.entity_id}: Reading '{stat_type}' from 'statistics'. Found value: {value}. Stats dict: {stats}"
+                f"PriceStatisticSensor {self.entity_id}: Reading '{stat_type}' from statistics. Found value: {value}."
             )
             return value
 
@@ -240,31 +254,38 @@ class PriceDifferenceSensor(PriceValueSensor):
 
         # Create value extraction function
         def extract_value(data):
-            value1 = data.get(value1_key)
-            if value1_key == "current_price" and value1 is None:
-                # Try to get from statistics
-                stats = data.get("statistics", {})
-                value1 = stats.get(
-                    "current"
-                )  # Assuming 'current' might exist in stats, otherwise this needs adjustment
+            if not data:
                 _LOGGER.debug(
-                    f"PriceDifferenceSensor {self.entity_id}: Fallback for current_price from statistics: {value1}"
+                    f"PriceDifferenceSensor {self.entity_id}: No data available."
+                )
+                return None
+
+            # data is IntervalPriceData object - use properties
+            value1 = None
+            if value1_key == "current_price":
+                value1 = data.current_price
+                _LOGGER.debug(
+                    f"PriceDifferenceSensor {self.entity_id}: current_price from property: {value1}"
+                )
+            else:
+                # Try to get as property
+                value1 = getattr(data, value1_key, None)
+                _LOGGER.debug(
+                    f"PriceDifferenceSensor {self.entity_id}: {value1_key} from property: {value1}"
                 )
 
             value2 = None
             if value2_key == "average":
-                # Get from statistics
-                stats = data.get("statistics", {})
-                value2 = stats.get(
-                    "avg"
-                )  # Fixed: use 'avg' to match PriceStatistics dataclass
+                # Get from statistics property
+                stats = data.statistics
+                value2 = stats.avg if stats else None
                 _LOGGER.debug(
                     f"PriceDifferenceSensor {self.entity_id}: Reading average from statistics: {value2}"
                 )
             else:
-                value2 = data.get(value2_key)
+                value2 = getattr(data, value2_key, None)
                 _LOGGER.debug(
-                    f"PriceDifferenceSensor {self.entity_id}: Reading {value2_key} directly: {value2}"
+                    f"PriceDifferenceSensor {self.entity_id}: Reading {value2_key} as property: {value2}"
                 )
 
             if value1 is None or value2 is None:
@@ -311,29 +332,37 @@ class PricePercentSensor(PriceValueSensor):
 
         # Create value extraction function
         def extract_value(data):
-            value = data.get(value_key)
-            if value_key == "current_price" and value is None:
-                # Try to get from statistics
-                stats = data.get("statistics", {})
-                value = stats.get("current")  # Assuming 'current' might exist in stats
+            if not data:
                 _LOGGER.debug(
-                    f"PricePercentSensor {self.entity_id}: Fallback for current_price from statistics: {value}"
+                    f"PricePercentSensor {self.entity_id}: No data available."
+                )
+                return None
+
+            # data is IntervalPriceData object - use properties
+            value = None
+            if value_key == "current_price":
+                value = data.current_price
+                _LOGGER.debug(
+                    f"PricePercentSensor {self.entity_id}: current_price from property: {value}"
+                )
+            else:
+                value = getattr(data, value_key, None)
+                _LOGGER.debug(
+                    f"PricePercentSensor {self.entity_id}: {value_key} from property: {value}"
                 )
 
             reference = None
             if reference_key == "average":
-                # Get from statistics
-                stats = data.get("statistics", {})
-                reference = stats.get(
-                    "avg"
-                )  # Fixed: use 'avg' to match PriceStatistics dataclass
+                # Get from statistics property
+                stats = data.statistics
+                reference = stats.avg if stats else None
                 _LOGGER.debug(
                     f"PricePercentSensor {self.entity_id}: Reading average from statistics: {reference}"
                 )
             else:
-                reference = data.get(reference_key)
+                reference = getattr(data, reference_key, None)
                 _LOGGER.debug(
-                    f"PricePercentSensor {self.entity_id}: Reading {reference_key} directly: {reference}"
+                    f"PricePercentSensor {self.entity_id}: Reading {reference_key} as property: {reference}"
                 )
 
             if value is None or reference is None or reference == 0:

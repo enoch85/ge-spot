@@ -61,11 +61,13 @@ async def async_setup_entry(
         "entry_id": config_entry.entry_id,
     }
 
-    # Define value extraction functions
-    get_current_price = lambda data: data.get("current_price")
-    get_next_interval_price = lambda data: data.get("next_interval_price")
+    # Define value extraction functions (data is IntervalPriceData object, not dict)
+    get_current_price = lambda data: data.current_price
+    get_next_interval_price = lambda data: data.next_interval_price
     # Define a simple additional attributes function
-    get_base_attrs = lambda data: {"tomorrow_valid": data.get("tomorrow_valid", False)}
+    get_base_attrs = lambda data: {
+        "tomorrow_valid": data.data_validity.tomorrow_valid if data else False
+    }
 
     entities = []
 
@@ -163,7 +165,9 @@ async def async_setup_entry(
 
     # Tomorrow Average price sensor
     # Define value extraction function for tomorrow average
-    get_tomorrow_avg_price = lambda data: data.get("tomorrow_statistics", {}).get("avg")
+    get_tomorrow_avg_price = lambda data: (
+        data.tomorrow_statistics.avg if data and data.tomorrow_statistics else None
+    )
     entities.append(
         TomorrowAveragePriceSensor(
             coordinator,
