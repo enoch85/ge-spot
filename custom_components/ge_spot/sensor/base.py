@@ -127,16 +127,18 @@ class BaseElectricityPriceSensor(SensorEntity):
         source_info = {}
 
         # Show validated sources (what's been tested and working)
-        if self.coordinator.data and hasattr(self.coordinator, 'price_manager'):
+        if self.coordinator.data and hasattr(self.coordinator, "price_manager"):
             # Get live validated sources from coordinator's price manager (not cached snapshot)
             validated_sources = self.coordinator.price_manager.get_validated_sources()
             if validated_sources:
                 source_info["validated_sources"] = validated_sources
 
         # Show failed sources with details
-        if self.coordinator.data and hasattr(self.coordinator, 'price_manager'):
+        if self.coordinator.data and hasattr(self.coordinator, "price_manager"):
             # Get live failed source details from coordinator's price manager
-            failed_source_details = self.coordinator.price_manager.get_failed_source_details()
+            failed_source_details = (
+                self.coordinator.price_manager.get_failed_source_details()
+            )
             if failed_source_details:
                 source_info["failed_sources"] = failed_source_details
 

@@ -44,9 +44,17 @@ async def main():
     # Get area code from command line or use default
     area_code = sys.argv[1] if len(sys.argv) > 1 else "SE3"
 
-    # Map area code to ENTSOE EIC code if possible
-    entsoe_code = AreaMapping.ENTSOE_MAPPING.get(area_code, area_code)
-    logger.info(f"Testing ENTSOE API for area: {area_code} (EIC: {entsoe_code})")
+    # The API will map area code to ENTSOE EIC code internally
+    # Just log what mapping will be used
+    entsoe_code = AreaMapping.ENTSOE_MAPPING.get(area_code.upper())
+    if entsoe_code:
+        logger.info(
+            f"Testing ENTSOE API for area: {area_code} (will map to EIC: {entsoe_code})"
+        )
+    else:
+        logger.info(
+            f"Testing ENTSOE API for area: {area_code} (no mapping found, may fail)"
+        )
 
     # Initialize API with config dictionary
     config = {"api_key": api_key}
@@ -55,9 +63,10 @@ async def main():
     # Test connection
     logger.info("Testing API connection...")
     try:
-        # Fetch raw data
+        # Fetch raw data - pass the area code, not the EIC code
+        # The API will handle the mapping internally
         logger.info("Fetching data from ENTSOE API...")
-        raw_data = await api.fetch_raw_data(entsoe_code)
+        raw_data = await api.fetch_raw_data(area_code)
 
         # Check if fetch failed (returns None or error dict)
         if raw_data is None:

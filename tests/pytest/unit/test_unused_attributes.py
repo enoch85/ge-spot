@@ -197,9 +197,7 @@ def test_all_assigned_attributes_are_defined():
                             )
 
     if undefined_assignments:
-        report = [
-            "\n\nFound assignments to undefined IntervalPriceData attributes:"
-        ]
+        report = ["\n\nFound assignments to undefined IntervalPriceData attributes:"]
         report.extend(f"  - {item}" for item in undefined_assignments)
         report.append(
             "\nThese attributes should be added to the IntervalPriceData dataclass."
