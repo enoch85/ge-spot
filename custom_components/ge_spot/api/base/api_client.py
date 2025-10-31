@@ -27,6 +27,8 @@ class ApiClient:
         self._semaphore = asyncio.Semaphore(pool_size)
         self._timeout = aiohttp.ClientTimeout(total=30)
         self._headers = {"User-Agent": "GE-Spot/1.0", "Accept": "application/json"}
+        self._consecutive_error_counts = {}
+        self._rate_limit_detected = {}
 
     async def get(
         self,
@@ -180,6 +182,9 @@ class ApiClient:
                     ) as response:
                         # Check for HTTP errors
                         if response.status != 200:
+                            # Track consecutive errors for rate limit detection
+                            self._track_error_response(url, response.status)
+
                             _LOGGER.error(
                                 f"API request failed with status {response.status}: {url}"
                             )
@@ -207,6 +212,9 @@ class ApiClient:
                                     "message": f"HTTP {response.status}",
                                     "url": url,
                                 }
+
+                        # Success - reset error tracking
+                        self._reset_error_tracking(url)
 
                         # Process successful response based on format parameter or content type
                         if response_format:
@@ -245,6 +253,9 @@ class ApiClient:
                             timeout=timeout_obj,
                         ) as response:
                             if response.status != 200:
+                                # Track consecutive errors for rate limit detection
+                                self._track_error_response(url, response.status)
+
                                 _LOGGER.error(
                                     f"API request failed with status {response.status}: {url}"
                                 )
@@ -269,6 +280,9 @@ class ApiClient:
                                         "message": f"HTTP {response.status}",
                                         "url": url,
                                     }
+
+                            # Success - reset error tracking
+                            self._reset_error_tracking(url)
 
                             # Process successful response based on format parameter or content type
                             if response_format:
@@ -314,6 +328,49 @@ class ApiClient:
                     "message": f"Unexpected error: {str(e)}",
                     "url": url,
                 }
+
+    def _track_error_response(self, url: str, status_code: int) -> None:
+        """Track consecutive error responses for rate limit detection.
+
+        Args:
+            url: The URL that failed
+            status_code: HTTP status code
+        """
+        url_key = url.split("?")[0]  # Use base URL without params
+
+        if status_code == 429:
+            # Explicit rate limiting
+            if url_key not in self._rate_limit_detected:
+                _LOGGER.warning(
+                    f"Rate limit detected (HTTP 429) for {url_key}. "
+                    f"Integration will automatically retry later."
+                )
+            self._rate_limit_detected[url_key] = True
+        elif status_code == 404:
+            # Track consecutive 404s which may indicate rate limiting
+            self._consecutive_error_counts[url_key] = (
+                self._consecutive_error_counts.get(url_key, 0) + 1
+            )
+            if self._consecutive_error_counts[url_key] >= 3:
+                if url_key not in self._rate_limit_detected:
+                    _LOGGER.warning(
+                        f"Repeated 404 errors for {url_key} "
+                        f"({self._consecutive_error_counts[url_key]} consecutive). "
+                        f"This may indicate rate limiting. Integration will retry later."
+                    )
+                self._rate_limit_detected[url_key] = True
+
+    def _reset_error_tracking(self, url: str) -> None:
+        """Reset error tracking for a URL after successful request.
+
+        Args:
+            url: The URL that succeeded
+        """
+        url_key = url.split("?")[0]
+        if url_key in self._consecutive_error_counts:
+            del self._consecutive_error_counts[url_key]
+        if url_key in self._rate_limit_detected:
+            del self._rate_limit_detected[url_key]
 
     async def close(self) -> None:
         """Close the session if it was created by this instance."""

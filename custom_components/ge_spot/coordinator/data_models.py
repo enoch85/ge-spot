@@ -89,8 +89,12 @@ class IntervalPriceData:
     attempted_sources: list = field(default_factory=list)
     fallback_sources: list = field(default_factory=list)
     using_cached_data: bool = False
-    _validated_sources: list = field(default_factory=list)  # Sources validated by health check
-    _failed_sources: Dict[str, Any] = field(default_factory=dict)  # Failed sources with details
+    _validated_sources: list = field(
+        default_factory=list
+    )  # Sources validated by health check
+    _failed_sources: Dict[str, Any] = field(
+        default_factory=dict
+    )  # Failed sources with details
     _last_fetch_attempt: Optional[str] = None  # Last API fetch attempt timestamp
     _api_key_status: Optional[str] = None  # API key validation status
     _next_fetch_allowed_in_seconds: Optional[int] = None  # Rate limit countdown
