@@ -127,28 +127,31 @@ class BaseElectricityPriceSensor(SensorEntity):
         source_info = {}
 
         # Show validated sources (what's been tested and working)
-        if self.coordinator.data and hasattr(
-            self.coordinator.data, "_validated_sources"
-        ):
-            validated_sources = self.coordinator.data._validated_sources
+        if self.coordinator.data:
+            # Get live validated sources from coordinator (not cached snapshot)
+            validated_sources = self.coordinator.get_validated_sources()
             if validated_sources:
                 source_info["validated_sources"] = validated_sources
 
         # Show failed sources with details
-        if self.coordinator.data and hasattr(self.coordinator.data, "_failed_sources"):
-            failed_sources = self.coordinator.data._failed_sources
-            if failed_sources:
-                source_info["failed_sources"] = failed_sources
+        if self.coordinator.data:
+            # Get live failed source details from coordinator
+            failed_source_details = self.coordinator.get_failed_source_details()
+            if failed_source_details:
+                source_info["failed_sources"] = failed_source_details
 
-        # Show active source (what's currently used)
-        if self.coordinator.data and self.coordinator.data.source not in (
-            "unknown",
-            "None",
-        ):
-            source_info["active_source"] = self.coordinator.data.source
+        # Show active source (what's currently used) - but not if it's redundant with Data source
+        # Only show active_source in source_info if we have other info to display
+        # (Otherwise users see it twice: once as "Data source" and once as "active_source")
 
         # Only add source_info if it contains data
         if source_info:
+            # Add active source to source_info only if we have other diagnostic info
+            if self.coordinator.data and self.coordinator.data.source not in (
+                "unknown",
+                "None",
+            ):
+                source_info["active_source"] = self.coordinator.data.source
             attrs["source_info"] = source_info
 
         # Add timezone info
