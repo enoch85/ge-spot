@@ -23,6 +23,8 @@ BASE_URL_TEMPLATE = "https://www.omie.es/sites/default/files/dados/AGNO_{year}/M
 class OmieAPI(BasePriceAPI):
     """OMIE API client - Fetches data directly from OMIE text files."""
 
+    SOURCE_TYPE = Source.OMIE
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -40,14 +42,6 @@ class OmieAPI(BasePriceAPI):
         self.area = config.get("area") if config else None
         self.error_handler = ErrorHandler(self.source_type)
         self.parser = OmieParser(timezone_service=self.timezone_service)
-
-    def _get_source_type(self) -> str:
-        """Get the source type for this API.
-
-        Returns:
-            Source type string
-        """
-        return Source.OMIE
 
     def _get_base_url(self) -> str:
         """Get the base URL template for API requests.

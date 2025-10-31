@@ -228,10 +228,8 @@ class UnifiedPriceManager:
                     "Source '%s' configured but no matching API class found.", source
                 )
 
-        # Log configured sources using source_type instead of class names
-        configured_source_names = [
-            cls(config={}).source_type for cls in self._api_classes
-        ]
+        # Log configured sources using SOURCE_TYPE class attribute
+        configured_source_names = [cls.SOURCE_TYPE for cls in self._api_classes]
         _LOGGER.info(
             f"Configured sources for area {self.area}: {configured_source_names}"
         )
@@ -259,7 +257,7 @@ class UnifiedPriceManager:
 
     def get_enabled_sources(self) -> List[str]:
         """Get list of currently enabled source names."""
-        all_sources = [cls(config={}).source_type for cls in self._api_classes]
+        all_sources = [cls.SOURCE_TYPE for cls in self._api_classes]
         disabled = self.get_disabled_sources()
         return sorted([s for s in all_sources if s not in disabled])
 
@@ -444,7 +442,7 @@ class UnifiedPriceManager:
             session = async_get_clientsession(self.hass)
 
             for api_class in self._api_classes:
-                source_name = api_class(config={}).source_type
+                source_name = api_class.SOURCE_TYPE
 
                 # Track that we're attempting this source
                 self._mark_source_attempted(source_name)
@@ -675,7 +673,7 @@ class UnifiedPriceManager:
             # Debug logging for source filtering decision
             _LOGGER.debug(f"[{self.area}] Source filtering:")
             _LOGGER.debug(
-                f"  - Configured sources: {[cls(config={}).source_type for cls in self._api_classes]}"
+                f"  - Configured sources: {[cls.SOURCE_TYPE for cls in self._api_classes]}"
             )
             _LOGGER.debug(f"  - Failed sources: {list(self._failed_sources.keys())}")
             _LOGGER.debug(f"  - First fetch: {first_fetch}")
@@ -684,7 +682,7 @@ class UnifiedPriceManager:
 
             enabled_api_classes = []
             for cls in self._api_classes:
-                source_name = cls(config={}).source_type
+                source_name = cls.SOURCE_TYPE
                 last_failure = self._failed_sources.get(source_name)
 
                 # Skip failed sources during regular fetches UNLESS:
@@ -711,7 +709,7 @@ class UnifiedPriceManager:
             if len(enabled_api_classes) < len(self._api_classes):
                 disabled_count = len(self._api_classes) - len(enabled_api_classes)
                 disabled_names = [
-                    cls(config={}).source_type
+                    cls.SOURCE_TYPE
                     for cls in self._api_classes
                     if cls not in enabled_api_classes
                 ]
@@ -724,12 +722,12 @@ class UnifiedPriceManager:
             elif first_fetch:
                 _LOGGER.info(
                     f"[{self.area}] First fetch - trying ALL {len(enabled_api_classes)} configured source(s): "
-                    f"{', '.join([cls(config={}).source_type for cls in enabled_api_classes])}"
+                    f"{', '.join([cls.SOURCE_TYPE for cls in enabled_api_classes])}"
                 )
             elif in_grace_period:
                 _LOGGER.info(
                     f"[{self.area}] Grace period active - trying ALL {len(enabled_api_classes)} configured source(s): "
-                    f"{', '.join([cls(config={}).source_type for cls in enabled_api_classes])}"
+                    f"{', '.join([cls.SOURCE_TYPE for cls in enabled_api_classes])}"
                 )
 
             api_instances = [

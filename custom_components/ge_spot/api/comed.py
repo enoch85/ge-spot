@@ -20,13 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 class ComedAPI(BasePriceAPI):
     """API client for ComEd 5-Minute Pricing (aggregated to 15-minute intervals)."""
 
-    def _get_source_type(self) -> str:
-        """Get the source type identifier.
-
-        Returns:
-            Source type identifier
-        """
-        return Source.COMED
+    SOURCE_TYPE = Source.COMED
 
     def _get_base_url(self) -> str:
         """Get the base URL for the API.

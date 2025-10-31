@@ -22,6 +22,8 @@ _LOGGER = logging.getLogger(__name__)
 class AmberAPI(BasePriceAPI):
     """API client for Amber Energy."""
 
+    SOURCE_TYPE = Source.AMBER
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -36,14 +38,6 @@ class AmberAPI(BasePriceAPI):
             timezone_service: Optional timezone service
         """
         super().__init__(config, session, timezone_service)
-
-    def _get_source_type(self) -> str:
-        """Get the source type identifier.
-
-        Returns:
-            Source type identifier
-        """
-        return Source.AMBER
 
     def _get_base_url(self) -> str:
         """Get the base URL for the API.

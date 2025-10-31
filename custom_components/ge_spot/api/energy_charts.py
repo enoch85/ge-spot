@@ -23,6 +23,8 @@ class EnergyChartsAPI(BasePriceAPI):
     Resolution: 15-minute intervals (96 data points per day)
     """
 
+    SOURCE_TYPE = Source.ENERGY_CHARTS
+
     def __init__(
         self,
         config: Optional[Dict[str, Any]] = None,
@@ -39,14 +41,6 @@ class EnergyChartsAPI(BasePriceAPI):
         super().__init__(config, session, timezone_service=timezone_service)
         self.error_handler = ErrorHandler(self.source_type)
         self.parser = EnergyChartsParser(timezone_service=timezone_service)
-
-    def _get_source_type(self) -> str:
-        """Get the source type identifier.
-
-        Returns:
-            Source type identifier
-        """
-        return Source.ENERGY_CHARTS
 
     def _get_base_url(self) -> str:
         """Get the base URL for the API.
