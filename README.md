@@ -676,10 +676,14 @@ flowchart TD
         Stats --> CalcValidity["Calculate DataValidity"]
     end
     
-    DataProcessor --> CacheStore["CacheManager.store()<br/>(with DataValidity)"]
-    CacheStore --> Sensors["Home Assistant Sensors"]
+    DataProcessor --> CreateIPD["Create IntervalPriceData<br/>(source data + metadata)"]
+    CreateIPD --> CacheStore["CacheManager.store()<br/>(stores IntervalPriceData)"]
+    CacheStore --> IPDObject["IntervalPriceData Object<br/>(in memory)"]
     
-    UseCache --> Sensors
+    UseCache --> LoadIPD["Load IntervalPriceData<br/>(from cache)"]
+    LoadIPD --> IPDObject
+    
+    IPDObject --> Sensors["Home Assistant Sensors<br/>(access via @property)"]
 ```
 
 ### 2. Fetch Decision Logic
@@ -736,10 +740,13 @@ flowchart TD
     AllFailed --> UseCache
     
     Success --> ClearFailed["Clear failure status<br/>(timestamp = None)"]
-    ClearFailed --> ProcessData["Process & Cache<br/>(with new DataValidity)"]
-    ProcessData --> UpdateSensors["Update Sensors"]
+    ClearFailed --> ProcessData["Process & Cache<br/>(create IntervalPriceData)"]
+    ProcessData --> IPDNew["IntervalPriceData<br/>(in memory)"]
     
-    UseCache --> UpdateSensors
+    UseCache --> IPDCached["IntervalPriceData<br/>(from cache)"]
+    
+    IPDNew --> UpdateSensors["Update Sensors<br/>(via @property access)"]
+    IPDCached --> UpdateSensors
     UpdateSensors --> End["Wait for Next Update"]
 ```
 
@@ -875,29 +882,11 @@ flowchart TD
     end
 ```
 
-### 5. Cache Architecture: Compute-on-Demand
+---
 
-The cache uses a **compute-on-demand** pattern: store only source data, compute everything else as properties when accessed.
+**For detailed cache architecture documentation**, see [docs/cache_compute_on_demand.md](/docs/cache_compute_on_demand.md)
 
-```mermaid
-flowchart LR
-    Cache["Cache Storage<br/>(.storage/ JSON files)<br/>────────────────<br/><b>Stored Data:</b><br/>• interval_prices<br/>• raw_prices<br/>• metadata<br/>• data_validity"]
-    
-    IPD["IntervalPriceData Object<br/>────────────────────────<br/><b>Source Data (stored):</b><br/>• interval_prices<br/>• raw_prices<br/>• metadata<br/><br/><b>Computed (@property):</b><br/>• current_price<br/>• next_interval_price<br/>• statistics (avg/min/max)<br/>• tomorrow_valid"]
-    
-    Sensors["Home Assistant Sensors<br/>──────────────────────<br/>sensor.ge_spot_current_price<br/>sensor.ge_spot_average<br/>sensor.ge_spot_tomorrow_valid<br/><br/><i>Access via @property</i><br/><i>Computed on-demand</i>"]
-    
-    Cache -->|"Load source data only"| IPD
-    IPD -->|"Property access triggers<br/>on-demand computation"| Sensors
-```
-
-**Key Benefits:**
-- **Single Source of Truth**: Only source data is stored
-- **No Stale Data**: Computed values always match current source data  
-- **Smaller Cache**: Less storage, faster serialization
-- **Simpler Logic**: No need to invalidate/recompute on updates
-
-See [docs/cache_compute_on_demand.md](/docs/cache_compute_on_demand.md) for detailed documentation.
+---
 
 ## License
 
