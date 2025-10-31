@@ -23,6 +23,7 @@ from ..utils.exchange_service import ExchangeRateService, get_exchange_service
 from .data_processor import DataProcessor
 from .fallback_manager import FallbackManager  # Import the new FallbackManager
 from .cache_manager import CacheManager  # Import CacheManager
+from .data_models import IntervalPriceData  # Import IntervalPriceData
 
 # Import all API implementations here to have them available
 from ..api.nordpool import NordpoolAPI
