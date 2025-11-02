@@ -34,7 +34,7 @@ class FetchDecisionMaker:
         now: datetime,
         last_fetch: Optional[datetime],
         data_validity: DataValidity,
-        fetch_interval_minutes: int = 15,
+        fetch_interval_minutes: int = Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES,
         in_grace_period: bool = False,
         is_health_check: bool = False,
         area: Optional[str] = None,

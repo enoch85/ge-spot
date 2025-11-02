@@ -43,6 +43,14 @@ class Network:
 
         # Time conversion constants
         SECONDS_PER_MINUTE = 60  # Seconds in a minute (for time calculations)
+        SECONDS_PER_HOUR = 3600  # Seconds in an hour (for time calculations)
+
+        # Retry cutoff time (stop retrying late at night)
+        RETRY_CUTOFF_TIME_HOUR = 23  # Hour to stop retrying (23:50)
+        RETRY_CUTOFF_TIME_MINUTE = 50  # Minute to stop retrying
+
+        # Cache TTL for short-term caching (1 hour)
+        CACHE_DEFAULT_TTL_SECONDS = 3600  # Default TTL for short-term cache entries
 
         # Special time windows for updates
         # During these windows, rate limiting is more lenient (1 min vs 15 min) to catch new data quickly

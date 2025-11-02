@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, List
 
 from ...const.sources import Source
 from ...const.currencies import Currency
+from ...const.time import TimeInterval
 from ..base.price_parser import BasePriceParser
 from ...const.api import ComEd, SourceTimezone
 from ..interval_expander import convert_to_target_intervals
@@ -248,8 +249,9 @@ class ComedParser(BasePriceParser):
             return None
 
         now = datetime.now(timezone.utc)
-        # Round down to nearest 15-minute interval
-        minute_rounded = (now.minute // 15) * 15
+        # Round down to nearest interval
+        interval_minutes = TimeInterval.get_interval_minutes()
+        minute_rounded = (now.minute // interval_minutes) * interval_minutes
         current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
         current_interval_key = current_interval.isoformat()
 
@@ -270,10 +272,11 @@ class ComedParser(BasePriceParser):
             return None
 
         now = datetime.now(timezone.utc)
-        # Round down to current 15-minute interval, then add 15 minutes
-        minute_rounded = (now.minute // 15) * 15
+        # Round down to current interval, then add interval duration
+        interval_minutes = TimeInterval.get_interval_minutes()
+        minute_rounded = (now.minute // interval_minutes) * interval_minutes
         current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
-        next_interval = current_interval + timedelta(minutes=15)
+        next_interval = current_interval + timedelta(minutes=interval_minutes)
         next_interval_key = next_interval.isoformat()
 
         return interval_raw.get(next_interval_key)  # Changed from interval_prices

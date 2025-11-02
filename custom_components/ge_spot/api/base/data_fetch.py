@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List, Union, Type
 from datetime import datetime, timezone
 
+from ...const.network import Network
 from .error_handler import ErrorHandler
 from .base_price_api import BasePriceAPI
 from .data_structure import StandardizedPriceData
@@ -255,18 +256,20 @@ class PriceDataFetcher:
 
             if cached:
                 # Check if cache is not too old
-                max_cache_age = 6 * 60 * 60  # Default 6 hours in seconds
+                max_cache_age = Network.Defaults.CACHE_TTL  # Default 6 hours in seconds
 
                 # Override with provided cache expiry if available
                 if cache_expiry_hours is not None:
-                    max_cache_age = cache_expiry_hours * 60 * 60
+                    max_cache_age = (
+                        cache_expiry_hours * Network.Defaults.SECONDS_PER_HOUR
+                    )
 
                 cache_age = datetime.now(timezone.utc).timestamp() - cached["timestamp"]
 
                 if cache_age <= max_cache_age:
                     _LOGGER.warning(
                         f"All sources failed for area {area}, using cached data from {cached['source']} "
-                        f"({int(cache_age / 60)} minutes old)"
+                        f"({int(cache_age / Network.Defaults.SECONDS_PER_MINUTE)} minutes old)"
                     )
                     result = cached["data"]
                     using_cached_data = True

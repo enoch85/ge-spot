@@ -1827,7 +1827,7 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         """
         # Ensure minimum update interval from constants is respected
         min_interval_seconds = (
-            Defaults.UPDATE_INTERVAL * 60
+            Defaults.UPDATE_INTERVAL * Network.Defaults.SECONDS_PER_MINUTE
         )  # Default interval in minutes
         effective_interval_seconds = max(
             update_interval.total_seconds(), min_interval_seconds

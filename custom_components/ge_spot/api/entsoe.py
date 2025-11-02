@@ -377,8 +377,12 @@ class EntsoeAPI(BasePriceAPI):
             tomorrow_xml = await fetch_with_retry(
                 fetch_tomorrow,
                 is_data_available,
-                retry_interval=1800,
-                end_time=time(23, 50),
+                retry_interval=Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
+                * Network.Defaults.SECONDS_PER_MINUTE,
+                end_time=time(
+                    Network.Defaults.RETRY_CUTOFF_TIME_HOUR,
+                    Network.Defaults.RETRY_CUTOFF_TIME_MINUTE,
+                ),
                 local_tz_name=TimezoneName.EUROPE_PARIS,
             )
 

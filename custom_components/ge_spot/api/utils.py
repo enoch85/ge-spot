@@ -6,6 +6,7 @@ import datetime
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
+from ..const.network import Network
 from ..timezone import TimezoneService
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,7 +22,8 @@ def get_timezone(tz_name):
 async def fetch_with_retry(
     fetch_func,
     is_data_available,
-    retry_interval=1800,
+    retry_interval=Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
+    * Network.Defaults.SECONDS_PER_MINUTE,
     end_time=None,
     local_tz_name=None,
     *args,
@@ -29,8 +31,8 @@ async def fetch_with_retry(
 ):
     """
     Repeatedly call fetch_func until is_data_available(result) is True or until end_time is reached.
-    retry_interval is in seconds (default: 1800 = 30 minutes).
-    end_time: a datetime.time object (e.g. time(23, 50)) in the local timezone.
+    retry_interval is in seconds (default: STANDARD_UPDATE_INTERVAL_MINUTES * SECONDS_PER_MINUTE = 30 minutes).
+    end_time: a datetime.time object (e.g. time(RETRY_CUTOFF_TIME_HOUR, RETRY_CUTOFF_TIME_MINUTE)) in the local timezone.
     local_tz_name: string, e.g. 'Europe/Oslo', 'Europe/Berlin', etc.
     """
     import datetime
