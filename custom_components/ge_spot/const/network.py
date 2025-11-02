@@ -8,15 +8,22 @@ class Network:
         """Default network parameters."""
 
         # Exponential backoff configuration for source retry
-        # Timeout progression: 2s → 6s → 18s (factor of 3)
-        # Total max time per source: 2s + 6s + 18s = 26 seconds
-        RETRY_BASE_TIMEOUT = 2  # Initial timeout: 2 seconds
-        RETRY_TIMEOUT_MULTIPLIER = 3  # Each retry: 3x previous (2s → 6s → 18s)
+        # Timeout progression: 5s → 15s → 45s (factor of 3)
+        # Total max time per source: 5s + 15s + 45s = 65 seconds
+        #
+        # Rationale: Real-world API calls during peak hours (13:00-15:00 CET) need:
+        #   - DNS + TCP + TLS: ~1s
+        #   - API processing: 3-10s (normal) or 5-15s (peak load)
+        #   - Data transfer: ~0.5s
+        # First attempt at 5s catches most requests, reducing unnecessary retries
+        RETRY_BASE_TIMEOUT = 5  # Initial timeout: 5 seconds
+        RETRY_TIMEOUT_MULTIPLIER = 3  # Each retry: 3x previous (5s → 15s → 45s)
         RETRY_COUNT = 3  # Total attempts per source
 
         # HTTP layer timeout (for individual network requests)
         # This is a safety net - FallbackManager controls the actual timeout strategy
-        HTTP_TIMEOUT = 30  # seconds - basic HTTP request timeout
+        # Must be higher than max FallbackManager timeout (45s) to avoid conflicts
+        HTTP_TIMEOUT = 60  # seconds - safety net for slowest possible requests
 
         CACHE_TTL = 21600  # 6 hours in seconds
         USER_AGENT = "HomeAssistantGESpot/1.0"

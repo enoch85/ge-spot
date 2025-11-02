@@ -2129,15 +2129,15 @@ class TestHealthCheck:
         Verifies that even with slow-failing sources (long timeouts), the health
         check runs in background without blocking the caller.
         """
-        # Arrange - simulate slow failing sources (26s timeout per source)
+        # Arrange - simulate slow failing sources (65s timeout per source)
         with patch.object(
             manager._fallback_manager, "fetch_with_fallback"
         ) as mock_fallback:
 
             async def slow_timeout(*args, **kwargs):
-                """Simulate slow timeout (2s + 6s + 18s = 26s)."""
+                """Simulate slow timeout (5s + 15s + 45s = 65s)."""
                 await asyncio.sleep(0.5)  # Simulate partial timeout for test speed
-                return {"error": Exception("Timeout after 26s")}
+                return {"error": Exception("Timeout after 65s")}
 
             mock_fallback.side_effect = slow_timeout
 
@@ -2195,7 +2195,7 @@ class TestHealthCheck:
 
         Simulates realistic scenario:
         - First source: fast success (1s)
-        - Second source: slow timeout (26s)
+        - Second source: slow timeout (65s)
         - Third source: fast error (0.1s)
 
         Health check should run in background without blocking caller.
@@ -2254,7 +2254,7 @@ class TestHealthCheck:
     async def test_health_check_all_sources_fast_success(self, manager):
         """Test health check completes quickly when all sources succeed fast.
 
-        Best-case scenario: All sources respond quickly (< 2s each).
+        Best-case scenario: All sources respond quickly (< 5s each).
         """
         # Arrange
         with patch.object(

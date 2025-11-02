@@ -28,7 +28,7 @@ class Source:
     ]
 
     # Default source priority
-    # All sources use same exponential timeout (2s → 6s → 18s)
+    # All sources use same exponential timeout (5s → 15s → 45s)
     # Reliable sources tried first, unreliable sources last
     DEFAULT_PRIORITY = [
         NORDPOOL,

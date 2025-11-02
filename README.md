@@ -170,7 +170,7 @@ The first selected source becomes your highest priority, and the integration wil
 ### Reliability Features
 
 - **Rate limiting** - Minimum 15-minute intervals 
-- **Automatic retries** - Exponential backoff for failed requests (2s → 6s → 18s)
+- **Automatic retries** - Exponential backoff for failed requests (5s → 15s → 45s)
 - **Data caching** - Persistent storage with TTL
 - **Intelligent interval validation** - DST-aware validation ensures complete data:
   - **Normal days**: Expects 96 intervals (15-min × 96 = 24 hours)
@@ -637,7 +637,7 @@ flowchart TD
     FetchDecision --> |"Should fetch"| FilterSources["Pre-filter Failed Sources<br/>(skip sources with failure timestamp)"]
     FetchDecision --> |"Rate limited or<br/>data still valid"| UseCache["Use Cached Data"]
     
-    FilterSources --> FallbackMgr["FallbackManager<br/>(Exponential Backoff:<br/>2s → 6s → 18s)"]
+    FilterSources --> FallbackMgr["FallbackManager<br/>(Exponential Backoff:<br/>5s → 15s → 45s)"]
     
     FallbackMgr --> |"Try source 1"| API1["API Client 1<br/>(attempt 1-3)"]
     FallbackMgr --> |"Try source 2"| API2["API Client 2<br/>(attempt 1-3)"] 
@@ -726,11 +726,11 @@ flowchart TD
     CheckAvailable --> |"No"| UseCache
     CheckAvailable --> |"Yes"| FallbackMgr["FallbackManager<br/>(try each source)"]
     
-    FallbackMgr --> Attempt1{"Source 1<br/>Attempt 1 (2s)"}
+    FallbackMgr --> Attempt1{"Source 1<br/>Attempt 1 (5s)"}
     Attempt1 --> |"Success"| Success["Parse & Validate Data"]
-    Attempt1 --> |"Fail"| Attempt2{"Source 1<br/>Attempt 2 (6s)"}
+    Attempt1 --> |"Fail"| Attempt2{"Source 1<br/>Attempt 2 (15s)"}
     Attempt2 --> |"Success"| Success
-    Attempt2 --> |"Fail"| Attempt3{"Source 1<br/>Attempt 3 (18s)"}
+    Attempt2 --> |"Fail"| Attempt3{"Source 1<br/>Attempt 3 (45s)"}
     Attempt3 --> |"Success"| Success
     Attempt3 --> |"Fail"| NextSource{"More sources?"}
     
@@ -834,12 +834,12 @@ flowchart TD
     
     subgraph RetryLoop["Retry with Exponential Backoff"]
         direction TB
-        Try1["Attempt 1: timeout=2s"] --> Check1{"Success?"}
+        Try1["Attempt 1: timeout=5s"] --> Check1{"Success?"}
         Check1 --> |"Yes"| Success1["✓ Return data"]
-        Check1 --> |"No"| Try2["Attempt 2: timeout=6s"]
+        Check1 --> |"No"| Try2["Attempt 2: timeout=15s"]
         Try2 --> Check2{"Success?"}
         Check2 --> |"Yes"| Success2["✓ Return data"]
-        Check2 --> |"No"| Try3["Attempt 3: timeout=18s"]
+        Check2 --> |"No"| Try3["Attempt 3: timeout=45s"]
         Try3 --> Check3{"Success?"}
         Check3 --> |"Yes"| Success3["✓ Return data"]
         Check3 --> |"No"| Failed["✗ Source failed"]

@@ -427,7 +427,7 @@ class UnifiedPriceManager:
 
         Unlike normal fetch (stops at first success), this tries EVERY source
         to get complete health status. Each source is tested with exponential
-        backoff (2s → 6s → 18s) via FallbackManager logic.
+        backoff (5s → 15s → 45s) via FallbackManager logic.
         """
         now = dt_util.now()
         results = {"validated": [], "failed": []}

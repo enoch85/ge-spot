@@ -31,7 +31,7 @@ This document describes the final implementation where **validation happens impl
 
 1. **Validation IS fetching** - No separate validation step
 2. **Always call first_refresh()** - No skip logic, no race conditions
-3. **Exponential backoff for all** - Same strategy for all sources (2s → 6s → 18s)
+3. **Exponential backoff for all** - Same strategy for all sources (5s → 15s → 45s)
 4. **Timestamp-based tracking** - Simple Dict[str, datetime] instead of multiple sets
 5. **Self-healing** - Daily retry automatically recovers failed sources
 
@@ -67,7 +67,7 @@ This document describes the final implementation where **validation happens impl
 │                                                               │
 │ for source in sources:                                        │
 │   for attempt in range(3):                                    │
-│     timeout = 2 * (3 ** attempt)  # 2s, 6s, 18s              │
+│     timeout = 5 * (3 ** attempt)  # 5s, 15s, 45s             │
 │     data = await asyncio.wait_for(                            │
 │       source.fetch_raw_data(), timeout=timeout                │
 │     )                                                         │
@@ -120,7 +120,7 @@ This document describes the final implementation where **validation happens impl
 5. fetch_data(): Call FallbackManager with all sources
    ↓
 6. FallbackManager: Try Nordpool
-   ├─ Attempt 1: timeout=2s  → SUCCESS ✅
+   ├─ Attempt 1: timeout=5s  → SUCCESS ✅
    ↓
 7. FallbackManager: Return data from Nordpool
    ↓
@@ -144,30 +144,30 @@ This document describes the final implementation where **validation happens impl
 2. Filter sources → Energy Charts failed 30 min ago → skip it
    ↓
 3. FallbackManager: Try Nordpool
-   ├─ Attempt 1: timeout=2s  → SUCCESS ✅
+   ├─ Attempt 1: timeout=5s  → SUCCESS ✅
    ↓
 4. Mark Nordpool as working
    ↓
 5. Return data
 ```
 
-**Timeline**: ~2-3 seconds  
+**Timeline**: ~5 seconds  
 **Behavior**: Failed source automatically skipped for 24h
 
 ### All Sources Fail (First Time)
 
 ```
 1. FallbackManager: Try Energy Charts
-   ├─ Attempt 1: timeout=2s  → timeout
-   ├─ Attempt 2: timeout=6s  → timeout  
-   ├─ Attempt 3: timeout=18s → timeout
-   ├─ Total: 26 seconds → FAIL ✗
+   ├─ Attempt 1: timeout=5s  → timeout
+   ├─ Attempt 2: timeout=15s → timeout  
+   ├─ Attempt 3: timeout=45s → timeout
+   ├─ Total: 65 seconds → FAIL ✗
    ↓
 2. FallbackManager: Try Nordpool
-   ├─ Attempt 1: timeout=2s  → network error
-   ├─ Attempt 2: timeout=6s  → network error
-   ├─ Attempt 3: timeout=18s → network error
-   ├─ Total: 26 seconds → FAIL ✗
+   ├─ Attempt 1: timeout=5s  → network error
+   ├─ Attempt 2: timeout=15s → network error
+   ├─ Attempt 3: timeout=45s → network error
+   ├─ Total: 65 seconds → FAIL ✗
    ↓
 3. FallbackManager: All failed → return failure info
    ↓
@@ -195,7 +195,7 @@ This document describes the final implementation where **validation happens impl
 5. fetch_data(force=True) → ignores 24h filter
    ↓
 6. FallbackManager: Try failed source
-   ├─ Attempt 1: timeout=2s  → SUCCESS ✅
+   ├─ Attempt 1: timeout=5s  → SUCCESS ✅
    ↓
 7. Mark source as working (timestamp = None)
    ↓
@@ -254,15 +254,15 @@ if last_failure and (now - last_failure).total_seconds() < 86400:
 class Network:
     class Defaults:
         # Exponential backoff for source retry
-        RETRY_BASE_TIMEOUT = 2        # Initial: 2 seconds
+        RETRY_BASE_TIMEOUT = 5        # Initial: 5 seconds
         RETRY_TIMEOUT_MULTIPLIER = 3  # Multiplier: 3x
         RETRY_COUNT = 3               # Total attempts: 3
         
         # Timeout progression per source:
-        # Attempt 1: 2s
-        # Attempt 2: 6s (2 × 3)
-        # Attempt 3: 18s (6 × 3)
-        # Total: 26 seconds max per source
+        # Attempt 1: 5s
+        # Attempt 2: 15s (5 × 3)
+        # Attempt 3: 45s (15 × 3)
+        # Total: 65 seconds max per source
 ```
 
 **Old constants removed**:
@@ -284,7 +284,7 @@ async def fetch_with_fallback(
 ) -> Optional[Dict[str, Any]]:
     """Try sources with exponential timeout backoff.
     
-    Timeout per source: 2s → 6s → 18s (total 26s max)
+    Timeout per source: 5s → 15s → 45s (total 65s max)
     """
     for api_instance in api_instances:
         source_name = api_instance.source_type
@@ -443,9 +443,9 @@ async def _schedule_daily_retry(
 
 | Scenario | Before | After | Improvement |
 |----------|--------|-------|-------------|
-| Fast source | ~2s | ~2s | Same |
-| Slow source timeout | 90s | 26s | **71% faster** |
-| Multiple sources (3) | 270s | 78s | **71% faster** |
+| Fast source | ~5s | ~5s | Same |
+| Slow source timeout | 90s | 65s | **28% faster** |
+| Multiple sources (3) | 270s | 195s | **28% faster** |
 | Boot to data | Never (skipped) | <5s | **∞ improvement** |
 
 ### Reliability
@@ -483,14 +483,14 @@ async def _schedule_daily_retry(
 ```
 Boot → first_refresh → fetch_data()
   ↓
-Try Energy Charts: 2s → 6s → 18s → fail (26s total)
+Try Energy Charts: 5s → 15s → 45s → fail (65s total)
   ↓
-Sensor unavailable (26s delay)
+Sensor unavailable (65s delay)
   ↓
 Daily retry at 13:00-15:00
 ```
 
-**User Impact**: 26s unavailability, but HA boot not blocked  
+**User Impact**: 65s unavailability, but HA boot not blocked  
 **Mitigation**: Recommend configuring fallback sources
 
 ### Force Clear Cache
@@ -575,9 +575,9 @@ rm -rf .storage/ge_spot_cache_*
 
 # 2. Check logs for exponential timeout progression
 # Should see:
-# - "Trying 'nordpool' attempt 1/3 (timeout: 2s)"
-# - "Trying 'nordpool' attempt 2/3 (timeout: 6s)"
-# - "Trying 'nordpool' attempt 3/3 (timeout: 18s)"
+# - "Trying 'nordpool' attempt 1/3 (timeout: 5s)"
+# - "Trying 'nordpool' attempt 2/3 (timeout: 15s)"
+# - "Trying 'nordpool' attempt 3/3 (timeout: 45s)"
 
 # 3. Verify no template errors
 grep "AttributeError.*get_raw" /config/home-assistant.log
@@ -602,9 +602,9 @@ for i in range(Network.Defaults.RETRY_COUNT):
     print(f"Attempt {i+1}: {timeout}s")
 
 # Output:
-# Attempt 1: 2s
-# Attempt 2: 6s  
-# Attempt 3: 18s
+# Attempt 1: 5s
+# Attempt 2: 15s  
+# Attempt 3: 45s
 ```
 
 ---

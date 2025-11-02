@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 import aiohttp
 
 from ...const.attributes import Attributes
+from ...const.network import Network
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class ApiClient:
         self.session = session
         self.pool_size = pool_size
         self._semaphore = asyncio.Semaphore(pool_size)
-        self._timeout = aiohttp.ClientTimeout(total=30)
+        self._timeout = aiohttp.ClientTimeout(total=Network.Defaults.HTTP_TIMEOUT)
         self._headers = {"User-Agent": "GE-Spot/1.0", "Accept": "application/json"}
         self._consecutive_error_counts = {}
         self._rate_limit_detected = {}
