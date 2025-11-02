@@ -7,7 +7,7 @@ import functools
 from datetime import datetime
 from typing import Callable, Any, Dict
 
-from ...const.network import NetworkErrorType, RetryStrategy
+from ...const.network import Network, NetworkErrorType, RetryStrategy
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def with_error_handling(func=None, *, source_type: str = "unknown"):
 def retry_with_backoff(
     func=None,
     *,
-    max_retries: int = 3,
+    max_retries: int = Network.Defaults.RETRY_COUNT,
     strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF,
     source_type: str = "unknown",
 ):
@@ -243,7 +243,7 @@ class ErrorHandler:
         # Different error types might need different backoff strategies
         if error_type == NetworkErrorType.RATE_LIMIT:
             # Rate limit errors need longer backoff
-            base_delay = 5.0
+            base_delay = float(Network.Defaults.RETRY_BASE_TIMEOUT)
 
         # Apply the selected strategy
         if strategy == RetryStrategy.EXPONENTIAL_BACKOFF:
@@ -269,14 +269,16 @@ class ErrorHandler:
             delay = base_delay * (2**retry_count) * (1.0 + jitter)
 
         # Cap the maximum delay
-        max_delay = 60.0  # 60 seconds
+        max_delay = float(
+            Network.Defaults.HTTP_TIMEOUT
+        )  # Use HTTP timeout as max delay
         return min(delay, max_delay)
 
     async def run_with_retry(
         self,
         func: Callable,
         *args,
-        max_retries: int = 3,
+        max_retries: int = Network.Defaults.RETRY_COUNT,
         strategy: str = RetryStrategy.EXPONENTIAL_BACKOFF,
         **kwargs,
     ) -> Any:
