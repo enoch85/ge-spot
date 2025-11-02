@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from homeassistant.util import dt as dt_util
 
 from ..const.time import DSTTransitionType
+from ..const.network import Network
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,7 +58,9 @@ class DSTHandler:
 
         # Calculate the difference in hours using UTC times
         # This will be 23, 24, or 25 hours depending on DST transition
-        diff_hours = (day_plus_1_utc - day_utc).total_seconds() / 3600
+        diff_hours = (
+            day_plus_1_utc - day_utc
+        ).total_seconds() / Network.Defaults.SECONDS_PER_HOUR
 
         # Check if it's a DST transition day
         if abs(diff_hours - 24) < 0.1:
@@ -98,7 +101,7 @@ class DSTHandler:
         if dst_seconds == 0:
             return "no DST offset"
 
-        dst_hours = dst_seconds / 3600
+        dst_hours = dst_seconds / Network.Defaults.SECONDS_PER_HOUR
         hour_text = "hour" if abs(dst_hours) == 1 else "hours"
         return f"{dst_hours:+.0f} {hour_text}"
 

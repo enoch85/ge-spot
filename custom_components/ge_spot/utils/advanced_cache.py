@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 
 from ..const.config import Config
 from ..const.defaults import Defaults
+from ..const.network import Network
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,13 +19,16 @@ class CacheEntry:
     """Cache entry with TTL and metadata."""
 
     def __init__(
-        self, data: Any, ttl: int = 3600, metadata: Optional[Dict[str, Any]] = None
+        self,
+        data: Any,
+        ttl: int = Network.Defaults.CACHE_DEFAULT_TTL_SECONDS,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Initialize a cache entry.
 
         Args:
             data: The data to cache
-            ttl: Time to live in seconds
+            ttl: Time to live in seconds (default: 1 hour)
             metadata: Optional metadata
         """
         self.data = data

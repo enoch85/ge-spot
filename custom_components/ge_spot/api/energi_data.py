@@ -8,6 +8,7 @@ from typing import Dict, Any
 
 from .base.api_client import ApiClient
 from ..const.sources import Source
+from ..const.network import Network
 from .parsers.energi_data_parser import EnergiDataParser
 from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
@@ -93,8 +94,12 @@ class EnergiDataAPI(BasePriceAPI):
                 raw_tomorrow = await fetch_with_retry(
                     fetch_tomorrow_task,
                     is_tomorrow_data_present,  # Basic check on raw data presence
-                    retry_interval=1800,
-                    end_time=time(23, 50),
+                    retry_interval=Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
+                    * Network.Defaults.SECONDS_PER_MINUTE,
+                    end_time=time(
+                        Network.Defaults.RETRY_CUTOFF_TIME_HOUR,
+                        Network.Defaults.RETRY_CUTOFF_TIME_MINUTE,
+                    ),
                     local_tz_name=TimezoneName.EUROPE_COPENHAGEN,
                 )
 

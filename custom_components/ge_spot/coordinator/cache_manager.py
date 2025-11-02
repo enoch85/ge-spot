@@ -9,6 +9,7 @@ from homeassistant.util import dt as dt_util
 
 from ..utils.advanced_cache import AdvancedCache
 from ..const.defaults import Defaults
+from ..const.network import Network
 from .data_models import IntervalPriceData
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,7 +31,10 @@ class CacheManager:
         # Use default TTL from Defaults if not in config
         default_ttl_minutes = config.get("cache_ttl", Defaults.CACHE_TTL)
         # Pass TTL in seconds to AdvancedCache
-        config_with_ttl_seconds = {**config, "cache_ttl": default_ttl_minutes * 60}
+        config_with_ttl_seconds = {
+            **config,
+            "cache_ttl": default_ttl_minutes * Network.Defaults.SECONDS_PER_MINUTE,
+        }
         self._price_cache = AdvancedCache(hass, config_with_ttl_seconds)
 
     def store(
