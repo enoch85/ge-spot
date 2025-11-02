@@ -59,7 +59,7 @@ async def fetch_with_retry(
     params=None,
     headers=None,
     timeout=Network.Defaults.HTTP_TIMEOUT,
-    max_retries=3,
+    max_retries=Network.Defaults.RETRY_COUNT,
 ):
     """Fetch data from URL with retry mechanism."""
     await ensure_session(api_obj)
