@@ -244,6 +244,7 @@ class NordpoolAPI(BasePriceAPI):
             "timezone": "Europe/Oslo",  # Nordpool API timezone
             "currency": "EUR",  # Nordpool API currency
             "area": area,  # Pass the area to the parser via this dict
+            "delivery_area": delivery_area,  # Pass the delivery area for parser to use
             "source": self.source_type,  # Let the parser know the source
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             # Add any other metadata the parser might need from the API adapter context
