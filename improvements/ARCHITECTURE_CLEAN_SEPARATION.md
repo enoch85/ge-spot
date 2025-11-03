@@ -59,7 +59,7 @@ unified_price_manager.py
 │                                                     │
 │ for source in sources:                             │
 │   for attempt in range(3):                         │
-│     timeout = 2 * (3 ** attempt)  # 2s, 6s, 18s   │
+│     timeout = 5 * (3 ** attempt)  # 5s, 15s, 45s  │
 │     data = await asyncio.wait_for(                 │
 │       source.fetch(), timeout=timeout              │
 │     )                                              │
@@ -128,12 +128,12 @@ unified_price_manager.py
 5. fetch_data(): Call FallbackManager.fetch_with_fallback()
    ↓
 6. FallbackManager: Try source 1
-   ├─ Attempt 1: timeout=2s  → fail
-   ├─ Attempt 2: timeout=6s  → fail
-   ├─ Attempt 3: timeout=18s → fail
+   ├─ Attempt 1: timeout=5s  → fail
+   ├─ Attempt 2: timeout=15s → fail
+   ├─ Attempt 3: timeout=45s → fail
    ↓
 7. FallbackManager: Try source 2
-   ├─ Attempt 1: timeout=2s  → SUCCESS ✅
+   ├─ Attempt 1: timeout=5s  → SUCCESS ✅
    ↓
 8. FallbackManager: Return data
    ↓
@@ -165,7 +165,7 @@ result = await fallback_manager.fetch(mock_sources, area)
 assert result.source == "FastSource"
 
 # Test timeout strategy
-with assert_timeout(2):  # Should fail in 2s
+with assert_timeout(5):  # Should fail in 5s
     await fallback_manager.fetch([DownSource()], area)
 ```
 

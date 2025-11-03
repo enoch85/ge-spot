@@ -686,7 +686,7 @@ class TestVATAutoEnable:
         # Act
         processor = DataProcessor(
             hass=processor_dependencies["hass"],
-            area="DE",
+            area="DE-LU",  # Germany-Luxembourg bidding zone
             target_currency="EUR",
             config=config,
             tz_service=processor_dependencies["tz_service"],

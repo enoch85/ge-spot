@@ -22,8 +22,7 @@ class Area:
     LT = "LT"
 
     # Central Europe
-    DE = "DE"
-    DE_LU = "DE-LU"
+    DE_LU = "DE-LU"  # Germany-Luxembourg bidding zone
     AT = "AT"
     FR = "FR"
     BE = "BE"
@@ -68,9 +67,8 @@ class Timezone:
         Area.NL: "Europe/Amsterdam",
         Area.BE: "Europe/Brussels",
         Area.AT: "Europe/Vienna",
-        Area.DE: "Europe/Berlin",
-        Area.DE_LU: "Europe/Berlin",
-        "GER": "Europe/Berlin",
+        Area.DE_LU: "Europe/Berlin",  # Germany-Luxembourg bidding zone
+        "GER": "Europe/Berlin",  # Nord Pool code for DE-LU
         "IT": "Europe/Rome",
         "IT-North": "Europe/Rome",
         "IT-Centre-South": "Europe/Rome",
@@ -128,11 +126,11 @@ class AreaMapping:
         Area.LV: Area.LV,
         Area.LT: Area.LT,
         # Central/Western Europe
-        Area.AT: Area.AT,
-        Area.BE: Area.BE,
-        Area.FR: Area.FR,
-        Area.DE: "GER",  # Nordpool uses "GER" for Germany
-        Area.NL: Area.NL,
+        Area.AT: "AT",
+        Area.BE: "BE",
+        Area.FR: "FR",
+        Area.DE_LU: "GER",  # Nord Pool uses "GER" for Germany-Luxembourg
+        Area.NL: "NL",
         Area.PL: Area.PL,
     }
 
@@ -179,7 +177,7 @@ class AreaMapping:
         Area.AT: "AT",
         Area.BE: "BE",
         Area.FR: "FR",
-        Area.DE: "DE",
+        Area.DE_LU: "DE-LU",  # Germany-Luxembourg bidding zone
         Area.NL: "NL",
         Area.PL: "PL",
     }
@@ -203,8 +201,7 @@ class AreaMapping:
         Area.EE: "10Y1001A1001A39I",  # Updated EIC code (was: 10Y1001A1001A816)
         Area.FI: "10YFI-1--------U",
         Area.FR: "10YFR-RTE------C",
-        Area.DE: "10Y1001A1001A82H",  # Germany (same bidding zone as DE-LU)
-        Area.DE_LU: "10Y1001A1001A82H",
+        Area.DE_LU: "10Y1001A1001A82H",  # Germany-Luxembourg bidding zone (same EIC as DE)
         "GR": "10YGR-HTSO-----Y",
         "HU": "10YHU-MAVIR----U",
         "IT": "10Y1001A1001A70O",  # Italy mainland
@@ -261,8 +258,7 @@ class AreaMapping:
         Area.EE: "EE",
         Area.FI: "FI",
         Area.FR: "FR",
-        Area.DE: "DE",
-        Area.DE_LU: "DE-LU",
+        Area.DE_LU: "DE-LU",  # Germany-Luxembourg bidding zone as DE
         "GR": "GR",
         "HU": "HU",
         "IT": "IT",
@@ -430,8 +426,7 @@ class AreaInfo:
         "LT": "Baltic",
         "LV": "Baltic",
         # Central Europe
-        "DE": "Central Europe",
-        "DE-LU": "Central Europe",
+        "DE-LU": "Central Europe",  # Germany-Luxembourg bidding zone as DE
         "AT": "Central Europe",
         "FR": "Central Europe",
         "BE": "Central Europe",
@@ -483,9 +478,10 @@ class AreaInfo:
         "EE": "Estonia",
         "LT": "Lithuania",
         "LV": "Latvia",
-        # Central Europe
-        "DE": "Germany",
-        "DE-LU": "Germany-Luxembourg",
+        # Germany-Luxembourg bidding zone
+        "DE-LU": "Germany-Luxembourg",  # Combined bidding zone
+        # Other Central Europe
+        "IT": "Italy",
         "AT": "Austria",
         "FR": "France",
         "BE": "Belgium",

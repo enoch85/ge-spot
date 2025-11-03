@@ -23,11 +23,11 @@ class FallbackManager:
         """Try API sources in priority order with exponential timeout backoff.
 
         Implements exponential timeout strategy per source:
-            - Attempt 1: 2 seconds
-            - Attempt 2: 6 seconds (2s × 3)
-            - Attempt 3: 18 seconds (6s × 3)
+            - Attempt 1: 5 seconds
+            - Attempt 2: 15 seconds (5s × 3)
+            - Attempt 3: 45 seconds (15s × 3)
 
-        Total max time per source: 2s + 6s + 18s = 26 seconds
+        Total max time per source: 5s + 15s + 45s = 65 seconds
 
         Args:
             api_instances: List of API instances to try in priority order
@@ -54,7 +54,7 @@ class FallbackManager:
             # Try each source with exponential backoff
             for attempt in range(Network.Defaults.RETRY_COUNT):
                 # Calculate timeout: base × (multiplier ^ attempt)
-                # No cap - let it grow naturally (2s, 6s, 18s)
+                # No cap - let it grow naturally (5s, 15s, 45s)
                 timeout = Network.Defaults.RETRY_BASE_TIMEOUT * (
                     Network.Defaults.RETRY_TIMEOUT_MULTIPLIER**attempt
                 )
@@ -112,7 +112,7 @@ class FallbackManager:
                         # Last attempt failed, log warning and move to next source
                         _LOGGER.warning(
                             f"[{area}] ✗ '{source_name}' failed all {Network.Defaults.RETRY_COUNT} attempts "
-                            f"(timeouts: 2s, 6s, 18s)"
+                            f"(timeouts: 5s, 15s, 45s)"
                         )
                         break
 

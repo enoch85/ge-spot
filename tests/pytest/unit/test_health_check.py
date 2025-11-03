@@ -105,8 +105,8 @@ class TestExponentialBackoffConfiguration:
         assert hasattr(Network.Defaults, "RETRY_BASE_TIMEOUT")
 
     def test_retry_base_timeout_value(self):
-        """Verify RETRY_BASE_TIMEOUT is 2 seconds."""
-        assert Network.Defaults.RETRY_BASE_TIMEOUT == 2
+        """Verify RETRY_BASE_TIMEOUT is 5 seconds."""
+        assert Network.Defaults.RETRY_BASE_TIMEOUT == 5
 
     def test_retry_timeout_multiplier_defined(self):
         """Verify RETRY_TIMEOUT_MULTIPLIER is defined."""
@@ -125,13 +125,13 @@ class TestExponentialBackoffConfiguration:
         assert Network.Defaults.RETRY_COUNT == 3
 
     def test_exponential_timeout_progression(self):
-        """Verify exponential timeout progression: 2s, 6s, 18s."""
+        """Verify exponential timeout progression: 5s, 15s, 45s."""
         base = Network.Defaults.RETRY_BASE_TIMEOUT
         multiplier = Network.Defaults.RETRY_TIMEOUT_MULTIPLIER
 
         timeouts = [base * (multiplier**i) for i in range(Network.Defaults.RETRY_COUNT)]
 
-        assert timeouts == [2, 6, 18]
+        assert timeouts == [5, 15, 45]
 
     def test_old_constants_removed(self):
         """Verify old timeout constants are removed."""
@@ -444,7 +444,7 @@ class TestTimeoutCalculation:
         multiplier = Network.Defaults.RETRY_TIMEOUT_MULTIPLIER
 
         timeout = base * (multiplier**0)
-        assert timeout == 2
+        assert timeout == 5
 
     def test_timeout_calculation_attempt_2(self):
         """Verify timeout calculation for attempt 2."""
@@ -452,7 +452,7 @@ class TestTimeoutCalculation:
         multiplier = Network.Defaults.RETRY_TIMEOUT_MULTIPLIER
 
         timeout = base * (multiplier**1)
-        assert timeout == 6
+        assert timeout == 15
 
     def test_timeout_calculation_attempt_3(self):
         """Verify timeout calculation for attempt 3."""
@@ -460,10 +460,10 @@ class TestTimeoutCalculation:
         multiplier = Network.Defaults.RETRY_TIMEOUT_MULTIPLIER
 
         timeout = base * (multiplier**2)
-        assert timeout == 18
+        assert timeout == 45
 
     def test_total_max_timeout_per_source(self):
-        """Verify total max timeout per source is 26 seconds."""
+        """Verify total max timeout per source is 65 seconds."""
         timeouts = [
             Network.Defaults.RETRY_BASE_TIMEOUT
             * (Network.Defaults.RETRY_TIMEOUT_MULTIPLIER**i)
@@ -471,7 +471,7 @@ class TestTimeoutCalculation:
         ]
 
         total = sum(timeouts)
-        assert total == 26  # 2 + 6 + 18
+        assert total == 65  # 5 + 15 + 45
 
 
 if __name__ == "__main__":

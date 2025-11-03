@@ -10,6 +10,7 @@ import re
 from .base.api_client import ApiClient
 from ..const.sources import Source
 from ..const.api import ComEd
+from ..const.network import Network
 from .parsers.comed_parser import ComedParser
 from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
@@ -131,7 +132,7 @@ class ComedAPI(BasePriceAPI):
 
                 response = None
                 try:
-                    async with asyncio.timeout(60):
+                    async with asyncio.timeout(Network.Defaults.HTTP_TIMEOUT):
                         response = await client.fetch(url)
                 except TimeoutError:
                     _LOGGER.error("Timeout fetching ComEd data")

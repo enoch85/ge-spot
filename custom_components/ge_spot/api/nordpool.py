@@ -185,8 +185,12 @@ class NordpoolAPI(BasePriceAPI):
             tomorrow_data = await fetch_with_retry(
                 fetch_tomorrow,
                 is_data_available,
-                retry_interval=1800,  # 30 minutes
-                end_time=time(23, 50),  # Stop retrying late at night
+                retry_interval=Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
+                * Network.Defaults.SECONDS_PER_MINUTE,
+                end_time=time(
+                    Network.Defaults.RETRY_CUTOFF_TIME_HOUR,
+                    Network.Defaults.RETRY_CUTOFF_TIME_MINUTE,
+                ),
                 local_tz_name=TimezoneName.EUROPE_OSLO,  # Use Oslo time for end_time check
             )
 
@@ -240,6 +244,7 @@ class NordpoolAPI(BasePriceAPI):
             "timezone": "Europe/Oslo",  # Nordpool API timezone
             "currency": "EUR",  # Nordpool API currency
             "area": area,  # Pass the area to the parser via this dict
+            "delivery_area": delivery_area,  # Pass the delivery area for parser to use
             "source": self.source_type,  # Let the parser know the source
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             # Add any other metadata the parser might need from the API adapter context

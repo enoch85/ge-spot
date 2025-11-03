@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List
 
 from ...const.sources import Source
+from ...const.time import TimeInterval
 from ..base.price_parser import BasePriceParser
 
 _LOGGER = logging.getLogger(__name__)
@@ -532,10 +533,11 @@ class EntsoeParser(BasePriceParser):
             return None
 
         now = datetime.now(timezone.utc)
-        # Round down to current 15-minute interval, then add 15 minutes
-        minute_rounded = (now.minute // 15) * 15
+        # Round down to current interval, then add interval duration
+        interval_minutes = TimeInterval.get_interval_minutes()
+        minute_rounded = (now.minute // interval_minutes) * interval_minutes
         current_interval = now.replace(minute=minute_rounded, second=0, microsecond=0)
-        next_interval = current_interval + timedelta(minutes=15)
+        next_interval = current_interval + timedelta(minutes=interval_minutes)
         next_interval_key = next_interval.isoformat()
 
         return interval_raw.get(next_interval_key)

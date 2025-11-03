@@ -303,8 +303,11 @@ def calculate_data_validity(
         all_intervals.sort()
         validity.last_valid_interval = all_intervals[-1]
 
-        # Add interval duration (15 minutes) to get data_valid_until
-        validity.data_valid_until = validity.last_valid_interval + timedelta(minutes=15)
+        # Add interval duration to get data_valid_until
+        interval_minutes = TimeInterval.get_interval_minutes()
+        validity.data_valid_until = validity.last_valid_interval + timedelta(
+            minutes=interval_minutes
+        )
 
         # Check if we have minimum data (at least rest of today)
         # This means we have intervals from now until at least end of today

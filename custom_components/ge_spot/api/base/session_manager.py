@@ -5,6 +5,8 @@ import aiohttp
 import asyncio
 import weakref
 
+from ...const.network import Network
+
 _LOGGER = logging.getLogger(__name__)
 
 # Global session registry to prevent leaks
@@ -52,7 +54,12 @@ async def close_session(api_obj):
 
 
 async def fetch_with_retry(
-    api_obj, url, params=None, headers=None, timeout=30, max_retries=3
+    api_obj,
+    url,
+    params=None,
+    headers=None,
+    timeout=Network.Defaults.HTTP_TIMEOUT,
+    max_retries=Network.Defaults.RETRY_COUNT,
 ):
     """Fetch data from URL with retry mechanism."""
     await ensure_session(api_obj)

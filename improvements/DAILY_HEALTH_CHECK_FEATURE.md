@@ -27,7 +27,7 @@ User has no idea if fallback sources are healthy
 
 ### 2. Complete Source Validation
 - **All sources tested**, not just failed ones
-- Each source validated with exponential backoff (2s → 6s → 18s)
+- Each source validated with exponential backoff (5s → 15s → 45s)
 - Success clears failure timestamp
 - Failure marks source with timestamp for 24-hour skip
 
@@ -197,7 +197,7 @@ class ValidationRetry:
 ### API Calls
 - **Same total number** of calls, just consolidated into one window
 - Spread over 0-3600 seconds with random delay
-- Uses existing exponential backoff (2s → 6s → 18s per source)
+- Uses existing exponential backoff (5s → 15s → 45s per source)
 
 ### Memory
 - **Negligible**: One boolean flag + one timestamp

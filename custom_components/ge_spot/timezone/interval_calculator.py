@@ -11,6 +11,7 @@ from ..const.time import (
     TimezoneReference,
     TimeInterval,
 )
+from ..const.network import Network
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ class IntervalCalculator:
                     now_area.replace(tzinfo=None) - now_system.replace(tzinfo=None)
                 ).total_seconds()
                 hour_diff = round(
-                    time_diff_seconds / 3600
+                    time_diff_seconds / Network.Defaults.SECONDS_PER_HOUR
                 )  # Convert to hours and round to nearest hour
 
                 _LOGGER.debug(

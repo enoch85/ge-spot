@@ -47,8 +47,12 @@ class NordpoolParser(BasePriceParser):
         source_timezone = data.get("timezone", "UTC")
         source_currency = data.get("currency", Currency.EUR)
         area = data.get("area")
+        # Get delivery area for looking up prices in the response
+        # (e.g., "DE" area uses "GER" delivery area in Nord Pool)
+        delivery_area = data.get("delivery_area", area)
         _LOGGER.debug(
-            f"[NordpoolParser] Metadata - Area: {area}, Timezone: {source_timezone}, Currency: {source_currency}"
+            f"[NordpoolParser] Metadata - Area: {area}, Delivery Area: {delivery_area}, "
+            f"Timezone: {source_timezone}, Currency: {source_currency}"
         )
 
         interval_raw = {}
@@ -89,14 +93,17 @@ class NordpoolParser(BasePriceParser):
                     continue
 
                 ts_str = entry.get("deliveryStart")
-                if not ts_str or not area:
+                if not ts_str or not delivery_area:
                     continue
 
                 entry_per_area = entry.get("entryPerArea")
-                if not isinstance(entry_per_area, dict) or area not in entry_per_area:
+                if (
+                    not isinstance(entry_per_area, dict)
+                    or delivery_area not in entry_per_area
+                ):
                     continue
 
-                price_str = entry_per_area[area]
+                price_str = entry_per_area[delivery_area]
 
                 try:
                     # Parse timestamp (assuming UTC from Nordpool)
