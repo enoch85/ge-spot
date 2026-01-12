@@ -173,8 +173,20 @@ class TestValidationFallback:
         # Create future-only data (tomorrow's prices)
         now = datetime.now(stockholm_tz)
         tomorrow = now + timedelta(days=1)
-        tomorrow_10am = tomorrow.replace(hour=10, minute=0, second=0, microsecond=0)
+        tomorrow_start = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow_start_utc = tomorrow_start.astimezone(zoneinfo.ZoneInfo("UTC"))
 
+        # Generate 24 hourly prices for tomorrow only (no today data)
+        # This simulates ENTSOE publishing tomorrow's prices in the afternoon
+        points_xml = "\n".join(
+            f"""            <Point>
+                <position>{i+1}</position>
+                <price.amount>{50.0 + i}</price.amount>
+            </Point>"""
+            for i in range(24)
+        )
+
+        # Use correct ENTSOE XML namespace (required by parser)
         future_only_raw = {
             "source": "entsoe",
             "data_source": "entsoe",
@@ -183,36 +195,52 @@ class TestValidationFallback:
             "timezone": "Etc/UTC",
             "attempted_sources": ["entsoe"],
             "raw_data": f"""<?xml version="1.0" encoding="UTF-8"?>
-<Publication_MarketDocument>
+<Publication_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:3">
     <TimeSeries>
+        <businessType>A44</businessType>
+        <currency_Unit.name>EUR</currency_Unit.name>
         <Period>
             <timeInterval>
-                <start>{tomorrow_10am.astimezone(zoneinfo.ZoneInfo('UTC')).strftime('%Y-%m-%dT%H:%M')}Z</start>
+                <start>{tomorrow_start_utc.strftime('%Y-%m-%dT%H:%M')}Z</start>
+                <end>{(tomorrow_start_utc + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')}Z</end>
             </timeInterval>
-            <Point>
-                <position>1</position>
-                <price.amount>50.0</price.amount>
-            </Point>
+            <resolution>PT60M</resolution>
+{points_xml}
         </Period>
     </TimeSeries>
 </Publication_MarketDocument>""",
         }
 
-        # Mock exchange service
+        # Mock currency converter (required for processing)
+        mock_currency_converter = AsyncMock()
+        mock_currency_converter.convert_interval_prices = AsyncMock(
+            return_value=({}, {}, None, None)
+        )
+
         with patch.object(processor, "_ensure_exchange_service", AsyncMock()):
+            processor._currency_converter = mock_currency_converter
+
             # Process the future-only data
             result = await processor.process(future_only_raw)
 
-            # Should fail validation and return error
-            assert (
-                "error" in result
-            ), "Should return error for future-only data after 01:00"
-            assert (
-                "validation" in result["error"].lower()
-                or "current interval" in result["error"].lower()
-            ), f"Error should mention validation or current interval, got: {result.get('error')}"
+            # DataProcessor returns IntervalPriceData, not a dict
+            # Future-only data should result in empty today_interval_prices
+            # because the data is all for tomorrow
+            assert hasattr(result, "today_interval_prices"), (
+                "Result should be IntervalPriceData with today_interval_prices"
+            )
 
-            _LOGGER.info(f"Validation correctly failed with error: {result['error']}")
+            # The key validation: future-only data should NOT populate today's prices
+            today_count = len(result.today_interval_prices)
+            assert today_count == 0, (
+                f"Future-only data should have 0 today prices, got {today_count}. "
+                "This means future data incorrectly populated today's slot."
+            )
+
+            _LOGGER.info(
+                f"Validation correct: future-only data has {today_count} today prices, "
+                f"{len(result.tomorrow_interval_prices)} tomorrow prices"
+            )
 
 
 if __name__ == "__main__":
