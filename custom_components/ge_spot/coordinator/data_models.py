@@ -60,6 +60,12 @@ class IntervalPriceData:
     today_raw_prices: Dict[str, float] = field(default_factory=dict)
     tomorrow_raw_prices: Dict[str, float] = field(default_factory=dict)
 
+    # Export/Production price data (for prosumers selling electricity)
+    # Calculated from spot prices using: (spot × multiplier + offset) × (1 + export_vat)
+    export_today_prices: Dict[str, float] = field(default_factory=dict)
+    export_tomorrow_prices: Dict[str, float] = field(default_factory=dict)
+    export_enabled: bool = False  # Whether export prices are calculated
+
     # Source metadata
     source: str = ""
     area: str = ""
@@ -330,6 +336,117 @@ class IntervalPriceData:
         # Allow for DST transitions (92-100 intervals)
         return 92 <= actual_intervals <= 100
 
+    @property
+    def export_current_price(self) -> Optional[float]:
+        """Get current export price.
+
+        Returns:
+            Current export price or None if not available/enabled
+        """
+        if not self.export_enabled or not self._tz_service:
+            return None
+
+        try:
+            current_key = self._tz_service.get_current_interval_key()
+            return self.export_today_prices.get(current_key)
+        except Exception as e:
+            _LOGGER.error(f"Error getting export_current_price: {e}", exc_info=True)
+            return None
+
+    @property
+    def export_next_interval_price(self) -> Optional[float]:
+        """Get next interval export price.
+
+        Returns:
+            Next export price or None if not available/enabled
+        """
+        if not self.export_enabled or not self._tz_service:
+            return None
+
+        try:
+            next_key = self._tz_service.get_next_interval_key()
+            price = self.export_today_prices.get(next_key)
+            if price is None:
+                price = self.export_tomorrow_prices.get(next_key)
+            return price
+        except Exception as e:
+            _LOGGER.error(
+                f"Error getting export_next_interval_price: {e}", exc_info=True
+            )
+            return None
+
+    @property
+    def export_statistics(self) -> PriceStatistics:
+        """Calculate statistics from today's export prices.
+
+        Returns:
+            PriceStatistics with avg, min, max for export prices
+        """
+        if not self.export_enabled or not self.export_today_prices:
+            return PriceStatistics()
+
+        try:
+            prices = list(self.export_today_prices.values())
+
+            min_price = min(prices)
+            max_price = max(prices)
+
+            min_timestamp = None
+            max_timestamp = None
+            for key, price in self.export_today_prices.items():
+                if price == min_price and min_timestamp is None:
+                    min_timestamp = key
+                if price == max_price and max_timestamp is None:
+                    max_timestamp = key
+
+            return PriceStatistics(
+                avg=sum(prices) / len(prices),
+                min=min_price,
+                max=max_price,
+                min_timestamp=min_timestamp,
+                max_timestamp=max_timestamp,
+            )
+        except Exception as e:
+            _LOGGER.error(f"Error calculating export_statistics: {e}", exc_info=True)
+            return PriceStatistics()
+
+    @property
+    def export_tomorrow_statistics(self) -> PriceStatistics:
+        """Calculate statistics from tomorrow's export prices.
+
+        Returns:
+            PriceStatistics with avg, min, max for tomorrow's export prices
+        """
+        if not self.export_enabled or not self.export_tomorrow_prices:
+            return PriceStatistics()
+
+        try:
+            prices = list(self.export_tomorrow_prices.values())
+
+            min_price = min(prices)
+            max_price = max(prices)
+
+            min_timestamp = None
+            max_timestamp = None
+            for key, price in self.export_tomorrow_prices.items():
+                if price == min_price and min_timestamp is None:
+                    min_timestamp = key
+                if price == max_price and max_timestamp is None:
+                    max_timestamp = key
+
+            return PriceStatistics(
+                avg=sum(prices) / len(prices),
+                min=min_price,
+                max=max_price,
+                min_timestamp=min_timestamp,
+                max_timestamp=max_timestamp,
+            )
+        except Exception as e:
+            _LOGGER.error(
+                f"Error calculating export_tomorrow_statistics: {e}", exc_info=True
+            )
+            return PriceStatistics()
+
     # ========== METHODS ==========
 
     def migrate_to_new_day(self) -> None:
@@ -354,6 +471,11 @@ class IntervalPriceData:
         # Clear tomorrow
         self.tomorrow_interval_prices = {}
         self.tomorrow_raw_prices = {}
+
+        # Migrate export prices too
+        if self.export_enabled:
+            self.export_today_prices = self.export_tomorrow_prices.copy()
+            self.export_tomorrow_prices = {}
 
         # Mark as migrated
         self.migrated_from_tomorrow = True
@@ -383,6 +505,10 @@ class IntervalPriceData:
             "tomorrow_interval_prices": self.tomorrow_interval_prices,
             "today_raw_prices": self.today_raw_prices,
             "tomorrow_raw_prices": self.tomorrow_raw_prices,
+            # Export/Production price data
+            "export_today_prices": self.export_today_prices,
+            "export_tomorrow_prices": self.export_tomorrow_prices,
+            "export_enabled": self.export_enabled,
             # Source metadata
             "source": self.source,
             "area": self.area,
@@ -442,6 +568,10 @@ class IntervalPriceData:
             tomorrow_interval_prices=data.get("tomorrow_interval_prices", {}),
             today_raw_prices=data.get("today_raw_prices", {}),
             tomorrow_raw_prices=data.get("tomorrow_raw_prices", {}),
+            # Export/Production price data
+            export_today_prices=data.get("export_today_prices", {}),
+            export_tomorrow_prices=data.get("export_tomorrow_prices", {}),
+            export_enabled=data.get("export_enabled", False),
             # Source metadata
             source=data.get("source", ""),
             area=data.get("area", ""),

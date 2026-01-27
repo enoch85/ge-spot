@@ -57,3 +57,11 @@ class Defaults:
     TOMORROW_DATA_INITIAL_RETRY_MINUTES = 15  # first retry after special window
     TOMORROW_DATA_MAX_RETRIES = 10  # maximum number of retries
     TOMORROW_DATA_BACKOFF_FACTOR = 1.5  # exponential backoff factor
+
+    # Export/Production price defaults
+    # Export prices use formula: (spot_price × multiplier + offset) × (1 + export_vat)
+    # Default multiplier of 1.0 means export price equals spot price before offset/VAT
+    EXPORT_ENABLED = False  # Export sensors disabled by default
+    EXPORT_MULTIPLIER = 1.0  # Default multiplier (1.0 = no scaling)
+    EXPORT_OFFSET = 0.0  # Default offset (0.0 = no offset)
+    EXPORT_VAT = 0.0  # Default export VAT (0.0 = no VAT, common for feed-in)

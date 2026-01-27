@@ -226,6 +226,57 @@ def get_options_schema(defaults, supported_sources, area):
             selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
         )
 
+    # --- Export/Production Price Settings ---
+    # Export prices use formula: (spot_price × multiplier + offset) × (1 + export_vat)
+    # Useful for prosumers who sell electricity back to the grid at different rates
+    schema[
+        vol.Optional(
+            Config.EXPORT_ENABLED,
+            default=defaults.get(Config.EXPORT_ENABLED, Defaults.EXPORT_ENABLED),
+        )
+    ] = selector.BooleanSelector(selector.BooleanSelectorConfig())
+
+    schema[
+        vol.Optional(
+            Config.EXPORT_MULTIPLIER,
+            default=defaults.get(Config.EXPORT_MULTIPLIER, Defaults.EXPORT_MULTIPLIER),
+            description="Multiplier applied to spot price for export (e.g. 0.1 for 10% of spot)",
+        )
+    ] = selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=-10.0,
+            max=10.0,
+            step=0.0001,
+            mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+    schema[
+        vol.Optional(
+            Config.EXPORT_OFFSET,
+            default=defaults.get(Config.EXPORT_OFFSET, Defaults.EXPORT_OFFSET),
+            description="Offset added after multiplier (can be negative).\nEnter in same unit as Price Display Format.",
+        )
+    ] = selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=-1000.0,
+            max=1000.0,
+            step=0.001,
+            mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+    schema[
+        vol.Optional(
+            Config.EXPORT_VAT,
+            default=defaults.get(Config.EXPORT_VAT, Defaults.EXPORT_VAT * 100),
+            description="VAT rate for export prices (often 0% for feed-in tariffs)",
+        )
+    ] = vol.All(
+        vol.Coerce(float),
+        vol.Range(min=0.0, max=100.0),
+    )
+
     # Add Clear Cache button
     schema[vol.Optional("clear_cache", default=False)] = selector.BooleanSelector(
         selector.BooleanSelectorConfig()
@@ -281,6 +332,25 @@ def get_default_values(options, data):
             defaults[Config.CONF_STROMLIGNING_SUPPLIER] = data.get(
                 Config.CONF_STROMLIGNING_SUPPLIER, ""
             )
+
+        # Export/Production price settings
+        defaults[Config.EXPORT_ENABLED] = options.get(
+            Config.EXPORT_ENABLED,
+            data.get(Config.EXPORT_ENABLED, Defaults.EXPORT_ENABLED),
+        )
+        defaults[Config.EXPORT_MULTIPLIER] = options.get(
+            Config.EXPORT_MULTIPLIER,
+            data.get(Config.EXPORT_MULTIPLIER, Defaults.EXPORT_MULTIPLIER),
+        )
+        defaults[Config.EXPORT_OFFSET] = options.get(
+            Config.EXPORT_OFFSET,
+            data.get(Config.EXPORT_OFFSET, Defaults.EXPORT_OFFSET),
+        )
+        # Export VAT - convert from decimal to percentage for display
+        export_vat_decimal = options.get(
+            Config.EXPORT_VAT, data.get(Config.EXPORT_VAT, Defaults.EXPORT_VAT)
+        )
+        defaults[Config.EXPORT_VAT] = export_vat_decimal * 100
 
         return defaults
     except Exception as e:

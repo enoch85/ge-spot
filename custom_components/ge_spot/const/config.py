@@ -56,3 +56,12 @@ class Config:
     VALIDATE_PRICE_RANGE = "validate_price_range"  # Whether to validate price ranges
     PRICE_MIN = "price_min"  # Minimum valid price
     PRICE_MAX = "price_max"  # Maximum valid price
+
+    # Export/Production price configuration
+    # Export prices use formula: (spot_price × multiplier + offset) × (1 + export_vat)
+    EXPORT_ENABLED = "export_enabled"  # Whether to enable export price sensors
+    EXPORT_MULTIPLIER = (
+        "export_multiplier"  # Multiplier applied to spot price for export
+    )
+    EXPORT_OFFSET = "export_offset"  # Offset added after multiplier (can be negative)
+    EXPORT_VAT = "export_vat"  # VAT rate for export prices (often 0%)

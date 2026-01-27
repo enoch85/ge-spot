@@ -229,5 +229,107 @@ async def async_setup_entry(
     )
     # --- End Hourly Average Sensors ---
 
+    # --- Export/Production Price Sensors ---
+    # Only add export sensors if export is enabled in config
+    export_enabled = options.get(
+        Config.EXPORT_ENABLED, data.get(Config.EXPORT_ENABLED, False)
+    )
+
+    if export_enabled:
+        # Export Current Price sensor
+        get_export_current_price = lambda data: (
+            data.export_current_price if data else None
+        )
+        entities.append(
+            PriceValueSensor(
+                coordinator,
+                config_data,
+                "export_current_price",
+                "Export Current Price",
+                get_export_current_price,
+                get_base_attrs,
+            )
+        )
+
+        # Export Next Interval Price sensor
+        get_export_next_price = lambda data: (
+            data.export_next_interval_price if data else None
+        )
+        entities.append(
+            PriceValueSensor(
+                coordinator,
+                config_data,
+                "export_next_interval_price",
+                "Export Next Interval Price",
+                get_export_next_price,
+                None,
+            )
+        )
+
+        # Export Average Price sensor (today)
+        get_export_avg = lambda data: (
+            data.export_statistics.avg if data and data.export_statistics else None
+        )
+        entities.append(
+            PriceValueSensor(
+                coordinator,
+                config_data,
+                "export_average_price",
+                "Export Average Price",
+                get_export_avg,
+                None,
+            )
+        )
+
+        # Export Peak Price sensor
+        get_export_peak = lambda data: (
+            data.export_statistics.max if data and data.export_statistics else None
+        )
+        entities.append(
+            PriceValueSensor(
+                coordinator,
+                config_data,
+                "export_peak_price",
+                "Export Peak Price",
+                get_export_peak,
+                None,
+            )
+        )
+
+        # Export Off-Peak Price sensor
+        get_export_off_peak = lambda data: (
+            data.export_statistics.min if data and data.export_statistics else None
+        )
+        entities.append(
+            PriceValueSensor(
+                coordinator,
+                config_data,
+                "export_off_peak_price",
+                "Export Off-Peak Price",
+                get_export_off_peak,
+                None,
+            )
+        )
+
+        # Tomorrow Export Average Price sensor
+        get_tomorrow_export_avg = lambda data: (
+            data.export_tomorrow_statistics.avg
+            if data and data.export_tomorrow_statistics
+            else None
+        )
+        entities.append(
+            TomorrowAveragePriceSensor(
+                coordinator,
+                config_data,
+                "tomorrow_export_average_price",
+                "Tomorrow Export Average Price",
+                get_tomorrow_export_avg,
+                additional_attrs=get_base_attrs,
+            )
+        )
+
+        _LOGGER.debug(f"Added export price sensors for area {coordinator.area}")
+    # --- End Export Price Sensors ---
+
     # Add all entities
     async_add_entities(entities)

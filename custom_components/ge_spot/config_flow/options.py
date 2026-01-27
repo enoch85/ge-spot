@@ -90,6 +90,10 @@ class GSpotOptionsFlow(OptionsFlow):
                 if Config.VAT in user_input:
                     user_input[Config.VAT] = user_input[Config.VAT] / 100
 
+                # Convert Export VAT from percentage to decimal if present
+                if Config.EXPORT_VAT in user_input:
+                    user_input[Config.EXPORT_VAT] = user_input[Config.EXPORT_VAT] / 100
+
                 # Check if price-affecting settings have changed
                 # These settings require cache invalidation because cached prices were calculated with old values
                 price_affecting_settings = [
@@ -97,6 +101,11 @@ class GSpotOptionsFlow(OptionsFlow):
                     Config.ADDITIONAL_TARIFF,
                     Config.ENERGY_TAX,
                     Config.DISPLAY_UNIT,
+                    # Export settings also affect cached prices
+                    Config.EXPORT_ENABLED,
+                    Config.EXPORT_MULTIPLIER,
+                    Config.EXPORT_OFFSET,
+                    Config.EXPORT_VAT,
                 ]
                 settings_changed = False
                 for setting in price_affecting_settings:

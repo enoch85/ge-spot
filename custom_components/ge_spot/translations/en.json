@@ -72,7 +72,11 @@
           "timezone_reference": "Time Reference",
           "entsoe_api_key": "ENTSO-E API Key",
           "clear_cache": "Clear Price Cache",
-          "stromligning_supplier": "Stromligning Supplier ID"
+          "stromligning_supplier": "Stromligning Supplier ID",
+          "export_enabled": "Enable Export Prices",
+          "export_multiplier": "Export Price Multiplier",
+          "export_offset": "Export Price Offset",
+          "export_vat": "Export VAT Rate (%)"
         },
         "data_description": {
           "source_priority": "Select which sources to use in order of priority (first = highest priority)",
@@ -83,7 +87,11 @@
           "timezone_reference": "Choose which timezone to use for displaying prices",
           "entsoe_api_key": "Required for using ENTSO-E as a data source",
           "clear_cache": "Clear the price cache to force a fresh data fetch",
-          "stromligning_supplier": "Complete list: https://github.com/enoch95/ge-spot/blob/main/docs/stromligning.md"
+          "stromligning_supplier": "Complete list: https://github.com/enoch95/ge-spot/blob/main/docs/stromligning.md",
+          "export_enabled": "Enable separate sensors for export/feed-in prices (for prosumers selling electricity)",
+          "export_multiplier": "Multiplier applied to spot price for export (e.g. 0.1 for 10% of spot price)",
+          "export_offset": "Offset added after multiplier (can be negative).\nEnter in same unit as Price Display Format.",
+          "export_vat": "VAT rate for export prices (often 0% for feed-in tariffs)"
         }
       }
     },

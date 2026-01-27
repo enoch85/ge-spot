@@ -143,6 +143,15 @@ class DataProcessor:
         # Use Defaults.PRECISION instead of DEFAULT_PRICE_PRECISION
         self.precision = config.get(Config.PRECISION, Defaults.PRECISION)
 
+        # Export/Production price configuration
+        # Export prices use formula: (spot_price × multiplier + offset) × (1 + export_vat)
+        self.export_enabled = config.get(Config.EXPORT_ENABLED, Defaults.EXPORT_ENABLED)
+        self.export_multiplier = config.get(
+            Config.EXPORT_MULTIPLIER, Defaults.EXPORT_MULTIPLIER
+        )
+        self.export_offset = config.get(Config.EXPORT_OFFSET, Defaults.EXPORT_OFFSET)
+        self.export_vat = config.get(Config.EXPORT_VAT, Defaults.EXPORT_VAT)
+
         # Log VAT configuration for transparency
         if self.include_vat:
             _LOGGER.debug(
@@ -151,6 +160,13 @@ class DataProcessor:
             )
         else:
             _LOGGER.debug(f"[{area}] VAT disabled (rate: {self.vat_rate * 100:.1f}%)")
+
+        # Log export price configuration
+        if self.export_enabled:
+            _LOGGER.debug(
+                f"[{area}] Export prices enabled: multiplier={self.export_multiplier}, "
+                f"offset={self.export_offset}, VAT={self.export_vat * 100:.1f}%"
+            )
 
         # Instantiate converters
         self._tz_converter = TimezoneConverter(tz_service)
@@ -558,7 +574,29 @@ class DataProcessor:
             "fallback_sources": data.get("fallback_sources", []),
             "using_cached_data": is_cached_data,  # Reflect if this cycle used cache
             "fetched_at": data.get("fetched_at"),
+            # Export/Production price data
+            "export_enabled": self.export_enabled,
+            "export_today_prices": {},
+            "export_tomorrow_prices": {},
         }
+
+        # --- Calculate Export Prices (if enabled) ---
+        if self.export_enabled:
+            # Get display unit multiplier for export calculation
+            display_multiplier = 100 if self.use_subunit else 1
+
+            # Calculate export prices from raw prices (without import VAT/taxes)
+            processed_result["export_today_prices"] = self._calculate_export_prices(
+                raw_today_prices, display_multiplier
+            )
+            processed_result["export_tomorrow_prices"] = self._calculate_export_prices(
+                raw_tomorrow_prices, display_multiplier
+            )
+
+            _LOGGER.debug(
+                f"[{self.area}] Calculated export prices: today={len(processed_result['export_today_prices'])}, "
+                f"tomorrow={len(processed_result['export_tomorrow_prices'])}"
+            )
 
         # --- Add Stromligning Attribution ---
         if source_name == Source.STROMLIGNING:
@@ -953,3 +991,44 @@ class DataProcessor:
         # Convert to IntervalPriceData and return it directly (not converted to dict)
         price_data = IntervalPriceData.from_cache_dict(empty_dict, self._tz_service)
         return price_data
+
+    def _calculate_export_prices(
+        self,
+        raw_prices: Dict[str, float],
+        display_unit_multiplier: int,
+    ) -> Dict[str, float]:
+        """Calculate export prices from raw spot prices.
+
+        Export prices use formula: (spot_price × multiplier + offset) × (1 + export_vat)
+
+        Args:
+            raw_prices: Dictionary of raw interval prices (already currency-converted but without VAT/taxes)
+            display_unit_multiplier: Multiplier for display subunits (e.g. 100 for cents)
+
+        Returns:
+            Dictionary of export prices with same keys as raw_prices
+        """
+        if not self.export_enabled or not raw_prices:
+            return {}
+
+        export_prices = {}
+        for key, raw_price in raw_prices.items():
+            if raw_price is None:
+                continue
+
+            # Formula: (spot_price × multiplier + offset) × (1 + export_vat)
+            # Note: raw_price is already in target currency and display units
+            # So offset should be in same display units as raw_price
+
+            # Apply multiplier
+            price = raw_price * self.export_multiplier
+
+            # Add offset (offset is entered in same unit as display format)
+            price += self.export_offset
+
+            # Apply export VAT (often 0% for feed-in)
+            price *= 1 + self.export_vat
+
+            export_prices[key] = price
+
+        return export_prices
