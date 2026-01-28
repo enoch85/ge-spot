@@ -10,6 +10,7 @@ class Defaults:
     NAME = "Electricity Price"
     VAT = 0.0  # Default VAT rate as decimal (0.25 = 25%)
     INCLUDE_VAT = False  # Whether to include VAT by default
+    IMPORT_MULTIPLIER = 1.0  # Default multiplier for import prices (1.0 = no scaling)
     ADDITIONAL_TARIFF = 0.0  # Default additional tariff (transfer fees, etc.) per kWh
     ENERGY_TAX = 0.0  # Default energy tax per kWh (applied before VAT)
     UPDATE_INTERVAL = 15  # Update every 15 minutes to match interval granularity

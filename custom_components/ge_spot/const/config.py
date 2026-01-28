@@ -8,7 +8,8 @@ class Config:
     AREA = "area"
     VAT = "vat"
     INCLUDE_VAT = "include_vat"  # Whether to include VAT in price calculations
-    # Price components (applied in order: spot + tariff + tax, then VAT on total)
+    # Price components (applied in order: (spot × multiplier) + tariff + tax, then VAT on total)
+    IMPORT_MULTIPLIER = "import_multiplier"  # Multiplier applied to spot price for import (e.g. 0.1068 for Belgian tariffs)
     ADDITIONAL_TARIFF = (
         "additional_tariff"  # Additional tariff/fees from energy provider (per kWh)
     )

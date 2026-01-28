@@ -161,6 +161,7 @@ The first selected source becomes your highest priority, and the integration wil
 ### Advanced Settings
 
 - **Display Format**: Choose between decimal (e.g. 0.15 EUR/kWh) or subunit (e.g. 15 cents/kWh)
+- **Import Multiplier**: Scale spot price before adding fees (e.g., 0.107 for Belgian tariffs where providers charge a fraction of spot price)
 - **Additional Tariff**: Add grid/transfer fees from your provider (per kWh, applied before VAT)
 - **Energy Tax**: Add fixed energy tax per kWh (e.g., government levy, applied before VAT)
 - **Timezone Reference**: Display prices in Home Assistant timezone or local area timezone
@@ -380,10 +381,10 @@ The price sensors expose interval prices through attributes in a standardized fo
 
 **Price Calculation:**
 ```
-value = ((raw_value + additional_tariff + energy_tax) × (1 + VAT%)) × display_unit_multiplier
+value = (((raw_value × import_multiplier) + additional_tariff + energy_tax) × (1 + VAT%)) × display_unit_multiplier
 ```
 
-When no VAT, tariffs, or taxes are configured, `raw_value` equals `value`.
+When no multiplier, VAT, tariffs, or taxes are configured, `raw_value` equals `value`.
 
 **Using in Templates:**
 ```yaml

@@ -127,12 +127,24 @@ def get_stromligning_config_schema(existing_supplier=None):
 def get_options_schema(defaults, supported_sources, area):
     """Return schema for options."""
     # Price calculation follows EU tax standards:
-    # Final Price = (Spot Price + Additional Tariff + Energy Tax) × (1 + VAT%)
+    # Final Price = ((Spot Price × Import Multiplier) + Additional Tariff + Energy Tax) × (1 + VAT%)
     # VAT is applied to the total of all costs, as per standard EU practice.
     schema = {
         vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0)): vol.All(
             vol.Coerce(float),
             vol.Range(min=0.0, max=100.0),
+        ),
+        vol.Optional(
+            Config.IMPORT_MULTIPLIER,
+            default=defaults.get(Config.IMPORT_MULTIPLIER, Defaults.IMPORT_MULTIPLIER),
+            description="Multiplier applied to spot price for import (e.g. 0.1068).\nApplied before tariff and tax.",
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0.0,
+                max=10.0,
+                step=0.001,
+                mode=selector.NumberSelectorMode.BOX,
+            )
         ),
         vol.Optional(
             Config.ADDITIONAL_TARIFF,
@@ -292,6 +304,12 @@ def get_default_values(options, data):
         # VAT - convert from decimal to percentage for display
         vat_decimal = options.get(Config.VAT, data.get(Config.VAT, Defaults.VAT))
         defaults[Config.VAT] = vat_decimal * 100  # Convert to percentage for UI display
+
+        # Import multiplier
+        defaults[Config.IMPORT_MULTIPLIER] = options.get(
+            Config.IMPORT_MULTIPLIER,
+            data.get(Config.IMPORT_MULTIPLIER, Defaults.IMPORT_MULTIPLIER),
+        )
 
         # Additional tariff
         defaults[Config.ADDITIONAL_TARIFF] = options.get(

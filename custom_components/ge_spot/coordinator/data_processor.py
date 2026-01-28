@@ -134,6 +134,9 @@ class DataProcessor:
         # This makes the behavior intuitive - configuring a VAT rate implies you want it applied
         configured_include_vat = config.get(Config.INCLUDE_VAT, Defaults.INCLUDE_VAT)
         self.include_vat = configured_include_vat or (self.vat_rate > 0)
+        self.import_multiplier = config.get(
+            Config.IMPORT_MULTIPLIER, Defaults.IMPORT_MULTIPLIER
+        )
         self.additional_tariff = config.get(
             Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF
         )
@@ -151,6 +154,13 @@ class DataProcessor:
         )
         self.export_offset = config.get(Config.EXPORT_OFFSET, Defaults.EXPORT_OFFSET)
         self.export_vat = config.get(Config.EXPORT_VAT, Defaults.EXPORT_VAT)
+
+        # Log import price configuration
+        if self.import_multiplier != 1.0:
+            _LOGGER.debug(
+                f"[{area}] Import multiplier: {self.import_multiplier:.4f} "
+                f"(spot price will be scaled before adding tariff/tax)"
+            )
 
         # Log VAT configuration for transparency
         if self.include_vat:
@@ -206,6 +216,7 @@ class DataProcessor:
                 vat_rate=self.vat_rate,
                 additional_tariff=self.additional_tariff,
                 energy_tax=self.energy_tax,
+                import_multiplier=self.import_multiplier,
             )
 
         # Ensure we have a valid currency converter
