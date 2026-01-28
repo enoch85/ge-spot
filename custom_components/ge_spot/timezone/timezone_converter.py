@@ -273,8 +273,9 @@ class TimezoneConverter:
             # This handles the case where APIs return concatenated data without dates
             if unassigned_prices:
                 # Calculate expected intervals for today (DST-aware)
+                now_in_target_tz = datetime.now(self._tz_service.target_timezone)
                 intervals_per_day = TimeInterval.get_expected_intervals_for_date(
-                    self.now, self.target_timezone
+                    now_in_target_tz, self._tz_service.target_timezone
                 )
 
                 _LOGGER.warning(

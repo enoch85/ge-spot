@@ -97,12 +97,6 @@ try:
     print(f"✅ Current interval matches expected: {expected_current}")
 
     print("✅ TEST 2 PASSED: Interval calculator works correctly")
-except Exception as e:
-    print(f"❌ TEST 2 ERROR: {e}")
-    import traceback
-
-    traceback.print_exc()
-    sys.exit(1)
 except AssertionError as e:
     print(f"❌ TEST 2 FAILED: {e}")
     sys.exit(1)

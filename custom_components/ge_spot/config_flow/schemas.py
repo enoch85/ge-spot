@@ -44,9 +44,7 @@ def get_source_priority_schema(supported_sources):
             vol.Required(
                 Config.SOURCE_PRIORITY,
                 default=supported_sources,
-                description=(
-                    "Priority by order: first selected = highest priority"
-                ),
+                description=("Priority by order: first selected = highest priority"),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
@@ -120,9 +118,7 @@ def get_stromligning_config_schema(existing_supplier=None):
     )
 
     # Create field - required for new setups
-    field = vol.Required(
-        Config.CONF_STROMLIGNING_SUPPLIER, description=description
-    )
+    field = vol.Required(Config.CONF_STROMLIGNING_SUPPLIER, description=description)
 
     schema_dict[field] = selector.TextSelector(
         selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
@@ -142,9 +138,7 @@ def get_options_schema(defaults, supported_sources, area):
         ),
         vol.Optional(
             Config.IMPORT_MULTIPLIER,
-            default=defaults.get(
-                Config.IMPORT_MULTIPLIER, Defaults.IMPORT_MULTIPLIER
-            ),
+            default=defaults.get(Config.IMPORT_MULTIPLIER, Defaults.IMPORT_MULTIPLIER),
             description=(
                 "Multiplier applied to spot price for import (e.g. 0.1068).\n"
                 "Applied before tariff and tax."
@@ -159,9 +153,7 @@ def get_options_schema(defaults, supported_sources, area):
         ),
         vol.Optional(
             Config.ADDITIONAL_TARIFF,
-            default=defaults.get(
-                Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF
-            ),
+            default=defaults.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF),
             description=(
                 "Additional transfer/grid fees from your provider.\n"
                 "Enter in same unit as Price Display Format.\n"
@@ -224,8 +216,7 @@ def get_options_schema(defaults, supported_sources, area):
             Config.SOURCE_PRIORITY,
             default=current_priority,
             description=(
-                "Priority is determined by order: "
-                "first selected = highest priority"
+                "Priority is determined by order: " "first selected = highest priority"
             ),
         )
     ] = selector.SelectSelector(
@@ -279,9 +270,7 @@ def get_options_schema(defaults, supported_sources, area):
     schema[
         vol.Optional(
             Config.EXPORT_MULTIPLIER,
-            default=defaults.get(
-                Config.EXPORT_MULTIPLIER, Defaults.EXPORT_MULTIPLIER
-            ),
+            default=defaults.get(Config.EXPORT_MULTIPLIER, Defaults.EXPORT_MULTIPLIER),
             description=(
                 "Multiplier applied to spot price for export "
                 "(e.g. 0.1 for 10% of spot)"

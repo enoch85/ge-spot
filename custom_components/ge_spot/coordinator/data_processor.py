@@ -38,46 +38,7 @@ from ..api.parsers.amber_parser import AmberParser
 
 _LOGGER = logging.getLogger(__name__)
 
-
-def parse_interval_key(interval_key: str) -> tuple[int, int]:
-    """Parse interval key to hour and minute, handling DST suffixes.
-
-    Args:
-        interval_key: Key in format "HH:MM" or "HH:MM_1" or "HH:MM_2"
-
-    Returns:
-        Tuple of (hour, minute)
-
-    Raises:
-        ValueError: If key format is invalid
-
-    Examples:
-        >>> parse_interval_key("14:30")
-        (14, 30)
-        >>> parse_interval_key("02:15_1")
-        (2, 15)
-        >>> parse_interval_key("02:15_2")
-        (2, 15)
-    """
-    # Match format: HH:MM optionally followed by _1 or _2
-    # This is strict - only allows valid DST suffixes, not any arbitrary suffix
-    match = re.match(r"^(\d{1,2}):(\d{2})(?:_[12])?$", interval_key)
-
-    if not match:
-        raise ValueError(
-            f"Invalid interval key format: '{interval_key}' (expected HH:MM or HH:MM_1 or HH:MM_2)"
-        )
-
-    hour = int(match.group(1))
-    minute = int(match.group(2))
-
-    # Validate ranges
-    if not (0 <= hour <= 23):
-        raise ValueError(f"Hour must be 0-23, got {hour}")
-    if not (0 <= minute <= 59):
-        raise ValueError(f"Minute must be 0-59, got {minute}")
-
-    return hour, minute
+# Note: parse_interval_key is imported from data_validity module above
 
 
 # NOTE: All API modules should return raw, unprocessed data in this standardized format:
@@ -245,6 +206,16 @@ class DataProcessor:
         input_source_currency: Optional[str] = None
         parser_current_price: Optional[float] = None
         parser_next_price: Optional[float] = None
+
+        # Initialize these early to avoid possibly-used-before-assignment errors
+        # They will be set properly in either the cached data path or fresh data path
+        ecb_rate: Optional[float] = None
+        ecb_updated: Optional[str] = None
+        final_today_prices: Dict[str, Any] = {}
+        final_tomorrow_prices: Dict[str, Any] = {}
+        raw_today_prices: Dict[str, Any] = {}
+        raw_tomorrow_prices: Dict[str, Any] = {}
+
         raw_api_data_for_result = (
             data.get("raw_data")
             or data.get("xml_responses")
@@ -506,10 +477,6 @@ class DataProcessor:
 
         # --- Step 3: Currency/Unit Conversion (skip if using processed cache) ---
         if not skip_currency_conversion:
-            ecb_rate = None
-            ecb_updated = None
-            final_today_prices = {}
-            raw_today_prices = {}  # Store raw prices (without VAT/taxes/tariffs)
             # Get source unit from the input data, default to MWh if not present
             # For cached data, this might be inside the 'data' dict, or from the original fetch context
             source_unit = data.get("source_unit", EnergyUnit.MWH)
@@ -531,8 +498,7 @@ class DataProcessor:
                 if rate is not None:
                     ecb_rate = rate
                     ecb_updated = rate_ts
-            final_tomorrow_prices = {}
-            raw_tomorrow_prices = {}  # Store raw prices (without VAT/taxes/tariffs)
+
             if normalized_tomorrow:
                 converted_tomorrow, raw_tomorrow, rate, rate_ts = (
                     await self._currency_converter.convert_interval_prices(
