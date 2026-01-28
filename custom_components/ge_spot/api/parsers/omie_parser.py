@@ -27,11 +27,11 @@ class OmieParser(BasePriceParser):
         """
         super().__init__(source, timezone_service)
 
-    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse OMIE API response dictionary containing raw text data for today and tomorrow.
 
         Args:
-            data: Dictionary from OmieAPI._fetch_data containing:
+            raw_data: Dictionary from OmieAPI._fetch_data containing:
                   'raw_data': Dict like {"today": str|None, "tomorrow": str|None}
                   'timezone': The timezone name string (e.g. 'Europe/Madrid').
                   'area': The area code ('ES' or 'PT').
@@ -43,21 +43,21 @@ class OmieParser(BasePriceParser):
             Parsed data dictionary: {'interval_raw': {...}, 'currency': 'EUR', 'timezone': 'Europe/Madrid', 'source': 'omie'}
         """
         # Extract info from the input dictionary
-        raw_data_payload = data.get("raw_data")
-        source_timezone = data.get("timezone", "Europe/Madrid")
-        area = data.get("area", "ES")
+        raw_data_payload = raw_data.get("raw_data")
+        source_timezone = raw_data.get("timezone", "Europe/Madrid")
+        area = raw_data.get("area", "ES")
         _LOGGER.debug(
             f"[OmieParser] Received data for Area: {area}, Timezone: {source_timezone}"
         )
 
         result = {
             "interval_raw": {},
-            "currency": data.get(
+            "currency": raw_data.get(
                 "currency", Currency.EUR
             ),  # Use provided currency or default
-            "source": data.get("source", Source.OMIE),
+            "source": raw_data.get("source", Source.OMIE),
             "timezone": source_timezone,
-            "metadata": {"fetched_at": data.get("fetched_at"), "area": area},
+            "metadata": {"fetched_at": raw_data.get("fetched_at"), "area": area},
         }
 
         if not raw_data_payload or not isinstance(raw_data_payload, dict):

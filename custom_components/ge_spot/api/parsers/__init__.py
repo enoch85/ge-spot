@@ -1,7 +1,5 @@
 """Price parsers for different API sources."""
 
-import logging
-
 from .nordpool_parser import NordpoolParser
 from .entsoe_parser import EntsoeParser
 from .aemo_parser import AemoParser
@@ -12,8 +10,6 @@ from .comed_parser import ComedParser
 from .stromligning_parser import StromligningParser
 
 from ...const.sources import Source
-
-_LOGGER = logging.getLogger(__name__)
 
 
 def get_parser_for_source(source_type: str, timezone_service=None):
@@ -41,9 +37,8 @@ def get_parser_for_source(source_type: str, timezone_service=None):
         parser_class = parsers[source_type]
         return parser_class(timezone_service=timezone_service)
 
-    # No parser available for this source
-    _LOGGER.warning(f"No parser registered for source type: {source_type}")
-    return None
+    # No fallback - unknown sources should raise an error
+    raise ValueError(f"No parser available for source: {source_type}")
 
 
 __all__ = [

@@ -36,7 +36,6 @@ from ..api.comed import ComedAPI
 from ..api.omie import OmieAPI
 from ..api.stromligning import StromligningAPI
 
-
 _LOGGER = logging.getLogger(__name__)
 
 # Validation result constants for clarity

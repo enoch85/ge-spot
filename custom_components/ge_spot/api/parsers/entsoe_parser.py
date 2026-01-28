@@ -24,8 +24,8 @@ class EntsoeParser(BasePriceParser):
         """
         super().__init__(source, timezone_service)
 
-    def parse(self, data: Any) -> Dict[str, Any]:
-        _LOGGER.debug(f"ENTSOE Parser: Received data of type: {type(data)}")
+    def parse(self, raw_data: Any) -> Dict[str, Any]:
+        _LOGGER.debug(f"ENTSOE Parser: Received data of type: {type(raw_data)}")
         all_interval_prices: Dict[str, float] = {}
         aggregated_currency: Optional[str] = None
         aggregated_timezone: Optional[str] = None  # To store timezone if found in XML
@@ -41,35 +41,35 @@ class EntsoeParser(BasePriceParser):
 
         xml_to_parse: List[str] = []
         original_input_for_metadata = (
-            data  # Keep original input for metadata if no XML is parsed
+            raw_data  # Keep original input for metadata if no XML is parsed
         )
 
-        if isinstance(data, str):  # Single XML string
+        if isinstance(raw_data, str):  # Single XML string
             _LOGGER.debug("ENTSOE Parser: Processing single XML string.")
-            xml_to_parse.append(data)
-        elif isinstance(data, list) and all(
-            isinstance(item, str) for item in data
+            xml_to_parse.append(raw_data)
+        elif isinstance(raw_data, list) and all(
+            isinstance(item, str) for item in raw_data
         ):  # List of XML strings
             _LOGGER.debug(
-                f"ENTSOE Parser: Processing list of {len(data)} XML responses."
+                f"ENTSOE Parser: Processing list of {len(raw_data)} XML responses."
             )
-            xml_to_parse.extend(data)
-        elif isinstance(data, dict):
+            xml_to_parse.extend(raw_data)
+        elif isinstance(raw_data, dict):
             _LOGGER.debug(
-                f"ENTSOE Parser: Processing dict input. Keys: {list(data.keys())}"
+                f"ENTSOE Parser: Processing dict input. Keys: {list(raw_data.keys())}"
             )
 
             # Check for yesterday/today/tomorrow structure (for timezone offset handling)
-            if "raw_data" in data and isinstance(data["raw_data"], dict):
-                raw_data = data["raw_data"]
+            if "raw_data" in raw_data and isinstance(raw_data["raw_data"], dict):
+                nested_raw_data = raw_data["raw_data"]
                 _LOGGER.debug(
-                    f"ENTSOE Parser: Found raw_data dict. Keys: {list(raw_data.keys())}"
+                    f"ENTSOE Parser: Found raw_data dict. Keys: {list(nested_raw_data.keys())}"
                 )
 
                 # Process yesterday, today, tomorrow in order
                 for day_key in ["yesterday", "today", "tomorrow"]:
-                    if day_key in raw_data:
-                        day_data = raw_data[day_key]
+                    if day_key in nested_raw_data:
+                        day_data = nested_raw_data[day_key]
                         if isinstance(day_data, list):
                             _LOGGER.debug(
                                 f"ENTSOE Parser: Processing {day_key} with {len(day_data)} items"
@@ -104,9 +104,11 @@ class EntsoeParser(BasePriceParser):
                     # dict_response is not XML, skip it
 
             # Check for 'xml_responses' (list of XML strings) - common from FallbackManager
-            elif "xml_responses" in data and isinstance(data["xml_responses"], list):
+            elif "xml_responses" in raw_data and isinstance(
+                raw_data["xml_responses"], list
+            ):
                 _LOGGER.debug("ENTSOE Parser: Found 'xml_responses' in dict.")
-                for item in data["xml_responses"]:
+                for item in raw_data["xml_responses"]:
                     if isinstance(item, str):
                         xml_to_parse.append(item)
                     else:
@@ -114,20 +116,20 @@ class EntsoeParser(BasePriceParser):
                             f"ENTSOE Parser: Non-string item in 'xml_responses': {type(item)}"
                         )
             # Check for 'raw_data' (single XML string) - common from API adapters or cache
-            elif "raw_data" in data and isinstance(data["raw_data"], str):
+            elif "raw_data" in raw_data and isinstance(raw_data["raw_data"], str):
                 _LOGGER.debug("ENTSOE Parser: Found 'raw_data' string in dict.")
-                xml_to_parse.append(data["raw_data"])
+                xml_to_parse.append(raw_data["raw_data"])
             # Check for 'document' (single XML string) - another possible key for raw XML
-            elif "document" in data and isinstance(data["document"], str):
+            elif "document" in raw_data and isinstance(raw_data["document"], str):
                 _LOGGER.debug("ENTSOE Parser: Found 'document' string in dict.")
-                xml_to_parse.append(data["document"])
+                xml_to_parse.append(raw_data["document"])
             else:
                 _LOGGER.warning(
                     "ENTSOE Parser: Dict input provided, but no recognized XML data found ('xml_responses', 'raw_data', or 'document')."
                 )
         else:
             _LOGGER.warning(
-                f"ENTSOE Parser: Unparseable data type: {type(data)}. Cannot extract XML."
+                f"ENTSOE Parser: Unparseable data type: {type(raw_data)}. Cannot extract XML."
             )
 
         if not xml_to_parse:
@@ -543,22 +545,25 @@ class EntsoeParser(BasePriceParser):
         return interval_raw.get(next_interval_key)
 
     def _calculate_day_average(
-        self, interval_prices: Dict[str, float]
+        self, interval_raw: Dict[str, float], day: str = "today"
     ) -> Optional[float]:
         """Calculate day average price.
 
         Args:
-            interval_prices: Dictionary of interval prices
+            interval_raw: Dictionary of raw interval prices
+            day: Which day to calculate average for ('today' or 'tomorrow')
 
         Returns:
             Day average price or None if not enough data
         """
-        if not interval_prices:
+        if not interval_raw:
             return None
 
         today = datetime.now(timezone.utc).date()
+        if day == "tomorrow":
+            today = today + timedelta(days=1)
         today_prices = []
-        for interval_key, price in interval_prices.items():
+        for interval_key, price in interval_raw.items():
             try:
                 interval_dt = datetime.fromisoformat(interval_key)
                 if interval_dt.date() == today:

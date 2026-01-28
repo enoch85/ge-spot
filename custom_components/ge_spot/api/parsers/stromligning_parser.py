@@ -327,40 +327,40 @@ class StromligningParser(BasePriceParser):
             _LOGGER.warning(f"Failed to parse timestamp: {timestamp_str}")
             return None
 
-    def _get_current_price(self, interval_prices: Dict[str, float]) -> Optional[float]:
+    def _get_current_price(self, interval_raw: Dict[str, float]) -> Optional[float]:
         """Get current interval price.
 
         Args:
-            interval_prices: Dictionary of interval prices
+            interval_raw: Dictionary of raw interval prices
 
         Returns:
             Current interval price or None if not available
         """
-        if not interval_prices:
+        if not interval_raw:
             return None
 
         now = datetime.now(timezone.utc)
         current_hour = now.replace(minute=0, second=0, microsecond=0)
         current_interval_key = current_hour.isoformat()
 
-        return interval_prices.get(current_interval_key)
+        return interval_raw.get(current_interval_key)
 
     def _get_next_interval_price(
-        self, interval_prices: Dict[str, float]
+        self, interval_raw: Dict[str, float]
     ) -> Optional[float]:
         """Get next interval price.
 
         Args:
-            interval_prices: Dictionary of interval prices
+            interval_raw: Dictionary of raw interval prices
 
         Returns:
             Next interval price or None if not available
         """
-        if not interval_prices:
+        if not interval_raw:
             return None
 
         now = datetime.now(timezone.utc)
         next_hour = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
         next_interval_key = next_hour.isoformat()
 
-        return interval_prices.get(next_interval_key)
+        return interval_raw.get(next_interval_key)

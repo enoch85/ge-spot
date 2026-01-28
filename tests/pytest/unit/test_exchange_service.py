@@ -10,6 +10,7 @@ These tests verify real-world behavior of the ExchangeService to ensure:
 
 If any test fails, investigate and fix the core implementation rather than adapting tests.
 """
+
 import sys
 import os
 import asyncio

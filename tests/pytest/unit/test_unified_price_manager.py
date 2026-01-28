@@ -16,6 +16,7 @@ IMPORTANT: These tests are aligned with the 15-minute interval implementation.
 
 If any test fails, investigate and fix the core implementation rather than adapting tests.
 """
+
 import sys
 import os
 import asyncio

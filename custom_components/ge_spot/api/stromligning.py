@@ -15,7 +15,6 @@ from ..const.api import Stromligning
 from ..const.network import Network
 from ..const.config import Config
 
-
 _LOGGER = logging.getLogger(__name__)
 
 

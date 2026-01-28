@@ -49,7 +49,7 @@ class ErrorDetails:
         template = messages.get(error_code, "Error: {error_code}")
         try:
             return template.format(error_code=error_code, **kwargs)
-        except KeyError as e:
+        except KeyError:
             # Missing format parameter, return with available params
             return f"{error_code}: {kwargs}"
 
@@ -80,5 +80,3 @@ class Errors:
 # Custom Exception Classes
 class PriceFetchError(Exception):
     """Custom exception for errors during price fetching."""
-
-    pass

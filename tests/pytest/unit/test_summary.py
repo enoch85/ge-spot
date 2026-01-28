@@ -4,6 +4,7 @@
 This script runs all core tests for the GE-Spot integration and presents a comprehensive
 summary of the results. It serves as the main entry point for testing the integration.
 """
+
 import sys
 import os
 import argparse
@@ -175,8 +176,7 @@ def run_tests(args):
     print("IMPLEMENTED FIXES")
     print("=" * 80)
 
-    print(
-        """
+    print("""
 1. Test Framework Updates:
    - Unified today and tomorrow data manager tests into a single UnifiedPriceManager test class
    - Fixed imports by using the current architecture instead of deprecated modules
@@ -191,8 +191,7 @@ def run_tests(args):
    - Fixed ElectricityPriceAdapter tests for timestamp format compatibility
    - Updated method calls to match current API (has_tomorrow_prices instead of is_tomorrow_valid)
    - Added support for ISO format dates in hourly prices
-    """
-    )
+    """)
 
     # Return overall status
     return all(results.values())
