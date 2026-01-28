@@ -226,9 +226,9 @@ class TestValidationFallback:
             # DataProcessor returns IntervalPriceData, not a dict
             # Future-only data should result in empty today_interval_prices
             # because the data is all for tomorrow
-            assert hasattr(result, "today_interval_prices"), (
-                "Result should be IntervalPriceData with today_interval_prices"
-            )
+            assert hasattr(
+                result, "today_interval_prices"
+            ), "Result should be IntervalPriceData with today_interval_prices"
 
             # The key validation: future-only data should NOT populate today's prices
             today_count = len(result.today_interval_prices)
