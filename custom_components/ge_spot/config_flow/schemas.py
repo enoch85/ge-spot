@@ -246,7 +246,7 @@ def get_options_schema(defaults, supported_sources, area):
         selector.NumberSelectorConfig(
             min=-10.0,
             max=10.0,
-            step=0.0001,
+            step=0.001,
             mode=selector.NumberSelectorMode.BOX,
         )
     )
