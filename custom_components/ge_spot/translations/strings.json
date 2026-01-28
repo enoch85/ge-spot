@@ -63,6 +63,7 @@
         "data": {
           "source_priority": "Data Source Priority",
           "vat": "VAT Rate (%)",
+          "import_multiplier": "Import Price Multiplier",
           "additional_tariff": "Additional Tariff",
           "energy_tax": "Energy Tax",
           "display_unit": "Price Display Format",
@@ -78,6 +79,7 @@
         "data_description": {
           "source_priority": "Select which sources to use in order of priority (first = highest priority)",
           "vat": "Enter your local VAT percentage (e.g. 25 for 25%)",
+          "import_multiplier": "Multiplier applied to spot price for import (e.g. 0.107 for Belgian tariffs).\nApplied before tariff and tax.",
           "additional_tariff": "Additional transfer/grid fees from your provider.\nEnter in same unit as Price Display Format.\nApplied before VAT.",
           "energy_tax": "Fixed energy tax per kWh (e.g. government levy).\nEnter in same unit as Price Display Format.\nApplied before VAT.",
           "display_unit": "Choose how prices should be displayed",
