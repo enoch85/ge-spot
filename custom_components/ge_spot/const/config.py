@@ -7,13 +7,11 @@ class Config:
     SOURCE = "source"
     AREA = "area"
     VAT = "vat"
-    INCLUDE_VAT = "include_vat"  # Whether to include VAT in price calculations
-    # Price components (applied in order: (spot × multiplier) + tariff + tax, then VAT on total)
-    IMPORT_MULTIPLIER = "import_multiplier"  # Multiplier applied to spot price for import (e.g. 0.1068 for Belgian tariffs)
-    ADDITIONAL_TARIFF = (
-        "additional_tariff"  # Additional tariff/fees from energy provider (per kWh)
-    )
-    ENERGY_TAX = "energy_tax"  # Fixed energy tax per kWh (e.g. government levy, applied before VAT)
+    INCLUDE_VAT = "include_vat"
+    # Price components: (spot × multiplier) + tariff + tax, then VAT on total
+    IMPORT_MULTIPLIER = "import_multiplier"  # e.g. 0.1068 for Belgian tariffs
+    ADDITIONAL_TARIFF = "additional_tariff"  # Energy provider fees (per kWh)
+    ENERGY_TAX = "energy_tax"  # Government levy (per kWh, applied before VAT)
     UPDATE_INTERVAL = "update_interval"
     DISPLAY_UNIT = "display_unit"
     CURRENCY = "currency"

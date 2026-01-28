@@ -27,12 +27,12 @@ def convert_energy_price(
     price: float,
     source_unit: str,
     target_unit: str = EnergyUnit.TARGET,  # Default target is kWh
-    vat_rate: float = 0.0,  # VAT rate (e.g. 0.25 for 25%), defaults to 0
-    display_unit_multiplier: int = 1,  # Multiplier for subunits (e.g. 100 for cents)
-    additional_tariff: float = 0.0,  # Additional tariff/fees per kWh, defaults to 0
-    energy_tax: float = 0.0,  # Fixed energy tax per kWh (e.g. government levy), defaults to 0
-    tariff_in_subunit: bool = False,  # Whether tariff is entered in subunit (cents/øre)
-    import_multiplier: float = 1.0,  # Multiplier applied to spot price (e.g. 0.1068)
+    vat_rate: float = 0.0,  # VAT (e.g. 0.25 for 25%)
+    display_unit_multiplier: int = 1,  # Multiplier for subunits (e.g. 100)
+    additional_tariff: float = 0.0,  # Additional tariff/fees per kWh
+    energy_tax: float = 0.0,  # Fixed energy tax per kWh (e.g. govt levy)
+    tariff_in_subunit: bool = False,  # Tariff in subunit (cents/øre)
+    import_multiplier: float = 1.0,  # Spot price multiplier (e.g. 0.1068)
 ) -> Optional[float]:
     """Convert energy price between units, apply VAT, and adjust for display units.
 
@@ -52,14 +52,14 @@ def convert_energy_price(
 
     Args:
         price: The original price value.
-        source_unit: The energy unit of the original price (e.g. EnergyUnit.MWH).
-        target_unit: The target energy unit (e.g. EnergyUnit.KWH).
-        vat_rate: The VAT rate to apply (0 to 1). Defaults to 0.
-        display_unit_multiplier: Multiplier for display subunits (e.g. 100). Defaults to 1.
-        additional_tariff: Additional tariff/fees from provider (per kWh). Defaults to 0.
-        energy_tax: Fixed energy tax per kWh (e.g. government levy). Defaults to 0.
-        tariff_in_subunit: If True, tariff is in subunit (cents/øre), else main unit. Defaults to False.
-        import_multiplier: Multiplier applied to spot price before tariff/tax. Defaults to 1.0.
+        source_unit: Energy unit of original price (e.g. EnergyUnit.MWH).
+        target_unit: Target energy unit (e.g. EnergyUnit.KWH).
+        vat_rate: VAT rate to apply (0 to 1). Defaults to 0.
+        display_unit_multiplier: Multiplier for subunits (e.g. 100).
+        additional_tariff: Tariff/fees from provider (per kWh). Defaults to 0.
+        energy_tax: Energy tax per kWh (e.g. govt levy). Defaults to 0.
+        tariff_in_subunit: If True, tariff in subunit (cents/øre).
+        import_multiplier: Spot price multiplier before tariff/tax.
 
     Returns:
         The converted price, or None if conversion is not possible.
@@ -127,7 +127,8 @@ def convert_energy_price(
 
     except (TypeError, ValueError) as e:
         _LOGGER.error(
-            "Error during energy price conversion: %s. Price: %s, SourceUnit: %s, TargetUnit: %s",
+            "Error during energy price conversion: %s. "
+            "Price: %s, SourceUnit: %s, TargetUnit: %s",
             e,
             price,
             source_unit,
@@ -183,7 +184,7 @@ def convert_export_price(
 
             if source_factor is None or target_factor is None:
                 _LOGGER.error(
-                    "Invalid energy unit specified for export: source='%s', target='%s'",
+                    "Invalid energy unit for export: source='%s', target='%s'",
                     source_unit,
                     target_unit,
                 )
@@ -222,7 +223,8 @@ def convert_export_price(
 
     except (TypeError, ValueError) as e:
         _LOGGER.error(
-            "Error during export price conversion: %s. Spot: %s, Multiplier: %s, Offset: %s",
+            "Error during export price conversion: %s. "
+            "Spot: %s, Multiplier: %s, Offset: %s",
             e,
             spot_price,
             multiplier,

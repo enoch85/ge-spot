@@ -44,7 +44,9 @@ def get_source_priority_schema(supported_sources):
             vol.Required(
                 Config.SOURCE_PRIORITY,
                 default=supported_sources,
-                description="Priority is determined by order: first selected = highest priority",
+                description=(
+                    "Priority by order: first selected = highest priority"
+                ),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
@@ -112,10 +114,15 @@ def get_api_keys_schema(area, existing_api_key=None):
 def get_stromligning_config_schema(existing_supplier=None):
     """Return schema for Stromligning config step."""
     schema_dict = {}
-    description = "Required for Strømligning data source. Complete list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
+    description = (
+        "Required for Strømligning data source. Complete list: "
+        "https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
+    )
 
     # Create field - required for new setups
-    field = vol.Required(Config.CONF_STROMLIGNING_SUPPLIER, description=description)
+    field = vol.Required(
+        Config.CONF_STROMLIGNING_SUPPLIER, description=description
+    )
 
     schema_dict[field] = selector.TextSelector(
         selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
@@ -126,9 +133,8 @@ def get_stromligning_config_schema(existing_supplier=None):
 
 def get_options_schema(defaults, supported_sources, area):
     """Return schema for options."""
-    # Price calculation follows EU tax standards:
-    # Final Price = ((Spot Price × Import Multiplier) + Additional Tariff + Energy Tax) × (1 + VAT%)
-    # VAT is applied to the total of all costs, as per standard EU practice.
+    # Price calculation: ((Spot × Import Multiplier) + Tariff + Tax) × (1 + VAT%)
+    # VAT is applied to total as per EU standard tax practice.
     schema = {
         vol.Optional(Config.VAT, default=defaults.get(Config.VAT, 0)): vol.All(
             vol.Coerce(float),
@@ -136,8 +142,13 @@ def get_options_schema(defaults, supported_sources, area):
         ),
         vol.Optional(
             Config.IMPORT_MULTIPLIER,
-            default=defaults.get(Config.IMPORT_MULTIPLIER, Defaults.IMPORT_MULTIPLIER),
-            description="Multiplier applied to spot price for import (e.g. 0.1068).\nApplied before tariff and tax.",
+            default=defaults.get(
+                Config.IMPORT_MULTIPLIER, Defaults.IMPORT_MULTIPLIER
+            ),
+            description=(
+                "Multiplier applied to spot price for import (e.g. 0.1068).\n"
+                "Applied before tariff and tax."
+            ),
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.0,
@@ -148,8 +159,14 @@ def get_options_schema(defaults, supported_sources, area):
         ),
         vol.Optional(
             Config.ADDITIONAL_TARIFF,
-            default=defaults.get(Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF),
-            description="Additional transfer/grid fees from your provider.\nEnter in same unit as Price Display Format.\nApplied before VAT.",
+            default=defaults.get(
+                Config.ADDITIONAL_TARIFF, Defaults.ADDITIONAL_TARIFF
+            ),
+            description=(
+                "Additional transfer/grid fees from your provider.\n"
+                "Enter in same unit as Price Display Format.\n"
+                "Applied before VAT."
+            ),
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.0,
@@ -161,7 +178,11 @@ def get_options_schema(defaults, supported_sources, area):
         vol.Optional(
             Config.ENERGY_TAX,
             default=defaults.get(Config.ENERGY_TAX, Defaults.ENERGY_TAX),
-            description="Fixed energy tax per kWh (e.g. government levy).\nEnter in same unit as Price Display Format.\nApplied before VAT.",
+            description=(
+                "Fixed energy tax per kWh (e.g. government levy).\n"
+                "Enter in same unit as Price Display Format.\n"
+                "Applied before VAT."
+            ),
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.0,
@@ -202,7 +223,10 @@ def get_options_schema(defaults, supported_sources, area):
         vol.Optional(
             Config.SOURCE_PRIORITY,
             default=current_priority,
-            description="Priority is determined by order: first selected = highest priority",
+            description=(
+                "Priority is determined by order: "
+                "first selected = highest priority"
+            ),
         )
     ] = selector.SelectSelector(
         selector.SelectSelectorConfig(
@@ -222,7 +246,11 @@ def get_options_schema(defaults, supported_sources, area):
             vol.Optional(
                 f"{Source.ENTSOE}_api_key",
                 default=current_api_key,
-                description=f"{'API key configured' if current_api_key else 'Enter API key for ENTSO-E'}",
+                description=(
+                    "API key configured"
+                    if current_api_key
+                    else "Enter API key for ENTSO-E"
+                ),
             )
         ] = FormHelper.create_api_key_selector()
 
@@ -251,8 +279,13 @@ def get_options_schema(defaults, supported_sources, area):
     schema[
         vol.Optional(
             Config.EXPORT_MULTIPLIER,
-            default=defaults.get(Config.EXPORT_MULTIPLIER, Defaults.EXPORT_MULTIPLIER),
-            description="Multiplier applied to spot price for export (e.g. 0.1 for 10% of spot)",
+            default=defaults.get(
+                Config.EXPORT_MULTIPLIER, Defaults.EXPORT_MULTIPLIER
+            ),
+            description=(
+                "Multiplier applied to spot price for export "
+                "(e.g. 0.1 for 10% of spot)"
+            ),
         )
     ] = selector.NumberSelector(
         selector.NumberSelectorConfig(
@@ -267,7 +300,10 @@ def get_options_schema(defaults, supported_sources, area):
         vol.Optional(
             Config.EXPORT_OFFSET,
             default=defaults.get(Config.EXPORT_OFFSET, Defaults.EXPORT_OFFSET),
-            description="Offset added after multiplier (can be negative).\nEnter in same unit as Price Display Format.",
+            description=(
+                "Offset added after multiplier (can be negative).\n"
+                "Enter in same unit as Price Display Format."
+            ),
         )
     ] = selector.NumberSelector(
         selector.NumberSelectorConfig(

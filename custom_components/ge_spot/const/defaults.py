@@ -20,15 +20,13 @@ class Defaults:
     CURRENCY_SUBUNIT = "cents"  # Added default for subunit check
 
     # Cache Settings
-    CACHE_TTL = (
-        60 * 24 * 3
-    )  # minutes (3 days = 4320 minutes) - Electricity prices valid for 24-72 hours
-    CACHE_MAX_ENTRIES = (
-        3500  # Max cache entries (3 days × 24h × 4 intervals × ~12 areas = ~3500)
-    )
-    # Disk persistence disabled by default to avoid blocking I/O warnings in HA event loop
-    # Cache remains in-memory only (cleared on reload). Can be enabled via config if needed.
-    # See: https://developers.home-assistant.io/docs/asyncio_blocking_operations/#open
+    # Cache - 3 days = 4320 minutes (prices valid 24-72h)
+    CACHE_TTL = 60 * 24 * 3  # minutes
+    # Max entries: 3 days × 24h × 4 intervals × ~12 areas = ~3500
+    CACHE_MAX_ENTRIES = 3500
+    # Disk persistence disabled to avoid blocking I/O in HA event loop
+    # Cache is in-memory only (cleared on reload), enable via config if needed.
+    # See: https://developers.home-assistant.io/docs/asyncio_blocking_op...
     PERSIST_CACHE = False
     CACHE_DIR = "cache"  # Cache directory for persistent storage (if enabled)
 
