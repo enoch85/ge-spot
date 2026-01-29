@@ -236,6 +236,42 @@ async def async_setup_entry(
     )
 
     if export_enabled:
+        # Define attribute function that includes export interval prices for automations
+        # This mirrors how import sensors expose today_interval_prices/tomorrow_interval_prices
+        def get_export_attrs(data):
+            """Get export price attributes including interval prices for automations."""
+            attrs = {"tomorrow_valid": data.tomorrow_valid if data else False}
+
+            # Add export interval prices for automation access
+            if data and data.export_today_prices:
+                # Convert to list format consistent with import prices
+                today_list = []
+                for key in sorted(data.export_today_prices.keys()):
+                    today_list.append(
+                        {
+                            "time": key,
+                            "value": round(float(data.export_today_prices[key]), 4),
+                        }
+                    )
+                attrs["export_today_prices"] = today_list
+            else:
+                attrs["export_today_prices"] = []
+
+            if data and data.export_tomorrow_prices:
+                tomorrow_list = []
+                for key in sorted(data.export_tomorrow_prices.keys()):
+                    tomorrow_list.append(
+                        {
+                            "time": key,
+                            "value": round(float(data.export_tomorrow_prices[key]), 4),
+                        }
+                    )
+                attrs["export_tomorrow_prices"] = tomorrow_list
+            else:
+                attrs["export_tomorrow_prices"] = []
+
+            return attrs
+
         # Export Current Price sensor
         get_export_current_price = lambda data: (
             data.export_current_price if data else None
@@ -247,7 +283,7 @@ async def async_setup_entry(
                 "export_current_price",
                 "Export Current Price",
                 get_export_current_price,
-                get_base_attrs,
+                get_export_attrs,  # Use export attrs with interval prices
             )
         )
 

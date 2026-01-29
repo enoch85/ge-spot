@@ -12,10 +12,8 @@ These tests are designed to catch regressions in the parser infrastructure.
 """
 
 import pytest
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Optional
+from datetime import datetime
 from zoneinfo import ZoneInfo
-from unittest.mock import MagicMock, patch
 import inspect
 
 from custom_components.ge_spot.api.base.price_parser import BasePriceParser
@@ -33,7 +31,6 @@ from custom_components.ge_spot.api.parsers.stromligning_parser import Stromligni
 
 from custom_components.ge_spot.timezone.service import TimezoneService
 from custom_components.ge_spot.const.currencies import Currency
-from custom_components.ge_spot.const.sources import Source
 
 # ============================================================================
 # Test fixtures

@@ -98,6 +98,7 @@ class GSpotOptionsFlow(OptionsFlow):
                 # These settings require cache invalidation because cached prices were calculated with old values
                 price_affecting_settings = [
                     Config.VAT,
+                    Config.IMPORT_MULTIPLIER,
                     Config.ADDITIONAL_TARIFF,
                     Config.ENERGY_TAX,
                     Config.DISPLAY_UNIT,

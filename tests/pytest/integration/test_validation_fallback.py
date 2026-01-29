@@ -179,10 +179,13 @@ class TestValidationFallback:
 
         # Generate 24 hourly prices for tomorrow only (no today data)
         # This simulates ENTSOE publishing tomorrow's prices in the afternoon
-        points_xml = "\n".join(f"""            <Point>
+        points_xml = "\n".join(
+            f"""            <Point>
                 <position>{i+1}</position>
                 <price.amount>{50.0 + i}</price.amount>
-            </Point>""" for i in range(24))
+            </Point>"""
+            for i in range(24)
+        )
 
         # Use correct ENTSOE XML namespace (required by parser)
         future_only_raw = {

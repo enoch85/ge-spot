@@ -2174,6 +2174,10 @@ class TestHealthCheck:
         Verifies that manual cache clear validates all sources in background.
         """
         # Arrange
+        # Create a mock IntervalPriceData that has today_interval_prices attribute
+        mock_price_data = MagicMock()
+        mock_price_data.today_interval_prices = {"10:00": 0.05}
+
         with patch.object(
             manager._cache_manager, "clear_cache", return_value=True
         ), patch.object(
@@ -2182,7 +2186,7 @@ class TestHealthCheck:
             manager, "_schedule_health_check", new_callable=AsyncMock
         ) as mock_health:
 
-            mock_fetch.return_value = {**MOCK_PROCESSED_RESULT, "has_data": True}
+            mock_fetch.return_value = mock_price_data
 
             # Act
             await manager.clear_cache()

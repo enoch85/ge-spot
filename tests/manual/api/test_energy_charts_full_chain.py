@@ -231,7 +231,8 @@ async def test_single_area(api: EnergyChartsAPI, area: str):
 
 async def main():
     """Run full chain tests for multiple bidding zones."""
-    print(f"""
+    print(
+        f"""
 {'='*80}
 Energy-Charts API - Full Chain Test (REAL API CALLS)
 {'='*80}
@@ -242,7 +243,8 @@ Testing: API fetch → Parser → Validation
 ⚠️  Please ensure you have internet connectivity
 ⚠️  Rate limiting may apply
 {'='*80}
-""")
+"""
+    )
 
     # Initialize API client
     api = EnergyChartsAPI()

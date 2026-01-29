@@ -446,15 +446,13 @@ class DataProcessor:
 
         # --- Calculate Export Prices (if enabled) ---
         if self.export_enabled:
-            # Get display unit multiplier for export calculation
-            display_multiplier = 100 if self.use_subunit else 1
-
             # Calculate export prices from raw prices (without import VAT/taxes)
+            # Note: raw_prices are already in display units (e.g., cents if use_subunit)
             processed_result["export_today_prices"] = self._calculate_export_prices(
-                raw_today_prices, display_multiplier
+                raw_today_prices
             )
             processed_result["export_tomorrow_prices"] = self._calculate_export_prices(
-                raw_tomorrow_prices, display_multiplier
+                raw_tomorrow_prices
             )
 
             _LOGGER.debug(
@@ -859,7 +857,6 @@ class DataProcessor:
     def _calculate_export_prices(
         self,
         raw_prices: Dict[str, float],
-        display_unit_multiplier: int,
     ) -> Dict[str, float]:
         """Calculate export prices from raw spot prices.
 
@@ -867,7 +864,6 @@ class DataProcessor:
 
         Args:
             raw_prices: Dictionary of raw interval prices (already currency-converted but without VAT/taxes)
-            display_unit_multiplier: Multiplier for display subunits (e.g. 100 for cents)
 
         Returns:
             Dictionary of export prices with same keys as raw_prices
