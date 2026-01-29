@@ -101,6 +101,7 @@ class GSpotOptionsFlow(OptionsFlow):
                     Config.ADDITIONAL_TARIFF,
                     Config.ENERGY_TAX,
                     Config.DISPLAY_UNIT,
+                    Config.IMPORT_MULTIPLIER,
                     # Export settings also affect cached prices
                     Config.EXPORT_ENABLED,
                     Config.EXPORT_MULTIPLIER,
