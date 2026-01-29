@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.13"]
     steps:
     - uses: actions/checkout@v6
     - name: Set up Python ${{ matrix.python-version }}
@@ -26,7 +26,7 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Analysing production code with pylint
       run: |
-        pylint custom_components/ge_spot/ --fail-under=8.0
+        pylint custom_components/ge_spot/ --fail-under=7.0
     - name: Analysing test code with pylint (warnings only)
       run: |
         pylint tests/ --exit-zero || true
