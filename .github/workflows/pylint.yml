@@ -27,6 +27,6 @@ jobs:
     - name: Analysing production code with pylint
       run: |
         pylint custom_components/ge_spot/ --fail-under=7.0
-    - name: Analysing test code with pylint (warnings only)
+    - name: Analysing test code with pylint
       run: |
-        pylint tests/ --exit-zero || true
+        pylint tests/ --fail-under=7.0
