@@ -234,7 +234,10 @@ class GSpotOptionsFlow(OptionsFlow):
                 step_id="init",
                 data_schema=schema,
                 errors=self._errors,
-                description_placeholders={"data_description": "data_description"},
+                description_placeholders={
+                    "data_description": "data_description",
+                    "stromligning_docs_url": "https://github.com/enoch95/ge-spot/blob/main/docs/stromligning.md",
+                },
             )
         except Exception as e:
             _LOGGER.error(f"Failed to create options form: {e}", exc_info=True)
@@ -264,7 +267,10 @@ class GSpotOptionsFlow(OptionsFlow):
                     }
                 ),
                 errors=self._errors,
-                description_placeholders={"data_description": "data_description"},
+                description_placeholders={
+                    "data_description": "data_description",
+                    "stromligning_docs_url": "https://github.com/enoch95/ge-spot/blob/main/docs/stromligning.md",
+                },
             )
 
     async def _find_existing_api_key(self, source_type):

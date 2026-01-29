@@ -38,7 +38,7 @@
           "stromligning_supplier": "Strømligning Supplier ID"
         },
         "data_description": {
-          "stromligning_supplier": "Enter your supplier ID (e.g. rah_c). Complete list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
+          "stromligning_supplier": "Enter your supplier ID (e.g. rah_c). View complete list at: {stromligning_docs_url}"
         }
       }
     },
@@ -86,7 +86,7 @@
           "timezone_reference": "Choose which timezone to use for displaying prices",
           "entsoe_api_key": "Required for using ENTSO-E as a data source",
           "clear_cache": "Clear the price cache to force a fresh data fetch",
-          "stromligning_supplier": "Complete list: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md",
+          "stromligning_supplier": "View complete list at: {stromligning_docs_url}",
           "export_enabled": "Enable separate sensors for export/feed-in prices (for prosumers selling electricity)",
           "export_multiplier": "Multiplier applied to spot price for export (e.g. 0.1 for 10% of spot price)",
           "export_offset": "Offset added after multiplier (can be negative).\nEnter in same unit as Price Display Format.",
