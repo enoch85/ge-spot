@@ -80,8 +80,8 @@ class TestMidnightMigration:
         self, cache_manager_with_tz, yesterday_cache_data, mock_timezone_service
     ):
         """Test that midnight migration recalculates data_validity correctly."""
-        yesterday = date.today() - timedelta(days=1)
         today = date.today()
+        yesterday = today - timedelta(days=1)
 
         # Create timezone-aware timestamp
         tz = ZoneInfo("Europe/Stockholm")
@@ -100,9 +100,10 @@ class TestMidnightMigration:
         with patch(
             "custom_components.ge_spot.coordinator.cache_manager.dt_util"
         ) as mock_dt:
-            # Mock time to be 00:05
-            mock_now = datetime.now(tz=tz).replace(
-                hour=0, minute=5, second=0, microsecond=0
+            # Mock time to be 00:05 ON THE SAME DAY as 'today'
+            # Use explicit datetime constructor - most reliable for timezone handling
+            mock_now = datetime(
+                today.year, today.month, today.day, 0, 5, 0, tzinfo=tz
             )
             mock_dt.now.return_value = mock_now
 
@@ -135,8 +136,8 @@ class TestMidnightMigration:
         self, cache_manager_with_tz, yesterday_cache_data
     ):
         """Test that migration also moves tomorrow_raw_prices to today_raw_prices."""
-        yesterday = date.today() - timedelta(days=1)
         today = date.today()
+        yesterday = today - timedelta(days=1)
         tz = ZoneInfo("Europe/Stockholm")
 
         cache_manager_with_tz.store(
@@ -150,7 +151,7 @@ class TestMidnightMigration:
         with patch(
             "custom_components.ge_spot.coordinator.cache_manager.dt_util"
         ) as mock_dt:
-            mock_now = datetime.now(tz=tz).replace(hour=0, minute=5)
+            mock_now = datetime(today.year, today.month, today.day, 0, 5, 0, tzinfo=tz)
             mock_dt.now.return_value = mock_now
             migrated_data = cache_manager_with_tz.get_data(
                 area="SE2", target_date=today
@@ -167,8 +168,8 @@ class TestMidnightMigration:
         self, cache_manager_with_tz, yesterday_cache_data
     ):
         """Test that migration clears tomorrow_statistics."""
-        yesterday = date.today() - timedelta(days=1)
         today = date.today()
+        yesterday = today - timedelta(days=1)
         tz = ZoneInfo("Europe/Stockholm")
 
         cache_manager_with_tz.store(
@@ -182,7 +183,7 @@ class TestMidnightMigration:
         with patch(
             "custom_components.ge_spot.coordinator.cache_manager.dt_util"
         ) as mock_dt:
-            mock_now = datetime.now(tz=tz).replace(hour=0, minute=5)
+            mock_now = datetime(today.year, today.month, today.day, 0, 5, 0, tzinfo=tz)
             mock_dt.now.return_value = mock_now
             migrated_data = cache_manager_with_tz.get_data(
                 area="SE2", target_date=today
@@ -215,7 +216,7 @@ class TestMidnightMigration:
         with patch(
             "custom_components.ge_spot.coordinator.cache_manager.dt_util"
         ) as mock_dt:
-            mock_now = datetime.now(tz=tz).replace(hour=0, minute=15)
+            mock_now = datetime(today.year, today.month, today.day, 0, 15, 0, tzinfo=tz)
             mock_dt.now.return_value = mock_now
             data = cache_manager_with_tz.get_data(area="SE2", target_date=today)
 
@@ -224,8 +225,8 @@ class TestMidnightMigration:
 
     def test_migration_without_timezone_service(self, mock_hass, yesterday_cache_data):
         """Test migration without timezone service removes stale validity."""
-        yesterday = date.today() - timedelta(days=1)
         today = date.today()
+        yesterday = today - timedelta(days=1)
         tz = ZoneInfo("Europe/Stockholm")
 
         # Create cache manager WITHOUT timezone service
@@ -244,7 +245,7 @@ class TestMidnightMigration:
         with patch(
             "custom_components.ge_spot.coordinator.cache_manager.dt_util"
         ) as mock_dt:
-            mock_now = datetime.now(tz=tz).replace(hour=0, minute=5)
+            mock_now = datetime(today.year, today.month, today.day, 0, 5, 0, tzinfo=tz)
             mock_dt.now.return_value = mock_now
             migrated_data = cache_mgr.get_data(area="SE2", target_date=today)
 
@@ -259,8 +260,8 @@ class TestMidnightMigration:
         self, cache_manager_with_tz, yesterday_cache_data, mock_timezone_service
     ):
         """Test that validity interval counts match actual interval dict lengths."""
-        yesterday = date.today() - timedelta(days=1)
         today = date.today()
+        yesterday = today - timedelta(days=1)
         tz = ZoneInfo("Europe/Stockholm")
 
         cache_manager_with_tz.store(
@@ -274,7 +275,7 @@ class TestMidnightMigration:
         with patch(
             "custom_components.ge_spot.coordinator.cache_manager.dt_util"
         ) as mock_dt:
-            mock_now = datetime.now(tz=tz).replace(hour=0, minute=5)
+            mock_now = datetime(today.year, today.month, today.day, 0, 5, 0, tzinfo=tz)
             mock_dt.now.return_value = mock_now
             migrated_data = cache_manager_with_tz.get_data(
                 area="SE2", target_date=today
@@ -312,8 +313,8 @@ class TestMigrationIntegration:
         self, cache_manager_with_tz, yesterday_cache_data, mock_timezone_service
     ):
         """Test that fetch decision uses correct validity after migration."""
-        yesterday = date.today() - timedelta(days=1)
         today = date.today()
+        yesterday = today - timedelta(days=1)
         tz = ZoneInfo("Europe/Stockholm")
 
         # Store yesterday's data
@@ -329,7 +330,7 @@ class TestMigrationIntegration:
         with patch(
             "custom_components.ge_spot.coordinator.cache_manager.dt_util"
         ) as mock_dt:
-            mock_now = datetime.now(tz=tz).replace(hour=0, minute=5)
+            mock_now = datetime(today.year, today.month, today.day, 0, 5, 0, tzinfo=tz)
             mock_dt.now.return_value = mock_now
             migrated_data = cache_manager_with_tz.get_data(
                 area="SE2", target_date=today
