@@ -80,10 +80,16 @@ class PriceValueSensor(BaseElectricityPriceSensor):
         if self._additional_attrs and self.coordinator.data:
             additional = self._additional_attrs(self.coordinator.data)
             if additional:
-                # Keep only essential additional attributes
+                # Keep essential additional attributes
+                # Include tomorrow_valid and export price lists for export sensors
+                essential_keys = {
+                    "tomorrow_valid",
+                    "export_today_prices",
+                    "export_tomorrow_prices",
+                }
                 essential_attrs = {}
                 for key, value in additional.items():
-                    if key == "tomorrow_valid":
+                    if key in essential_keys:
                         essential_attrs[key] = value
                 attrs.update(essential_attrs)
 
