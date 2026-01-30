@@ -90,7 +90,7 @@ class SchemaValidator:
                     # Validate property
                     try:
                         validator.validate(value, prop_path)
-                    except ValidationError as e:
+                    except ValidationError:
                         # Check if property is nullable
                         if value is None and self.schema.is_nullable(prop):
                             continue

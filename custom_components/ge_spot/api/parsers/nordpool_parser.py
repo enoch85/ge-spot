@@ -24,32 +24,32 @@ class NordpoolParser(BasePriceParser):
         """
         super().__init__(source, timezone_service)
 
-    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse the raw data dictionary from NordpoolAPI.
 
-        Expects input `data` to be the dictionary returned by NordpoolAPI.fetch_raw_data,
+        Expects input `raw_data` to be the dictionary returned by NordpoolAPI.fetch_raw_data,
         which includes keys like 'interval_raw', 'timezone', 'currency', 'raw_data', etc.
         The actual Nordpool JSON response is expected under the 'raw_data' key.
         """
         _LOGGER.debug(
-            f"[NordpoolParser] Starting parse. Input data keys: {list(data.keys())}"
+            f"[NordpoolParser] Starting parse. Input data keys: {list(raw_data.keys())}"
         )
 
         # The actual Nordpool JSON response is nested under 'raw_data'
-        raw_api_response = data.get("raw_data")
+        raw_api_response = raw_data.get("raw_data")
         if not raw_api_response or not isinstance(raw_api_response, dict):
             _LOGGER.warning(
                 "[NordpoolParser] 'raw_data' key missing or not a dictionary in input."
             )
-            return self._create_empty_result(data)
+            return self._create_empty_result(raw_data)
 
         # Extract metadata provided by the API adapter
-        source_timezone = data.get("timezone", "UTC")
-        source_currency = data.get("currency", Currency.EUR)
-        area = data.get("area")
+        source_timezone = raw_data.get("timezone", "UTC")
+        source_currency = raw_data.get("currency", Currency.EUR)
+        area = raw_data.get("area")
         # Get delivery area for looking up prices in the response
         # (e.g., "DE" area uses "GER" delivery area in Nord Pool)
-        delivery_area = data.get("delivery_area", area)
+        delivery_area = raw_data.get("delivery_area", area)
         _LOGGER.debug(
             f"[NordpoolParser] Metadata - Area: {area}, Delivery Area: {delivery_area}, "
             f"Timezone: {source_timezone}, Currency: {source_currency}"
@@ -76,7 +76,7 @@ class NordpoolParser(BasePriceParser):
             _LOGGER.warning(
                 "[NordpoolParser] Could not find 'today'/'tomorrow' dicts or 'multiAreaEntries' list in raw_api_response."
             )
-            return self._create_empty_result(data, source_timezone, source_currency)
+            return self._create_empty_result(raw_data, source_timezone, source_currency)
 
         _LOGGER.debug(
             f"[NordpoolParser] Processing {len(days_to_process)} day(s) of data"
@@ -140,7 +140,7 @@ class NordpoolParser(BasePriceParser):
             _LOGGER.warning(
                 f"[NordpoolParser] Validation failed for parsed data. Result: {result}"
             )
-            return self._create_empty_result(data, source_timezone, source_currency)
+            return self._create_empty_result(raw_data, source_timezone, source_currency)
 
         return result
 

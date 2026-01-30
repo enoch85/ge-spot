@@ -1,0 +1,121 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GE-Spot konfigurieren",
+        "description": "Wählen Sie Ihr Preisgebiet",
+        "data": {
+          "area": "Preisgebiet"
+        }
+      },
+      "source_priority": {
+        "title": "Datenquellen konfigurieren",
+        "description": "Wählen Sie die Datenquellen in Prioritätsreihenfolge",
+        "data": {
+          "source_priority": "Datenquellen-Priorität",
+          "vat": "Mehrwertsteuersatz (%)",
+          "additional_tariff": "Zusätzliche Gebühren",
+          "display_unit": "Preisanzeigeformat"
+        },
+        "data_description": {
+          "source_priority": "Wählen Sie die Quellen nach Priorität (erste = höchste Priorität)",
+          "vat": "Geben Sie Ihren lokalen Mehrwertsteuersatz ein (z.B. 19 für 19%)",
+          "additional_tariff": "Zusätzliche Gebühren von Ihrem Energieversorger (Netz-/Übertragungsgebühren). In derselben Einheit wie Preisanzeigeformat eingeben (z.B. 0,05 für dezimal oder 5 für Cent)",
+          "display_unit": "Wählen Sie, wie Preise angezeigt werden sollen"
+        }
+      },
+      "api_keys": {
+        "title": "API-Schlüssel",
+        "description": "API-Schlüssel für ausgewählte Quellen eingeben",
+        "data": {
+          "entsoe_api_key": "ENTSO-E API-Schlüssel"
+        }
+      },
+      "stromligning_config": {
+        "title": "Strømligning-Konfiguration",
+        "description": "Geben Sie Ihre Strømligning-Anbieter-ID ein",
+        "data": {
+          "stromligning_supplier": "Strømligning-Anbieter-ID"
+        },
+        "data_description": {
+          "stromligning_supplier": "Geben Sie Ihre Anbieter-ID ein (z.B. rah_c). Vollständige Liste: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
+        }
+      }
+    },
+    "error": {
+      "no_sources_for_region": "Keine Datenquellen für diese Region verfügbar",
+      "error_sources_for_region": "Fehler beim Abrufen der Quellen für die Region",
+      "api_key_required": "API-Schlüssel erforderlich",
+      "invalid_api_key": "Ungültiger API-Schlüssel. Bitte überprüfen Sie den Schlüssel oder versuchen Sie es später erneut.",
+      "supplier_id_required": "Anbieter-ID für Strømligning erforderlich",
+      "api_creation_failed": "API-Verbindung konnte nicht hergestellt werden. Bitte versuchen Sie es erneut.",
+      "unknown": "Unerwarteter Fehler aufgetreten"
+    },
+    "abort": {
+      "already_configured": "Dieses Preisgebiet ist bereits konfiguriert"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "GE-Spot Optionen",
+        "description": "Preiseinstellungen konfigurieren",
+        "data": {
+          "source_priority": "Datenquellen-Priorität",
+          "vat": "Mehrwertsteuersatz (%)",
+          "import_multiplier": "Import-Preis-Multiplikator",
+          "additional_tariff": "Zusätzliche Gebühren",
+          "energy_tax": "Energiesteuer",
+          "display_unit": "Preisanzeigeformat",
+          "timezone_reference": "Zeitreferenz",
+          "entsoe_api_key": "ENTSO-E API-Schlüssel",
+          "clear_cache": "Preis-Cache leeren",
+          "stromligning_supplier": "Strømligning-Anbieter-ID",
+          "export_enabled": "Exportpreise aktivieren",
+          "export_multiplier": "Export-Preis-Multiplikator",
+          "export_offset": "Export-Preis-Offset",
+          "export_vat": "Export-Mehrwertsteuersatz (%)"
+        },
+        "data_description": {
+          "source_priority": "Wählen Sie die zu verwendenden Quellen nach Priorität (erste = höchste Priorität)",
+          "vat": "Geben Sie Ihren lokalen Mehrwertsteuersatz ein (z.B. 19 für 19%)",
+          "import_multiplier": "Multiplikator für Spotpreis bei Import (z.B. 0,107 für belgische Tarife).\nWird vor Gebühren und Steuern angewendet.",
+          "additional_tariff": "Zusätzliche Netz-/Übertragungsgebühren von Ihrem Anbieter.\nIn derselben Einheit wie Preisanzeigeformat eingeben.\nWird vor MwSt. angewendet.",
+          "energy_tax": "Feste Energiesteuer pro kWh (z.B. staatliche Abgabe).\nIn derselben Einheit wie Preisanzeigeformat eingeben.\nWird vor MwSt. angewendet.",
+          "display_unit": "Wählen Sie, wie Preise angezeigt werden sollen",
+          "timezone_reference": "Wählen Sie die Zeitzone für die Preisanzeige",
+          "entsoe_api_key": "Erforderlich für die Verwendung von ENTSO-E als Datenquelle",
+          "clear_cache": "Preis-Cache leeren, um neue Daten abzurufen",
+          "stromligning_supplier": "Vollständige Liste: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md",
+          "export_enabled": "Separate Sensoren für Export-/Einspeisepreise aktivieren (für Prosumer, die Strom verkaufen)",
+          "export_multiplier": "Multiplikator für Spotpreis bei Export (z.B. 0,1 für 10% des Spotpreises)",
+          "export_offset": "Offset nach Multiplikator (kann negativ sein).\nIn derselben Einheit wie Preisanzeigeformat eingeben.",
+          "export_vat": "Mehrwertsteuersatz für Exportpreise (oft 0% für Einspeisevergütung)"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "Ungültiger API-Schlüssel. Bitte überprüfen Sie den Schlüssel oder versuchen Sie es später erneut.",
+      "api_creation_failed": "API-Verbindung konnte nicht hergestellt werden. Bitte versuchen Sie es erneut.",
+      "cache_cleared": "Preis-Cache erfolgreich geleert!",
+      "cache_clear_failed": "Preis-Cache konnte nicht geleert werden. Bitte versuchen Sie es erneut."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "api_key_status": {
+        "state": {
+          "valid": "Gültig",
+          "invalid": "Ungültig",
+          "not_configured": "Nicht konfiguriert",
+          "unknown": "Status unbekannt"
+        },
+        "state_attributes": {
+          "last_checked": {
+            "name": "Letzte Überprüfung"
+          }
+        }
+      }
+    }
+  }
+}

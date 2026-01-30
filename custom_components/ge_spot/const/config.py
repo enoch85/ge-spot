@@ -7,12 +7,11 @@ class Config:
     SOURCE = "source"
     AREA = "area"
     VAT = "vat"
-    INCLUDE_VAT = "include_vat"  # Whether to include VAT in price calculations
-    # Price components (applied in order: spot + tariff + tax, then VAT on total)
-    ADDITIONAL_TARIFF = (
-        "additional_tariff"  # Additional tariff/fees from energy provider (per kWh)
-    )
-    ENERGY_TAX = "energy_tax"  # Fixed energy tax per kWh (e.g. government levy, applied before VAT)
+    INCLUDE_VAT = "include_vat"
+    # Price components: (spot × multiplier) + tariff + tax, then VAT on total
+    IMPORT_MULTIPLIER = "import_multiplier"  # e.g. 0.1068 for Belgian tariffs
+    ADDITIONAL_TARIFF = "additional_tariff"  # Energy provider fees (per kWh)
+    ENERGY_TAX = "energy_tax"  # Government levy (per kWh, applied before VAT)
     UPDATE_INTERVAL = "update_interval"
     DISPLAY_UNIT = "display_unit"
     CURRENCY = "currency"
@@ -56,3 +55,12 @@ class Config:
     VALIDATE_PRICE_RANGE = "validate_price_range"  # Whether to validate price ranges
     PRICE_MIN = "price_min"  # Minimum valid price
     PRICE_MAX = "price_max"  # Maximum valid price
+
+    # Export/Production price configuration
+    # Export prices use formula: (spot_price × multiplier + offset) × (1 + export_vat)
+    EXPORT_ENABLED = "export_enabled"  # Whether to enable export price sensors
+    EXPORT_MULTIPLIER = (
+        "export_multiplier"  # Multiplier applied to spot price for export
+    )
+    EXPORT_OFFSET = "export_offset"  # Offset added after multiplier (can be negative)
+    EXPORT_VAT = "export_vat"  # VAT rate for export prices (often 0%)

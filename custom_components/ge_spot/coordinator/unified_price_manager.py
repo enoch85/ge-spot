@@ -36,7 +36,6 @@ from ..api.comed import ComedAPI
 from ..api.omie import OmieAPI
 from ..api.stromligning import StromligningAPI
 
-
 _LOGGER = logging.getLogger(__name__)
 
 # Validation result constants for clarity
@@ -1760,10 +1759,10 @@ class UnifiedPriceManager:
                 self.area,
             )
             # Force a new fetch - this will return fresh data
+            # fetch_data returns IntervalPriceData, not a dict
             fresh_data = await self.fetch_data(force=True)
-            _LOGGER.debug(
-                f"Fresh data fetched after cache clear: has_data={fresh_data.get('has_data')}"
-            )
+            has_data = bool(fresh_data and fresh_data.today_interval_prices)
+            _LOGGER.debug(f"Fresh data fetched after cache clear: has_data={has_data}")
 
             # Schedule health check to validate all sources after manual cache clear
             # Cancel existing health check task if running

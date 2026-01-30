@@ -34,7 +34,7 @@ def get_yesterday():
 
 def generate_nordpool_response(delivery_date, area="SE4"):
     """Generate a Nordpool response for a specific date.
-    
+
     Generates 24 hourly prices starting at 00:00 UTC on the delivery date.
     When converted to local timezone (e.g., Stockholm CET/CEST), hours may
     shift: UTC 00:00 becomes CET 01:00, so the first local hour is 01:00.

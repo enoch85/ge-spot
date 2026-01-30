@@ -323,10 +323,6 @@ class PriceDataFetcher:
         Returns:
             Dictionary with standardized empty structure
         """
-        from custom_components.ge_spot.api.base.data_structure import (
-            StandardizedPriceData,
-        )
-
         # Generate empty result with proper structure
         empty_result = StandardizedPriceData.create_empty(
             source="None", area=area, currency=currency

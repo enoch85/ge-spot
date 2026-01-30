@@ -37,10 +37,8 @@ def get_parser_for_source(source_type: str, timezone_service=None):
         parser_class = parsers[source_type]
         return parser_class(timezone_service=timezone_service)
 
-    # Fallback to a generic parser
-    from ..base.price_parser import BasePriceParser
-
-    return BasePriceParser(source_type, timezone_service)
+    # No fallback - unknown sources should raise an error
+    raise ValueError(f"No parser available for source: {source_type}")
 
 
 __all__ = [

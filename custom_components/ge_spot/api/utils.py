@@ -35,8 +35,6 @@ async def fetch_with_retry(
     end_time: a datetime.time object (e.g. time(RETRY_CUTOFF_TIME_HOUR, RETRY_CUTOFF_TIME_MINUTE)) in the local timezone.
     local_tz_name: string, e.g. 'Europe/Oslo', 'Europe/Berlin', etc.
     """
-    import datetime
-
     attempts = 0
 
     # Create the timezone object outside the loop

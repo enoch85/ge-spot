@@ -24,25 +24,17 @@ from .debug_utils import log_conversion, log_raw_data, log_statistics
 class APIError(Exception):
     """Base class for API errors."""
 
-    pass
-
 
 class RateLimitError(APIError):
     """Error raised when API rate limiting is detected."""
-
-    pass
 
 
 class AuthenticationError(APIError):
     """Error raised when API authentication fails."""
 
-    pass
-
 
 class DataParsingError(APIError):
     """Error raised when parsing API data fails."""
-
-    pass
 
 
 # Exchange service

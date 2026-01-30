@@ -85,7 +85,6 @@ class BasePriceAPI(ABC):
         try:
             if not self.timezone_service:
                 raise ValueError("timezone_service is not initialized")
-            target_timezone = self.timezone_service.ha_timezone
 
             _LOGGER.debug(
                 f"{self.source_type}: Fetching day-ahead prices for area {area}"

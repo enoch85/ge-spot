@@ -23,6 +23,7 @@ class CurrencyConverter:
         vat_rate: float,  # VAT rate as a decimal (e.g. 0.25 for 25%)
         additional_tariff: float = 0.0,  # Additional tariff/fees per kWh
         energy_tax: float = 0.0,  # Fixed energy tax per kWh
+        import_multiplier: float = 1.0,  # Multiplier applied to spot price
     ):
         """Initialize the CurrencyConverter."""
         self._exchange_service = exchange_service
@@ -32,6 +33,7 @@ class CurrencyConverter:
         self.vat_rate = vat_rate
         self.additional_tariff = additional_tariff
         self.energy_tax = energy_tax
+        self.import_multiplier = import_multiplier
         # Use cents display format when explicitly set to DisplayUnit.CENTS
         self.use_subunit = display_unit == DisplayUnit.CENTS
         _LOGGER.debug(
@@ -46,30 +48,33 @@ class CurrencyConverter:
         source_currency: str,
         source_unit: str = EnergyUnit.MWH,  # Assume MWh default if not specified
     ) -> Tuple[Dict[str, float], Dict[str, float], Optional[float], Optional[str]]:
-        """Converts a dictionary of interval prices to the target currency and display unit.
+        """Converts interval prices to target currency and display unit.
 
         Args:
             interval_prices: Dict of {'HH:MM': price} in source currency/unit.
-            source_currency: The currency code of the source prices (e.g. 'EUR').
-            source_unit: The energy unit of the source prices (e.g. 'MWh').
+            source_currency: Currency code of source prices (e.g. 'EUR').
+            source_unit: Energy unit of source prices (e.g. 'MWh').
 
         Returns:
-            A tuple containing:
-            - Dictionary of converted interval prices {'HH:MM': converted_price} (with VAT/taxes/tariffs).
-            - Dictionary of raw interval prices {'HH:MM': raw_price} (without VAT/taxes/tariffs, only currency + unit conversion).
-            - The exchange rate used (or None if no conversion needed).
-            - The timestamp of the exchange rate used.
+            Tuple containing:
+            - Dict of converted prices {'HH:MM': price} (with VAT/taxes).
+            - Dict of raw prices {'HH:MM': price} (currency + unit only).
+            - Exchange rate used (None if no conversion needed).
+            - Timestamp of exchange rate used.
         """
         if not interval_prices:
             return {}, {}, None, None
 
         _LOGGER.debug(
-            "Converting %d prices from %s/%s to %s/%s (VAT included: %s, Rate: %.2f%%, Additional tariff: %.4f, Energy tax: %.4f, Use Subunit/Cents: %s)",
+            "Converting %d prices from %s/%s to %s/%s "
+            "(Import multiplier: %.4f, VAT included: %s, Rate: %.2f%%, "
+            "Additional tariff: %.4f, Energy tax: %.4f, Use Subunit/Cents: %s)",
             len(interval_prices),
             source_currency,
             source_unit,
             self.target_currency,
-            f"{'cents' if self.use_subunit else 'units'} per {EnergyUnit.KWH}",  # Clarify target unit
+            f"{'cents' if self.use_subunit else 'units'} per {EnergyUnit.KWH}",
+            self.import_multiplier,
             self.include_vat,
             self.vat_rate * 100,
             self.additional_tariff,
@@ -110,7 +115,8 @@ class CurrencyConverter:
                     rate_timestamp = self._exchange_service.last_update
                 else:
                     _LOGGER.error(
-                        "Could not retrieve exchange rate for %s -> %s. Cannot convert currency.",
+                        "Could not retrieve exchange rate for %s -> %s. "
+                        "Cannot convert currency.",
                         source_currency,
                         self.target_currency,
                     )
@@ -120,7 +126,8 @@ class CurrencyConverter:
                 return {}, {}, None, None
         else:
             _LOGGER.debug(
-                "Source and target currency (%s) are the same. No exchange rate needed.",
+                "Source and target currency (%s) are the same. "
+                "No exchange rate needed.",
                 source_currency,
             )
 
@@ -145,7 +152,7 @@ class CurrencyConverter:
                 if needs_currency_conversion and exchange_rate is not None:
                     converted_value = price * exchange_rate
 
-                # Calculate RAW price (currency + unit conversion only, NO VAT/taxes/tariffs)
+                # RAW price (currency + unit conversion, NO VAT/taxes/tariffs)
                 raw_price = convert_energy_price(
                     price=converted_value,
                     source_unit=source_unit,
@@ -155,10 +162,11 @@ class CurrencyConverter:
                     additional_tariff=0.0,  # No tariff for raw price
                     energy_tax=0.0,  # No tax for raw price
                     tariff_in_subunit=False,
+                    import_multiplier=1.0,  # No multiplier for raw price
                 )
                 raw_prices[interval_key] = raw_price
 
-                # Calculate FINAL price (with VAT, taxes, tariffs)
+                # Calculate FINAL price (with VAT, taxes, tariffs, multiplier)
                 converted_price = convert_energy_price(
                     price=converted_value,
                     source_unit=source_unit,
@@ -168,6 +176,7 @@ class CurrencyConverter:
                     additional_tariff=self.additional_tariff,
                     energy_tax=self.energy_tax,
                     tariff_in_subunit=self.use_subunit,  # Tariff matches display format
+                    import_multiplier=self.import_multiplier,
                 )
                 converted_prices[interval_key] = converted_price
 

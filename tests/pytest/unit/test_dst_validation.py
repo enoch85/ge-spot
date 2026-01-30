@@ -54,7 +54,7 @@ class TestApiValidatorDSTAware:
 
     def test_spring_forward_validation_with_timezone(self):
         """Validator with timezone should calculate correct minimum for spring forward."""
-        # Mock data with 92 intervals (spring forward)
+        # Mock data with 92 intervals (spring forward) - includes 12:00 for current interval check
         data = {
             "today_interval_prices": {
                 f"{h:02d}:{m:02d}": 100.0
@@ -68,10 +68,17 @@ class TestApiValidatorDSTAware:
         # With timezone on spring forward day, should calculate min=46 (92/2)
         with patch(
             "custom_components.ge_spot.api.base.api_validator.dt_util"
-        ) as mock_dt:
+        ) as mock_dt, patch(
+            "custom_components.ge_spot.api.base.api_validator.TimezoneService"
+        ) as mock_tz_service_class:
             tz = ZoneInfo("Europe/Stockholm")
             spring_day = datetime(2025, 3, 30, 12, 0, 0, tzinfo=tz)
             mock_dt.now.return_value = spring_day
+
+            # Mock TimezoneService to return an interval key that exists in our data
+            mock_tz_service = Mock()
+            mock_tz_service.get_current_interval_key.return_value = "12:00"
+            mock_tz_service_class.return_value = mock_tz_service
 
             result = ApiValidator.is_data_adequate(
                 data, source_name="test", timezone="Europe/Stockholm"
@@ -100,10 +107,17 @@ class TestApiValidatorDSTAware:
         # With timezone on fall back day, should calculate min=50 (100/2)
         with patch(
             "custom_components.ge_spot.api.base.api_validator.dt_util"
-        ) as mock_dt:
+        ) as mock_dt, patch(
+            "custom_components.ge_spot.api.base.api_validator.TimezoneService"
+        ) as mock_tz_service_class:
             tz = ZoneInfo("Europe/Stockholm")
             fall_day = datetime(2025, 10, 26, 12, 0, 0, tzinfo=tz)
             mock_dt.now.return_value = fall_day
+
+            # Mock TimezoneService to return an interval key that exists in our data
+            mock_tz_service = Mock()
+            mock_tz_service.get_current_interval_key.return_value = "12:00"
+            mock_tz_service_class.return_value = mock_tz_service
 
             result = ApiValidator.is_data_adequate(
                 data, source_name="test", timezone="Europe/Stockholm"
@@ -112,7 +126,7 @@ class TestApiValidatorDSTAware:
 
     def test_insufficient_data_spring_forward(self):
         """Validator should reject insufficient data on spring forward day."""
-        # Mock data with only 40 intervals (less than 46 minimum for 92/2)
+        # Mock data with only 10 intervals (less than 46 minimum for 92/2)
         data = {
             "today_interval_prices": {
                 f"{h:02d}:00": 100.0 for h in range(10)
@@ -123,10 +137,17 @@ class TestApiValidatorDSTAware:
 
         with patch(
             "custom_components.ge_spot.api.base.api_validator.dt_util"
-        ) as mock_dt:
+        ) as mock_dt, patch(
+            "custom_components.ge_spot.api.base.api_validator.TimezoneService"
+        ) as mock_tz_service_class:
             tz = ZoneInfo("Europe/Stockholm")
             spring_day = datetime(2025, 3, 30, 12, 0, 0, tzinfo=tz)
             mock_dt.now.return_value = spring_day
+
+            # Mock TimezoneService to return an interval key that exists in our data
+            mock_tz_service = Mock()
+            mock_tz_service.get_current_interval_key.return_value = "05:00"
+            mock_tz_service_class.return_value = mock_tz_service
 
             result = ApiValidator.is_data_adequate(
                 data, source_name="test", timezone="Europe/Stockholm"

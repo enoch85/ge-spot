@@ -7,6 +7,7 @@ and doesn't produce cascading error messages.
 Phase 1.2 fix: API client timeout/error responses should be detected
 before checking for missing fields.
 """
+
 import sys
 import os
 import asyncio

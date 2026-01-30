@@ -248,7 +248,10 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="stromligning_config",
             data_schema=get_stromligning_config_schema(),
             errors=self._errors,
-            description_placeholders={"data_description": "data_description"},
+            description_placeholders={
+                "data_description": "data_description",
+                "stromligning_docs_url": "https://github.com/enoch95/ge-spot/blob/main/docs/stromligning.md",
+            },
         )
 
     def _create_entry(self) -> FlowResult:

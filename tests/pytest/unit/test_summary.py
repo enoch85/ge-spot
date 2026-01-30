@@ -4,6 +4,7 @@
 This script runs all core tests for the GE-Spot integration and presents a comprehensive
 summary of the results. It serves as the main entry point for testing the integration.
 """
+
 import sys
 import os
 import argparse

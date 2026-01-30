@@ -1,0 +1,121 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GE-Spot configureren",
+        "description": "Selecteer uw prijsgebied",
+        "data": {
+          "area": "Prijsgebied"
+        }
+      },
+      "source_priority": {
+        "title": "Gegevensbronnen configureren",
+        "description": "Selecteer welke bronnen te gebruiken in prioriteitsvolgorde",
+        "data": {
+          "source_priority": "Gegevensbron Prioriteit",
+          "vat": "BTW-tarief (%)",
+          "additional_tariff": "Aanvullend Tarief",
+          "display_unit": "Prijs Weergaveformaat"
+        },
+        "data_description": {
+          "source_priority": "Selecteer welke bronnen te gebruiken in volgorde van prioriteit (eerste = hoogste prioriteit)",
+          "vat": "Voer uw lokale BTW-percentage in (bijv. 21 voor 21%)",
+          "additional_tariff": "Aanvullende kosten van uw energieleverancier (transport-/netwerkkosten). Voer in dezelfde eenheid in als Prijs Weergaveformaat (bijv. 0,05 voor decimaal of 5 voor cent)",
+          "display_unit": "Kies hoe prijzen moeten worden weergegeven"
+        }
+      },
+      "api_keys": {
+        "title": "API-sleutels",
+        "description": "Voer API-sleutels in voor geselecteerde bronnen",
+        "data": {
+          "entsoe_api_key": "ENTSO-E API-sleutel"
+        }
+      },
+      "stromligning_config": {
+        "title": "Strømligning Configuratie",
+        "description": "Voer uw Strømligning leveranciers-ID in",
+        "data": {
+          "stromligning_supplier": "Strømligning Leveranciers-ID"
+        },
+        "data_description": {
+          "stromligning_supplier": "Voer uw leveranciers-ID in (bijv. rah_c). Volledige lijst: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md"
+        }
+      }
+    },
+    "error": {
+      "no_sources_for_region": "Geen gegevensbronnen beschikbaar voor deze regio",
+      "error_sources_for_region": "Fout bij ophalen van bronnen voor regio",
+      "api_key_required": "API-sleutel is vereist",
+      "invalid_api_key": "Ongeldige API-sleutel. Controleer de sleutel of probeer het later opnieuw.",
+      "supplier_id_required": "Leveranciers-ID is vereist voor Strømligning",
+      "api_creation_failed": "Kan geen API-verbinding maken. Probeer het opnieuw.",
+      "unknown": "Onverwachte fout opgetreden"
+    },
+    "abort": {
+      "already_configured": "Dit prijsgebied is al geconfigureerd"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "GE-Spot Opties",
+        "description": "Prijsinstellingen configureren",
+        "data": {
+          "source_priority": "Gegevensbron Prioriteit",
+          "vat": "BTW-tarief (%)",
+          "import_multiplier": "Import Prijs Vermenigvuldiger",
+          "additional_tariff": "Aanvullend Tarief",
+          "energy_tax": "Energiebelasting",
+          "display_unit": "Prijs Weergaveformaat",
+          "timezone_reference": "Tijdreferentie",
+          "entsoe_api_key": "ENTSO-E API-sleutel",
+          "clear_cache": "Prijscache wissen",
+          "stromligning_supplier": "Strømligning Leveranciers-ID",
+          "export_enabled": "Exportprijzen inschakelen",
+          "export_multiplier": "Export Prijs Vermenigvuldiger",
+          "export_offset": "Export Prijs Offset",
+          "export_vat": "Export BTW-tarief (%)"
+        },
+        "data_description": {
+          "source_priority": "Selecteer welke bronnen te gebruiken in volgorde van prioriteit (eerste = hoogste prioriteit)",
+          "vat": "Voer uw lokale BTW-percentage in (bijv. 21 voor 21%)",
+          "import_multiplier": "Vermenigvuldiger toegepast op spotprijs voor import (bijv. 0,107 voor Belgische tarieven).\nToegepast vóór tarief en belasting.",
+          "additional_tariff": "Aanvullende transport-/netwerkkosten van uw leverancier.\nVoer in dezelfde eenheid in als Prijs Weergaveformaat.\nToegepast vóór BTW.",
+          "energy_tax": "Vaste energiebelasting per kWh (bijv. overheidsheffing).\nVoer in dezelfde eenheid in als Prijs Weergaveformaat.\nToegepast vóór BTW.",
+          "display_unit": "Kies hoe prijzen moeten worden weergegeven",
+          "timezone_reference": "Kies welke tijdzone te gebruiken voor prijsweergave",
+          "entsoe_api_key": "Vereist voor gebruik van ENTSO-E als gegevensbron",
+          "clear_cache": "Wis de prijscache om nieuwe gegevens op te halen",
+          "stromligning_supplier": "Volledige lijst: https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md",
+          "export_enabled": "Schakel aparte sensoren in voor export-/terugleveringsprijzen (voor prosumenten die elektriciteit verkopen)",
+          "export_multiplier": "Vermenigvuldiger toegepast op spotprijs voor export (bijv. 0,1 voor 10% van spotprijs)",
+          "export_offset": "Offset toegevoegd na vermenigvuldiger (kan negatief zijn).\nVoer in dezelfde eenheid in als Prijs Weergaveformaat.",
+          "export_vat": "BTW-tarief voor exportprijzen (vaak 0% voor terugleveringstarieven)"
+        }
+      }
+    },
+    "error": {
+      "invalid_api_key": "Ongeldige API-sleutel. Controleer de sleutel of probeer het later opnieuw.",
+      "api_creation_failed": "Kan geen API-verbinding maken. Probeer het opnieuw.",
+      "cache_cleared": "Prijscache succesvol gewist!",
+      "cache_clear_failed": "Kan prijscache niet wissen. Probeer het opnieuw."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "api_key_status": {
+        "state": {
+          "valid": "Geldig",
+          "invalid": "Ongeldig",
+          "not_configured": "Niet geconfigureerd",
+          "unknown": "Status onbekend"
+        },
+        "state_attributes": {
+          "last_checked": {
+            "name": "Laatst gecontroleerd"
+          }
+        }
+      }
+    }
+  }
+}

@@ -37,7 +37,7 @@ class AemoParser(BasePriceParser):
         """
         super().__init__(source, timezone_service)
 
-    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse AEMO NEMWEB Pre-dispatch data.
 
         Expected input structure (from AemoAPI.fetch_raw_data):
@@ -53,23 +53,23 @@ class AemoParser(BasePriceParser):
             Dict with interval_raw (ISO timestamps), currency, timezone, source, etc.
         """
         _LOGGER.debug(
-            f"[AemoParser] Starting parse. Input data keys: {list(data.keys())}"
+            f"[AemoParser] Starting parse. Input data keys: {list(raw_data.keys())}"
         )
 
         # Extract the CSV content from raw_data
-        csv_content = data.get("csv_content")
+        csv_content = raw_data.get("csv_content")
         if not csv_content:
             _LOGGER.warning("[AemoParser] 'csv_content' missing in input data")
-            return self._create_empty_result(data)
+            return self._create_empty_result(raw_data)
 
         # Extract metadata
-        area = data.get("area")
+        area = raw_data.get("area")
         if not area:
             _LOGGER.warning("[AemoParser] 'area' not specified")
-            return self._create_empty_result(data)
+            return self._create_empty_result(raw_data)
 
-        source_timezone = data.get("timezone", "Australia/Sydney")
-        source_currency = data.get("currency", Currency.AUD)
+        source_timezone = raw_data.get("timezone", "Australia/Sydney")
+        source_currency = raw_data.get("currency", Currency.AUD)
 
         _LOGGER.debug(
             f"[AemoParser] Parsing NEMWEB CSV for area: {area}, timezone: {source_timezone}"
@@ -81,7 +81,9 @@ class AemoParser(BasePriceParser):
 
             if not prices_30min:
                 _LOGGER.warning(f"[AemoParser] No price data found for {area}")
-                return self._create_empty_result(data, source_timezone, source_currency)
+                return self._create_empty_result(
+                    raw_data, source_timezone, source_currency
+                )
 
             _LOGGER.debug(
                 f"[AemoParser] Parsed {len(prices_30min)} 30-minute trading intervals"
@@ -132,13 +134,15 @@ class AemoParser(BasePriceParser):
             # Validate before returning
             if not self.validate_parsed_data(result):
                 _LOGGER.warning(f"[AemoParser] Validation failed for parsed data")
-                return self._create_empty_result(data, source_timezone, source_currency)
+                return self._create_empty_result(
+                    raw_data, source_timezone, source_currency
+                )
 
             return result
 
         except Exception as e:
             _LOGGER.error(f"[AemoParser] Error parsing NEMWEB CSV: {e}", exc_info=True)
-            return self._create_empty_result(data, source_timezone, source_currency)
+            return self._create_empty_result(raw_data, source_timezone, source_currency)
 
     def _parse_predispatch_csv(
         self, csv_content: str, target_region: str

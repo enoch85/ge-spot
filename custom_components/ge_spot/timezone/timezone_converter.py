@@ -110,11 +110,8 @@ class TimezoneConverter:
                 # We need to preserve BOTH occurrences, not overwrite
                 if target_key in normalized_prices:
                     if preserve_date:
-                        # Check if this is the same date - if so, it's a DST fall-back duplicate
-                        # Extract date from key (format: "YYYY-MM-DD HH:MM")
-                        existing_date = target_key.split()[0]
-
-                        # This is a DST fall-back duplicate on the same day
+                        # DST fall-back duplicate on the same day
+                        # When preserve_date=True, keys include dates, so a collision means DST
                         # Keep the first occurrence and add the second with a suffix
                         # Check if we already have a _1 version
                         base_key = target_key
@@ -273,8 +270,9 @@ class TimezoneConverter:
             # This handles the case where APIs return concatenated data without dates
             if unassigned_prices:
                 # Calculate expected intervals for today (DST-aware)
+                now_in_target_tz = datetime.now(self._tz_service.target_timezone)
                 intervals_per_day = TimeInterval.get_expected_intervals_for_date(
-                    self.now, self.target_timezone
+                    now_in_target_tz, self._tz_service.target_timezone
                 )
 
                 _LOGGER.warning(

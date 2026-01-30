@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12"]
+        python-version: ["3.13"]
     steps:
     - uses: actions/checkout@v6
     - name: Set up Python ${{ matrix.python-version }}
@@ -24,6 +24,9 @@ jobs:
         pip install pylint
         pip install homeassistant
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Analysing the code with pylint
+    - name: Analysing production code with pylint
       run: |
-        pylint $(git ls-files '*.py')
+        pylint custom_components/ge_spot/ --fail-under=7.0
+    - name: Analysing test code with pylint
+      run: |
+        pylint tests/ --fail-under=5.0

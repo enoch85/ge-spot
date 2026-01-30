@@ -20,7 +20,6 @@ from .interval_calculator import IntervalCalculator
 from .parser import TimestampParser
 from .timezone_utils import get_source_timezone, get_timezone_object
 
-
 _LOGGER = logging.getLogger(__name__)
 
 

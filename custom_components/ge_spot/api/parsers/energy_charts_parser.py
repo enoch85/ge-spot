@@ -34,15 +34,15 @@ class EnergyChartsParser(BasePriceParser):
         """
         super().__init__(source, timezone_service)
 
-    def parse(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def parse(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """Parse the raw data dictionary from EnergyChartsAPI.
 
-        Expects input `data` to be the dictionary returned by EnergyChartsAPI.fetch_raw_data,
+        Expects input `raw_data` to be the dictionary returned by EnergyChartsAPI.fetch_raw_data,
         which includes keys like 'raw_data', 'timezone', 'currency', 'area', etc.
         The actual Energy-Charts JSON response is under the 'raw_data' key.
 
         Args:
-            data: Dictionary containing raw API response and metadata
+            raw_data: Dictionary containing raw API response and metadata
 
         Returns:
             Dictionary with parsed interval data:
@@ -57,22 +57,22 @@ class EnergyChartsParser(BasePriceParser):
             }
         """
         _LOGGER.debug(
-            f"[EnergyChartsParser] Starting parse. Input data keys: {list(data.keys())}"
+            f"[EnergyChartsParser] Starting parse. Input data keys: {list(raw_data.keys())}"
         )
 
         # Extract the actual API response
-        raw_api_response = data.get("raw_data")
+        raw_api_response = raw_data.get("raw_data")
         if not raw_api_response or not isinstance(raw_api_response, dict):
             _LOGGER.warning(
                 "[EnergyChartsParser] 'raw_data' key missing or not a dictionary"
             )
-            return self._create_empty_result(data)
+            return self._create_empty_result(raw_data)
 
         # Extract metadata
-        source_timezone = data.get("timezone", "Europe/Berlin")
-        source_currency = data.get("currency", Currency.EUR)
-        area = data.get("area")
-        license_info = data.get("license_info", "")
+        source_timezone = raw_data.get("timezone", "Europe/Berlin")
+        source_currency = raw_data.get("currency", Currency.EUR)
+        area = raw_data.get("area")
+        license_info = raw_data.get("license_info", "")
 
         _LOGGER.debug(
             f"[EnergyChartsParser] Metadata - Area: {area}, "
@@ -115,14 +115,14 @@ class EnergyChartsParser(BasePriceParser):
 
         if not unix_seconds or not prices:
             _LOGGER.warning("[EnergyChartsParser] No timestamps or prices in response")
-            return self._create_empty_result(data, source_timezone, source_currency)
+            return self._create_empty_result(raw_data, source_timezone, source_currency)
 
         if len(unix_seconds) != len(prices):
             _LOGGER.error(
                 f"[EnergyChartsParser] Mismatch: {len(unix_seconds)} timestamps "
                 f"vs {len(prices)} prices"
             )
-            return self._create_empty_result(data, source_timezone, source_currency)
+            return self._create_empty_result(raw_data, source_timezone, source_currency)
 
         _LOGGER.debug(
             f"[EnergyChartsParser] Processing {len(unix_seconds)} data points"
@@ -168,7 +168,7 @@ class EnergyChartsParser(BasePriceParser):
 
         if not self.validate(result):
             _LOGGER.warning(f"[EnergyChartsParser] Validation failed for parsed data")
-            return self._create_empty_result(data, source_timezone, source_currency)
+            return self._create_empty_result(raw_data, source_timezone, source_currency)
 
         return result
 
