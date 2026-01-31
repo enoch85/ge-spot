@@ -1,252 +1,167 @@
-# GE-Spot: Global Electricity Spot Prices Integration for Home Assistant
+# GE-Spot: Global Electricity Spot Prices for Home Assistant
 
 ![Version](https://img.shields.io/badge/version-1.8.0-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg) [![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration) [![Sponsor on GitHub](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-1f425f?logo=github&style=for-the-badge)](https://github.com/sponsors/enoch85)
 
-> *"Hit the right spot with your energy prices"*
-
 <img src="https://github.com/user-attachments/assets/7d765596-50b2-4d2a-926c-209da7120179" width="200" title="GE-Spot Logo" alt="GE-Spot Logo"/>
 
-Home Assistant custom integration providing **electricity spot prices** from global markets with intelligent interval handling (15-minute, hourly, 5-minute) and automatic source fallback.
+Home Assistant integration providing **electricity spot prices** from global markets with 15-minute intervals, automatic source fallback, and prosumer support (import/export pricing).
+
+> Hit the right spot with your energy prices
 
 If you find this project useful, please consider sponsoring the development on GitHub Sponsors: https://github.com/sponsors/enoch85
 
 ## Table of Contents
 
 - [Installation](#installation)
-- [Supported Price Sources & Regions](#supported-price-sources--regions)
+- [Supported Sources & Regions](#supported-sources--regions)
 - [Features](#features)
 - [Configuration](#configuration)
-- [Architecture](#architecture)
 - [Usage Examples](#usage-examples)
 - [Troubleshooting](#troubleshooting)
+- [Architecture](#architecture)
 - [For Developers](#for-developers)
-- [Contributing](#contributing)
-- [Technical Architecture (Advanced)](#technical-architecture-advanced)
 
 ## Installation
 
-### HACS Installation (Recommended)
-
-GE-Spot is available in the default HACS store!
+### HACS (Recommended)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=enoch85&repository=ge-spot&category=integration)
 
-1. Make sure [HACS](https://hacs.xyz/) is installed
-2. Click the button above, or go to HACS → Integrations
-3. Click the "+ EXPLORE & DOWNLOAD REPOSITORIES" button
-4. Search for "GE-Spot" or "Global Electricity Spot Prices"
-5. Click "Download"
-6. Restart Home Assistant
-7. Go to Settings → Devices & Services → Add Integration → Search for "GE-Spot"
+1. Install [HACS](https://hacs.xyz/)
+2. Search for "GE-Spot" in HACS → Integrations
+3. Download, restart Home Assistant
+4. Add via Settings → Devices & Services → Add Integration
 
-### Manual Installation
+### Manual
 
-1. Copy the `ge_spot` directory from this repository to your Home Assistant's `custom_components` directory
+1. Copy `custom_components/ge_spot` to your `custom_components` directory
 2. Restart Home Assistant
 
-## Supported Price Sources & Regions
+## Supported Sources & Regions
 
 The integration supports multiple price data sources with automatic fallback capabilities:
 
-- **Nordpool** - Nordic (Norway, Sweden, Denmark, Finland), Baltic (Estonia, Latvia, Lithuania), and Central/Western Europe (Germany, Austria, Belgium, France, Netherlands, Poland)
-- **ENTSO-E** - European Network of Transmission System Operators (requires API key)
-- **Energy-Charts** - European spot prices (Germany, France, Netherlands, Belgium, Austria, and more)
-- **Energi Data Service** - Denmark
-- **Stromligning** - Denmark  
-- **OMIE** - Spain and Portugal
-- **AEMO** - Australian Energy Market Operator
-- **ComEd** - Chicago area real-time pricing
-- **Amber** - Australian residential pricing
+| Source | Coverage | Notes |
+|--------|----------|-------|
+| **Nordpool** | Nordic, Baltic, Central Europe | DE, AT, BE, FR, NL, PL, NO, SE, DK, FI, EE, LT, LV |
+| **ENTSO-E** | Pan-European | Requires [API key](https://transparency.entsoe.eu/) |
+| **Energy-Charts** | European spot prices | DE, FR, NL, BE, AT, IT, ES, and more |
+| **Energi Data Service** | Denmark | DK1, DK2 |
+| **Strømligning** | Denmark | Includes grid fees and taxes |
+| **OMIE** | Iberian Peninsula | ES, PT |
+| **AEMO** | Australia | NSW, QLD, SA, TAS, VIC |
+| **ComEd** | Chicago area | Real-time pricing (5-min) |
+| **Amber** | Australia | Includes network + carbon costs |
 
-### Region Support Matrix
+<details>
+<summary><b>Full Region Support Matrix</b></summary>
 
-The table below shows which price sources support specific regions:
+| Region | Nordpool | ENTSO-E | Energy-Charts | Energi Data | Strømligning | OMIE | AEMO | ComEd | Amber |
+|--------|:--------:|:-------:|:-------------:|:-----------:|:------------:|:----:|:----:|:-----:|:-----:|
+| AT | ✓ | ✓ | ✓ | | | | | | |
+| BE | ✓ | ✓ | ✓ | | | | | | |
+| BG | | ✓ | ✓ | | | | | | |
+| CH | | ✓ | ✓ | | | | | | |
+| ComEd | | | | | | | | ✓ | |
+| CZ | | ✓ | ✓ | | | | | | |
+| DE | ✓ | ✓ | ✓ | | | | | | |
+| DE-LU | ✓ | ✓ | ✓ | | | | | | |
+| DK1-2 | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
+| EE | ✓ | ✓ | ✓ | | | | | | |
+| ES | | ✓ | ✓ | | | ✓ | | | |
+| FI | ✓ | ✓ | ✓ | | | | | | |
+| FR | ✓ | ✓ | ✓ | | | | | | |
+| GR | | ✓ | ✓ | | | | | | |
+| HR | | ✓ | ✓ | | | | | | |
+| HU | | ✓ | ✓ | | | | | | |
+| IT-* | | ✓ | ✓ | | | | | | |
+| LT | ✓ | ✓ | ✓ | | | | | | |
+| LV | ✓ | | ✓ | | | | | | |
+| NL | ✓ | ✓ | ✓ | | | | | | |
+| NO1-5 | ✓ | ✓ | ✓ | | | | | | |
+| NSW1 | | | | | | | ✓ | | ✓ |
+| PL | ✓ | ✓ | ✓ | | | | | | |
+| PT | | ✓ | ✓ | | | ✓ | | | |
+| QLD1 | | | | | | | ✓ | | ✓ |
+| RO | | ✓ | ✓ | | | | | | |
+| SA1 | | | | | | | ✓ | | ✓ |
+| SE1-4 | ✓ | ✓ | ✓ | | | | | | |
+| SI | | ✓ | ✓ | | | | | | |
+| SK | | ✓ | ✓ | | | | | | |
+| TAS1 | | | | | | | ✓ | | ✓ |
+| VIC1 | | | | | | | ✓ | | ✓ |
 
-| Region | Description | Nordpool | ENTSO-E | Energy-Charts | Energi Data | Stromligning | OMIE | AEMO | ComEd | Amber |
-|--------|-------------|:--------:|:-------:|:-------------:|:-----------:|:------------:|:----:|:----:|:-----:|:-----:|
-| AT     | Austria | ✓ | ✓ | ✓ | | | | | | |
-| BE     | Belgium | ✓ | ✓ | ✓ | | | | | | |
-| BG     | Bulgaria | | ✓ | ✓ | | | | | | |
-| CH     | Switzerland | | ✓ | ✓ | | | | | | |
-| ComEd  | Chicago Area | | | | | | | | ✓ | |
-| CZ     | Czech Republic | | ✓ | ✓ | | | | | | |
-| DE     | Germany | ✓ | ✓ | ✓ | | | | | | |
-| DE-LU  | Germany-Luxembourg | ✓ | ✓ | ✓ | | | | | | |
-| DK1-2  | Denmark | ✓ | ✓ | ✓ | ✓ | ✓ | | | | |
-| EE     | Estonia | ✓ | ✓ | ✓ | | | | | | |
-| ES     | Spain | | ✓ | ✓ | | | ✓ | | | |
-| FI     | Finland | ✓ | ✓ | ✓ | | | | | | |
-| FR     | France | ✓ | ✓ | ✓ | | | | | | |
-| GR     | Greece | | ✓ | ✓ | | | | | | |
-| HR     | Croatia | | ✓ | ✓ | | | | | | |
-| HU     | Hungary | | ✓ | ✓ | | | | | | |
-| IT-Centre-North | Italy Centre-North | | | ✓ | | | | | | |
-| IT-Centre-South | Italy Centre-South | | | ✓ | | | | | | |
-| IT-North | Italy North | | ✓ | ✓ | | | | | | |
-| IT-Sardinia | Italy Sardinia | | | ✓ | | | | | | |
-| IT-Sicily | Italy Sicily | | | ✓ | | | | | | |
-| IT-South | Italy South | | | ✓ | | | | | | |
-| LT     | Lithuania | ✓ | ✓ | ✓ | | | | | | |
-| LV     | Latvia | ✓ | | ✓ | | | | | | |
-| ME     | Montenegro | | | ✓ | | | | | | |
-| NL     | Netherlands | ✓ | ✓ | ✓ | | | | | | |
-| NO1-5  | Norway | ✓ | ✓ | ✓ | | | | | | |
-| NSW1   | Australia NSW | | | | | | | ✓ | | ✓ |
-| PL     | Poland | ✓ | ✓ | ✓ | | | | | | |
-| PT     | Portugal | | ✓ | ✓ | | | ✓ | | | |
-| QLD1   | Australia Queensland | | | | | | | ✓ | | ✓ |
-| RO     | Romania | | ✓ | ✓ | | | | | | |
-| RS     | Serbia | | ✓ | ✓ | | | | | | |
-| SA1    | Australia South | | | | | | | ✓ | | ✓ |
-| SE1-4  | Sweden | ✓ | ✓ | ✓ | | | | | | |
-| SI     | Slovenia | | ✓ | ✓ | | | | | | |
-| SK     | Slovakia | | ✓ | ✓ | | | | | | |
-| TAS1   | Australia Tasmania | | | | | | | ✓ | | ✓ |
-| VIC1   | Australia Victoria | | | | | | | ✓ | | ✓ |
+</details>
 
-For complete area mappings, see [`const/areas.py`](custom_components/ge_spot/const/areas.py).
+For complete area mappings, see [const/areas.py](custom_components/ge_spot/const/areas.py).
 
 ## Features
 
-- **Flexible intervals** - Handles 15-min, hourly, and 5-min data from different markets
-- **Unified output** - Standardizes to 15-minute intervals (96 data points per day)
-- **Multi-source fallback** - Automatic switching between data sources
-- **Global coverage** - Europe, Australia, and North America
-- **Currency conversion** - Live ECB exchange rates
-- **Timezone handling** - Consistent display regardless of API source
-- **Tomorrow's prices** - Available after daily publication (typically 13:00 CET)
-- **EV Smart Charging integration** - Native support for [EV Smart Charging](https://github.com/jonasbkarlsson/ev_smart_charging) via `today_interval_prices` and `tomorrow_interval_prices` attributes
+**Core:**
+- 15-minute interval output (96 data points/day), DST-aware (92-100 intervals on transitions)
+- Supports hourly, 30-minute, 15-minute, and 5-minute source data (normalized to 15-min output)
+- Multi-source fallback with automatic switching
+- Live ECB currency conversion
+- Timezone normalization across all sources
 
-### Sensors Created (per region)
+**Import/Export Pricing:**
+- **Import multiplier** - Scale spot price before fees (e.g., Belgian tariffs: `spot × 0.1068`)
+- **Export sensors** - Separate pricing for prosumers selling electricity
+- Formula: `Import: ((spot × multiplier) + tariff + tax) × (1 + VAT)`
+- Formula: `Export: (spot × multiplier + offset) × (1 + VAT)`
 
-- **Current Price** - Current 15-minute interval price
-- **Next Interval Price** - Upcoming interval price  
-- **Average Price** - Today's average
-- **Peak/Off-Peak Price** - Today's high/low
-- **Price Difference** - Current vs average (absolute)
-- **Price Percentage** - Current vs average (relative)
-- **Hourly Average Price** - Current hour's average (calculated from 15-min intervals)
-- **Tomorrow Average Price** - Tomorrow's average forecast
-- **Tomorrow Peak/Off-Peak Price** - Tomorrow's high/low forecasts
-- **Tomorrow Hourly Average Price** - Tomorrow's hourly averages
+**Sensors Created (per region):**
+
+| Entity ID | Description |
+|-----------|-------------|
+| `sensor.gespot_current_price_{area}` | Current 15-min interval price |
+| `sensor.gespot_next_interval_price_{area}` | Upcoming interval price |
+| `sensor.gespot_average_price_{area}` | Today's average |
+| `sensor.gespot_peak_price_{area}` | Today's peak (highest) |
+| `sensor.gespot_off_peak_price_{area}` | Today's off-peak (lowest) |
+| `sensor.gespot_price_difference_{area}` | Current vs average (absolute) |
+| `sensor.gespot_price_percentage_{area}` | Current vs average (%) |
+| `sensor.gespot_hourly_average_price_{area}` | Current hour's average |
+| `sensor.gespot_tomorrow_average_price_{area}` | Tomorrow's average |
+| `sensor.gespot_tomorrow_peak_price_{area}` | Tomorrow's peak |
+| `sensor.gespot_tomorrow_off_peak_price_{area}` | Tomorrow's off-peak |
+| `sensor.gespot_export_current_price_{area}`* | Export price (current) |
+| `sensor.gespot_export_average_price_{area}`* | Export average |
+| `sensor.gespot_export_peak_price_{area}`* | Export peak |
+
+*Export sensors created when "Enable Export Prices" is configured. Replace `{area}` with your region code (e.g., `se4`, `dk1`, `nsw1`).
+
+**Integrations:** Compatible with [EV Smart Charging](https://github.com/jonasbkarlsson/ev_smart_charging) via `today_interval_prices` and `tomorrow_interval_prices` attributes.
 
 See [docs/hourly_average_sensors.md](docs/hourly_average_sensors.md) for details on hourly average sensors.
 
 ## Configuration
 
-After installation:
+1. Go to Settings → Devices & Services → Add Integration
+2. Search for "GE-Spot" and select your region/area
+3. Enable all sources to activate fallback
+4. Configure source priority (first = highest priority)
 
-1. Go to Configuration → Integrations
-2. Click "Add Integration" and search for "GE-Spot: Global Electricity Spot Prices"
-3. Select your region/area from the dropdown
-4. Configure settings:
+### Settings
 
-### Basic Settings
+| Setting | Description |
+|---------|-------------|
+| **VAT Rate** | Your local VAT % (e.g., 25 for 25%) |
+| **Import Multiplier** | Scale spot price before fees (e.g., 0.107 for Belgian tariffs) |
+| **Additional Tariff** | Grid/transfer fees per kWh (applied before VAT) |
+| **Energy Tax** | Government levy per kWh (applied before VAT) |
+| **Display Format** | Decimal (0.15 EUR/kWh) or subunit (15 cents/kWh) |
+| **ENTSO-E API Key** | Required for ENTSO-E source ([register here](https://transparency.entsoe.eu/)) |
+| **Export Enabled** | Enable export/feed-in price sensors for prosumers |
+| **Export Multiplier/Offset/VAT** | Configure export pricing formula |
 
-- **Region/Area**: Select your electricity price area (e.g. SE4, DK1)
-- **Source Priority**: Order of data sources to try (first = highest priority)
-- **VAT Rate**: Set your applicable VAT percentage (e.g. 25 for 25%)
+### Reliability
 
-#### Setting Source Priority Order
-
-The order in which you select data sources determines their priority. To set a specific source as your primary:
-
-1. Uncheck all source options
-2. Select your preferred primary source first (e.g., ENTSO-E)
-3. Continue selecting additional sources in your desired priority order
-4. Submit the configuration
-
-The first selected source becomes your highest priority, and the integration will attempt to use sources in the order you configured them.
-
-### Advanced Settings
-
-- **Display Format**: Choose between decimal (e.g. 0.15 EUR/kWh) or subunit (e.g. 15 cents/kWh)
-- **Import Multiplier**: Scale spot price before adding fees (e.g., 0.107 for Belgian tariffs where providers charge a fraction of spot price)
-- **Additional Tariff**: Add grid/transfer fees from your provider (per kWh, applied before VAT)
-- **Energy Tax**: Add fixed energy tax per kWh (e.g., government levy, applied before VAT)
-- **Timezone Reference**: Display prices in Home Assistant timezone or local area timezone
-- **API Keys**: For ENTSO-E, you'll need to [register for an API key](https://transparency.entsoe.eu/content/static_content/Static%20content/web%20api/Guide.html)
-- **API Key Reuse**: The integration will reuse API keys across different regions using the same source
-
-### Reliability Features
-
-- **Rate limiting** - Minimum 15-minute intervals 
-- **Automatic retries** - Exponential backoff for failed requests (5s → 15s → 45s)
-- **Data caching** - Persistent storage with TTL
-- **Intelligent interval validation** - DST-aware validation ensures complete data:
-  - **Normal days**: Expects 96 intervals (15-min × 96 = 24 hours)
-  - **DST spring forward**: Expects 92 intervals (23 hours)
-  - **DST fall back**: Expects 100 intervals (25 hours)
-  - **Strict validation**: Allows only 1 missing interval (15 minutes) tolerance
-  - **Automatic fallback**: Switches to alternative sources when data is incomplete
-- **Source fallback** - Try all sources in priority order until complete data is found
-- **Daily health check** - All configured sources validated once per day during special windows
-- **Source health monitoring** - Track which sources are working vs failed, with retry schedules
-
-**Example:** If ENTSO-E returns 94/96 intervals (missing 30 minutes), the system automatically:
-1. Detects incomplete data (94 < 95 minimum required)
-2. Logs warning about missing intervals
-3. Tries next configured source (e.g., Energy Charts)
-4. Uses complete data from working source
-5. Caches complete result for future requests
-
-## Architecture
-
-**Data Flow:** API Client → Parser → Timezone Conversion → Currency Conversion → Cache → Sensors
-
-**Three-Layer System:**
-- **API Layer** - Source-specific clients (Nordpool, ENTSO-E, AEMO, etc.)
-- **Coordinator Layer** - Unified manager with fallback and caching  
-- **Sensor Layer** - Home Assistant entities with consistent IDs
-
-### Timezone & Interval Handling
-
-- **Source timezone detection** - Each API has known timezone behavior
-- **DST transitions** - Handles 92-100 intervals on transition days automatically
-- **Interval validation** - Ensures data completeness before acceptance:
-  - Validates exact interval count matches expected (92/96/100 depending on DST)
-  - Tolerates 1 missing interval (15 minutes) for API timing edge cases
-  - Rejects incomplete data (2+ missing intervals = 30+ minutes)
-  - Automatically tries alternative sources when primary source is incomplete
-- **15-minute alignment** - All data normalized to :00, :15, :30, :45 boundaries
-- **Home Assistant integration** - Displays in your configured timezone
-
-### Price Processing
-
-**Conversion Pipeline:** Raw API Data → Currency Conversion → Unit Conversion → VAT Application → Display Formatting
-
-**Currency handling:**
-- Live ECB exchange rates (24h cache)
-- Automatic currency detection by region
-- Display in main units (EUR/kWh) or subunits (cents/kWh)
-
-### Data Source Differences
-
-Different sources include different price components:
-
-| Source | Price Components |
-|--------|------------------|
-| Nordpool/ENTSO-E/OMIE | Raw spot price |
-| Stromligning | Spot + grid fees + taxes (Denmark) |
-| AEMO | Pre-dispatch trading prices (30-min intervals) |
-| ComEd | Real-time market pricing (5-min dispatch) |
-| Amber | Spot + network + carbon costs |
-
-### Interval Resolution
-
-GE-Spot intelligently handles different native resolutions from APIs:
-
-| Source | Native Data | GE-Spot Processing |
-|--------|-------------|-------------------|
-| ENTSO-E | 15/30/60 min | Uses native 15-min when available, expands others |
-| Nordpool | 15/60 min | Uses native 15-min, expands hourly to 15-min |
-| Energy-Charts | 15 min | Uses native 15-min data (96 intervals/day) |
-| OMIE/Stromligning | 60 min | Expands hourly to 15-min (duplicates across 4 intervals) |
-| AEMO | 30 min trading | Expands to 15-min (duplicates across 2 intervals) |
-| ComEd | 5 min dispatch | Aggregates to 15-min (averages 3 values per interval) |
-| Amber | 30 min | Expands to 15-min (duplicates across 2 intervals) |
-
-**Strategy**: All sources output 96 intervals per day (15-minute granularity) for consistent automation timing.
+- **Rate limiting**: 15-minute minimum between fetches
+- **Retries**: Exponential backoff (5s → 15s → 45s)
+- **Validation**: DST-aware interval counting (92/96/100 intervals)
+- **Fallback**: Automatic source switching on incomplete data
+- **Health checks**: Daily validation of all configured sources
 
 ## Usage Examples
 
@@ -353,74 +268,45 @@ update_interval: 300s
 
 ### Sensor Attributes
 
-The price sensors expose interval prices through attributes in a standardized format compatible with various integrations:
+Interval prices are exposed via sensor attributes for automations and charts:
 
-**Attribute Format:**
 ```json
 {
   "today_interval_prices": [
     {"time": "2025-10-14T00:00:00+02:00", "value": 0.0856, "raw_value": 0.0754},
-    {"time": "2025-10-14T00:15:00+02:00", "value": 0.0842, "raw_value": 0.0740},
-    ...
+    {"time": "2025-10-14T00:15:00+02:00", "value": 0.0842, "raw_value": 0.0740}
   ],
-  "tomorrow_interval_prices": [
-    {"time": "2025-10-15T00:00:00+02:00", "value": 0.0891, "raw_value": 0.0789},
-    ...
-  ]
+  "tomorrow_interval_prices": [...]
 }
 ```
 
-**Key Points:**
-- Each price entry contains:
-  - `time`: ISO 8601 datetime string in your Home Assistant timezone
-  - `value`: Final consumer price (with VAT, tariffs, and energy taxes applied)
-  - `raw_value`: Market spot price (currency and unit converted only, no VAT/fees) _(New in v1.6.0)_
-- List contains 96 entries for a normal day (15-minute intervals)
-- During DST transitions: 92 entries (spring) or 100 entries (fall)
-- Compatible with EV Smart Charging, ApexCharts, and custom automations
+| Field | Description |
+|-------|-------------|
+| `time` | ISO 8601 datetime in Home Assistant timezone |
+| `value` | Final price (VAT, tariffs, taxes applied) |
+| `raw_value` | Market spot price (currency/unit converted only) |
 
-**Price Calculation:**
+**Price Formula:**
 ```
-value = (((raw_value × import_multiplier) + additional_tariff + energy_tax) × (1 + VAT%)) × display_unit_multiplier
+value = (((raw_value × import_multiplier) + tariff + tax) × (1 + VAT%)) × display_multiplier
 ```
 
-When no multiplier, VAT, tariffs, or taxes are configured, `raw_value` equals `value`.
-
-**Using in Templates:**
+**Template Examples:**
 ```yaml
-# Get final consumer price at 14:00
+# Price at 14:00
 {{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
-   | selectattr('time', 'search', 'T14:00') 
-   | map(attribute='value') 
-   | first }}
+   | selectattr('time', 'search', 'T14:00') | map(attribute='value') | first }}
 
-# Get raw market price at 14:00 (without VAT/fees)
-{{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
-   | selectattr('time', 'search', 'T14:00') 
-   | map(attribute='raw_value') 
-   | first }}
-
-# Get all prices above 0.10
-{{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
-   | map(attribute='value') 
-   | select('>', 0.10) 
-   | list }}
-
-# Compare market prices to final prices
+# Average raw market price
 {% set prices = state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') %}
-Market avg: {{ prices | map(attribute='raw_value') | average | round(4) }}
-Final avg: {{ prices | map(attribute='value') | average | round(4) }}
-Difference: {{ ((prices | map(attribute='value') | average) - (prices | map(attribute='raw_value') | average)) | round(4) }}
+{{ prices | map(attribute='raw_value') | average | round(4) }}
 
-# Count hours with negative prices (on market)
+# Count negative price intervals
 {{ state_attr('sensor.gespot_current_price_se3', 'today_interval_prices') 
-   | map(attribute='raw_value') 
-   | select('<', 0) 
-   | list 
-   | length }}
+   | map(attribute='raw_value') | select('<', 0) | list | length }}
 ```
 
-### Price-Based Automation
+### Automation Example
 
 ```yaml
 automation:
@@ -436,9 +322,9 @@ automation:
         entity_id: switch.water_heater
 ```
 
-### Energy Dashboard Integration
+## Energy Dashboard Integration
 
-To integrate GE-Spot with the Energy Dashboard, you can create template sensors:
+To integrate GE-Spot with the Energy Dashboard, create template sensors:
 
 ```yaml
 template:
@@ -452,23 +338,20 @@ Then set this sensor as your energy cost sensor in the Energy Dashboard settings
 
 ## Troubleshooting
 
-**Common Issues:**
-- **No data** - Check area is supported by selected source
-- **API key errors** - Verify ENTSO-E API key if using that source  
-- **Missing tomorrow prices** - Available after 13:00 CET daily
-- **96 data points** - Correct! 15-minute intervals = 96 per day (92 on DST spring, 100 on DST fall)
-- **Incomplete data warnings** - If you see warnings about incomplete intervals:
-  - System automatically tries alternative sources
-  - Check `active_source` in sensor attributes to see which source is being used
-  - Configure multiple sources for better reliability
-  - Example: `[NL] Incomplete today data from entsoe: 94/96 intervals (missing 2)` → System switches to Energy Charts
+| Issue | Solution |
+|-------|----------|
+| No data | Check area is supported by selected source |
+| API key errors | Verify ENTSO-E API key if using that source |
+| Missing tomorrow prices | Available after 13:00 CET daily |
+| 96 data points | Correct! 15-min intervals = 96/day (92 spring DST, 100 fall DST) |
+| Incomplete data warnings | System auto-switches sources; configure multiple for reliability |
 
-**Source Health Monitoring:**
+### Source Health Monitoring
 
 Check sensor attributes for source health information:
 
 ```yaml
-sensor.gespot_current_price_se4:
+sensor.gespot_current_price_se4
   attributes:
     source_info:
       active_source: "nordpool"           # Currently used source
@@ -481,14 +364,11 @@ sensor.gespot_current_price_se4:
           retry_at: "2025-10-11T13:00:00+02:00"
 ```
 
-- **validated_sources**: List of sources that have been tested and are working
-- **failed_sources**: List of sources that failed, with timestamps and retry schedule
-- **active_source**: The source currently providing data
-
-**Diagnostics:**
-- Check sensor attributes: `data_source`, `active_source`, `using_cached_data`
-- Review Home Assistant logs for `ge_spot` errors
-- Configure multiple sources for better reliability
+**Key Attributes:**
+- `active_source` - Currently used source
+- `validated_sources` - Working sources  
+- `failed_sources` - Failed sources with retry schedule
+- `using_cached_data` - Whether cache is being used
 
 ## For Developers
 
@@ -496,133 +376,45 @@ sensor.gespot_current_price_se4:
 
 ```
 custom_components/ge_spot/
-├── __init__.py           # Integration setup and coordinator registration
-├── config_flow.py        # Configuration flow handler
-├── manifest.json         # Integration manifest and dependencies
-├── api/                  # API clients for different price sources
-│   ├── __init__.py       # API client factory and source mapping
-│   ├── base/             # Base classes and shared functionality
-│   │   ├── api_client.py       # HTTP client wrapper with retry logic
-│   │   ├── base_price_api.py   # Abstract base for all price APIs
-│   │   └── error_handler.py    # Error handling and retry mechanisms
-│   ├── parsers/          # Data parsers for each API source
-│   │   ├── nordpool_parser.py    # Nord Pool price data parser
-│   │   ├── entsoe_parser.py      # ENTSO-E XML response parser
-│   │   ├── aemo_parser.py        # AEMO market data parser
-│   │   └── ...                   # Other source-specific parsers
-│   ├── nordpool.py       # Nord Pool API client
-│   ├── entsoe.py         # ENTSO-E API client
-│   ├── energy_charts.py  # Energy-Charts API client
-│   ├── aemo.py           # AEMO API client
-│   ├── omie.py           # OMIE API client
-│   ├── stromligning.py   # Strømligning API client
-│   ├── energi_data.py    # Energi Data Service API client
-│   ├── comed.py          # ComEd API client
-│   ├── amber.py          # Amber Electric API client
-│   └── utils.py          # API utility functions
-├── config_flow/          # Configuration flow logic
-│   ├── __init__.py       # Config flow exports
-│   ├── implementation.py # Main configuration steps
-│   ├── options.py        # Options flow for reconfiguration
-│   ├── schemas.py        # Voluptuous schemas for validation
-│   ├── utils.py          # Config flow utility functions
-│   └── validators.py     # Custom validation logic
-├── const/                # Constants and configuration
-│   ├── __init__.py       # Constants exports
-│   ├── api.py            # API-specific constants
-│   ├── areas.py          # Area codes and mappings
-│   ├── attributes.py     # Sensor attribute constants
-│   ├── config.py         # Configuration keys
-│   ├── currencies.py     # Currency codes and mappings
-│   ├── defaults.py       # Default configuration values
-│   ├── display.py        # Display format constants
-│   ├── energy.py         # Energy unit constants
-│   ├── errors.py         # Error message constants
-│   ├── intervals.py      # Interval-related constants
-│   ├── network.py        # Network and timeout constants
-│   ├── sensors.py        # Sensor type constants
-│   ├── sources.py        # Source definitions and mappings
-│   └── time.py           # Time and timezone constants
-├── coordinator/          # Data coordination and management
-│   ├── __init__.py       # Coordinator exports
-│   ├── unified_price_manager.py  # Main price data orchestrator
+├── api/                  # API clients and parsers
+│   ├── base/             # Base classes (BasePriceAPI, error handling)
+│   ├── parsers/          # Source-specific data parsers
+│   └── *.py              # API clients (nordpool.py, entsoe.py, etc.)
+├── coordinator/          # Data coordination
+│   ├── unified_price_manager.py  # Main orchestrator
 │   ├── fallback_manager.py       # Source fallback logic
-│   ├── data_processor.py         # Raw data processing
-│   ├── cache_manager.py          # Data caching with TTL
-│   ├── fetch_decision.py         # Fetch timing decisions
-│   ├── data_validity.py          # Data validation logic
-│   └── api_key_manager.py        # API key management
-├── price/                # Price data processing
-│   ├── __init__.py       # Price processing exports
-│   ├── currency_converter.py # Currency and unit conversion
-│   ├── currency_service.py   # ECB exchange rate service
-│   ├── formatter.py          # Price display formatting
-│   └── statistics.py         # Price statistics calculation
-├── sensor/               # Home Assistant sensor entities
-│   ├── __init__.py       # Sensor exports
-│   ├── base.py           # Base sensor class
-│   ├── electricity.py    # Main sensor setup
-│   └── price.py          # Individual price sensor types
-├── timezone/             # Timezone handling
-│   ├── __init__.py           # Timezone exports
-│   ├── converter.py          # Main timezone conversion
-│   ├── dst_handler.py        # DST transition handling
-│   ├── interval_calculator.py # 15-min interval calculations
-│   ├── parser.py             # Timestamp parsing
-│   ├── service.py            # Timezone service orchestrator
-│   ├── source_tz.py          # Source-specific timezone logic
-│   ├── timezone_converter.py # Core timezone conversion
-│   └── timezone_utils.py     # Timezone utility functions
-├── translations/         # UI translations
-│   ├── en.json           # English translations
-│   └── strings.json      # Translation strings
-└── utils/                # Utility functions
-    ├── __init__.py       # Utilities exports
-    ├── advanced_cache.py # Advanced caching implementation
-    ├── data_validator.py # Data validation helpers
-    ├── date_range.py     # Date range utilities
-    ├── debug_utils.py    # Debugging helpers
-    ├── exchange_service.py # ECB exchange rate fetching
-    ├── form_helper.py    # Configuration form helpers
-    ├── parallel_fetcher.py # Parallel API fetching
-    ├── rate_limiter.py   # API rate limiting
-    ├── timezone_converter.py # Timezone conversion utilities
-    ├── unit_conversion.py    # Unit conversion helpers
-    └── validation/       # Validation modules
+│   ├── data_processor.py         # Price processing pipeline
+│   └── cache_manager.py          # TTL-based caching
+├── price/                # Currency/unit conversion
+├── sensor/               # Home Assistant entities
+├── timezone/             # DST-aware interval handling
+├── const/                # Configuration constants
+└── utils/                # Exchange rates, validation
 ```
 
-### Adding New Price Sources
+### Adding a New Source
 
-1. **Create API Client**: Extend `BasePriceAPI` in `api/new_source.py`
-2. **Create Parser**: Add `api/parsers/new_source_parser.py` for data parsing
-3. **Register Source**: 
-   - Add to `const/sources.py` (source constants and mappings)
-   - Update `const/areas.py` (supported regions)
-4. **Update Config Flow**: Enable source selection in configuration
-5. **Add Tests**: Unit and integration tests for reliability
+1. Create `api/new_source.py` extending `BasePriceAPI`
+2. Create `api/parsers/new_source_parser.py` returning `interval_raw` dict
+3. Register in `const/sources.py` and `const/areas.py`
+4. Add to `coordinator/unified_price_manager.py` `_source_api_map`
+5. Add tests in `tests/pytest/unit/`
 
 ### Testing
 
-- **Unit Tests**: `pytest tests/pytest/unit/`
-- **Integration Tests**: `pytest tests/pytest/integration/`  
-- **Manual Testing**: `python -m tests.manual.integration.source_test AREA`
+```bash
+pytest tests/pytest/unit/           # Unit tests
+pytest tests/pytest/integration/    # Integration tests
+./scripts/run_pytest.sh             # Full test suite
+```
 
 ### Contributing
 
-Want to help improve GE-Spot? Check out the **[TODO folder](/TODO)** for a list of tasks!
-
-We've organized contribution opportunities into categories:
-- **Testing** - Add tests for better reliability
-- **Code Quality** - Improve maintainability
-- **Documentation** - Help new contributors
-- **Enhancements** - Add monitoring and features
-- **Future Features** - Long-term ideas
-
-Pick something that interests you, no deadlines or pressure. See the [TODO/README.md](/TODO/README.md) for details.
+Check [TODO/README.md](/TODO/README.md) for contribution opportunities organized by category (testing, code quality, documentation, enhancements).
 
 ---
 
-## Technical Architecture (Advanced)
+## Architecture
 
 ### 1. Data Flow Architecture
 
@@ -631,7 +423,7 @@ flowchart TD
     Config["User Configuration"] --> Coord["UnifiedPriceCoordinator"]
     Coord --> UPM["UnifiedPriceManager"]
     
-    UPM --> LoadCache["Load Cached Data<br/>(with DataValidity)"]
+    UPM --> LoadCache["Load Cached Data<br/>(IntervalPriceData)"]
     LoadCache --> ExtractValidity["Extract DataValidity"]
     ExtractValidity --> FetchDecision["FetchDecisionMaker<br/>(DataValidity-driven)"]
     
@@ -665,34 +457,34 @@ flowchart TD
     ParserN --> Validate
     
     Validate --> |"Valid"| ClearFailed["Clear failure status<br/>(timestamp = None)"]
-    ClearFailed --> RawData["Raw Standardized Data"]
+    ClearFailed --> RawData["Raw Standardized Data<br/>(interval_raw)"]
     
     RawData --> DataProcessor["DataProcessor"]
     
     subgraph DataProcessor["Data Processing Pipeline"]
         direction TB
-        TZ["Timezone Conversion"] --> Currency["Currency Conversion"]
-        Currency --> VAT["VAT Application"]
-        VAT --> Stats["Statistics Calculation"]
+        TZ["Timezone Conversion"] --> Currency["Currency Conversion<br/>(ECB rates)"]
+        Currency --> Import["Import Price:<br/>((spot × multiplier) + tariff + tax)<br/>× (1 + VAT)"]
+        Import --> Export["Export Price (if enabled):<br/>(spot × multiplier + offset)<br/>× (1 + VAT)"]
+        Export --> Stats["Statistics Calculation"]
         Stats --> CalcValidity["Calculate DataValidity"]
     end
     
-    DataProcessor --> CreateIPD["Create IntervalPriceData<br/>(source data + metadata)"]
-    CreateIPD --> CacheStore["CacheManager.store()<br/>(stores IntervalPriceData)"]
-    CacheStore --> IPDObject["IntervalPriceData Object<br/>(in memory)"]
+    DataProcessor --> CreateIPD["Create IntervalPriceData<br/>(with raw data preserved)"]
+    CreateIPD --> CacheStore["CacheManager.store()"]
+    CacheStore --> IPD["IntervalPriceData"]
     
-    UseCache --> LoadIPD["Load IntervalPriceData<br/>(from cache)"]
-    LoadIPD --> IPDObject
-    
-    IPDObject --> Sensors["Home Assistant Sensors<br/>(access via @property)"]
+    UseCache --> IPD
+    IPD --> Sensors["Home Assistant Sensors<br/>(via @property)"]
 ```
 
 ### 2. Fetch Decision Logic
 
 ```mermaid
 flowchart TD
-    Start["Coordinator Update Trigger"] --> LoadCache["Load Cache + DataValidity"]
-    LoadCache --> CheckCurrent{"DataValidity:<br/>has_current_interval?"}
+    Start["Coordinator Update Trigger"] --> LoadCache["Load Cache"]
+    LoadCache --> Extract["Extract DataValidity"]
+    Extract --> CheckCurrent{"DataValidity:<br/>has_current_interval?"}
     
     CheckCurrent --> |"FALSE<br/>(CRITICAL)"| RateLimitCritical{"Rate Limited?"}
     CheckCurrent --> |"TRUE"| CheckInitial{"First fetch ever?"}
@@ -742,12 +534,9 @@ flowchart TD
     
     Success --> ClearFailed["Clear failure status<br/>(timestamp = None)"]
     ClearFailed --> ProcessData["Process & Cache<br/>(create IntervalPriceData)"]
-    ProcessData --> IPDNew["IntervalPriceData<br/>(in memory)"]
+    ProcessData --> UpdateSensors["Update Sensors"]
     
-    UseCache --> IPDCached["IntervalPriceData<br/>(from cache)"]
-    
-    IPDNew --> UpdateSensors["Update Sensors<br/>(via @property access)"]
-    IPDCached --> UpdateSensors
+    UseCache --> UpdateSensors
     UpdateSensors --> End["Wait for Next Update"]
 ```
 
@@ -757,14 +546,18 @@ flowchart TD
 flowchart TD
     subgraph CacheManager["Cache Manager"]
         direction TB
-        CacheGet["get(area, target_date, source)"] --> CacheCheck{"Cache exists & valid?"}
-        CacheCheck --> |"Yes"| CacheHit["Return cached data<br/>(with DataValidity)<br/>(deep copy to prevent mutation)"]
+        CacheGet["get(area, target_date)"] --> CacheCheck{"Cache exists & valid?"}
+        CacheCheck --> |"Yes"| CacheHit["Return IntervalPriceData<br/>(properties compute on demand)"]
         CacheCheck --> |"No"| CacheMiss["Return None"]
         
-        CacheStore["store(area, source, data, timestamp, target_date)"] --> Serialize["Serialize data<br/>(includes DataValidity)"]
-        Serialize --> WriteFile["Write to .storage/"]
+        CacheStore["store(area, data)"] --> ToDict["IntervalPriceData.to_cache_dict()<br/>(source data only, no computed properties)"]
+        ToDict --> Serialize["Serialize to JSON"]
+        Serialize --> WriteFile["Write to .storage/<br/>(via AdvancedCache)"]
         
-        CacheCleanup["cleanup()"] --> FindExpired["Find expired entries"]
+        CacheGet --> FromDict["IntervalPriceData.from_cache_dict()<br/>(reconstruct with tz_service)"]
+        FromDict --> ComputeProps["Properties compute automatically:<br/>• data_validity<br/>• statistics<br/>• current_price"]
+        
+        CacheCleanup["cleanup()"] --> FindExpired["Find expired entries<br/>(TTL-based)"]
         FindExpired --> DeleteExpired["Delete expired files"]
     end
     
@@ -776,7 +569,7 @@ flowchart TD
         LastFetch --> |"< 15 min ago"| Blocked["Rate Limited<br/>(use cache)"]
         LastFetch --> |"≥ 15 min ago"| AllowFetch
         
-        RLUpdate["update_last_fetch(source, area)"] --> StoreTime["Store current timestamp"]
+        RLUpdate["update_last_fetch(area)"] --> StoreTime["Store current timestamp<br/>(in _LAST_FETCH_TIME dict)"]
     end
     
     subgraph FailedSourceTracking["Source Health & Validation"]
@@ -803,7 +596,7 @@ flowchart TD
     subgraph Integration["Integration Flow"]
         FetchRequest["Fetch Request"] --> RLCheck
         Blocked --> CacheGet
-        CacheGet --> LoadIPD["Load IntervalPriceData<br/>(from cache)"]
+        CacheGet --> LoadIPD["Load IntervalPriceData"]
         
         AllowFetch --> PreFilter["Pre-filter disabled sources<br/>(sources with failure timestamp)"]
         PreFilter --> APICall["API Call with<br/>Exponential Backoff"]
@@ -897,6 +690,31 @@ flowchart TD
 
 ---
 
+### Key Components
+
+| Component | Responsibility |
+|-----------|---------------|
+| `UnifiedPriceManager` | Orchestrates fetching, caching, and sensor updates |
+| `FallbackManager` | Tries sources in priority order with exponential backoff (5s→15s→45s) |
+| `DataProcessor` | Normalizes timezones, converts currency, applies import/export pricing |
+| `CacheManager` | TTL-based storage with deep-copy mutation protection |
+| `IntervalPriceData` | Dataclass with computed properties for sensors |
+| `FetchDecisionMaker` | Uses DataValidity to decide when to fetch |
+| `DataValidity` | Tracks data coverage and expiration timestamps |
+
+### Interval Resolution
+
+| Source | Native | Output |
+|--------|--------|--------|
+| ENTSO-E/Nordpool/Energy-Charts | 15-60 min | 96 intervals/day |
+| OMIE/Strømligning | 60 min | Expanded to 15-min |
+| AEMO/Amber | 30 min | Expanded to 15-min |
+| ComEd | 5 min | Aggregated to 15-min |
+
+---
+
 ## License
 
-This integration is licensed under the MIT License.
+MIT License. See [LICENSE](LICENSE) for details.
+
+If you find this project useful, consider [sponsoring development](https://github.com/sponsors/enoch85).

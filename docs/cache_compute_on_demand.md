@@ -1,163 +1,144 @@
-# Cache Architecture: Compute-on-Demand Pattern
+# Cache Architecture: Compute-on-Demand
 
-## Overview
+**Pattern:** Store source data only, compute everything else as `@property` when accessed.
 
-The cache system uses a **compute-on-demand** pattern: store only source data in the cache, compute everything else as properties when accessed. This keeps the cache simple and ensures computed values are always consistent with source data.
-
-## Architecture Diagram
+**Result:** Cache stays simple, computed values always match source data, fixes Issue #44.
 
 ```mermaid
 flowchart LR
-    Cache["Cache (JSON)<br/>────────────<br/>interval_prices<br/>raw_prices<br/>metadata"]
-    
-    IPD["IntervalPriceData Object<br/>────────────────────────<br/><b>Source Data:</b><br/>• interval_prices<br/>• raw_prices<br/>• metadata<br/><br/><b>Computed Properties:</b><br/>• current_price<br/>• statistics<br/>• tomorrow_valid<br/>• data_validity<br/>• next_interval_*"]
-    
-    Sensors["Home Assistant Sensors<br/>──────────────────────<br/>sensor.current_price<br/>sensor.statistics<br/>sensor.tomorrow_valid"]
-    
-    Cache -->|"Load source data"| IPD
-    IPD -->|"@property access<br/>Compute on-demand"| Sensors
+    Cache[".storage/<br/>────────<br/>Prices<br/>Metadata<br/>Timestamps"] -->|"from_cache_dict()"| IPD["IntervalPriceData<br/>────────────────<br/>Source Data<br/>+<br/>@property methods"]
+    IPD -->|"Compute on-demand"| Sensors["HA Sensors"]
+    IPD -->|"to_cache_dict()"| Cache
 ```
 
-## Data Flow
+## What's Stored vs. Computed
 
-1. **API** fetches raw data → **Parser** creates `StandardizedPriceData`
-2. **Cache** stores only source data: `interval_prices`, `raw_prices`, `metadata`
-3. **IntervalPriceData** loaded from cache with source data
-4. **Sensors** access properties → computed on-demand from source data
-5. **Properties** cache results internally (e.g., `@cached_property`)
+| Stored in Cache (34 fields) | Computed @property (13 fields) |
+|------------------------------|--------------------------------|
+| `today_interval_prices` | `data_validity` |
+| `tomorrow_interval_prices` | `statistics` / `tomorrow_statistics` |
+| `today_raw_prices` / `tomorrow_raw_prices` | `current_price` / `next_interval_price` |
+| `export_today_prices` / `export_tomorrow_prices` | `current_interval_key` / `next_interval_key` |
+| `export_enabled` | `tomorrow_valid` / `has_tomorrow_prices` |
+| Metadata: `source`, `area`, `source_currency`, `target_currency` | `export_current_price` / `export_next_interval_price` |
+| Timezones: `source_timezone`, `target_timezone` | `export_statistics` / `export_tomorrow_statistics` |
+| Currency: `ecb_rate`, `ecb_updated` | |
+| Display: `vat_rate`, `vat_included`, `display_unit` | |
+| Timestamps: `fetched_at`, `last_updated` | |
+| Migration: `migrated_from_tomorrow`, `original_cache_date` | |
+| Fallback: `attempted_sources`, `fallback_sources`, `using_cached_data` | |
+| Source health: `_validated_sources`, `_failed_sources` | |
+| Errors: `_error`, `_error_code`, `_consecutive_failures`, `_all_attempted_sources` | |
+| Debug: `data_source_attribution`, `raw_data`, `raw_interval_prices_original` | |
 
-## Key Principles
+**Why separate?** Single source of truth, no stale data, smaller cache, simpler logic.
 
-### ✅ DO Store in Cache
-- `interval_prices` - Map of time → price
-- `raw_prices` - Original API response
-- `metadata` - Source info, area, currency, etc.
+## Code Patterns
 
-### ❌ DON'T Store in Cache
-- `current_price` - Computed from `interval_prices` + current time
-- `statistics` - Computed from `interval_prices`
-- `tomorrow_valid` - Computed from data validity checks
-- `data_validity` - Computed from interval counts vs. expectations
-
-### Why?
-- **Single Source of Truth**: Source data is the only truth
-- **No Stale Data**: Computed values always match current source data
-- **Smaller Cache**: Less storage, faster serialization
-- **Simpler Logic**: No need to invalidate/recompute on cache updates
-
-## Common Gotcha: API Instance Creation
-
-### ⚠️ PROBLEM: Creating Instances for Metadata
-
-**❌ WRONG:**
+### Sensor Access
 ```python
-# This creates unnecessary instances and TimezoneService initializations!
-source = NordpoolAPI(config={}).source_type
-source_name = api_class(config={}).source_type
-```
-
-**Why this is bad:**
-- Creates full API instance just to read a static class attribute
-- Each API instance creates a TimezoneService instance
-- Analysis showed 57 TimezoneService instances instead of expected 8
-- 49 extra instances = 49 wasted initializations
-
-**✅ CORRECT:**
-```python
-# Use class attribute directly - no instance needed!
-source = NordpoolAPI.SOURCE_TYPE
-source_name = api_class.SOURCE_TYPE
-```
-
-**Why this is good:**
-- No instance creation overhead
-- No TimezoneService initialization
-- Cleaner code, faster execution
-- Static metadata should be accessed statically
-
-### Implementation Pattern
-
-All API classes now define `SOURCE_TYPE` as a class attribute:
-
-```python
-class NordpoolAPI(BasePriceAPI):
-    """API implementation for Nordpool."""
-    
-    SOURCE_TYPE = Source.NORDPOOL  # ✅ Class attribute
-    
-    def __init__(self, config=None, session=None, timezone_service=None):
-        super().__init__(config, session, timezone_service)
-        # ... rest of initialization
-```
-
-## Sensor Access Pattern
-
-Sensors access IntervalPriceData properties, not dict methods:
-
-**❌ WRONG:**
-```python
-# Old pattern (when cache stored dicts)
-current = data.get("current_price")
-stats = data.get("statistics", {})
-```
-
-**✅ CORRECT:**
-```python
-# New pattern (IntervalPriceData with properties)
+# ✅ Use properties
 current = data.current_price
 stats = data.statistics
-valid = data.tomorrow_valid
+
+# ❌ Don't use dict access
+current = data.get("current_price")
 ```
 
-## Performance Monitoring
-
-TimezoneService instantiations are tracked with a global counter:
-
+### API Metadata
 ```python
-# In timezone/service.py
-_TZ_SERVICE_COUNT = 0  # Global counter
+# ✅ Class attribute (no instance)
+source = NordpoolAPI.SOURCE_TYPE
 
-class TimezoneService:
-    def __init__(self, ...):
-        global _TZ_SERVICE_COUNT
-        _TZ_SERVICE_COUNT += 1
-        _LOGGER.debug(f"TimezoneService #{_TZ_SERVICE_COUNT} created for area='{area or 'None'}'")
+# ❌ Instance creation (wasteful)
+source = NordpoolAPI(config={}).source_type
 ```
 
-Watch logs for `TimezoneService #N created` messages:
-- **Expected**: ~8 instances (one per area/coordinator)
-- **Before Phase 1**: 57 instances (49 unnecessary)
-- **After Phase 1**: ~8 instances (fixed!)
-
-## Log Message Context
-
-Tomorrow data warnings are now context-aware:
-
+### Cache Operations
 ```python
-# Before 14:00 (expected): DEBUG level
-_LOGGER.debug(f"Tomorrow data not yet available (before 14:00): {count}/{expected}")
+# Store: serializes source data only
+cache_dict = data.to_cache_dict()  # 34 fields
 
-# After 14:00 (unexpected): WARNING level
-_LOGGER.warning(f"Incomplete tomorrow data: {count}/{expected} intervals")
+# Load: reconstructs with tz_service injection
+data = IntervalPriceData.from_cache_dict(cache_dict, tz_service)
+
+# Properties compute automatically
+validity = data.data_validity  # Fresh calculation
 ```
-
-This reduces log noise during normal operations (tomorrow data is published ~13:00 CET).
 
 ## Testing
 
-All critical paths have test coverage (337/337 passing):
-- ✅ Data fetching from all sources
-- ✅ Fallback mechanism
-- ✅ Cache storage/retrieval
-- ✅ Timezone calculations
-- ✅ Data validity computation
-- ✅ Sensor value extraction (properties)
-- ✅ Currency conversion
-- ✅ VAT application
-- ✅ Health checks
+**492 tests** verify:
+- `to_cache_dict()` / `from_cache_dict()` serialization
+- Computed properties (data_validity, statistics)
+- Source data only in cache (no computed fields)
+- Midnight migration (`migrate_to_new_day()`)
 
-## Summary
+```bash
+pytest tests/pytest/unit/test_data_models.py -v
+```
 
-**Key Takeaway:** The compute-on-demand pattern keeps cache simple and data consistent. Always access static metadata via class attributes, not instance creation. Properties compute values on-demand from source data stored in cache.
+## Cache File Example
 
-**Result:** Clean architecture, smaller cache, no stale data, better performance.
+`.storage/` files contain source data only (34 fields):
+
+```json
+{
+  "today_interval_prices": {"00:00": 0.25, "00:15": 0.28},
+  "tomorrow_interval_prices": {"00:00": 0.22},
+  "today_raw_prices": {"00:00": 0.20},
+  "tomorrow_raw_prices": {},
+  "export_today_prices": {"00:00": 0.18},
+  "export_tomorrow_prices": {},
+  "export_enabled": true,
+  "source": "nordpool",
+  "area": "SE4",
+  "source_currency": "EUR",
+  "target_currency": "SEK",
+  "source_timezone": "Europe/Stockholm",
+  "target_timezone": "Europe/Stockholm",
+  "ecb_rate": 11.45,
+  "ecb_updated": "2025-01-30T15:00:00+00:00",
+  "vat_rate": 0.25,
+  "vat_included": true,
+  "display_unit": "SEK/kWh",
+  "fetched_at": "2025-01-30T14:30:00+00:00",
+  "last_updated": "2025-01-30T14:30:00+00:00",
+  "migrated_from_tomorrow": false,
+  "original_cache_date": null,
+  "attempted_sources": ["nordpool"],
+  "fallback_sources": [],
+  "using_cached_data": false,
+  "_validated_sources": ["nordpool", "entsoe"],
+  "_failed_sources": {},
+  "_error": null,
+  "_error_code": null,
+  "_consecutive_failures": 0,
+  "_all_attempted_sources": ["nordpool"],
+  "data_source_attribution": null,
+  "raw_data": null,
+  "raw_interval_prices_original": null
+}
+```
+
+**Not stored (13 @property methods):** `data_validity`, `statistics`, `tomorrow_statistics`, `current_price`, `next_interval_price`, `current_interval_key`, `next_interval_key`, `tomorrow_valid`, `has_tomorrow_prices`, `export_current_price`, `export_next_interval_price`, `export_statistics`, `export_tomorrow_statistics` - all computed on access.
+
+**Impact:**
+- Issue #44 fixed: `data_validity` always fresh after midnight migration
+- Smaller files: 34 fields vs. 47+ (34 stored + 13 computed)
+- No cache invalidation needed
+
+---
+
+**Summary:** Store source data (34 fields), compute on-demand via `@property` (13 fields). Sensors use `data.statistics`, not `data.get("statistics")`. 
+
+**Midnight migration** (00:00-00:10 window): CacheManager checks yesterday's cache for tomorrow_interval_prices, calls `migrate_to_new_day()` which moves tomorrow→today and clears tomorrow data. Properties (`data_validity`, `statistics`, etc.) auto-recalculate from new source data.
+
+**Verified against code:**
+- `to_cache_dict()`: Returns 34 fields (data_models.py:503-548)
+- `from_cache_dict()`: Reconstructs with `_tz_service` injection (data_models.py:551)
+- `migrate_to_new_day()`: Moves tomorrow→today, clears tomorrow (data_models.py:452-490)
+- `@property` methods: 13 computed fields (data_models.py:123-413)
+- Midnight migration: 10-minute window after midnight (cache_manager.py:228-287)
+- Sensor access: Uses properties, not dict methods (sensor/price.py:122,141,219,272,286,350,363)
+- API metadata: `api_class.SOURCE_TYPE` (no instances) (coordinator/unified_price_manager.py:445,685)
