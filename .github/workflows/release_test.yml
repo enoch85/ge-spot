@@ -81,6 +81,14 @@ jobs:
     runs-on: ubuntu-latest
     name: Add Release Label
     if: startsWith(github.head_ref, 'release/v')
+    # Narrowest grant that unblocks the labels call. The default
+    # GITHUB_TOKEN in this repo is read-only, so the labels API returns
+    # 403 without it. Job-scoped (no other job inherits this), no
+    # checkout, no PR-supplied code is executed; the only call is a
+    # hard-coded `addLabels` with the fixed label 'release'. Fork PRs
+    # are auto-downgraded to read by GitHub regardless of this grant.
+    permissions:
+      pull-requests: write
     steps:
       - name: Add release label
         uses: actions/github-script@v9
