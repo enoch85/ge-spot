@@ -7,7 +7,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorDeviceClass,
 )
-from homeassistant.util import dt as dt_util
+from homeassistant.util import dt as dt_util, slugify
 
 from ..const.attributes import Attributes
 from ..const.config import Config
@@ -67,7 +67,11 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Create entity ID and name
         if self._area:
             area_lower = self._area.lower()
-            self.entity_id = f"sensor.gespot_{sensor_type.lower()}_{area_lower}"
+            # HA entity IDs only allow [a-z0-9_]; slugify handles areas like
+            # "DE-LU" → "de_lu". Keep area_lower for unique_id so existing
+            # registry entries (which permit any character) are not orphaned.
+            area_slug = slugify(self._area)
+            self.entity_id = f"sensor.gespot_{sensor_type.lower()}_{area_slug}"
             self._attr_name = f"GE-Spot {name_suffix} {self._area}"
             self._attr_unique_id = f"gespot_{sensor_type}_{area_lower}"
         else:
