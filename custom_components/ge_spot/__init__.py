@@ -69,14 +69,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await coordinator.async_config_entry_first_refresh()
 
-        # Schedule health check task in background (fully non-blocking)
-        # The task itself will run immediate validation, then continue daily schedule
+        # Schedule health check task in background (fully non-blocking).
+        # The task itself will run immediate validation, then continue daily schedule.
+        # Set the flag BEFORE creating the task so concurrent setup attempts
+        # cannot double-schedule the health check.
         if not coordinator.price_manager._health_check_scheduled:
+            coordinator.price_manager._health_check_scheduled = True
             _LOGGER.info(f"Scheduling health check task for {area}")
-            asyncio.create_task(
+            coordinator.price_manager._health_check_task = asyncio.create_task(
                 coordinator.price_manager._schedule_health_check(run_immediately=True)
             )
-            coordinator.price_manager._health_check_scheduled = True
 
     except Exception as e:
         _LOGGER.error(

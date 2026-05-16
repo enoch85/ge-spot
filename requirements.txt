@@ -1,4 +1,10 @@
-aiohttp>=3.8.0
+# aiohttp 3.12 is the first release whose default AsyncResolver works with
+# the new aiodns Channel.getaddrinfo() signature shipped in aiodns 3.2+.
+# Older combos crash with
+#   "Channel.getaddrinfo() takes 3 positional arguments but 4 were given".
+# Production HA ships its own pinned versions; these are the test-time floor.
+aiohttp>=3.12
+aiodns>=3.3.0
 beautifulsoup4>=4.11.0
 homeassistant>=2023.8.0
 voluptuous>=0.13.0

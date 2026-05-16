@@ -21,7 +21,6 @@ from custom_components.ge_spot.const.defaults import Defaults
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.const.energy import EnergyUnit
 
-
 # ============================================================================
 # Test: Import Multiplier in unit_conversion.convert_energy_price
 # ============================================================================

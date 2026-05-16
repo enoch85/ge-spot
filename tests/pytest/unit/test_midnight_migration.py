@@ -102,9 +102,7 @@ class TestMidnightMigration:
         ) as mock_dt:
             # Mock time to be 00:05 ON THE SAME DAY as 'today'
             # Use explicit datetime constructor - most reliable for timezone handling
-            mock_now = datetime(
-                today.year, today.month, today.day, 0, 5, 0, tzinfo=tz
-            )
+            mock_now = datetime(today.year, today.month, today.day, 0, 5, 0, tzinfo=tz)
             mock_dt.now.return_value = mock_now
 
             # Get data for today (should trigger migration)

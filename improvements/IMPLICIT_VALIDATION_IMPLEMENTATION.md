@@ -1,12 +1,28 @@
 # Implicit Validation Implementation
 
-**Date**: October 10, 2025  
-**Approach**: Implicit validation - validation IS fetching  
+**Date**: October 10, 2025
+**Approach**: Implicit validation - validation IS fetching
 **Philosophy**: No separate validation step, clean separation of concerns
+
+> **Update (matches current code):** the per-source 24-hour skip window and the
+> per-source `_schedule_daily_retry()` task described below were superseded by a
+> single shared health-check task. The current behaviour is:
+> - Failed sources stay skipped **indefinitely** until cleared by the health
+>   check — `_failed_sources[source] = datetime` means "skip", `= None` means
+>   "OK". There is no 86400-second timeout in `fetch_data()`.
+> - One health-check task per area validates **all** sources once per
+>   special-hour window (00:00–01:00 and 13:00–15:00) with a random 0–3600 s
+>   delay. See `_schedule_health_check()` / `_validate_all_sources()` in
+>   [`coordinator/unified_price_manager.py`](../custom_components/ge_spot/coordinator/unified_price_manager.py)
+>   and [`DAILY_HEALTH_CHECK_FEATURE.md`](DAILY_HEALTH_CHECK_FEATURE.md).
+> - `force=True` (e.g. cache clear) bypasses the failed-source filter and the
+>   rate limiter; it does not "ignore the 24-hour window" because none exists.
+>
+> The architecture and timeout-strategy sections below are still accurate.
 
 ## Overview
 
-This document describes the final implementation where **validation happens implicitly during fetch**. There is no separate validation step - if a fetch succeeds, the source is validated. If it fails, it's marked as failed and retried daily.
+This document describes the final implementation where **validation happens implicitly during fetch**. There is no separate validation step - if a fetch succeeds, the source is validated. If it fails, it's marked as failed and retried by the daily health check.
 
 ---
 
@@ -54,7 +70,8 @@ This document describes the final implementation where **validation happens impl
 │ Responsibility: Decide what to fetch, track results          │
 │                                                               │
 │ • Should we fetch? (rate limiting, cache validity)           │
-│ • Filter sources (skip those that failed <24h ago)           │
+│ • Filter sources (skip those marked failed; cleared by      │
+│   the shared health-check task during special hour windows) │
 │ • Call FallbackManager with enabled sources                  │
 │ • On success: Clear failure timestamp, cache data            │
 │ • On failure: Mark sources as failed, schedule retry         │
@@ -152,7 +169,7 @@ This document describes the final implementation where **validation happens impl
 ```
 
 **Timeline**: ~5 seconds  
-**Behavior**: Failed source automatically skipped for 24h
+**Behavior**: Failed source skipped until the daily health-check window (00:00–01:00 or 13:00–15:00) re-validates it.
 
 ### All Sources Fail (First Time)
 
@@ -192,7 +209,7 @@ This document describes the final implementation where **validation happens impl
    ↓
 4. Trigger force fetch
    ↓
-5. fetch_data(force=True) → ignores 24h filter
+5. fetch_data(force=True) → bypasses failed-source filter
    ↓
 6. FallbackManager: Try failed source
    ├─ Attempt 1: timeout=5s  → SUCCESS ✅
@@ -227,10 +244,11 @@ _schedule_daily_source_retry()
 
 **Added** (simple):
 ```python
-# ✅ New approach - simple timestamp tracking
-self._failed_sources = {}  # Dict[str, datetime | None]
-self._retry_scheduled = set()  # Set[str]
-_schedule_daily_retry()  # One simple method
+# ✅ Current approach - simple timestamp tracking
+self._failed_sources = {}            # Dict[str, datetime | None]
+self._health_check_scheduled = False # Single shared task, not per-source
+self._health_check_task = None       # asyncio.Task | None
+_schedule_health_check()             # One task validates all sources daily
 ```
 
 **Tracking Logic**:
@@ -241,9 +259,10 @@ self._failed_sources[source_name] = None  # Clear failure
 # On failure
 self._failed_sources[source_name] = now  # Mark failure time
 
-# Filter sources (in fetch_data)
-if last_failure and (now - last_failure).total_seconds() < 86400:
-    skip_source()  # Failed within 24 hours
+# Filter sources (in fetch_data) — no time-based expiry; the shared
+# health-check task is the only thing that clears a failed timestamp.
+if last_failure is not None:
+    skip_source()  # Skip until next health-check window re-validates it
 ```
 
 ### 2. Exponential Backoff Configuration
@@ -337,15 +356,16 @@ async def fetch_data(self, force: bool = False) -> Dict[str, Any]:
     """
     now = dt_util.now()
     
-    # Filter out recently failed sources (24h window)
+    # Filter out failed sources (skipped until next health-check window
+    # clears them; first_fetch / grace_period / force=True override this).
     enabled_api_classes = []
     for cls in self._api_classes:
-        source_name = cls(config={}).source_type
+        source_name = cls.SOURCE_TYPE
         last_failure = self._failed_sources.get(source_name)
-        
-        if last_failure and (now - last_failure).total_seconds() < 86400:
-            continue  # Skip - failed within 24 hours
-            
+
+        if not force and not first_fetch and not in_grace_period and last_failure:
+            continue  # Skip - waiting for health check to re-validate
+
         enabled_api_classes.append(cls)
     
     # Fetch via FallbackManager
@@ -412,7 +432,7 @@ async def _schedule_daily_retry(
             delay = random.randint(0, 3600)
             await asyncio.sleep(delay)
             
-            # Force fetch (ignores 24h filter)
+            # Force fetch (bypasses failed-source filter and rate limit)
             result = await self.fetch_data(force=True)
             
             # Check if THIS source succeeded
@@ -503,7 +523,7 @@ Clear Cache → triggers force=True fetch
   ↓
 Ignores rate limits
   ↓
-Ignores 24h failure window
+Bypasses failed-source filter
   ↓
 Tries all sources (including recently failed)
   ↓
