@@ -197,7 +197,9 @@ async def main():
 
             # Allow some tolerance for partial intervals
             if abs(len(interval_raw_prices) - expected_interval_count) > 5:
-                logger.warning(f"⚠️  Warning: Interval count differs more than expected")
+                logger.warning(
+                    f"⚠️  Warning: Interval count differs more than expected"
+                )
             else:
                 logger.info(f"✅ Interval count within expected range")
         else:

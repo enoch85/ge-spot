@@ -52,9 +52,10 @@ class Aemo:
         "https://visualisations.aemo.com.au/aemo/apps/api/report/ELEC_NEM_SUMMARY"
     )
 
-    # NEMWEB Pre-dispatch Reports (forecast data with 40+ hour horizon)
+    # NEMWEB Pre-dispatch Reports (forecast data with 40+ hour horizon).
+    # HTTPS is supported and verified — keep it on TLS for integrity.
     NEMWEB_PREDISPATCH_URL = (
-        "http://www.nemweb.com.au/Reports/Current/PredispatchIS_Reports/"
+        "https://www.nemweb.com.au/Reports/Current/PredispatchIS_Reports/"
     )
 
     # NEMWEB file patterns

@@ -1,11 +1,11 @@
 """API client utilities for GE-Spot integration."""
 
+import json
 import logging
 import asyncio
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, Optional
 import aiohttp
 
-from ...const.attributes import Attributes
 from ...const.network import Network
 
 _LOGGER = logging.getLogger(__name__)
@@ -84,10 +84,13 @@ class ApiClient:
                         ):
                             return await response.text(encoding=encoding)
                         else:
-                            # Try JSON first, fall back to text if that fails
+                            # Try JSON first, fall back to text if that fails.
+                            # Narrow the catch so KeyboardInterrupt/SystemExit propagate:
+                            #   ContentTypeError = Content-Type didn't match application/json
+                            #   JSONDecodeError  = body wasn't valid JSON
                             try:
                                 return await response.json()
-                            except:
+                            except (aiohttp.ContentTypeError, json.JSONDecodeError):
                                 return await response.text(encoding=encoding)
                 else:
                     async with aiohttp.ClientSession() as session:
@@ -126,10 +129,12 @@ class ApiClient:
                             ):
                                 return await response.text(encoding=encoding)
                             else:
-                                # Try JSON first, fall back to text if that fails
+                                # Try JSON first, fall back to text if that fails.
+                                # See the matching block above for why these
+                                # exception types are the right ones to catch.
                                 try:
                                     return await response.json()
-                                except:
+                                except (aiohttp.ContentTypeError, json.JSONDecodeError):
                                     return await response.text(encoding=encoding)
             except asyncio.TimeoutError:
                 _LOGGER.error(f"API request timed out: {url}")
@@ -239,10 +244,13 @@ class ApiClient:
                         elif "text/csv" in content_type or "text/plain" in content_type:
                             return await response.text(encoding=encoding)
                         else:
-                            # Try JSON first, fall back to text if that fails
+                            # Try JSON first, fall back to text if that fails.
+                            # Narrow the catch so KeyboardInterrupt/SystemExit propagate:
+                            #   ContentTypeError = Content-Type didn't match application/json
+                            #   JSONDecodeError  = body wasn't valid JSON
                             try:
                                 return await response.json()
-                            except:
+                            except (aiohttp.ContentTypeError, json.JSONDecodeError):
                                 return await response.text(encoding=encoding)
                 else:
                     # Create temporary session if none exists
@@ -312,9 +320,11 @@ class ApiClient:
                             ):
                                 return await response.text(encoding=encoding)
                             else:
+                                # Try JSON first, fall back to text if that fails.
+                                # See the matching block in get() for rationale.
                                 try:
                                     return await response.json()
-                                except:
+                                except (aiohttp.ContentTypeError, json.JSONDecodeError):
                                     return await response.text(encoding=encoding)
             except asyncio.TimeoutError:
                 _LOGGER.error(f"API request timed out: {url}")
@@ -377,72 +387,3 @@ class ApiClient:
         """Close the session if it was created by this instance."""
         if self.session and not hasattr(self.session, "_is_external"):
             await self.session.close()
-
-
-class ApiFallbackManager:
-    """Manage API fallbacks with priority-based retries."""
-
-    def __init__(self, apis: List[Any]):
-        """Initialize the fallback manager.
-
-        Args:
-            apis: List of API instances in priority order
-        """
-        self.apis = apis
-        self.primary_api = apis[0] if apis else None
-        self.active_api = None
-        self.fallback_used = False
-        self.attempted_sources = []
-
-    async def fetch_with_fallback(self, fetch_method: str, *args, **kwargs) -> Any:
-        """Fetch data using fallback chain if needed.
-
-        Args:
-            fetch_method: The name of the method to call on each API
-            *args: Arguments to pass to the fetch method
-            **kwargs: Keyword arguments to pass to the fetch method
-
-        Returns:
-            The fetched data or None if all sources fail
-        """
-        result = None
-        self.attempted_sources = []
-        self.fallback_used = False
-
-        for api in self.apis:
-            api_name = api.__class__.__name__
-            self.attempted_sources.append(api_name)
-
-            try:
-                # Get the method by name
-                method = getattr(api, fetch_method)
-                if not method or not callable(method):
-                    _LOGGER.error(f"Method {fetch_method} not found on {api_name}")
-                    continue
-
-                _LOGGER.debug(f"Attempting to fetch data from {api_name}")
-                result = await method(*args, **kwargs)
-
-                if result:
-                    self.active_api = api
-                    self.fallback_used = api != self.primary_api
-                    _LOGGER.debug(f"Successfully retrieved data from {api_name}")
-
-                    # Add metadata about source if result is a dictionary
-                    if isinstance(result, dict):
-                        result[Attributes.DATA_SOURCE] = api_name
-                        result[Attributes.FALLBACK_USED] = self.fallback_used
-                    # For string results (like XML), we can't add metadata
-                    # but we still return the result
-
-                    return result
-                else:
-                    _LOGGER.warning(f"No data retrieved from {api_name}")
-
-            except Exception as e:
-                _LOGGER.error(f"Error fetching data from {api_name}: {e}")
-
-        _LOGGER.error(
-            f"Failed to fetch data from any source. Attempted: {', '.join(self.attempted_sources)}"
-        )
-        return None

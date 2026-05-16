@@ -1,3 +1,13 @@
+# NOTE: do not pin aiohttp/aiodns above the versions Home Assistant ships -
+# HA pins them in its package constraints and pip's strict resolver fails
+# the install if our floors conflict.
+#
+# Local manual tests against live APIs may crash with
+#   "Channel.getaddrinfo() takes 3 positional arguments but 4 were given"
+# because HA bundles aiohttp 3.11 + aiodns 3.2 (incompatible signatures).
+# Workaround for dev only - after `pip install -r requirements.txt`, run:
+#   pip install --upgrade 'aiodns>=3.3.0'
+# Production HA configures its own aiohttp session so users are not affected.
 aiohttp>=3.8.0
 beautifulsoup4>=4.11.0
 homeassistant>=2023.8.0

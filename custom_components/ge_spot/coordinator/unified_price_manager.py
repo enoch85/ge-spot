@@ -1519,6 +1519,9 @@ class UnifiedPriceManager:
 
                 # Schedule health check task (once) if not already running
                 if not self._health_check_scheduled:
+                    # Set flag BEFORE creating the task so concurrent failure
+                    # paths in the same area cannot double-schedule.
+                    self._health_check_scheduled = True
                     _LOGGER.info(
                         f"[{self.area}] Scheduling daily health check task "
                         f"(will validate all {len(self._api_classes)} sources during windows at "
@@ -1527,7 +1530,6 @@ class UnifiedPriceManager:
                     self._health_check_task = asyncio.create_task(
                         self._schedule_health_check()
                     )
-                    self._health_check_scheduled = True
 
             # Try to use cached data as a last resort - specify today's date
             cached_data = self._cache_manager.get_data(
@@ -1670,12 +1672,16 @@ class UnifiedPriceManager:
             processed_price_data.attempted_sources = result.get("attempted_sources", [])
             processed_price_data.using_cached_data = is_cached
 
-            # Store validated/failed sources for diagnostics (these are manager-specific)
-            # We'll add them as dynamic attributes
+            # Store validated/failed sources for diagnostics (these are manager-specific).
+            # _failed_sources is typed Dict[str, Any] on IntervalPriceData and is
+            # serialized via to_cache_dict(); keep it keyed by source name so the
+            # round-trip stays well-formed.
             processed_price_data._validated_sources = self.get_validated_sources()
             failed_source_details = self.get_failed_source_details()
             if failed_source_details:
-                processed_price_data._failed_sources = failed_source_details
+                processed_price_data._failed_sources = {
+                    entry["source"]: entry for entry in failed_source_details
+                }
 
             # Return IntervalPriceData directly - sensors will access properties
             return processed_price_data

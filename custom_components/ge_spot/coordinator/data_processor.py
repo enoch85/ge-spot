@@ -593,10 +593,13 @@ class DataProcessor:
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
 
-                    # Time-aware validation: Use DEBUG before publication time, WARNING after
+                    # Time-aware validation: Use DEBUG before publication time, WARNING after.
+                    # source_name was resolved at the top of process() from
+                    # data["data_source"] or data["source"]; DataProcessor itself is
+                    # source-agnostic so we look up the per-source schedule each call.
                     now_utc = dt_util.utcnow()
                     publication_hour_utc = Source.get_publication_time_utc(
-                        self.source if hasattr(self, "source") else "unknown"
+                        source_name or "unknown"
                     )
                     data_should_be_available = now_utc.hour >= publication_hour_utc
 
