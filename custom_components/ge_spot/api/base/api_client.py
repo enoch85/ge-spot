@@ -14,15 +14,22 @@ _LOGGER = logging.getLogger(__name__)
 class ApiClient:
     """Generic API client with improved error handling."""
 
-    def __init__(
-        self, session: Optional[aiohttp.ClientSession] = None, pool_size: int = 10
-    ):
+    def __init__(self, session: aiohttp.ClientSession, pool_size: int = 10):
         """Initialize the API client.
 
         Args:
-            session: Optional aiohttp ClientSession to use
+            session: aiohttp ClientSession to use. Required -- callers inject
+                Home Assistant's shared session via async_get_clientsession(hass)
+                rather than letting the client open its own. Opening a session
+                here would block the event loop loading SSL certs and is
+                discouraged by HA's inject-websession quality rule.
             pool_size: Size of the connection pool
         """
+        if session is None:
+            raise ValueError(
+                "ApiClient requires an aiohttp session; inject "
+                "async_get_clientsession(hass) instead of creating one."
+            )
         self.session = session
         self.pool_size = pool_size
         self._semaphore = asyncio.Semaphore(pool_size)
@@ -56,86 +63,40 @@ class ApiClient:
 
         async with self._semaphore:
             try:
-                if self.session:
-                    async with self.session.get(
-                        url, params=params, headers=merged_headers, timeout=timeout_obj
-                    ) as response:
-                        # HTTP 204 = No Content - data not published yet (not an error)
-                        if response.status == 204:
-                            _LOGGER.info(
-                                f"API returned 204 (No Content) - data not yet published: {url}"
-                            )
-                            return {"status": 204, "message": "Data not yet published"}
+                async with self.session.get(
+                    url, params=params, headers=merged_headers, timeout=timeout_obj
+                ) as response:
+                    # HTTP 204 = No Content - data not published yet (not an error)
+                    if response.status == 204:
+                        _LOGGER.info(
+                            f"API returned 204 (No Content) - data not yet published: {url}"
+                        )
+                        return {"status": 204, "message": "Data not yet published"}
 
-                        if response.status != 200:
-                            _LOGGER.error(
-                                f"API request failed with status {response.status}: {url}"
-                            )
-                            return {}
+                    if response.status != 200:
+                        _LOGGER.error(
+                            f"API request failed with status {response.status}: {url}"
+                        )
+                        return {}
 
-                        # Check content type to determine how to parse the response
-                        content_type = response.headers.get("Content-Type", "").lower()
+                    # Check content type to determine how to parse the response
+                    content_type = response.headers.get("Content-Type", "").lower()
 
-                        if "application/json" in content_type:
+                    if "application/json" in content_type:
+                        return await response.json()
+                    elif (
+                        "text/xml" in content_type or "application/xml" in content_type
+                    ):
+                        return await response.text(encoding=encoding)
+                    else:
+                        # Try JSON first, fall back to text if that fails.
+                        # Narrow the catch so KeyboardInterrupt/SystemExit propagate:
+                        #   ContentTypeError = Content-Type didn't match application/json
+                        #   JSONDecodeError  = body wasn't valid JSON
+                        try:
                             return await response.json()
-                        elif (
-                            "text/xml" in content_type
-                            or "application/xml" in content_type
-                        ):
+                        except (aiohttp.ContentTypeError, json.JSONDecodeError):
                             return await response.text(encoding=encoding)
-                        else:
-                            # Try JSON first, fall back to text if that fails.
-                            # Narrow the catch so KeyboardInterrupt/SystemExit propagate:
-                            #   ContentTypeError = Content-Type didn't match application/json
-                            #   JSONDecodeError  = body wasn't valid JSON
-                            try:
-                                return await response.json()
-                            except (aiohttp.ContentTypeError, json.JSONDecodeError):
-                                return await response.text(encoding=encoding)
-                else:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(
-                            url,
-                            params=params,
-                            headers=merged_headers,
-                            timeout=timeout_obj,
-                        ) as response:
-                            # HTTP 204 = No Content - data not published yet (not an error)
-                            if response.status == 204:
-                                _LOGGER.info(
-                                    f"API returned 204 (No Content) - data not yet published: {url}"
-                                )
-                                return {
-                                    "status": 204,
-                                    "message": "Data not yet published",
-                                }
-
-                            if response.status != 200:
-                                _LOGGER.error(
-                                    f"API request failed with status {response.status}: {url}"
-                                )
-                                return {}
-
-                            # Check content type to determine how to parse the response
-                            content_type = response.headers.get(
-                                "Content-Type", ""
-                            ).lower()
-
-                            if "application/json" in content_type:
-                                return await response.json()
-                            elif (
-                                "text/xml" in content_type
-                                or "application/xml" in content_type
-                            ):
-                                return await response.text(encoding=encoding)
-                            else:
-                                # Try JSON first, fall back to text if that fails.
-                                # See the matching block above for why these
-                                # exception types are the right ones to catch.
-                                try:
-                                    return await response.json()
-                                except (aiohttp.ContentTypeError, json.JSONDecodeError):
-                                    return await response.text(encoding=encoding)
             except asyncio.TimeoutError:
                 _LOGGER.error(f"API request timed out: {url}")
                 return {}
@@ -182,150 +143,74 @@ class ApiClient:
 
         async with self._semaphore:
             try:
-                if self.session:
-                    async with self.session.get(
-                        url, params=params, headers=merged_headers, timeout=timeout_obj
-                    ) as response:
-                        # Check for HTTP errors
-                        if response.status != 200:
-                            # Track consecutive errors for rate limit detection
-                            self._track_error_response(url, response.status)
+                async with self.session.get(
+                    url, params=params, headers=merged_headers, timeout=timeout_obj
+                ) as response:
+                    # Check for HTTP errors
+                    if response.status != 200:
+                        # Track consecutive errors for rate limit detection
+                        self._track_error_response(url, response.status)
 
-                            _LOGGER.error(
-                                f"API request failed with status {response.status}: {url}"
-                            )
+                        _LOGGER.error(
+                            f"API request failed with status {response.status}: {url}"
+                        )
 
-                            # Try to get more detailed error information
-                            try:
-                                error_text = await response.text(encoding=encoding)
-                                # Return error information instead of empty dict
-                                return {
-                                    "error": True,
-                                    "status_code": response.status,
-                                    "message": (
-                                        error_text[:500]
-                                        if len(error_text) > 500
-                                        else error_text
-                                    ),
-                                    "url": url,
-                                }
-                            except Exception as e:
-                                _LOGGER.debug(f"Could not extract error text: {e}")
-                                # Fallback error info
-                                return {
-                                    "error": True,
-                                    "status_code": response.status,
-                                    "message": f"HTTP {response.status}",
-                                    "url": url,
-                                }
+                        # Try to get more detailed error information
+                        try:
+                            error_text = await response.text(encoding=encoding)
+                            # Return error information instead of empty dict
+                            return {
+                                "error": True,
+                                "status_code": response.status,
+                                "message": (
+                                    error_text[:500]
+                                    if len(error_text) > 500
+                                    else error_text
+                                ),
+                                "url": url,
+                            }
+                        except Exception as e:
+                            _LOGGER.debug(f"Could not extract error text: {e}")
+                            # Fallback error info
+                            return {
+                                "error": True,
+                                "status_code": response.status,
+                                "message": f"HTTP {response.status}",
+                                "url": url,
+                            }
 
-                        # Success - reset error tracking
-                        self._reset_error_tracking(url)
+                    # Success - reset error tracking
+                    self._reset_error_tracking(url)
 
-                        # Process successful response based on format parameter or content type
-                        if response_format:
-                            if response_format.lower() in ["text", "csv"]:
-                                return await response.text(encoding=encoding)
-                            elif response_format.lower() == "json":
-                                return await response.json()
-                            elif response_format.lower() == "xml":
-                                return await response.text(encoding=encoding)
-
-                        # If no specific format requested, check content type
-                        content_type = response.headers.get("Content-Type", "").lower()
-
-                        if "application/json" in content_type:
+                    # Process successful response based on format parameter or content type
+                    if response_format:
+                        if response_format.lower() in ["text", "csv"]:
+                            return await response.text(encoding=encoding)
+                        elif response_format.lower() == "json":
                             return await response.json()
-                        elif (
-                            "text/xml" in content_type
-                            or "application/xml" in content_type
-                        ):
+                        elif response_format.lower() == "xml":
                             return await response.text(encoding=encoding)
-                        elif "text/csv" in content_type or "text/plain" in content_type:
+
+                    # If no specific format requested, check content type
+                    content_type = response.headers.get("Content-Type", "").lower()
+
+                    if "application/json" in content_type:
+                        return await response.json()
+                    elif (
+                        "text/xml" in content_type or "application/xml" in content_type
+                    ):
+                        return await response.text(encoding=encoding)
+                    elif "text/csv" in content_type or "text/plain" in content_type:
+                        return await response.text(encoding=encoding)
+                    else:
+                        # Try JSON first, fall back to text if that fails.
+                        # Narrow the catch so KeyboardInterrupt/SystemExit propagate:
+                        #   ContentTypeError = Content-Type didn't match application/json
+                        #   JSONDecodeError  = body wasn't valid JSON
+                        try:
+                            return await response.json()
+                        except (aiohttp.ContentTypeError, json.JSONDecodeError):
                             return await response.text(encoding=encoding)
-                        else:
-                            # Try JSON first, fall back to text if that fails.
-                            # Narrow the catch so KeyboardInterrupt/SystemExit propagate:
-                            #   ContentTypeError = Content-Type didn't match application/json
-                            #   JSONDecodeError  = body wasn't valid JSON
-                            try:
-                                return await response.json()
-                            except (aiohttp.ContentTypeError, json.JSONDecodeError):
-                                return await response.text(encoding=encoding)
-                else:
-                    # Create temporary session if none exists
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(
-                            url,
-                            params=params,
-                            headers=merged_headers,
-                            timeout=timeout_obj,
-                        ) as response:
-                            if response.status != 200:
-                                # Track consecutive errors for rate limit detection
-                                self._track_error_response(url, response.status)
-
-                                _LOGGER.error(
-                                    f"API request failed with status {response.status}: {url}"
-                                )
-
-                                try:
-                                    error_text = await response.text(encoding=encoding)
-                                    return {
-                                        "error": True,
-                                        "status_code": response.status,
-                                        "message": (
-                                            error_text[:500]
-                                            if len(error_text) > 500
-                                            else error_text
-                                        ),
-                                        "url": url,
-                                    }
-                                except Exception as e:
-                                    _LOGGER.debug(f"Could not extract error text: {e}")
-                                    return {
-                                        "error": True,
-                                        "status_code": response.status,
-                                        "message": f"HTTP {response.status}",
-                                        "url": url,
-                                    }
-
-                            # Success - reset error tracking
-                            self._reset_error_tracking(url)
-
-                            # Process successful response based on format parameter or content type
-                            if response_format:
-                                if response_format.lower() in ["text", "csv"]:
-                                    return await response.text(encoding=encoding)
-                                elif response_format.lower() == "json":
-                                    return await response.json()
-                                elif response_format.lower() == "xml":
-                                    return await response.text(encoding=encoding)
-
-                            # If no specific format requested, check content type
-                            content_type = response.headers.get(
-                                "Content-Type", ""
-                            ).lower()
-
-                            if "application/json" in content_type:
-                                return await response.json()
-                            elif (
-                                "text/xml" in content_type
-                                or "application/xml" in content_type
-                            ):
-                                return await response.text(encoding=encoding)
-                            elif (
-                                "text/csv" in content_type
-                                or "text/plain" in content_type
-                            ):
-                                return await response.text(encoding=encoding)
-                            else:
-                                # Try JSON first, fall back to text if that fails.
-                                # See the matching block in get() for rationale.
-                                try:
-                                    return await response.json()
-                                except (aiohttp.ContentTypeError, json.JSONDecodeError):
-                                    return await response.text(encoding=encoding)
             except asyncio.TimeoutError:
                 _LOGGER.error(f"API request timed out: {url}")
                 return {"error": True, "message": "Request timed out", "url": url}
@@ -384,6 +269,10 @@ class ApiClient:
             del self._rate_limit_detected[url_key]
 
     async def close(self) -> None:
-        """Close the session if it was created by this instance."""
-        if self.session and not hasattr(self.session, "_is_external"):
-            await self.session.close()
+        """No-op: the aiohttp session is injected and owned by the caller.
+
+        The session comes from Home Assistant's async_get_clientsession and is
+        shared across the integration (and others), so this client must never
+        close it. Kept so existing call sites remain valid.
+        """
+        return

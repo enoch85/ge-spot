@@ -128,9 +128,10 @@ class AdvancedCache:
         # Cache storage
         self._cache: Dict[str, CacheEntry] = {}
 
-        # Load cache from disk if enabled
+        # Load cache from disk if enabled. Run on the executor so the blocking
+        # file I/O (open/os.stat) never runs on the event loop.
         if self.persist_cache and hass:
-            self._load_cache()
+            hass.async_add_executor_job(self._load_cache)
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get a value from the cache.
@@ -185,9 +186,10 @@ class AdvancedCache:
         # Check if we need to evict entries
         self._evict_if_needed()
 
-        # Persist cache if enabled
+        # Persist cache if enabled. Schedule on the executor so the blocking
+        # file I/O never runs on the event loop.
         if self.persist_cache and self.hass:
-            self._save_cache()
+            self.hass.async_add_executor_job(self._save_cache)
 
     def delete(self, key: str) -> bool:
         """Delete a value from the cache.
@@ -201,9 +203,10 @@ class AdvancedCache:
         if key in self._cache:
             del self._cache[key]
 
-            # Persist cache if enabled
+            # Persist cache if enabled. Schedule on the executor so the blocking
+            # file I/O never runs on the event loop.
             if self.persist_cache and self.hass:
-                self._save_cache()
+                self.hass.async_add_executor_job(self._save_cache)
 
             return True
 
@@ -213,9 +216,10 @@ class AdvancedCache:
         """Clear the cache."""
         self._cache.clear()
 
-        # Persist cache if enabled
+        # Persist cache if enabled. Schedule on the executor so the blocking
+        # file I/O never runs on the event loop.
         if self.persist_cache and self.hass:
-            self._save_cache()
+            self.hass.async_add_executor_job(self._save_cache)
 
     def get_info(self) -> Dict[str, Any]:
         """Get information about the cache.
