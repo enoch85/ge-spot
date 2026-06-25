@@ -333,7 +333,7 @@ class UnifiedPriceManager:
         if self._exchange_service is None:
             # Use the singleton helper to get/create the service
             self._exchange_service = await get_exchange_service(
-                session=async_get_clientsession(self.hass)
+                session=async_get_clientsession(self.hass), hass=self.hass
             )
             # Pass the initialized service to the data processor if it expects it
             # Assuming DataProcessor needs the actual service instance:
