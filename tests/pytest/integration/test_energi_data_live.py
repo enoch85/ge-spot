@@ -2,6 +2,7 @@ import pytest
 import logging
 from datetime import datetime, timedelta
 import asyncio
+import aiohttp
 
 from custom_components.ge_spot.api.energi_data import EnergiDataAPI
 from custom_components.ge_spot.const.sources import Source
@@ -31,13 +32,15 @@ async def test_energi_data_live_fetch_parse(area):
     If it fails, investigate and fix the core code rather than modifying the test.
     """
     logger.info(f"Testing Energi Data Service live API for area: {area}...")
-    # Arrange - allow failures during setup to find real issues
+    # Arrange - allow failures during setup to find real issues. Inject a
+    # session (the client requires one and never opens its own).
     api = EnergiDataAPI()
+    session = aiohttp.ClientSession()
     session_closed = False
 
     try:
         # Act: Fetch Raw Data - no exception handling to expose real issues
-        raw_data = await api.fetch_raw_data(area=area)
+        raw_data = await api.fetch_raw_data(area=area, session=session)
 
         # Assert: Raw Data Structure (strict validation)
         assert raw_data is not None, f"Raw data for {area} should not be None"
@@ -186,10 +189,10 @@ async def test_energi_data_live_fetch_parse(area):
         logger.error(f"Energi Data Service Live Test ({area}): EXCEPTION - {str(e)}")
         raise
     finally:
-        # Proper async cleanup
-        if hasattr(api, "session") and api.session and not session_closed:
+        # Proper async cleanup of the injected session
+        if not session_closed:
             try:
-                await api.session.close()
+                await session.close()
                 session_closed = True
                 # Give a moment for the session to fully close
                 await asyncio.sleep(0.1)

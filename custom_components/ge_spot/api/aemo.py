@@ -200,25 +200,12 @@ class AemoAPI(BasePriceAPI):
         try:
             timeout_obj = aiohttp.ClientTimeout(total=Network.Defaults.HTTP_TIMEOUT * 2)
 
-            if client.session:
-                # Use existing session
-                async with client.session.get(url, timeout=timeout_obj) as response:
-                    if response.status != 200:
-                        _LOGGER.error(
-                            f"Failed to download {url}: HTTP {response.status}"
-                        )
-                        return None
-                    return await response.read()
-            else:
-                # Create temporary session
-                async with aiohttp.ClientSession() as temp_session:
-                    async with temp_session.get(url, timeout=timeout_obj) as response:
-                        if response.status != 200:
-                            _LOGGER.error(
-                                f"Failed to download {url}: HTTP {response.status}"
-                            )
-                            return None
-                        return await response.read()
+            # client.session is always an injected (shared) HA session
+            async with client.session.get(url, timeout=timeout_obj) as response:
+                if response.status != 200:
+                    _LOGGER.error(f"Failed to download {url}: HTTP {response.status}")
+                    return None
+                return await response.read()
 
         except Exception as e:
             _LOGGER.error(

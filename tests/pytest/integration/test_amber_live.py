@@ -1,6 +1,7 @@
 import pytest
 import os
 import logging
+import aiohttp
 from datetime import datetime, timedelta
 
 from custom_components.ge_spot.api.amber import AmberAPI
@@ -26,12 +27,14 @@ async def test_amber_live_fetch_parse():
     If it fails, investigate and fix the core code rather than modifying the test.
     """
     logger.info("Testing Amber live API...")
-    # Arrange - don't catch exceptions during setup
+    # Arrange - don't catch exceptions during setup. Inject a session (the
+    # client requires one and never opens its own).
     api = AmberAPI()
+    session = aiohttp.ClientSession()
 
     try:
         # Act: Fetch Raw Data - let exceptions propagate to find real issues
-        raw_data = await api.fetch_raw_data()
+        raw_data = await api.fetch_raw_data(session=session)
 
         # Assert: Raw Data Structure (strict validation)
         assert raw_data is not None, "Raw data should not be None"
@@ -180,5 +183,4 @@ async def test_amber_live_fetch_parse():
         logger.error(f"Amber Live Test: EXCEPTION - {str(e)}")
         raise
     finally:
-        if hasattr(api, "session") and api.session:
-            await api.session.close()
+        await session.close()
