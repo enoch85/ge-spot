@@ -263,6 +263,28 @@ class IntervalPriceData:
             return None
 
     @property
+    def current_raw_price(self) -> Optional[float]:
+        """Get current interval base market price (before VAT/taxes/tariffs).
+
+        Mirrors current_price but reads the raw (pre-VAT/tariff) values, so a
+        sensor can expose the underlying spot market price even when VAT and
+        tariffs are configured (Issue #70).
+
+        Returns:
+            Current base market price or None if not available
+        """
+        if not self._tz_service:
+            _LOGGER.warning("Cannot get current_raw_price without timezone service")
+            return None
+
+        try:
+            current_key = self._tz_service.get_current_interval_key()
+            return self.today_raw_prices.get(current_key)
+        except Exception as e:
+            _LOGGER.error(f"Error getting current_raw_price: {e}", exc_info=True)
+            return None
+
+    @property
     def next_interval_price(self) -> Optional[float]:
         """Get next interval price.
 

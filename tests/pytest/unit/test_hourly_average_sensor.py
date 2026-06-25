@@ -723,3 +723,92 @@ class TestHourlyAverageSensor:
         assert "today_min_price" not in attrs
         assert "today_max_price" not in attrs
         assert "today_avg_price" not in attrs
+
+    def test_use_raw_averages_base_market_prices(self, config_data):
+        """use_raw=True averages base market prices, not the all-in prices.
+
+        Issue #70: a dedicated 1-hour sensor for the market price (before
+        VAT/taxes/tariffs) when those adjustments are configured.
+        """
+        coordinator = Mock()
+        coordinator.data = IntervalPriceData(
+            today_interval_prices={
+                "00:00": 110.0,
+                "00:15": 112.0,
+                "00:30": 114.0,
+                "00:45": 116.0,
+            },
+            today_raw_prices={
+                "00:00": 10.0,
+                "00:15": 12.0,
+                "00:30": 14.0,
+                "00:45": 16.0,
+            },
+            source="nordpool",
+            area="SE3",
+        )
+        coordinator.last_update_success = True
+
+        # Default (all-in) averages the converted prices: (110+112+114+116)/4
+        all_in = HourlyAverageSensor(
+            coordinator,
+            config_data,
+            "hourly_average_price",
+            "Hourly Average Price",
+            day_offset=0,
+        )
+        assert all_in._calculate_hourly_averages(coordinator.data)["00:00"] == 113.0
+
+        # use_raw averages the base market prices: (10+12+14+16)/4 = 13.0
+        market = HourlyAverageSensor(
+            coordinator,
+            config_data,
+            "hourly_market_average_price",
+            "Hourly Market Average Price",
+            day_offset=0,
+            use_raw=True,
+        )
+        assert market._calculate_hourly_averages(coordinator.data)["00:00"] == 13.0
+
+    @patch("custom_components.ge_spot.sensor.base.dt_util.get_default_time_zone")
+    def test_use_raw_attributes_use_base_prices(self, mock_get_tz, config_data):
+        """use_raw=True hourly attributes expose base market prices (Issue #70)."""
+        mock_get_tz.return_value = timezone.utc
+
+        coordinator = Mock()
+        coordinator.data = IntervalPriceData(
+            today_interval_prices={
+                "00:00": 110.0,
+                "00:15": 112.0,
+                "00:30": 114.0,
+                "00:45": 116.0,
+            },
+            today_raw_prices={
+                "00:00": 10.0,
+                "00:15": 12.0,
+                "00:30": 14.0,
+                "00:45": 16.0,
+            },
+            source="nordpool",
+            area="SE3",
+        )
+        coordinator.last_update_success = True
+
+        sensor = HourlyAverageSensor(
+            coordinator,
+            config_data,
+            "hourly_market_average_price",
+            "Hourly Market Average Price",
+            day_offset=0,
+            use_raw=True,
+        )
+        sensor._tz_service = None
+
+        attrs = sensor.extra_state_attributes
+
+        # Hourly list reflects the base market average (13.0), not all-in (113.0)
+        today_hourly = attrs["today_hourly_prices"]
+        hour_0 = next((e for e in today_hourly if e["time"].hour == 0), None)
+        assert hour_0 is not None
+        assert abs(hour_0["value"] - 13.0) < 0.0001
+        assert attrs["today_avg_price"] == 13.0

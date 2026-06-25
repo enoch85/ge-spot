@@ -416,7 +416,13 @@ class HourlyAverageSensor(PriceValueSensor):
     )
 
     def __init__(
-        self, coordinator, config_data, sensor_type, name_suffix, day_offset=0
+        self,
+        coordinator,
+        config_data,
+        sensor_type,
+        name_suffix,
+        day_offset=0,
+        use_raw=False,
     ):
         """Initialize the hourly average price sensor.
 
@@ -426,8 +432,11 @@ class HourlyAverageSensor(PriceValueSensor):
             sensor_type: Type identifier for the sensor
             name_suffix: Display name suffix
             day_offset: 0 for today, 1 for tomorrow
+            use_raw: If True, average the base market prices (raw, before
+                VAT/taxes/tariffs) instead of the all-in prices (Issue #70)
         """
         self._day_offset = day_offset
+        self._use_raw = use_raw
 
         # Create value extraction function
         def extract_value(data):
@@ -473,11 +482,20 @@ class HourlyAverageSensor(PriceValueSensor):
         Returns:
             Dictionary mapping hour (HH:00) to average price
         """
-        # Get the appropriate interval prices based on day offset
-        if self._day_offset == 0:
-            interval_prices = data.today_interval_prices if data else {}
+        # Get the appropriate interval prices based on day offset. When use_raw
+        # is set, use the base market prices (before VAT/taxes/tariffs).
+        if not data:
+            interval_prices = {}
+        elif self._day_offset == 0:
+            interval_prices = (
+                data.today_raw_prices if self._use_raw else data.today_interval_prices
+            )
         else:
-            interval_prices = data.tomorrow_interval_prices if data else {}
+            interval_prices = (
+                data.tomorrow_raw_prices
+                if self._use_raw
+                else data.tomorrow_interval_prices
+            )
 
         if not interval_prices:
             return {}
@@ -566,15 +584,17 @@ class HourlyAverageSensor(PriceValueSensor):
         today_hourly = {}
         tomorrow_hourly = {}
 
-        # Get interval prices from coordinator data (properties)
-        today_intervals = (
-            self.coordinator.data.today_interval_prices if self.coordinator.data else {}
-        )
-        tomorrow_intervals = (
-            self.coordinator.data.tomorrow_interval_prices
-            if self.coordinator.data
-            else {}
-        )
+        # Get interval prices from coordinator data (properties). When use_raw
+        # is set, use the base market prices (before VAT/taxes/tariffs).
+        if not self.coordinator.data:
+            today_intervals = {}
+            tomorrow_intervals = {}
+        elif self._use_raw:
+            today_intervals = self.coordinator.data.today_raw_prices
+            tomorrow_intervals = self.coordinator.data.tomorrow_raw_prices
+        else:
+            today_intervals = self.coordinator.data.today_interval_prices
+            tomorrow_intervals = self.coordinator.data.tomorrow_interval_prices
 
         # Calculate hourly averages for today
         if today_intervals:

@@ -229,6 +229,37 @@ async def async_setup_entry(
     )
     # --- End Hourly Average Sensors ---
 
+    # --- Base Market Price Sensors (Issue #70) ---
+    # The underlying spot market price BEFORE VAT/taxes/tariffs (from raw
+    # prices), so users who configure VAT/tariffs can still see the market price
+    # alongside the all-in price.
+
+    # Current Market Price (current 15-minute interval, no VAT/taxes/tariffs)
+    get_current_market_price = lambda data: data.current_raw_price if data else None
+    entities.append(
+        PriceValueSensor(
+            coordinator,
+            config_data,
+            "current_market_price",
+            "Current Market Price",
+            get_current_market_price,
+            get_base_attrs,
+        )
+    )
+
+    # Hourly Market Average Price (current hour average, no VAT/taxes/tariffs)
+    entities.append(
+        HourlyAverageSensor(
+            coordinator,
+            config_data,
+            "hourly_market_average_price",
+            "Hourly Market Average Price",
+            day_offset=0,
+            use_raw=True,
+        )
+    )
+    # --- End Base Market Price Sensors ---
+
     # --- Export/Production Price Sensors ---
     # Only add export sensors if export is enabled in config
     export_enabled = options.get(
