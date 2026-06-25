@@ -14,6 +14,7 @@ Home Assistant custom integration providing 15-minute electricity spot prices ac
 8. **Ask before acting** - When uncertain, clarify first
 9. **No analysis/summary files in git** - All `*ANALYSIS*.md`, `*SUMMARY*.md` files stay untracked
 10. **Format with black** - Run `black` on all Python code before committing. Consistent formatting is mandatory.
+11. **No AI attribution** - Never add AI/assistant attribution to commits, PRs, or code. No "Generated with Claude Code", no "Co-Authored-By: Claude", no robot-emoji trailers, no "AI"/"Copilot"/"assistant" credit anywhere.
 
 ## Architecture
 

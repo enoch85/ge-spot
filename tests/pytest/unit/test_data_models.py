@@ -160,6 +160,27 @@ class TestComputedProperties:
 
         assert data.current_price is None
 
+    def test_current_raw_price_lookup(self, sample_today_prices, mock_timezone_service):
+        """Test current_raw_price reads the base market price (Issue #70)."""
+        # Make raw prices distinct from the all-in prices so we prove it reads
+        # the raw (pre-VAT/tariff) values rather than the converted ones.
+        raw_prices = {k: v - 50.0 for k, v in sample_today_prices.items()}
+        data = IntervalPriceData(
+            today_interval_prices=sample_today_prices,
+            today_raw_prices=raw_prices,
+            _tz_service=mock_timezone_service,
+        )
+
+        # Current interval is 14:15: all-in = 114.0, base market = 64.0
+        assert data.current_price == 114.0
+        assert data.current_raw_price == 64.0
+
+    def test_current_raw_price_none_without_tz_service(self, sample_today_prices):
+        """Test current_raw_price returns None without timezone service."""
+        data = IntervalPriceData(today_raw_prices=sample_today_prices)
+
+        assert data.current_raw_price is None
+
     def test_next_interval_price_lookup(
         self, sample_today_prices, mock_timezone_service
     ):
