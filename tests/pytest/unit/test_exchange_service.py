@@ -34,7 +34,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from custom_components.ge_spot.utils.exchange_service import (
     ExchangeRateService,
+    ExchangeRateFetchError,
     get_exchange_service,
+    EXCHANGE_RATE_CACHE_FILENAME,
 )
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.const.defaults import Defaults
@@ -184,25 +186,30 @@ async def test_convert_currency_caching(exchange_service):
 @pytest.mark.asyncio
 async def test_convert_currency_api_error(exchange_service):
     """Test handling of API errors with appropriate fallback."""
-    # Pre-populate cache with some rate data to test fallback
+    # Pre-populate fresh rates (1h old) to test fallback to existing rates
     exchange_service.rates = {Currency.EUR: 1.0, Currency.SEK: 10.0, Currency.USD: 1.1}
-    exchange_service.last_update = time.time() - 3600  # 1 hour ago
+    exchange_service.last_update = time.time() - 3600  # 1 hour ago (fresh)
 
     # Simulate API error by having _fetch_ecb_rates return None
     with patch.object(
         exchange_service, "_fetch_ecb_rates", AsyncMock(return_value=None)
     ):
-        # Act - Should use existing rates when fetch fails
+        # Act - Should keep existing (still-fresh) rates when fetch fails
         rates = await exchange_service.get_rates(force_refresh=True)
 
         # Assert fallback to existing rates
         assert rates is not None, "Should use existing rates"
         assert Currency.SEK in rates, "Existing rates should be preserved"
 
-        # But with no existing rates, should raise error
+        # With no existing rates and no fresh cache -> degrade to empty (never
+        # raise, never use stale rates).
         exchange_service.rates = {}
-        with pytest.raises(ValueError):
-            await exchange_service.get_rates(force_refresh=True)
+        exchange_service.last_update = 0
+        with patch.object(
+            exchange_service, "_load_cache", AsyncMock(return_value=False)
+        ):
+            rates = await exchange_service.get_rates(force_refresh=True)
+            assert rates == {}, "Should return empty rates when nothing is fresh"
 
 
 @pytest.mark.asyncio
@@ -235,17 +242,22 @@ async def test_convert_currency_network_error(exchange_service):
     with patch.object(
         exchange_service, "_fetch_ecb_rates", AsyncMock(side_effect=network_error)
     ):
-        # Act - Should use existing rates on error
+        # Act - Should keep existing (fresh) rates on error
         rates = await exchange_service.get_rates(force_refresh=True)
 
         # Assert
         assert rates is not None, "Should use existing rates"
         assert Currency.SEK in rates, "Existing rates should be preserved"
 
-        # But with empty rates, should propagate error
+        # With empty rates and no fresh cache, the network error is handled
+        # gracefully (never propagated) and conversion degrades to empty.
         exchange_service.rates = {}
-        with pytest.raises(ClientError):
-            await exchange_service.get_rates(force_refresh=True)
+        exchange_service.last_update = 0
+        with patch.object(
+            exchange_service, "_load_cache", AsyncMock(return_value=False)
+        ):
+            rates = await exchange_service.get_rates(force_refresh=True)
+            assert rates == {}, "Network error should degrade to empty, not raise"
 
 
 @pytest.mark.asyncio
@@ -363,8 +375,10 @@ async def test_get_exchange_rate_info(exchange_service):
 @pytest.mark.asyncio
 async def test_convert_currency_missing_rates(exchange_service):
     """Test error handling when rates are missing for requested currencies."""
-    # Arrange - set limited rates
+    # Arrange - set limited but FRESH rates so get_rates returns them as-is
+    # (stale rates would be discarded and replaced by cache/fallback).
     exchange_service.rates = {Currency.EUR: 1.0, Currency.USD: 1.1}
+    exchange_service.last_update = time.time()
 
     # Act & Assert - Missing target currency
     with pytest.raises(ValueError) as exc_info:
@@ -446,3 +460,205 @@ async def test_fetch_ecb_rates_uses_instance_session():
                 f"BUG DETECTED: Code uses undefined 'session' variable instead of 'self.session': {e}"
             )
         raise
+
+
+@pytest.mark.asyncio
+async def test_fetch_ecb_rates_raises_on_network_error():
+    """Regression (issue #68): _fetch_ecb_rates must propagate connection errors.
+
+    Previously the method caught the error and returned None, which silently
+    defeated @retry_with_backoff (it only retries on raised exceptions) and
+    surfaced the misleading "fetch attempt failed silently" ValueError.
+    """
+    service = ExchangeRateService()
+
+    # Session whose GET raises a connection error
+    mock_get = MagicMock()
+    mock_get.__aenter__ = AsyncMock(side_effect=ClientError("Cannot connect to host"))
+    mock_get.__aexit__ = AsyncMock(return_value=None)
+    mock_session = MagicMock()
+    mock_session.get = MagicMock(return_value=mock_get)
+    mock_session.close = AsyncMock()
+    service.session = mock_session
+
+    # Skip the backoff sleeps so the retries are instant
+    with patch(
+        "custom_components.ge_spot.api.base.error_handler.asyncio.sleep", AsyncMock()
+    ):
+        with pytest.raises(ClientError):
+            await service._fetch_ecb_rates()
+
+
+@pytest.mark.asyncio
+async def test_fetch_ecb_rates_raises_on_http_error():
+    """_fetch_ecb_rates raises (not returns None) on a non-200 response."""
+    service = ExchangeRateService()
+
+    mock_response = MagicMock()
+    mock_response.status = 500
+    mock_response.text = AsyncMock(return_value="error")
+    mock_get = MagicMock()
+    mock_get.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_get.__aexit__ = AsyncMock(return_value=None)
+    mock_session = MagicMock()
+    mock_session.get = MagicMock(return_value=mock_get)
+    mock_session.close = AsyncMock()
+    service.session = mock_session
+
+    with patch(
+        "custom_components.ge_spot.api.base.error_handler.asyncio.sleep", AsyncMock()
+    ):
+        with pytest.raises(ExchangeRateFetchError):
+            await service._fetch_ecb_rates()
+
+
+@pytest.mark.asyncio
+async def test_get_rates_uses_fresh_cache_when_fetch_fails(exchange_service):
+    """Failed fetch + a fresh (<= max age) cache -> the cache is used.
+
+    The persistent cache is the self-updating fallback: it is written on every
+    successful fetch and survives restarts/upgrades, so no hardcoded rates are
+    needed.
+    """
+    cached = {Currency.EUR: 1.0, Currency.SEK: 11.0, "USD": 1.1}
+
+    def fake_load_cache():
+        exchange_service.rates = dict(cached)
+        exchange_service.last_update = time.time() - 3600  # 1h old (fresh)
+        return True
+
+    exchange_service.rates = {}
+    exchange_service.last_update = 0
+    with patch.object(
+        exchange_service, "_load_cache", AsyncMock(side_effect=fake_load_cache)
+    ), patch.object(exchange_service, "_fetch_ecb_rates", AsyncMock(return_value=None)):
+        rates = await exchange_service.get_rates(force_refresh=True)
+
+    assert rates == cached, "Should use the fresh cached rates when fetch fails"
+
+
+@pytest.mark.asyncio
+async def test_get_rates_degrades_when_no_fresh_rates(exchange_service):
+    """No cache + failed fetch -> empty rates (conversion paused, never raises)."""
+    exchange_service.rates = {}
+    exchange_service.last_update = 0
+    with patch.object(
+        exchange_service, "_load_cache", AsyncMock(return_value=False)
+    ), patch.object(exchange_service, "_fetch_ecb_rates", AsyncMock(return_value=None)):
+        rates = await exchange_service.get_rates(force_refresh=True)
+
+    assert rates == {}, "Should degrade to empty rather than risk stale values"
+
+
+@pytest.mark.asyncio
+async def test_get_rates_discards_stale_in_memory_rates(exchange_service):
+    """In-memory rates older than the max age are discarded, never returned."""
+    exchange_service.rates = {Currency.EUR: 1.0, Currency.SEK: 10.0}
+    exchange_service.last_update = time.time() - (ECB.RATES_MAX_AGE_SECONDS + 3600)
+
+    with patch.object(
+        exchange_service, "_load_cache", AsyncMock(return_value=False)
+    ), patch.object(exchange_service, "_fetch_ecb_rates", AsyncMock(return_value=None)):
+        # Even a non-forced call must not return stale in-memory rates
+        rates = await exchange_service.get_rates(force_refresh=False)
+
+    assert rates == {}, "Stale in-memory rates must be discarded"
+
+
+@pytest.mark.asyncio
+async def test_load_cache_rejects_stale(exchange_service, tmp_path):
+    """Cache older than the max age is ignored (treated as a miss)."""
+    cache_file = tmp_path / "stale_rates.json"
+    stale_ts = time.time() - (ECB.RATES_MAX_AGE_SECONDS + 3600)
+    cache_file.write_text(
+        json.dumps(
+            {"rates": {Currency.EUR: 1.0, Currency.SEK: 10.0}, "timestamp": stale_ts}
+        )
+    )
+    exchange_service.cache_file = str(cache_file)
+    exchange_service.rates = {}
+
+    loaded = await exchange_service._load_cache()
+
+    assert loaded is False, "Stale cache should not load"
+    assert (
+        exchange_service.rates == {}
+    ), "Rates should remain empty after rejecting stale cache"
+
+
+@pytest.mark.asyncio
+async def test_load_cache_accepts_fresh(exchange_service, tmp_path):
+    """Cache within the max age loads normally."""
+    cache_file = tmp_path / "fresh_rates.json"
+    fresh_ts = time.time() - 3600  # 1h old
+    cache_file.write_text(
+        json.dumps(
+            {"rates": {Currency.EUR: 1.0, Currency.SEK: 10.0}, "timestamp": fresh_ts}
+        )
+    )
+    exchange_service.cache_file = str(cache_file)
+    exchange_service.rates = {}
+
+    loaded = await exchange_service._load_cache()
+
+    assert loaded is True
+    assert exchange_service.rates[Currency.SEK] == 10.0
+
+
+@pytest.mark.asyncio
+async def test_get_exchange_service_uses_shared_session_and_config_path():
+    """Factory uses HA's shared session (not its own) and the config-dir cache."""
+    import custom_components.ge_spot.utils.exchange_service as svc_module
+
+    # Ensure a clean singleton
+    svc_module._EXCHANGE_SERVICE = None
+
+    mock_hass = MagicMock()
+    expected_path = "/config/" + EXCHANGE_RATE_CACHE_FILENAME
+    mock_hass.config.path = MagicMock(return_value=expected_path)
+    shared_session = MagicMock()
+
+    with patch.object(ExchangeRateService, "get_rates", AsyncMock()), patch(
+        "custom_components.ge_spot.utils.exchange_service.async_get_clientsession",
+        return_value=shared_session,
+    ) as mock_gcs:
+        service = await get_exchange_service(hass=mock_hass)
+
+    # Uses the shared HA session, does not open its own, and won't close it
+    mock_gcs.assert_called_once_with(mock_hass)
+    assert service.session is shared_session
+    assert service._owns_session is False
+    # Cache stored under the HA config directory (survives upgrades)
+    assert service.cache_file == expected_path
+    mock_hass.config.path.assert_called_once_with(EXCHANGE_RATE_CACHE_FILENAME)
+
+    # Reset the singleton for other tests
+    svc_module._EXCHANGE_SERVICE = None
+
+
+@pytest.mark.asyncio
+async def test_close_only_closes_owned_session():
+    """close() closes a session we created, but never an injected (shared) one."""
+    # Injected session -> not owned -> must NOT be closed (HA manages it)
+    injected = MagicMock()
+    injected.close = AsyncMock()
+    svc = ExchangeRateService(session=injected)
+    assert svc._owns_session is False
+    await svc.close()
+    injected.close.assert_not_called()
+    assert svc.session is injected  # still usable by HA
+
+    # No session injected -> we create and own one -> close() closes it
+    svc2 = ExchangeRateService()
+    assert svc2._owns_session is True
+    created = MagicMock()
+    created.close = AsyncMock()
+    with patch(
+        "custom_components.ge_spot.utils.exchange_service.aiohttp.ClientSession",
+        return_value=created,
+    ):
+        await svc2._ensure_session()
+    assert svc2.session is created
+    await svc2.close()
+    created.close.assert_awaited_once()
+    assert svc2.session is None

@@ -80,6 +80,13 @@ class ECB:
     XML_NAMESPACE_GESMES = "http://www.gesmes.org/xml/2002-08-01"
     XML_NAMESPACE_ECB = "http://www.ecb.int/vocabulary/2002-08-01/eurofxref"
 
+    # Maximum age for non-live exchange rates loaded from the persistent cache.
+    # ECB publishes new reference rates once per TARGET working day, so rates
+    # older than this risk being materially wrong and must never be used for
+    # price conversion. When no rate this fresh is available, conversion is
+    # skipped rather than risk wrong prices. 24h = 24 * 60 * 60 = 86400 seconds.
+    RATES_MAX_AGE_SECONDS = 24 * 60 * 60
+
 
 class ComEd:
     """ComEd API constants."""

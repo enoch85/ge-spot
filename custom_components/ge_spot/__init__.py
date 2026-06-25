@@ -29,9 +29,21 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 async def async_setup(hass: HomeAssistant, config):  # pylint: disable=unused-argument
     """Set up the GE-Spot component."""
-    # Initialize exchange rate service and register update handlers
-    exchange_service = await get_exchange_service()
-    exchange_service.register_update_handlers(hass)
+    # Initialize exchange rate service and register update handlers.
+    # A failure here (e.g. ECB briefly unreachable with no fresh cache) must NOT
+    # block the integration from loading: the service degrades gracefully (fresh
+    # fetch -> persistent cache, capped at 24h) and the scheduled handlers keep
+    # retrying, so we log and continue rather than fail setup.
+    try:
+        exchange_service = await get_exchange_service(hass=hass)
+        exchange_service.register_update_handlers(hass)
+    except Exception as e:  # pragma: no cover - defensive, get_rates already soft-fails
+        _LOGGER.warning(
+            "Exchange rate service could not be initialized at setup: %s. "
+            "Currency conversion will use cached/fallback rates where available "
+            "and retry automatically.",
+            e,
+        )
 
     return True
 

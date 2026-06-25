@@ -9,6 +9,7 @@ import json
 import os
 import time
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from ..const.currencies import Currency
 from ..const.network import Network
@@ -18,6 +19,15 @@ from ..api.base.error_handler import retry_with_backoff
 
 _LOGGER = logging.getLogger(__name__)
 
+# Cache file name used when a Home Assistant config path is available. Stored in
+# the config directory so it survives container/add-on recreation (e.g. version
+# upgrades), unlike the home-directory fallback in _get_default_cache_path.
+EXCHANGE_RATE_CACHE_FILENAME = "ge_spot_exchange_rates.json"
+
+
+class ExchangeRateFetchError(Exception):
+    """Raised when fresh exchange rates cannot be fetched/parsed from ECB."""
+
 
 class ExchangeRateService:
     """Service to fetch and cache currency exchange rates."""
@@ -25,6 +35,10 @@ class ExchangeRateService:
     def __init__(self, session=None, cache_file=None):
         """Initialize the exchange rate service."""
         self.session = session
+        # A session injected by Home Assistant (async_get_clientsession) is
+        # shared and managed by HA; we must never close it. Only a session we
+        # create ourselves (standalone scripts/tests) is owned and closed by us.
+        self._owns_session = session is None
         self.cache_file = cache_file or self._get_default_cache_path()
         self.rates = {}
         self.last_update = 0
@@ -43,36 +57,54 @@ class ExchangeRateService:
             return "/tmp/ge_spot_exchange_rates.json"
 
     async def _ensure_session(self):
-        """Ensure we have an aiohttp session."""
+        """Ensure we have an aiohttp session.
+
+        Fallback only for standalone use (scripts/tests) where no Home Assistant
+        session was injected. In Home Assistant the shared session from
+        async_get_clientsession is passed in via get_exchange_service, which
+        also avoids blocking SSL certificate loading on the event loop.
+        """
         if self.session is None:
             self.session = aiohttp.ClientSession()
+            self._owns_session = True
 
     async def close(self):
-        """Close the session."""
-        if self.session:
+        """Close the session only if we own it.
+
+        A shared Home Assistant session (async_get_clientsession) is managed by
+        HA and must not be closed here.
+        """
+        if self.session and self._owns_session:
             await self.session.close()
             self.session = None
 
     @retry_with_backoff(max_retries=Network.Defaults.RETRY_COUNT)
     async def _fetch_ecb_rates(self):
-        """Fetch exchange rates from European Central Bank API."""
+        """Fetch exchange rates from the European Central Bank.
+
+        Raises on failure (connection error, non-200 status, or unparseable
+        response) instead of returning ``None``. Swallowing the error here would
+        defeat the @retry_with_backoff decorator (it only retries on raised
+        exceptions, so a returned ``None`` looks like success) and hide the real
+        cause from get_rates, so the error is allowed to propagate.
+        """
         await self._ensure_session()
 
-        try:
-            async with self.session.get(
-                Network.URLs.ECB, timeout=Network.Defaults.HTTP_TIMEOUT
-            ) as response:
-                if response.status != 200:
-                    _LOGGER.error(
-                        "Failed to fetch exchange rates: HTTP %s", response.status
-                    )
-                    return None
+        async with self.session.get(
+            Network.URLs.ECB, timeout=Network.Defaults.HTTP_TIMEOUT
+        ) as response:
+            if response.status != 200:
+                raise ExchangeRateFetchError(
+                    f"Failed to fetch exchange rates: HTTP {response.status}"
+                )
+            xml_data = await response.text()
 
-                xml_data = await response.text()
-                return self._parse_ecb_xml(xml_data)
-        except Exception as e:
-            _LOGGER.error("Error fetching exchange rates: %s", e)
-            return None
+        rates = self._parse_ecb_xml(xml_data)
+        if not rates:
+            raise ExchangeRateFetchError(
+                "ECB response could not be parsed into exchange rates"
+            )
+        return rates
 
     def _parse_ecb_xml(self, xml_data):
         """Parse ECB exchange rate XML data."""
@@ -99,38 +131,54 @@ class ExchangeRateService:
             return None
 
     async def _load_cache(self):
-        """Load exchange rates from cache file asynchronously."""
-        if not os.path.exists(self.cache_file):
-            return False
+        """Load exchange rates from the cache file if present and within max age.
 
+        Uses async file I/O only (aiofiles, which reads on a worker thread) so no
+        blocking disk I/O runs on the event loop -- os.path.exists/getmtime would
+        each call the blocking os.stat. Cached rates older than
+        ECB.RATES_MAX_AGE_SECONDS are ignored (treated as a cache miss) so stale
+        rates can never be used for conversion.
+        """
         try:
-            modified_time = os.path.getmtime(self.cache_file)
-
             async with aiofiles.open(self.cache_file, "r") as f:
                 content = await f.read()
-                data = json.loads(content)
-
-            if not data or "rates" not in data:
-                return False
-
-            self.rates = data["rates"]
-
-            # Ensure cents currency is always available
-            if Currency.CENTS not in self.rates:
-                self.rates[Currency.CENTS] = 100.0
-
-            self.last_update = data.get("timestamp", modified_time)
-
-            age = time.time() - self.last_update
-            _LOGGER.info(
-                "Loaded exchange rates from cache (age: %.1fs, currencies: %d)",
-                age,
-                len(self.rates),
-            )
-            return True
+            data = json.loads(content)
+        except FileNotFoundError:
+            return False
         except Exception as e:
             _LOGGER.error("Error loading exchange rate cache: %s", e)
             return False
+
+        if not data or "rates" not in data:
+            return False
+
+        # _save_cache always writes "timestamp"; default to 0 (treated as stale)
+        # if a legacy/hand-written file lacks it.
+        timestamp = data.get("timestamp", 0)
+        age = time.time() - timestamp
+        if age > ECB.RATES_MAX_AGE_SECONDS:
+            _LOGGER.info(
+                "Ignoring cached exchange rates: older than max age "
+                "(age: %.1fh, max: %.1fh)",
+                age / 3600,
+                ECB.RATES_MAX_AGE_SECONDS / 3600,
+            )
+            return False
+
+        self.rates = data["rates"]
+
+        # Ensure cents currency is always available
+        if Currency.CENTS not in self.rates:
+            self.rates[Currency.CENTS] = 100.0
+
+        self.last_update = timestamp
+
+        _LOGGER.info(
+            "Loaded exchange rates from cache (age: %.1fs, currencies: %d)",
+            age,
+            len(self.rates),
+        )
+        return True
 
     async def _save_cache(self):
         """Save exchange rates to cache file asynchronously."""
@@ -154,25 +202,38 @@ class ExchangeRateService:
             return False
 
     async def get_rates(self, force_refresh=False):
-        """Get exchange rates (from cache or fresh fetch)."""
+        """Get exchange rates, always preferring fresh ECB data.
+
+        Rates are only ever returned when no older than ECB.RATES_MAX_AGE_SECONDS
+        (stale rates risk materially wrong prices). Resolution order:
+        fresh ECB fetch -> persistent cache within max age. The cache is written
+        on every successful fetch, so it acts as a self-updating fallback. If
+        nothing qualifies, an empty dict is returned and callers skip conversion
+        gracefully. This method never raises, so a transient ECB outage can never
+        block setup or price processing.
+        """
         now = time.time()
-        cache_loaded = False
-        if not self.rates:  # If no rates in memory
-            cache_loaded = await self._load_cache()
 
-        # Decide if fetch is needed
-        needs_fetch = (
-            force_refresh or not self.rates
-        )  # Fetch if forced or no rates in memory/cache
+        # Discard in-memory rates that have aged out so they can't be reused.
+        if self.rates and not self._rates_fresh():
+            _LOGGER.info("Held exchange rates exceeded max age; discarding.")
+            self.rates = {}
+            self.last_update = 0
 
-        if needs_fetch:
+        # Fall back to cache only when nothing fresh is in memory. _load_cache
+        # itself rejects anything older than the max age.
+        if not self.rates:
+            await self._load_cache()
+
+        # Fetch fresh rates when forced, or when we still have nothing fresh.
+        if force_refresh or not self.rates:
             fresh_rates = None
-            fetch_exception = None
             try:
                 _LOGGER.debug("Attempting to fetch fresh exchange rates from ECB.")
-                fresh_rates = await self._fetch_ecb_rates()  # Decorated with retry
+                fresh_rates = (
+                    await self._fetch_ecb_rates()
+                )  # retries; raises on failure
             except Exception as e:
-                fetch_exception = e  # Store exception
                 _LOGGER.warning("Fetching fresh ECB rates failed after retries: %s", e)
 
             if fresh_rates:
@@ -180,30 +241,30 @@ class ExchangeRateService:
                 self.rates = fresh_rates
                 self.last_update = now
                 await self._save_cache()
-                # Fall through to return self.rates
-            elif (
-                self.rates
-            ):  # Fetch failed, but we have rates (from memory or loaded cache)
-                _LOGGER.warning("Using existing rates as fresh fetch failed.")
-                # Fall through to return self.rates
-            else:  # Fetch failed AND we still have no rates
-                _LOGGER.error("Failed to fetch exchange rates and no cache available.")
-                # Raise the original exception if it exists, otherwise a generic one
-                if fetch_exception:
-                    raise fetch_exception  # Raise the original error (e.g. ClientConnectorError)
-                else:
-                    # Should not happen if fetch was attempted, but as a fallback
-                    raise ValueError(
-                        "Could not retrieve exchange rates (fetch attempt failed silently)"
-                    )
 
-        # Return rates (either fresh, loaded from cache, or from memory)
-        if not self.rates:
-            # This case should only be hit if fetch wasn't needed but rates are somehow empty.
-            _LOGGER.error("Exchange rates are unexpectedly empty after processing.")
-            raise ValueError("Exchange rates unavailable.")
+        # Fresh fetch succeeded, or a fresh (<= max age) cache was loaded above.
+        if self.rates:
+            return self.rates
 
+        # Nothing within the max age: do not risk wrong prices. Leave rates empty
+        # so currency conversion is skipped. The persistent cache (written on
+        # every successful fetch) and the scheduled handlers recover us as soon
+        # as ECB is reachable again.
+        _LOGGER.error(
+            "No exchange rates within %dh available (ECB unreachable and no "
+            "fresh cache). Currency conversion is paused; prices remain in their "
+            "source currency until ECB is reachable again.",
+            int(ECB.RATES_MAX_AGE_SECONDS // 3600),
+        )
+        self.rates = {}
+        self.last_update = 0
         return self.rates
+
+    def _rates_fresh(self):
+        """Return True if currently held rates are within the max age."""
+        if not self.rates:
+            return False
+        return (time.time() - self.last_update) <= ECB.RATES_MAX_AGE_SECONDS
 
     async def convert(self, amount, from_currency, to_currency):
         """Convert an amount from one currency to another."""
@@ -405,12 +466,25 @@ class ExchangeRateService:
 _EXCHANGE_SERVICE = None
 
 
-async def get_exchange_service(session=None):
-    """Get the exchange service singleton."""
+async def get_exchange_service(session=None, hass=None):
+    """Get the exchange service singleton.
+
+    When ``hass`` is provided we use Home Assistant's shared aiohttp session
+    (async_get_clientsession) instead of opening our own -- this follows the
+    inject-websession guidance and avoids blocking SSL certificate loading on the
+    event loop. The rate cache is stored under the HA config directory so it
+    survives container/add-on recreation (e.g. version upgrades). Without
+    ``hass`` (standalone scripts/tests), a home-directory path is used.
+    """
     global _EXCHANGE_SERVICE
 
     if _EXCHANGE_SERVICE is None:
-        _EXCHANGE_SERVICE = ExchangeRateService(session)
+        if session is None and hass is not None:
+            session = async_get_clientsession(hass)
+        cache_file = (
+            hass.config.path(EXCHANGE_RATE_CACHE_FILENAME) if hass is not None else None
+        )
+        _EXCHANGE_SERVICE = ExchangeRateService(session, cache_file=cache_file)
         await _EXCHANGE_SERVICE.get_rates()  # Initialize rates
 
     return _EXCHANGE_SERVICE
