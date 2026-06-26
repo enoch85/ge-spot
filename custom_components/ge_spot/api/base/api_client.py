@@ -151,9 +151,20 @@ class ApiClient:
                         # Track consecutive errors for rate limit detection
                         self._track_error_response(url, response.status)
 
-                        _LOGGER.error(
-                            f"API request failed with status {response.status}: {url}"
-                        )
+                        if response.status == 429:
+                            # Rate limiting is expected and handled by the
+                            # retry/fallback path; _track_error_response already
+                            # surfaces it once at WARNING. Log the per-request
+                            # detail at DEBUG so a rate-limited source shared by
+                            # many areas does not flood the log with ERRORs.
+                            _LOGGER.debug(
+                                f"Rate limited (HTTP 429), will fall back / "
+                                f"retry later: {url}"
+                            )
+                        else:
+                            _LOGGER.error(
+                                f"API request failed with status {response.status}: {url}"
+                            )
 
                         # Try to get more detailed error information
                         try:

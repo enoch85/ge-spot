@@ -152,9 +152,18 @@ class EnergyChartsAPI(BasePriceAPI):
             # Check for error response from API client first
             if isinstance(response, dict) and response.get("error"):
                 error_msg = response.get("message", "Unknown error")
-                _LOGGER.error(
-                    f"Energy-Charts API request failed for {area}: {error_msg}"
-                )
+                if response.get("status_code") == 429:
+                    # Rate limiting is expected and handled by the fallback
+                    # manager; don't log it at ERROR (Energy-Charts' public API
+                    # is strict, so many areas sharing it would flood the log).
+                    _LOGGER.warning(
+                        f"Energy-Charts rate limited for {area}; "
+                        f"will fall back / retry: {error_msg}"
+                    )
+                else:
+                    _LOGGER.error(
+                        f"Energy-Charts API request failed for {area}: {error_msg}"
+                    )
                 return None
 
             # Check for valid response structure
