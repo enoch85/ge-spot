@@ -44,8 +44,15 @@ class BaseElectricityPriceSensor(SensorEntity):
         if not isinstance(config_data, dict):
             raise TypeError("config_data must be a dictionary")
 
-        # Store timezone service for EV Smart Charging attribute conversion
-        self._tz_service = getattr(coordinator, "_tz_service", None)
+        # Store timezone service for EV Smart Charging attribute conversion.
+        # The coordinator (a DataUpdateCoordinator) does not hold the timezone
+        # service directly — it lives on its price_manager — so resolve from
+        # either. Without this the service is always None and interval-time
+        # attributes fall back to Home Assistant's default zone instead of the
+        # configured area timezone.
+        self._tz_service = getattr(coordinator, "_tz_service", None) or getattr(
+            getattr(coordinator, "price_manager", None), "_tz_service", None
+        )
 
         self._area = config_data.get(Attributes.AREA)
         self._vat = config_data.get(Attributes.VAT, 0)
@@ -94,6 +101,19 @@ class BaseElectricityPriceSensor(SensorEntity):
             self._attr_native_unit_of_measurement = f"{self._currency}/kWh"
 
         self._attr_suggested_display_precision = self._precision
+
+    @property
+    def _target_timezone(self):
+        """Timezone used for interval-time attributes.
+
+        Interval keys are in the configured area timezone (Local Area Time
+        mode), so datetimes and current-hour lookups must use the same zone.
+        Falls back to Home Assistant's default zone only if the service is
+        unavailable.
+        """
+        if self._tz_service:
+            return self._tz_service.target_timezone
+        return dt_util.get_default_time_zone()
 
     @property
     def available(self):
@@ -221,13 +241,8 @@ class BaseElectricityPriceSensor(SensorEntity):
         # Format: [{"time": datetime object, "value": float}, ...]
         # External integrations (EV Smart Charging) expect this format
 
-        # Get target timezone
-        target_tz = None
-        if self._tz_service:
-            target_tz = self._tz_service.target_timezone
-        else:
-            # Fallback to HA default timezone
-            target_tz = dt_util.get_default_time_zone()
+        # Get target timezone (interval keys are area-local; see _target_timezone)
+        target_tz = self._target_timezone
 
         # Convert today's prices from HH:MM dict to list of datetime objects
         if self.coordinator.data and self.coordinator.data.today_interval_prices:
