@@ -194,7 +194,7 @@ class AreaMapping:
         Area.LV: "10YLV-1001A00074",  # Fixed: added missing zero
         Area.LT: "10YLT-1001A0008Q",  # Fixed: corrected EIC code
         Area.NL: "10YNL----------L",
-        Area.NO1: "10Y1001A1001A48H",  # Updated EIC code (was: 10Y1001A1001A840)
+        Area.NO1: "10YNO-1--------2",  # East Norway (Oslo) — distinct zone from NO5
         Area.NO2: "10YNO-2--------T",  # Updated EIC code (was: 10Y1001A1001A85Y)
         Area.NO3: "10YNO-3--------J",  # Updated EIC code (was: 10Y1001A1001A86W)
         Area.NO4: "10YNO-4--------9",  # Updated EIC code (was: 10Y1001A1001A87U)

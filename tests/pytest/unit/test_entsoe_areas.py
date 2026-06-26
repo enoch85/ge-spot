@@ -70,6 +70,18 @@ class TestEntsoeAreasValidation:
                 area in AreaMapping.ENTSOE_AREAS
             ), f"Newly enabled area '{area}' not visible in ENTSOE_AREAS"
 
+    def test_no1_no5_distinct_eic(self):
+        """NO1 (Oslo) and NO5 (Bergen) are distinct bidding zones with distinct EICs.
+
+        Regression: NO1 was previously mapped to NO5's EIC (10Y1001A1001A48H),
+        so NO1 users received NO5/Bergen prices from ENTSO-E.
+        """
+        assert AreaMapping.ENTSOE_MAPPING["NO1"] == "10YNO-1--------2"
+        assert AreaMapping.ENTSOE_MAPPING["NO5"] == "10Y1001A1001A48H"
+        assert (
+            AreaMapping.ENTSOE_MAPPING["NO1"] != AreaMapping.ENTSOE_MAPPING["NO5"]
+        ), "NO1 and NO5 must not share an EIC code"
+
     def test_non_working_areas_hidden(self):
         """Test that areas with no data are hidden from ENTSOE_AREAS but kept in ENTSOE_MAPPING."""
         non_working = {
@@ -115,10 +127,6 @@ class TestEntsoeAreasValidation:
                 "GB",
                 "IE(SEM)",
             ],  # Great Britain and Ireland SEM share code
-            "10Y1001A1001A48H": [
-                "NO1",
-                "NO5",
-            ],  # NO1 and NO5 might share (verify this is intentional)
             # Note: DE-LU is the only area for the Germany-Luxembourg bidding zone now
             # (DE was removed as it's the same bidding zone)
         }
