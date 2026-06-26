@@ -5,7 +5,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.data_entry_flow import AbortFlow, FlowResult
 
 from ..const import DOMAIN
 from ..const.config import Config
@@ -96,6 +96,11 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
                 # Proceed to source priority step
                 return await self.async_step_source_priority()
 
+            except AbortFlow:
+                # Expected flow control (already_configured / already_in_progress
+                # from async_set_unique_id / _abort_if_unique_id_configured).
+                # Let Home Assistant handle it instead of masking it as "unknown".
+                raise
             except Exception as e:
                 _LOGGER.error(f"Unexpected error in async_step_user: {e}")
                 self._errors["base"] = "unknown"
