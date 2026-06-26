@@ -622,7 +622,11 @@ class TestEdgeCasesAndErrorHandling:
         assert any(p > 0 for p in prices), "Should preserve positive prices"
 
     def test_very_large_prices_preserved(self, timezone_service):
-        """Test that very large prices (price spikes) are preserved."""
+        """Test that very large prices (price spikes) are preserved.
+
+        Amber 'perKwh' is in cents/kWh and the parser normalizes it to AUD/kWh
+        (/100), so a 15000 c/kWh spike is preserved as 150.0 AUD/kWh.
+        """
         parser = AmberParser(timezone_service=timezone_service)
 
         # Australia occasionally has extreme price spikes
@@ -638,7 +642,7 @@ class TestEdgeCasesAndErrorHandling:
         result = parser.parse(test_data)
 
         prices = list(result["interval_raw"].values())
-        assert max(prices) == 15000.0, "Should preserve extreme price spikes"
+        assert max(prices) == 150.0, "Should preserve extreme price spikes (AUD/kWh)"
 
 
 # ============================================================================

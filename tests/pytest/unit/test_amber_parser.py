@@ -45,3 +45,21 @@ def test_parse_fetch_raw_data_wrapper():
     }
     result = AmberParser().parse(wrapper)
     assert len(result["interval_raw"]) == 2, "Amber wrapper dict must yield prices"
+
+
+def test_parse_normalizes_perkwh_cents_to_aud_per_kwh():
+    """'perKwh' (cents/kWh) is normalized to AUD/kWh (25 c/kWh -> 0.25 AUD/kWh).
+
+    Without this, the DataProcessor reads the value as AUD/MWh and the final
+    price is ~10x too low.
+    """
+    result = AmberParser().parse(
+        [{"startTime": "2026-06-25T00:00:00Z", "perKwh": 25.0}]
+    )
+    assert list(result["interval_raw"].values()) == [0.25]
+
+
+def test_parse_rrp_fallback_normalizes_to_aud_per_kwh():
+    """'rrp' (AUD/MWh) also normalizes to AUD/kWh (100 AUD/MWh -> 0.10 AUD/kWh)."""
+    result = AmberParser().parse([{"startTime": "2026-06-25T00:00:00Z", "rrp": 100.0}])
+    assert list(result["interval_raw"].values()) == [0.10]

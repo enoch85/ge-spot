@@ -121,9 +121,13 @@ class AmberParser(BasePriceParser):
                     _LOGGER.debug(f"Could not parse Amber price value: {price_cents}")
                     continue
 
-                interval_raw[interval_key] = price  # Store price in Cents/kWh
+                # Amber 'perKwh'/'rrp' are in cents/kWh; normalize to AUD/kWh so
+                # the DataProcessor reads them with currency=AUD and
+                # source_unit=kWh. cents/kWh -> AUD/kWh = / 100.
+                price_aud_kwh = price / 100.0
+                interval_raw[interval_key] = price_aud_kwh
                 _LOGGER.debug(
-                    f"Storing raw Amber price for {interval_key}: {price} Cents/kWh"
+                    f"Storing Amber price for {interval_key}: {price_aud_kwh} AUD/kWh"
                 )
 
             except (ValueError, TypeError, KeyError) as e:
@@ -146,7 +150,7 @@ class AmberParser(BasePriceParser):
                 "currency": Currency.AUD,  # Amber usually uses AUD
                 "timezone": "Australia/Sydney",  # Default Amber timezone
                 "area": "unknown",  # Amber doesn't typically specify area in price data
-                "source_unit": "Cents/kWh",  # Amber 'perKwh' is usually Cents/kWh
+                "source_unit": "kWh",  # prices are normalized to AUD/kWh by the parser
             }
         )
 
