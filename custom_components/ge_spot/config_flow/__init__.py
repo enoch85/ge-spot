@@ -1,14 +1,12 @@
-"""Config flow for GE-Spot integration."""
+"""Config flow for GE-Spot integration.
 
-import logging
+Home Assistant discovers the config flow by importing this package, which
+registers ``GSpotConfigFlow`` via its ``domain=DOMAIN`` class definition. The
+options flow is provided by ``GSpotConfigFlow.async_get_options_flow`` (a
+staticmethod), so no module-level handler is needed here.
+"""
 
-from .implementation import GSpotConfigFlow  # noqa: F401
+from .implementation import GSpotConfigFlow
 from .options import GSpotOptionsFlow
 
-_LOGGER = logging.getLogger(__name__)
-
-
-# This ensures the implementation of ConfigFlow is imported and used
-async def async_get_options_flow(config_entry):
-    """Get the options flow for this handler."""
-    return GSpotOptionsFlow(config_entry)
+__all__ = ["GSpotConfigFlow", "GSpotOptionsFlow"]
