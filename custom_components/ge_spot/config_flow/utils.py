@@ -61,7 +61,7 @@ def get_deduplicated_regions():
         # Sort by source priority (lower number = higher priority)
         sorted_variants = sorted(name_variants)
         # Choose the preferred region code based on source priority
-        for priority, region_code, display_name, source in sorted_variants:
+        for _priority, region_code, display_name, _source in sorted_variants:
             try:
                 # Only include if the region is supported by at least one API
                 supported_sources = get_sources_for_region(region_code)

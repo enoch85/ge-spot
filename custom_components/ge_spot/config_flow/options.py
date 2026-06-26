@@ -126,14 +126,12 @@ class GSpotOptionsFlow(OptionsFlow):
                 # Handle source priority, timezone reference, and Stromlinging supplier updates if present
                 # ALWAYS update entry.data to ensure API key and other data fields are persisted
                 updated_data = dict(self._data)
-                data_changed = False
 
                 if Config.SOURCE_PRIORITY in user_input:
                     updated_data[Config.SOURCE_PRIORITY] = user_input[
                         Config.SOURCE_PRIORITY
                     ]
                     user_input.pop(Config.SOURCE_PRIORITY)
-                    data_changed = True
 
                 if Config.TIMEZONE_REFERENCE in user_input:
                     _LOGGER.debug(
@@ -143,7 +141,6 @@ class GSpotOptionsFlow(OptionsFlow):
                         Config.TIMEZONE_REFERENCE
                     ]
                     # Keep in options as well
-                    data_changed = True
 
                 # Handle Stromligning supplier update
                 if Config.CONF_STROMLIGNING_SUPPLIER in user_input:
@@ -152,7 +149,6 @@ class GSpotOptionsFlow(OptionsFlow):
                     updated_data[Config.CONF_STROMLIGNING_SUPPLIER] = supplier_value
                     # Remove from options dict before saving options
                     user_input.pop(Config.CONF_STROMLIGNING_SUPPLIER)
-                    data_changed = True
 
                 # Update the config entry data (this includes the API key from self._data)
                 entry = self.hass.config_entries.async_get_entry(self.entry_id)
