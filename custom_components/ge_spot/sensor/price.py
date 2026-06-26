@@ -322,7 +322,9 @@ class PriceDifferenceSensor(PriceValueSensor):
 class PricePercentSensor(PriceValueSensor):
     """Sensor for price percentage relative to a reference value."""
 
-    device_class = SensorDeviceClass.MONETARY
+    # A percentage (unit "%") is not a monetary amount; MONETARY here is a
+    # device_class/unit mismatch. Override the base MONETARY device_class to None.
+    device_class = None
     state_class = None
 
     def __init__(
