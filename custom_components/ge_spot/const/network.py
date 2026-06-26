@@ -1,5 +1,7 @@
 """Network-related constants for GE-Spot integration."""
 
+from .time import TimeInterval
+
 
 class Network:
     """Network-related constants."""
@@ -62,11 +64,12 @@ class Network:
             ),  # 13:00-15:00 - For tomorrow's data (most EU markets publish around 13:00-14:00 CET)
         ]
 
-        # Data validity settings (in intervals, assuming 15-min intervals = 96/day)
-        DATA_SAFETY_BUFFER_INTERVALS = (
-            8  # Fetch when we have less than 8 intervals remaining (~2 hours)
-        )
-        REQUIRED_TOMORROW_INTERVALS = 76  # Require at least 76 intervals (~80% of 96) to consider tomorrow data "complete"
+        # Data validity settings (interval counts derived from TimeInterval so
+        # they stay correct if the interval resolution changes).
+        # Fetch when fewer than ~2 hours of intervals remain.
+        DATA_SAFETY_BUFFER_INTERVALS = TimeInterval.get_intervals_per_hour() * 2
+        # Require at least ~80% of a day's intervals to treat tomorrow "complete".
+        REQUIRED_TOMORROW_INTERVALS = int(TimeInterval.get_intervals_per_day() * 0.8)
 
     class URLs:
         """Base URLs for various APIs."""

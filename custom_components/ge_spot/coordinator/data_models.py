@@ -352,11 +352,15 @@ class IntervalPriceData:
         if not self.tomorrow_interval_prices:
             return False
 
-        expected_intervals = TimeInterval.get_intervals_per_day()
         actual_intervals = len(self.tomorrow_interval_prices)
 
-        # Allow for DST transitions (92-100 intervals)
-        return 92 <= actual_intervals <= 100
+        # Allow for DST transitions: spring-forward days are shorter and
+        # fall-back days longer than a normal day (config-driven via TimeInterval).
+        return (
+            TimeInterval.get_intervals_per_day_dst_spring()
+            <= actual_intervals
+            <= TimeInterval.get_intervals_per_day_dst_fall()
+        )
 
     @property
     def export_current_price(self) -> Optional[float]:

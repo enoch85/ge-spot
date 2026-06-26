@@ -182,6 +182,8 @@ class TestHourlyAverageSensor:
             "Hourly Average Price",
             day_offset=0,
         )
+        # Interval keys and the mocked "now" are both in UTC here.
+        sensor._tz_service = Mock(target_timezone=timezone.utc)
 
         # The sensor should return hour 01:00's average
         value = sensor.native_value
@@ -316,6 +318,7 @@ class TestHourlyAverageSensor:
             "Hourly Average Price",
             day_offset=0,
         )
+        sensor._tz_service = Mock(target_timezone=timezone.utc)
 
         value = sensor.native_value
         assert value == 53.0  # Average of 23:00 hour
@@ -341,6 +344,7 @@ class TestHourlyAverageSensor:
             "Hourly Average Price",
             day_offset=0,
         )
+        sensor2._tz_service = Mock(target_timezone=timezone.utc)
 
         value2 = sensor2.native_value
         assert value2 == 13.0  # Average of 00:00 hour
@@ -522,6 +526,7 @@ class TestHourlyAverageSensor:
                 "Hourly Average Price",
                 day_offset=0,
             )
+            sensor._tz_service = Mock(target_timezone=timezone.utc)
 
             # Should return None since current hour has no data
             assert sensor.native_value is None

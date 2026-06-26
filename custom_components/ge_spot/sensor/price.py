@@ -322,7 +322,9 @@ class PriceDifferenceSensor(PriceValueSensor):
 class PricePercentSensor(PriceValueSensor):
     """Sensor for price percentage relative to a reference value."""
 
-    device_class = SensorDeviceClass.MONETARY
+    # A percentage (unit "%") is not a monetary amount; MONETARY here is a
+    # device_class/unit mismatch. Override the base MONETARY device_class to None.
+    device_class = None
     state_class = None
 
     def __init__(
@@ -447,8 +449,9 @@ class HourlyAverageSensor(PriceValueSensor):
 
             # Get current hour (or first hour of tomorrow for tomorrow sensor)
             if self._day_offset == 0:
-                # For today: get current hour
-                now = dt_util.now()
+                # For today: current hour in the area timezone so it matches the
+                # area-local interval keys (HA's zone may differ from the area's).
+                now = dt_util.now().astimezone(self._target_timezone)
                 current_hour = f"{now.hour:02d}:00"
                 return hourly_prices.get(current_hour)
             else:
@@ -538,8 +541,8 @@ class HourlyAverageSensor(PriceValueSensor):
         Returns:
             List of dicts with 'time' (datetime) and 'value' (float) keys
         """
-        # Get target timezone
-        target_tz = dt_util.get_default_time_zone()
+        # Get target timezone (area-local interval keys, see _target_timezone)
+        target_tz = self._target_timezone
 
         hourly_list = []
         for hhmm_key in sorted(hourly_prices.keys()):
@@ -576,8 +579,8 @@ class HourlyAverageSensor(PriceValueSensor):
         if not self.coordinator.data:
             return attrs
 
-        # Get target timezone for datetime conversion
-        target_tz = dt_util.get_default_time_zone()
+        # Get target timezone for datetime conversion (area-local interval keys)
+        target_tz = self._target_timezone
         now = dt_util.now().astimezone(target_tz)
 
         # Calculate hourly averages for today and tomorrow

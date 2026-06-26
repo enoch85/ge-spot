@@ -1,5 +1,6 @@
 """API handler for AEMO (Australian Energy Market Operator) - NEMWEB Pre-dispatch."""
 
+import asyncio
 import logging
 import re
 from datetime import datetime, timezone
@@ -95,9 +96,14 @@ class AemoAPI(BasePriceAPI):
                 _LOGGER.error("Failed to download pre-dispatch file")
                 return None
 
-            # Step 3: Extract CSV from ZIP
+            # Step 3: Extract CSV from ZIP. zipfile decompression + UTF-8 decode
+            # are blocking, so run them in an executor to keep the event loop
+            # responsive (Home Assistant flags blocking calls on the loop).
             _LOGGER.debug(f"Extracting CSV from ZIP ({len(zip_data):,} bytes)")
-            csv_content = unzip_single_file(zip_data, expected_extension=".csv")
+            loop = asyncio.get_running_loop()
+            csv_content = await loop.run_in_executor(
+                None, unzip_single_file, zip_data, ".csv"
+            )
 
             _LOGGER.info(
                 f"Extracted CSV ({len(csv_content):,} characters) for region {area}"

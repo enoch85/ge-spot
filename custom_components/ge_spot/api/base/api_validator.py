@@ -75,28 +75,30 @@ class ApiValidator:
                 _LOGGER.warning(
                     f"Error calculating DST-aware intervals for {timezone}: {e}, using default"
                 )
-                default_min = 48
+                default_min = TimeInterval.get_intervals_per_day() // 2
         else:
-            default_min = 48
+            default_min = TimeInterval.get_intervals_per_day() // 2
 
         # Use provided min_intervals or calculated default
         effective_min = min_intervals if min_intervals is not None else default_min
 
         # Special handling for sources with different data availability patterns
         if source_name.lower() == Source.AEMO.lower():
-            # For AEMO, we only require at least 16 intervals of data (4 hours with 15-min intervals)
-            # Missing intervals will be filled from fallback sources if available
-            if interval_count < 16:
+            # For AEMO, we only require at least 4 hours of data; missing
+            # intervals are filled from fallback sources if available.
+            aemo_min = TimeInterval.get_intervals_per_hour() * 4
+            if interval_count < aemo_min:
                 _LOGGER.warning(
-                    f"No interval prices from {source_name}: {interval_count}/16"
+                    f"No interval prices from {source_name}: {interval_count}/{aemo_min}"
                 )
                 return False
         elif source_name.lower() == Source.ENTSOE.lower():
-            # For ENTSO-E, we only require at least 24 intervals of data (6 hours with 15-min intervals)
-            # This is because ENTSO-E sometimes only provides partial data
-            if interval_count < 24:
+            # For ENTSO-E, we only require at least 6 hours of data because it
+            # sometimes only provides partial data.
+            entsoe_min = TimeInterval.get_intervals_per_hour() * 6
+            if interval_count < entsoe_min:
                 _LOGGER.warning(
-                    f"Insufficient interval prices from {source_name}: {interval_count}/24"
+                    f"Insufficient interval prices from {source_name}: {interval_count}/{entsoe_min}"
                 )
                 return False
         elif interval_count < effective_min:

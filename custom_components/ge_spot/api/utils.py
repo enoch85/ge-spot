@@ -7,7 +7,6 @@ from functools import lru_cache
 from zoneinfo import ZoneInfo
 
 from ..const.network import Network
-from ..timezone import TimezoneService
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -80,69 +79,3 @@ async def fetch_with_retry(
         await asyncio.sleep(retry_interval)
     _LOGGER.warning(f"Failed to fetch data before cutoff time. Proceeding without it.")
     return None
-
-
-def get_now(reference_time=None, hass=None):
-    """Get current time with consistent handling.
-
-    Args:
-        reference_time: Optional reference time to use instead of now
-        hass: Optional Home Assistant instance for timezone handling
-
-    Returns:
-        A timezone-aware datetime object
-    """
-    if reference_time is None:
-        now = datetime.datetime.now(datetime.timezone.utc)
-    else:
-        now = reference_time
-
-    # Convert to local time if Home Assistant instance provided
-    if hass:
-        tz_service = TimezoneService(hass)
-        return tz_service.convert_to_target_timezone(now)
-
-    return now
-
-
-def format_result(data, source_name, currency):
-    """Format API result with common metadata.
-
-    Args:
-        data: The processed data dictionary
-        source_name: Name of the data source
-        currency: Target currency
-
-    Returns:
-        Dictionary with added metadata
-    """
-    if not data:
-        return None
-
-    # Add standardized metadata
-    data["data_source"] = source_name
-    data["last_updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    data["currency"] = currency
-
-    return data
-
-
-def check_prices_count(interval_prices):
-    """Check if we have the expected number of interval prices.
-
-    Args:
-        interval_prices: Dictionary of interval prices
-
-    Returns:
-        True if count is reasonable, False otherwise
-    """
-    from ..const.time import TimeInterval
-
-    expected_count = TimeInterval.get_intervals_per_day()
-
-    if len(interval_prices) != expected_count and len(interval_prices) > 0:
-        _LOGGER.warning(
-            f"Expected {expected_count} interval prices, got {len(interval_prices)}. Prices may be incomplete."
-        )
-        return False
-    return True

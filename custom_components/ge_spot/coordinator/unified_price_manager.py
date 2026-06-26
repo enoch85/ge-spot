@@ -879,24 +879,29 @@ class UnifiedPriceManager:
                     tomorrow, self._tz_service.target_timezone
                 )
 
-                # Check for DST transitions for logging
-                is_today_dst = expected_today != 96
-                is_tomorrow_dst = expected_tomorrow != 96
+                # Check for DST transitions for logging. Interval counts are
+                # config-driven (TimeInterval), never hardcoded.
+                normal_intervals = TimeInterval.get_intervals_per_day()
+                spring_intervals = TimeInterval.get_intervals_per_day_dst_spring()
+                fall_intervals = TimeInterval.get_intervals_per_day_dst_fall()
+
+                is_today_dst = expected_today != normal_intervals
+                is_tomorrow_dst = expected_tomorrow != normal_intervals
                 today_dst_type = (
                     DSTTransitionType.SPRING_FORWARD
-                    if expected_today == 92
+                    if expected_today == spring_intervals
                     else (
                         DSTTransitionType.FALL_BACK
-                        if expected_today == 100
+                        if expected_today == fall_intervals
                         else "normal"
                     )
                 )
                 tomorrow_dst_type = (
                     DSTTransitionType.SPRING_FORWARD
-                    if expected_tomorrow == 92
+                    if expected_tomorrow == spring_intervals
                     else (
                         DSTTransitionType.FALL_BACK
-                        if expected_tomorrow == 100
+                        if expected_tomorrow == fall_intervals
                         else "normal"
                     )
                 )

@@ -42,12 +42,19 @@ class AmberParser(BasePriceParser):
         if isinstance(raw_data, list):
             price_list = raw_data
         elif isinstance(raw_data, dict):
-            # Check common keys where the list might be nested
-            if "data" in raw_data and isinstance(raw_data["data"], list):
-                price_list = raw_data["data"]
-            elif "prices" in raw_data and isinstance(raw_data["prices"], list):
-                price_list = raw_data["prices"]
-            # Add more checks if Amber API structure varies
+            # The Amber API returns a bare list. AmberAPI.fetch_raw_data wraps it
+            # as {"raw_data": {"data": [...]}}, and the DataProcessor re-parses
+            # that wrapper. Look for the list at the top level AND nested one
+            # level deeper under "raw_data" so both inputs yield prices.
+            for candidate in (raw_data, raw_data.get("raw_data")):
+                if not isinstance(candidate, dict):
+                    continue
+                if isinstance(candidate.get("data"), list):
+                    price_list = candidate["data"]
+                    break
+                if isinstance(candidate.get("prices"), list):
+                    price_list = candidate["prices"]
+                    break
 
         if not price_list:
             _LOGGER.warning("No valid price list found in Amber data to parse")
@@ -114,9 +121,13 @@ class AmberParser(BasePriceParser):
                     _LOGGER.debug(f"Could not parse Amber price value: {price_cents}")
                     continue
 
-                interval_raw[interval_key] = price  # Store price in Cents/kWh
+                # Amber 'perKwh'/'rrp' are in cents/kWh; normalize to AUD/kWh so
+                # the DataProcessor reads them with currency=AUD and
+                # source_unit=kWh. cents/kWh -> AUD/kWh = / 100.
+                price_aud_kwh = price / 100.0
+                interval_raw[interval_key] = price_aud_kwh
                 _LOGGER.debug(
-                    f"Storing raw Amber price for {interval_key}: {price} Cents/kWh"
+                    f"Storing Amber price for {interval_key}: {price_aud_kwh} AUD/kWh"
                 )
 
             except (ValueError, TypeError, KeyError) as e:
@@ -139,7 +150,7 @@ class AmberParser(BasePriceParser):
                 "currency": Currency.AUD,  # Amber usually uses AUD
                 "timezone": "Australia/Sydney",  # Default Amber timezone
                 "area": "unknown",  # Amber doesn't typically specify area in price data
-                "source_unit": "Cents/kWh",  # Amber 'perKwh' is usually Cents/kWh
+                "source_unit": "kWh",  # prices are normalized to AUD/kWh by the parser
             }
         )
 

@@ -156,10 +156,6 @@ class PeriodType:
     TOMORROW = "tomorrow"
     OTHER = "other"
 
-    MIN_VALID_INTERVALS = (
-        80  # Minimum intervals required for valid data (80 of 96 = 83%)
-    )
-
 
 class DSTTransitionType:
     """DST transition type constants."""
