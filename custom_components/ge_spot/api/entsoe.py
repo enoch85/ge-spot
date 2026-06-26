@@ -112,8 +112,20 @@ class EntsoeAPI(BasePriceAPI):
             )
             raise ValueError(f"No API key provided for {self.source_type}")
 
-        # Map area code to ENTSO-E area code
-        entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area.upper())
+        # Map area code to ENTSO-E area code. Area codes are canonical and some
+        # keys are mixed-case (e.g. "IT-North", "IT-Centre-South"), so do NOT
+        # upper-case the lookup or those zones would never match. Fall back to a
+        # case-insensitive match to tolerate any case-variant input.
+        entsoe_area = AreaMapping.ENTSOE_MAPPING.get(area)
+        if not entsoe_area:
+            entsoe_area = next(
+                (
+                    eic
+                    for code, eic in AreaMapping.ENTSOE_MAPPING.items()
+                    if code.upper() == area.upper()
+                ),
+                None,
+            )
         if not entsoe_area:
             raise ValueError(f"Area '{area}' not supported for ENTSO-E")
 
