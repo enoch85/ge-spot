@@ -15,7 +15,6 @@ from ..const.defaults import Defaults
 from ..const.areas import AreaMapping
 from ..api import get_sources_for_region
 from ..api import entsoe
-from ..utils.exchange_service import get_exchange_service
 
 from .utils import (
     get_deduplicated_regions,
@@ -290,7 +289,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     def _get_region_name(self, region_code):
         """Get display name for a region code."""
         region_name = None
-        for source, area_dict in AreaMapping.ALL_AREAS.items():
+        for area_dict in AreaMapping.ALL_AREAS.values():
             if region_code in area_dict:
                 region_name = area_dict[region_code]
                 break

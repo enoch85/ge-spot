@@ -1,7 +1,6 @@
 """Form schemas for config flow."""
 
 import logging
-from typing import Dict, Any
 import voluptuous as vol
 
 from homeassistant.helpers import selector
@@ -10,10 +9,9 @@ from ..const.areas import AreaMapping
 from ..const.config import Config
 from ..const.defaults import Defaults
 from ..const.sources import Source
-from ..const.display import DisplayUnit, UpdateInterval
+from ..const.display import DisplayUnit
 from ..const.time import TimezoneReference
 from ..utils.form_helper import FormHelper
-from ..api import get_sources_for_region
 
 _LOGGER = logging.getLogger(__name__)
 
