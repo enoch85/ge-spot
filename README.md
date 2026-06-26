@@ -1,6 +1,6 @@
 # GE-Spot: Global Electricity Spot Prices for Home Assistant
 
-![Version](https://img.shields.io/badge/version-1.8.1-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg) [![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration) [![Sponsor on GitHub](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-1f425f?logo=github&style=for-the-badge)](https://github.com/sponsors/enoch85)
+![Version](https://img.shields.io/badge/version-1.8.2-blue.svg) ![Status](https://img.shields.io/badge/status-stable-green.svg) [![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration) [![Sponsor on GitHub](https://img.shields.io/badge/sponsor-GitHub%20Sponsors-1f425f?logo=github&style=for-the-badge)](https://github.com/sponsors/enoch85)
 
 <img src="https://github.com/user-attachments/assets/7d765596-50b2-4d2a-926c-209da7120179" width="200" title="GE-Spot Logo" alt="GE-Spot Logo"/>
 
