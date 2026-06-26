@@ -134,26 +134,6 @@ class AreaMapping:
         Area.PL: Area.PL,
     }
 
-    # Nordpool region mapping for v2 API
-    # Is this needed?
-    NORDPOOL_REGION_MAPPING = {
-        Area.SE1: "Sweden",
-        Area.SE2: "Sweden",
-        Area.SE3: "Sweden",
-        Area.SE4: "Sweden",
-        Area.FI: "Finland",
-        Area.DK1: "Denmark",
-        Area.DK2: "Denmark",
-        Area.NO1: "Norway",
-        Area.NO2: "Norway",
-        Area.NO3: "Norway",
-        Area.NO4: "Norway",
-        Area.NO5: "Norway",
-        Area.LT: "Lithuania",
-        Area.LV: "Latvia",
-        Area.EE: "Estonia",
-    }
-
     # Nordpool areas display names
     NORDPOOL_AREAS = {
         # Nordic regions
@@ -389,18 +369,6 @@ class AreaMapping:
         "aemo": AEMO_AREAS,
         "stromligning": STROMLIGNING_AREAS,
         "comed": COMED_AREAS,
-    }
-
-    # Default areas for each source
-    DEFAULT_AREAS = {
-        "nordpool": Area.SE4,
-        "energi_data_service": Area.DK1,
-        "entsoe": "10Y1001A1001A47J",  # SE4 EIC Code (updated)
-        "energy_charts": Area.DE_LU,
-        "omie": Area.ES,
-        "aemo": Area.NSW1,
-        "stromligning": Area.DK1,
-        "comed": "5minutefeed",
     }
 
 

@@ -1,8 +1,7 @@
 """Constants for the GE-Spot integration."""
 
-# Domain and version - these stay as top-level constants as they're foundational identifiers
+# Domain - foundational top-level identifier
 DOMAIN = "ge_spot"
-CONFIG_VERSION = 1
 
 # Import all constant classes
 from .config import Config
@@ -29,7 +28,6 @@ from .api import EntsoE, Nordpool, Omie, Stromligning, ECB, SourceTimezone
 __all__ = [
     # Top-level constants
     "DOMAIN",
-    "CONFIG_VERSION",
     # Classes
     "Config",
     "Defaults",
