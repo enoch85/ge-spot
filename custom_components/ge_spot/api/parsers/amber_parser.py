@@ -42,12 +42,19 @@ class AmberParser(BasePriceParser):
         if isinstance(raw_data, list):
             price_list = raw_data
         elif isinstance(raw_data, dict):
-            # Check common keys where the list might be nested
-            if "data" in raw_data and isinstance(raw_data["data"], list):
-                price_list = raw_data["data"]
-            elif "prices" in raw_data and isinstance(raw_data["prices"], list):
-                price_list = raw_data["prices"]
-            # Add more checks if Amber API structure varies
+            # The Amber API returns a bare list. AmberAPI.fetch_raw_data wraps it
+            # as {"raw_data": {"data": [...]}}, and the DataProcessor re-parses
+            # that wrapper. Look for the list at the top level AND nested one
+            # level deeper under "raw_data" so both inputs yield prices.
+            for candidate in (raw_data, raw_data.get("raw_data")):
+                if not isinstance(candidate, dict):
+                    continue
+                if isinstance(candidate.get("data"), list):
+                    price_list = candidate["data"]
+                    break
+                if isinstance(candidate.get("prices"), list):
+                    price_list = candidate["prices"]
+                    break
 
         if not price_list:
             _LOGGER.warning("No valid price list found in Amber data to parse")
