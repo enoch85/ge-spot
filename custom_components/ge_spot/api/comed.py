@@ -10,6 +10,7 @@ import re
 from .base.api_client import ApiClient
 from ..const.sources import Source
 from ..const.api import ComEd
+from ..const.energy import EnergyUnit
 from ..const.network import Network
 from .parsers.comed_parser import ComedParser
 from ..utils.date_range import generate_date_ranges
@@ -63,6 +64,10 @@ class ComedAPI(BasePriceAPI):
                 "interval_raw": interval_raw,
                 "timezone": metadata.get("timezone", "America/Chicago"),
                 "currency": metadata.get("currency", "cents"),
+                # ComEd reports prices in cents/kWh (already per-kWh). Declare the
+                # source energy unit so the downstream MWh->kWh conversion in
+                # DataProcessor is not applied (which would divide prices by 1000).
+                "source_unit": EnergyUnit.KWH,
                 "source_name": "comed",
                 "raw_data": {
                     "data": raw_data,
