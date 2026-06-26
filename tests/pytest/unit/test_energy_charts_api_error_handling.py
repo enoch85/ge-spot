@@ -235,6 +235,39 @@ class TestEnergyChartsErrorHandling:
         assert len(error_messages) == 0, "Should have no errors for successful response"
 
     @pytest.mark.asyncio
+    async def test_rate_limit_429_logged_as_warning_not_error(self, api, caplog):
+        """A 429 (rate limit) response is handled by fallback and must not log ERROR.
+
+        Energy-Charts' public API is strict; when many configured areas share it
+        the per-request 429 must not flood the log at ERROR level.
+        """
+        mock_client = AsyncMock()
+        mock_client.fetch = AsyncMock(
+            return_value={
+                "error": True,
+                "status_code": 429,
+                "message": "Too Many Requests",
+                "url": "https://api.energy-charts.info/price",
+            }
+        )
+
+        caplog.clear()
+        with caplog.at_level(logging.DEBUG):
+            result = await api._fetch_data(
+                client=mock_client,
+                area="NO2NSL",
+                reference_time=datetime.now(timezone.utc),
+            )
+
+        assert result is None
+        error_messages = [r.message for r in caplog.records if r.levelname == "ERROR"]
+        assert error_messages == [], f"429 must not log ERROR, got: {error_messages}"
+        warnings = [r.message for r in caplog.records if r.levelname == "WARNING"]
+        assert any(
+            "rate limited" in m.lower() for m in warnings
+        ), f"Expected a rate-limit WARNING, got: {warnings}"
+
+    @pytest.mark.asyncio
     async def test_error_check_order(self, api, caplog):
         """Test that error checking happens in correct order.
 
