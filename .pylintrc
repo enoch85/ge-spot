@@ -9,9 +9,15 @@ ignore=__pycache__,.git,.storage,improvements,docs,scripts
 # Disable specific warnings that don't apply to our project
 # R0801: Similar lines in N files (duplicate-code) - We have legitimate patterns in tests/parsers
 # R0903: Too few public methods - API clients may be simple wrappers
+# C0301: Line too long - formatting is owned by black (line-length 88); black leaves
+#        the few unsplittable lines (long URLs, EIC tables, log strings) over the limit.
+# W1203: f-string in logging - this project intentionally uses f-string logging as its
+#        house style (see .github/copilot-instructions.md examples).
 disable=
     R0801,
-    R0903
+    R0903,
+    C0301,
+    W1203
 
 [FORMAT]
 # Maximum line length (PEP 8 default)
