@@ -28,7 +28,6 @@ from .schemas import (
     get_api_keys_schema,
     get_stromligning_config_schema,  # Import new schema
     get_user_schema,
-    get_default_values,
 )
 from .options import GSpotOptionsFlow
 
@@ -39,7 +38,6 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for GE-Spot integration."""
 
     VERSION = 1
-    CONNECTION_CLASS = "cloud_poll"
 
     def __init__(self):
         """Initialize the config flow."""
