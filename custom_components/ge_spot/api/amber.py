@@ -103,6 +103,9 @@ class AmberAPI(BasePriceAPI):
                 "interval_raw": interval_raw,
                 "timezone": self.get_timezone_for_area(None),
                 "currency": Currency.AUD,
+                # Parser normalizes Amber's cents/kWh to AUD/kWh; tell the
+                # DataProcessor the unit so it does not divide by 1000 as MWh.
+                "source_unit": "kWh",
                 "source_name": "amber",
                 "raw_data": {
                     "data": data,
