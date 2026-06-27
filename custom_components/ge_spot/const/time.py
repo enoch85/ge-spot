@@ -108,19 +108,26 @@ class TimeInterval:
         # Import here to avoid circular dependency (DSTHandler uses TimeInterval)
         from ..timezone.dst_handler import DSTHandler
 
-        # Normalize timezone to ZoneInfo object
-        # Handle both string and ZoneInfo inputs (also handles str() conversion for other types)
-        if isinstance(timezone_str, str):
-            tz = ZoneInfo(timezone_str)
-        elif isinstance(timezone_str, ZoneInfo):
+        # Normalize timezone to a ZoneInfo object.
+        if isinstance(timezone_str, ZoneInfo):
             tz = timezone_str
+        elif isinstance(timezone_str, str):
+            if not timezone_str or timezone_str == "None":
+                # Missing/invalid timezone name: we cannot determine DST
+                # transitions, so assume a normal day. Avoids ZoneInfo("None"),
+                # which both fails (no such zone) and blocks the event loop.
+                return TimeInterval.get_intervals_per_day()  # 96
+            tz = ZoneInfo(timezone_str)
+        elif timezone_str is None:
+            # No timezone provided (e.g. an area whose timezone service has not
+            # resolved a zone): assume a normal day rather than crashing or
+            # doing a blocking ZoneInfo("None") load inside the event loop.
+            return TimeInterval.get_intervals_per_day()  # 96
         else:
-            # If it's some other type (like a Mock or unknown object), try to convert to string first
-            try:
-                tz = ZoneInfo(str(timezone_str))
-            except Exception:
-                # Last resort: assume it's already a timezone-like object
-                tz = timezone_str
+            # Some other timezone-like object (e.g. a tzinfo instance); use it
+            # directly instead of ZoneInfo(str(obj)), which would block the event
+            # loop and fail for objects whose str() is not a valid zone name.
+            tz = timezone_str
 
         # Create timezone-aware datetime if needed
         if hasattr(date, "tzinfo") and date.tzinfo is None:
