@@ -37,6 +37,7 @@ class ApiClient:
         self._headers = {"User-Agent": "GE-Spot/1.0", "Accept": "application/json"}
         self._consecutive_error_counts = {}
         self._rate_limit_detected = {}
+        self._server_error_detected = {}
 
     async def get(
         self,
@@ -161,6 +162,18 @@ class ApiClient:
                                 f"Rate limited (HTTP 429), will fall back / "
                                 f"retry later: {url}"
                             )
+                        elif response.status in (502, 503, 504):
+                            # Transient upstream unavailability (bad gateway /
+                            # service unavailable / gateway timeout). Retried by
+                            # the fetch/fallback path; _track_error_response
+                            # surfaces one WARNING per source, so keep the
+                            # per-request detail at DEBUG to avoid flooding the
+                            # log during an upstream outage (e.g. ENTSO-E 503s).
+                            _LOGGER.debug(
+                                f"Upstream temporarily unavailable "
+                                f"(HTTP {response.status}), will retry / "
+                                f"fall back: {url}"
+                            )
                         else:
                             _LOGGER.error(
                                 f"API request failed with status {response.status}: {url}"
@@ -253,6 +266,15 @@ class ApiClient:
                     f"Integration will automatically retry later."
                 )
             self._rate_limit_detected[url_key] = True
+        elif status_code in (502, 503, 504):
+            # Transient upstream unavailability: surface one WARNING per source
+            # (reset on the next success) instead of an ERROR per request.
+            if url_key not in self._server_error_detected:
+                _LOGGER.warning(
+                    f"Upstream temporarily unavailable (HTTP {status_code}) for "
+                    f"{url_key}. Transient; integration will retry / fall back."
+                )
+            self._server_error_detected[url_key] = True
         elif status_code == 404:
             # Track consecutive 404s which may indicate rate limiting
             self._consecutive_error_counts[url_key] = (
@@ -278,6 +300,8 @@ class ApiClient:
             del self._consecutive_error_counts[url_key]
         if url_key in self._rate_limit_detected:
             del self._rate_limit_detected[url_key]
+        if url_key in self._server_error_detected:
+            del self._server_error_detected[url_key]
 
     async def close(self) -> None:
         """No-op: the aiohttp session is injected and owned by the caller.

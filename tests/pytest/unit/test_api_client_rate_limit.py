@@ -71,3 +71,36 @@ async def test_500_still_logged_as_error(caplog):
     assert any(
         "status 500" in m for m in errors
     ), f"500 should log ERROR, got: {errors}"
+
+
+async def test_503_not_logged_as_error(caplog):
+    """A transient 503 (upstream outage) returns the error dict, no ERROR record."""
+    client = ApiClient(
+        session=_FakeSession(_FakeResponse(503, body="<html>service down</html>"))
+    )
+
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG):
+        result = await client.fetch("https://web-api.tp.entsoe.eu/api")
+
+    assert result.get("error") is True
+    assert result.get("status_code") == 503
+    errors = [r.message for r in caplog.records if r.levelname == "ERROR"]
+    assert errors == [], f"503 must not log ERROR, got: {errors}"
+
+
+async def test_503_surfaces_single_warning(caplog):
+    """Repeated 503s to the same source warn once (per source), not per request."""
+    client = ApiClient(session=_FakeSession(_FakeResponse(503, body="down")))
+
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG):
+        await client.fetch("https://web-api.tp.entsoe.eu/api?doc=A44&x=1")
+        await client.fetch("https://web-api.tp.entsoe.eu/api?doc=A44&x=2")
+
+    warnings = [
+        r.message
+        for r in caplog.records
+        if r.levelname == "WARNING" and "Upstream temporarily unavailable" in r.message
+    ]
+    assert len(warnings) == 1, f"expected exactly one WARNING, got: {warnings}"
