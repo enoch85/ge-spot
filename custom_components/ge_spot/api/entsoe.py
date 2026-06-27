@@ -245,17 +245,27 @@ class EntsoeAPI(BasePriceAPI):
                     if isinstance(response, dict) and response.get("error"):
                         status_code = response.get("status_code")
                         message = response.get("message", "Unknown API error")
-                        _LOGGER.error(
-                            f"ENTSO-E API error (status {status_code}) for doc_type={doc_type}, range={period_start}-{period_end}: {message}"
-                        )
                         if status_code == 401:
-                            # Raise specific error for auth failure, including message from API if available
+                            # Auth failure is actionable by the user — log at ERROR
+                            # and raise so the caller surfaces it.
+                            _LOGGER.error(
+                                f"ENTSO-E API authentication failed (401 Unauthorized) "
+                                f"for area {area}. Check your API key."
+                            )
                             raise ValueError(
                                 f"ENTSO-E API authentication failed (401 Unauthorized). Check your API key. Message: {message}"
                             )
-                        else:
-                            # For other HTTP errors (e.g. 400, 500), log and continue to the next attempt
-                            continue  # Go to next doc_type/date_range
+                        # Other HTTP errors (e.g. transient 503s during an ENTSO-E
+                        # outage) are retried and handled by the fallback path; the
+                        # api_client already surfaces one WARNING per source. Log at
+                        # DEBUG without the (often HTML) response body to avoid
+                        # flooding the log.
+                        _LOGGER.debug(
+                            f"ENTSO-E non-OK response (status {status_code}) for "
+                            f"doc_type={doc_type}, range={period_start}-{period_end}; "
+                            f"trying next."
+                        )
+                        continue  # Go to next doc_type/date_range
 
                     # --- Handle Non-Error Responses ---
                     # If it wasn't an error dict, proceed with normal checks
