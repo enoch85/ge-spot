@@ -15,7 +15,6 @@ from ..const.currencies import CurrencyInfo
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..coordinator.data_processor import parse_interval_key
-from ..coordinator.data_validity import DataValidity
 
 _LOGGER = logging.getLogger(__name__)
 

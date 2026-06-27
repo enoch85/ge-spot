@@ -189,13 +189,9 @@ class TomorrowSensorMixin:
 class TomorrowExtremaPriceSensor(TomorrowSensorMixin, ExtremaPriceSensor):
     """Extrema price sensor for tomorrow data with proper availability behavior."""
 
-    pass
-
 
 class TomorrowAveragePriceSensor(TomorrowSensorMixin, PriceValueSensor):
     """Average price sensor for tomorrow data with proper availability behavior."""
-
-    pass
 
 
 class PriceStatisticSensor(PriceValueSensor):
@@ -668,5 +664,3 @@ class HourlyAverageSensor(PriceValueSensor):
 
 class TomorrowHourlyAverageSensor(TomorrowSensorMixin, HourlyAverageSensor):
     """Hourly average price sensor for tomorrow with proper availability."""
-
-    pass
