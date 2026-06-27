@@ -5,7 +5,7 @@ Instead of asking "do we have complete data?", we ask "how long is our data vali
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Optional, Tuple
 
 from ..const.network import Network
@@ -173,9 +173,6 @@ class FetchDecisionMaker:
         start_hour, end_hour = Network.Defaults.SPECIAL_HOUR_WINDOWS[1]
 
         if start_hour <= hour < end_hour:
-            # Check if we already have tomorrow's complete data
-            tomorrow_date = now.date() + timedelta(days=1)
-
             # Check against the required interval threshold (76 intervals = 80% of 96)
             if (
                 data_validity.tomorrow_interval_count

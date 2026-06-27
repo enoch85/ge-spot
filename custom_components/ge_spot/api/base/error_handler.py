@@ -12,47 +12,6 @@ from ...const.network import Network, NetworkErrorType, RetryStrategy
 _LOGGER = logging.getLogger(__name__)
 
 
-def with_error_handling(func=None, *, source_type: str = "unknown"):
-    """Decorator to handle errors in API calls.
-
-    Can be used as a decorator with or without arguments:
-
-    @with_error_handling
-    async def my_func():
-        ...
-
-    @with_error_handling(source_type="my_source")
-    async def my_func():
-        ...
-
-    Args:
-        func: The function to decorate
-        source_type: The source type identifier
-
-    Returns:
-        Decorated function
-    """
-    # Used as a decorator with arguments @with_error_handling(...)
-    if func is None:
-        return functools.partial(with_error_handling, source_type=source_type)
-
-    # For direct function calls or @with_error_handling without arguments
-    @functools.wraps(func)
-    async def wrapper(*args, **kwargs):
-        handler = ErrorHandler(source_type)
-        try:
-            return await func(*args, **kwargs)
-        except Exception as error:
-            error_type = handler.classify_error(error)
-            _LOGGER.error(
-                f"Error in {source_type} API call: {error}. "
-                f"Classified as {error_type}."
-            )
-            raise error
-
-    return wrapper
-
-
 def retry_with_backoff(
     func=None,
     *,
