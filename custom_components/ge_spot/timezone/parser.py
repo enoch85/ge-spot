@@ -149,12 +149,13 @@ class TimestampParser:
                     if str(source_tz) != "UTC":
                         dt = dt.astimezone(source_tz)
                     return dt
-                elif (
-                    "+" in timestamp_str
-                    or "-" in timestamp_str
-                    and "T" in timestamp_str
-                ):
-                    # ISO with timezone offset
+                elif re.search(r"[+-]\d{2}:?\d{2}$", timestamp_str):
+                    # ISO with an explicit timezone offset suffix (e.g. +02:00,
+                    # -0500). Detect a real trailing offset rather than any "+"/
+                    # "-": the date part always contains "-", so the old
+                    # `"+" in s or "-" in s and "T" in s` test (and binds tighter
+                    # than or) sent NAIVE ISO timestamps down this branch and
+                    # returned them without attaching the source timezone.
                     dt = datetime.fromisoformat(timestamp_str)
                     # Convert to source timezone if needed
                     if dt.tzinfo and dt.tzinfo != source_tz:
