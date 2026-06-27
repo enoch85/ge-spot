@@ -7,9 +7,6 @@ from ..api.base.error_handler import ErrorHandler, retry_with_backoff
 
 _LOGGER = logging.getLogger(__name__)
 
-# API validation
-from ..api.base.api_validator import ApiValidator
-
 # Import DataValidator from the local file
 from .data_validator import DataValidator
 
@@ -44,7 +41,6 @@ from .validation.validation_error import ValidationError
 
 __all__ = [
     # API utilities
-    "ApiValidator",
     "DataValidator",
     # Debug utilities
     "log_conversion",
