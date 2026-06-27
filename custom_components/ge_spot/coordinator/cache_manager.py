@@ -65,9 +65,14 @@ class CacheManager:
             )
             return
 
-        # Use provided target_date if available, otherwise use timestamp's date
+        # Use provided target_date if available; otherwise derive it from the
+        # timestamp in the display (target) timezone so the cache files data
+        # under the same day the prices are split/displayed in (see
+        # _to_target_tz). For same-timezone setups this equals timestamp.date().
         actual_target_date = (
-            target_date if target_date is not None else timestamp.date()
+            target_date
+            if target_date is not None
+            else self._to_target_tz(timestamp).date()
         )
 
         cache_key = self._generate_cache_key(area, source, actual_target_date)
@@ -96,6 +101,26 @@ class CacheManager:
         """Generate a consistent cache key including the target date."""
         date_str = target_date.isoformat()  # Format date as YYYY-MM-DD
         return f"{area}_{date_str}_{source}"
+
+    def _to_target_tz(self, value: datetime) -> datetime:
+        """Convert a timezone-aware datetime to the display (target) timezone.
+
+        Prices are split into today/tomorrow and keyed by interval in the target
+        timezone (the area timezone in LOCAL_AREA mode, the HA timezone
+        otherwise). The cache must therefore file days and detect the midnight
+        rollover in that same timezone; otherwise, for a user whose HA system
+        timezone differs from the area/display timezone, the day would roll over
+        at HA-system midnight instead of the displayed midnight. Returns the
+        value unchanged if no timezone service/target is available (e.g. before
+        it is wired up, or in tests).
+        """
+        target_tz = getattr(self._timezone_service, "target_timezone", None)
+        if target_tz is None:
+            return value
+        try:
+            return value.astimezone(target_tz)
+        except (TypeError, ValueError, AttributeError):
+            return value
 
     def get_data(
         self,
@@ -225,12 +250,15 @@ class CacheManager:
         # If no valid entries were found for today's date, check if we have yesterday's data with tomorrow's prices
         # This handles the midnight transition case
         now = dt_util.now()
-        current_date = now.date()
+        # Detect the rollover in the display (target) timezone, not the HA-system
+        # timezone, so promotion fires at the displayed midnight (see _to_target_tz).
+        rollover_now = self._to_target_tz(now)
+        current_date = rollover_now.date()
 
         # Only attempt the migration if we're looking for today's date and it's just after midnight
         if target_date == current_date:
             # Only allow migration between 00:00 and 00:10 (10 minute window after midnight)
-            if now.hour == 0 and now.minute < 10:
+            if rollover_now.hour == 0 and rollover_now.minute < 10:
                 yesterday = target_date - timedelta(days=1)
                 _LOGGER.debug(
                     "No valid cache entries for today (%s). Checking yesterday's cache for tomorrow's data.",
