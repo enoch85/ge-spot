@@ -83,6 +83,16 @@ class IntervalPriceData:
     vat_included: bool = False
     display_unit: str = "EUR/kWh"
 
+    # Price-affecting config actually applied when these prices were computed.
+    # Lets fetch_data detect an option change and reprocess instead of serving a
+    # stale, fully-baked cache (otherwise VAT/multiplier/tariff/tax edits would
+    # only take effect after an HA restart).
+    applied_vat_rate: float = 0.0
+    applied_include_vat: bool = False
+    applied_import_multiplier: float = 1.0
+    applied_additional_tariff: float = 0.0
+    applied_energy_tax: float = 0.0
+
     # Timestamps
     fetched_at: Optional[str] = None
     last_updated: Optional[str] = None
@@ -549,6 +559,12 @@ class IntervalPriceData:
             "vat_rate": self.vat_rate,
             "vat_included": self.vat_included,
             "display_unit": self.display_unit,
+            # Applied price-affecting config (for cache invalidation on change)
+            "applied_vat_rate": self.applied_vat_rate,
+            "applied_include_vat": self.applied_include_vat,
+            "applied_import_multiplier": self.applied_import_multiplier,
+            "applied_additional_tariff": self.applied_additional_tariff,
+            "applied_energy_tax": self.applied_energy_tax,
             # Timestamps
             "fetched_at": self.fetched_at,
             "last_updated": self.last_updated,
@@ -612,6 +628,12 @@ class IntervalPriceData:
             vat_rate=data.get("vat_rate", 0.0),
             vat_included=data.get("vat_included", False),
             display_unit=data.get("display_unit", "EUR/kWh"),
+            # Applied price-affecting config (for cache invalidation on change)
+            applied_vat_rate=data.get("applied_vat_rate", 0.0),
+            applied_include_vat=data.get("applied_include_vat", False),
+            applied_import_multiplier=data.get("applied_import_multiplier", 1.0),
+            applied_additional_tariff=data.get("applied_additional_tariff", 0.0),
+            applied_energy_tax=data.get("applied_energy_tax", 0.0),
             # Timestamps
             fetched_at=data.get("fetched_at"),
             last_updated=data.get("last_updated"),

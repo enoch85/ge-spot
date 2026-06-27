@@ -515,6 +515,37 @@ class UnifiedPriceManager:
             # Always clear flag when done
             self._health_check_in_progress = False
 
+    def _price_config_changed(self, cached_price_data) -> bool:
+        """Whether the current price config differs from the cached data's.
+
+        Cached prices are fully processed (VAT/multiplier/tariff/tax baked in), so
+        an option change must invalidate the cache and trigger a reprocess. Cached
+        data from before this stamp existed defaults to 0.0/False/1.0, which simply
+        forces one reprocess for non-default configs (self-healing).
+        """
+        if cached_price_data is None or self._data_processor is None:
+            return False
+        dp = self._data_processor
+        tol = 1e-9
+        try:
+            return (
+                abs(cached_price_data.applied_vat_rate - dp.vat_rate) > tol
+                or bool(cached_price_data.applied_include_vat) != bool(dp.include_vat)
+                or abs(
+                    cached_price_data.applied_import_multiplier - dp.import_multiplier
+                )
+                > tol
+                or abs(
+                    cached_price_data.applied_additional_tariff - dp.additional_tariff
+                )
+                > tol
+                or abs(cached_price_data.applied_energy_tax - dp.energy_tax) > tol
+            )
+        except (TypeError, AttributeError):
+            # Config values not comparable (e.g. mocked in tests, or missing):
+            # fail safe to serving the cache rather than forcing a refetch.
+            return False
+
     async def fetch_data(self, force: bool = False) -> Dict[str, Any]:
         """Fetch price data with implicit source validation.
 
@@ -606,7 +637,20 @@ class UnifiedPriceManager:
                 f"[{self.area}] Health check bypassing rate limit (reason: {fetch_reason})"
             )
 
-        if not force and not should_fetch_from_api:
+        # Cached prices bake in VAT/multiplier/tariff/tax. If the current price
+        # config differs from what the cache was computed with, the cache is stale
+        # and must be reprocessed (otherwise option changes only take effect after
+        # an HA restart). Treat this like force=True so a fresh fetch + reprocess
+        # runs (which also bypasses the rate limit, avoiding a data gap).
+        price_config_changed = self._price_config_changed(cached_price_data)
+        if price_config_changed:
+            _LOGGER.info(
+                "[%s] Price config changed since cache was computed; "
+                "reprocessing instead of serving stale cache.",
+                self.area,
+            )
+
+        if not force and not price_config_changed and not should_fetch_from_api:
             _LOGGER.debug(f"Skipping API fetch for area {self.area}: {fetch_reason}")
             if cached_price_data:
                 _LOGGER.debug("Returning cached data for %s", self.area)
