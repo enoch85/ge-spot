@@ -136,7 +136,6 @@ class ExtremaPriceSensor(PriceValueSensor):
                     return {"timestamp": formatted_time, "value": price_value}
                 except (ValueError, TypeError):
                     return {"timestamp": timestamp, "value": price_value}
-                return {"timestamp": timestamp, "value": price_value}
             return {}
 
         # Initialize parent class

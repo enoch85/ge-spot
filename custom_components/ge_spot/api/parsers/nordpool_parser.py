@@ -1,7 +1,7 @@
 """Parser for Nordpool API responses."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Dict, Any
 
 from ..base.price_parser import BasePriceParser
