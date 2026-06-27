@@ -59,7 +59,6 @@ class BasePriceAPI(ABC):
         Returns:
             Base URL as string
         """
-        pass
 
     @abstractmethod
     async def fetch_raw_data(
@@ -75,7 +74,6 @@ class BasePriceAPI(ABC):
         Returns:
             List of standardized price data dictionaries
         """
-        pass
 
     async def parse_raw_data(self, raw_data: Any) -> Dict[str, Any]:
         """Default parse_raw_data implementation (not used in new adapters)."""

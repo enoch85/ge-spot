@@ -35,7 +35,6 @@ class BasePriceParser(ABC):
         Returns:
             Dict with parsed data
         """
-        pass
 
     def extract_metadata(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Extract metadata from parsed data.
