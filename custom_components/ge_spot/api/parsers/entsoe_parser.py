@@ -344,7 +344,7 @@ class EntsoeParser(BasePriceParser):
 
             selected_ts = self._select_best_time_series(time_series)
 
-            if not selected_ts:
+            if selected_ts is None:
                 _LOGGER.warning(
                     "_parse_xml: No suitable TimeSeries found by _select_best_time_series"
                 )
@@ -395,6 +395,13 @@ class EntsoeParser(BasePriceParser):
                         f"_parse_xml: Unexpected resolution '{res_text}', assuming hourly."
                     )
 
+                # One source point covers several slots on the integration's 15-min
+                # grid (PT60M -> 4, PT30M -> 2, PT15M -> 1). Expand each point across
+                # the slots it covers so an hourly document yields a full 96-interval
+                # day instead of 24/96 ("Incomplete data" warnings downstream).
+                target_minutes = TimeInterval.get_interval_minutes()
+                sub_slots = max(1, int(round(interval_hours * 60)) // target_minutes)
+
                 points = period.findall(".//ns:Point", ns)
                 _LOGGER.debug(f"_parse_xml: Found {len(points)} Point elements")
 
@@ -417,14 +424,15 @@ class EntsoeParser(BasePriceParser):
                                 hours=(pos - 1) * interval_hours
                             )
 
-                            # Accept all interval times (15-min, 30-min, hourly)
-                            interval_key = point_time.isoformat()
-                            result["today_interval_prices"][interval_key] = price_val
-                            points_added += 1
-                            if points_added <= 3:
-                                _LOGGER.debug(
-                                    f"_parse_xml: Added point {pos}: key={interval_key}, price={price_val}"
+                            for sub in range(sub_slots):
+                                slot_time = point_time + timedelta(
+                                    minutes=sub * target_minutes
                                 )
+                                interval_key = slot_time.isoformat()
+                                result["today_interval_prices"][
+                                    interval_key
+                                ] = price_val
+                                points_added += 1
 
                         except (ValueError, TypeError) as e:
                             _LOGGER.warning(
@@ -432,7 +440,7 @@ class EntsoeParser(BasePriceParser):
                             )
                     else:
                         _LOGGER.debug(
-                            f"_parse_xml: Skipping point with missing position or price"
+                            "_parse_xml: Skipping point with missing position or price"
                         )
 
                 _LOGGER.debug(
