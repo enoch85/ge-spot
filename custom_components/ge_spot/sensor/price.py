@@ -47,30 +47,6 @@ class PriceValueSensor(BaseElectricityPriceSensor):
 
         return value
 
-    def _format_timestamp_display(self, timestamp_prices):
-        """Format timestamp prices for clean display in attributes."""
-        formatted = {}
-
-        for timestamp_str, price in timestamp_prices.items():
-            try:
-                # Parse timestamp
-                dt = datetime.fromisoformat(timestamp_str)
-                # Format using HA's datetime display format directly
-                formatted_time = dt_util.as_local(dt).isoformat(timespec="minutes")
-
-                # Format price with 2 decimal places
-                if isinstance(price, (int, float)):
-                    formatted_price = round(price, 2)
-                else:
-                    formatted_price = price
-
-                # Add to formatted dict with price
-                formatted[formatted_time] = formatted_price
-            except (ValueError, TypeError):
-                formatted[timestamp_str] = price
-
-        return formatted
-
     @property
     def extra_state_attributes(self):
         """Return the state attributes."""
