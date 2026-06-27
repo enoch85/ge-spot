@@ -430,6 +430,13 @@ class DataProcessor:
             "vat_rate": self.vat_rate * 100 if self.include_vat else 0,
             "vat_included": self.include_vat,
             "display_unit": self.display_unit,
+            # Stamp the exact price-affecting config applied, so the coordinator can
+            # detect option changes and reprocess instead of serving stale cache.
+            "applied_vat_rate": self.vat_rate,
+            "applied_include_vat": self.include_vat,
+            "applied_import_multiplier": self.import_multiplier,
+            "applied_additional_tariff": self.additional_tariff,
+            "applied_energy_tax": self.energy_tax,
             "raw_data": raw_api_data_for_result,  # Store original raw API data (XML, JSON, etc.)
             "ecb_rate": ecb_rate,
             "ecb_updated": ecb_updated,
