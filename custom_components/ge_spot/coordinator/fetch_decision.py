@@ -162,7 +162,12 @@ class FetchDecisionMaker:
 
             if should_skip:
                 reason = f"Low on data but rate limited: {skip_reason}"
-                _LOGGER.warning(reason)
+                # INFO, not WARNING: this is the rate limiter working as intended
+                # (we recently fetched). It is logged every update cycle for each
+                # affected area, and its siblings above ("no current interval data
+                # but rate limited", "special window but rate limited") are INFO
+                # too — surfacing it at WARNING flooded the log during outages.
+                _LOGGER.info(reason)
                 return False, reason
 
             return True, reason
