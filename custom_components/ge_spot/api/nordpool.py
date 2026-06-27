@@ -118,12 +118,18 @@ class NordpoolAPI(BasePriceAPI):
         # Check if we need extended date ranges due to timezone offset
         extended_ranges = self.needs_extended_date_range("Europe/Oslo", reference_time)
 
+        # Nordpool's "date" parameter is the delivery date in the market's local
+        # (CET/CEST) time, so compute these dates in that timezone rather than UTC.
+        # Just after local midnight (CET date > UTC date) a UTC-based date would
+        # request the previous delivery day, leaving today's prices empty (~2 h).
+        delivery_tz = get_timezone_object("Europe/Oslo")
+
         # Fetch yesterday's data if needed
         yesterday_data = None
         if extended_ranges["need_yesterday"]:
-            yesterday = (reference_time - timedelta(days=1)).strftime(
-                TimeFormat.DATE_ONLY
-            )
+            yesterday = (
+                reference_time.astimezone(delivery_tz) - timedelta(days=1)
+            ).strftime(TimeFormat.DATE_ONLY)
             params_yesterday = {
                 "currency": Currency.EUR,
                 "date": yesterday,
@@ -137,7 +143,7 @@ class NordpoolAPI(BasePriceAPI):
 
         # Fetch today's data (first range is today to tomorrow)
         today_start, today_end = date_ranges[0]
-        today = today_start.strftime(TimeFormat.DATE_ONLY)
+        today = today_start.astimezone(delivery_tz).strftime(TimeFormat.DATE_ONLY)
 
         params_today = {
             "currency": Currency.EUR,
@@ -163,10 +169,10 @@ class NordpoolAPI(BasePriceAPI):
         should_fetch_tomorrow = now_cet.hour >= release_hour_cet
 
         if should_fetch_tomorrow:
-            # Always compute tomorrow as reference_time + 1 day
-            tomorrow = (reference_time + timedelta(days=1)).strftime(
-                TimeFormat.DATE_ONLY
-            )
+            # Always compute tomorrow as the delivery-area local day + 1
+            tomorrow = (
+                reference_time.astimezone(delivery_tz) + timedelta(days=1)
+            ).strftime(TimeFormat.DATE_ONLY)
             params_tomorrow = {
                 "currency": Currency.EUR,
                 "date": tomorrow,
