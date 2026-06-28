@@ -215,8 +215,10 @@ class EntsoeAPI(BasePriceAPI):
             period_start = start_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
             period_end = end_date.strftime(TimeFormat.ENTSOE_DATE_HOUR)
 
-            # Try different document types (A44: day-ahead prices, A65: week-ahead prices)
-            doc_types = ["A44", "A65"]
+            # A44 is the day-ahead price document. (A65 is a system-load document,
+            # not a price document; ENTSO-E rejects it for these domains with
+            # HTTP 400 "DOCUMENT_TYPE=A65 is not valid", so it is never requested.)
+            doc_types = ["A44"]
 
             for doc_type in doc_types:
                 params = {
