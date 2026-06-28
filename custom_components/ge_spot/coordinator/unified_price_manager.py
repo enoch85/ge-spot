@@ -546,6 +546,25 @@ class UnifiedPriceManager:
             # fail safe to serving the cache rather than forcing a refetch.
             return False
 
+    def _today_in_target_tz(self, now: datetime) -> date:
+        """Return "today" as a date in the display (target) timezone.
+
+        Prices are split into today/tomorrow and keyed by interval in the target
+        timezone (the area timezone in LOCAL_AREA mode, the HA timezone
+        otherwise). Anchoring the cache lookup and the midnight rollover to that
+        same timezone keeps them consistent for a user whose HA system timezone
+        differs from the area/display timezone; without it the day would roll
+        over at HA-system midnight rather than the displayed midnight. Falls back
+        to the HA-local date if the target timezone is unavailable (e.g. tests).
+        """
+        target_tz = getattr(self._tz_service, "target_timezone", None)
+        if target_tz is None:
+            return now.date()
+        try:
+            return now.astimezone(target_tz).date()
+        except (TypeError, ValueError, AttributeError):
+            return now.date()
+
     async def fetch_data(self, force: bool = False) -> Dict[str, Any]:
         """Fetch price data with implicit source validation.
 
@@ -560,7 +579,7 @@ class UnifiedPriceManager:
             Dictionary with processed data
         """
         now = dt_util.now()
-        today_date = now.date()  # Get today's date
+        today_date = self._today_in_target_tz(now)  # "Today" in the display tz
         area_key = self.area  # Key for rate limiting
 
         # Ensure exchange service is initialized before fetching/processing

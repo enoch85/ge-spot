@@ -347,5 +347,108 @@ class TestMigrationIntegration:
         # and trigger a fetch after 13:00 when tomorrow prices are published
 
 
+class TestCrossTimezoneMidnight:
+    """Day rollover must follow the DISPLAY (target) timezone, not the HA system tz.
+
+    Regression for the global midnight bug: a user whose HA system timezone
+    differs from the area/display timezone must see the day roll over (and the
+    pre-fetched tomorrow promoted to today) at the *displayed* midnight, not at
+    HA-system midnight. Scenario: HA in America/New_York viewing a Europe/
+    Stockholm area (6 h ahead in winter), at an instant just past Stockholm
+    midnight but still the previous calendar day in New York.
+    """
+
+    def _cache_manager(self, hass, target_tz):
+        tz_service = Mock()
+        tz_service.target_timezone = target_tz
+        tz_service.get_current_interval_key.return_value = "00:00"
+        mgr = CacheManager(hass=hass, config={"cache_ttl": 60})
+        mgr._timezone_service = tz_service
+        return mgr
+
+    def test_promotion_follows_display_midnight_not_ha_midnight(
+        self, mock_hass, yesterday_cache_data
+    ):
+        ha_tz = ZoneInfo("America/New_York")
+        target_tz = ZoneInfo("Europe/Stockholm")
+        mgr = self._cache_manager(mock_hass, target_tz)
+
+        # 18:05 New York (Jan 15) == 00:05 Stockholm (Jan 16): a new display day,
+        # still the previous day on the HA-system clock.
+        ha_now = datetime(2026, 1, 15, 18, 5, 0, tzinfo=ha_tz)
+        display_today = date(2026, 1, 16)
+        display_yesterday = date(2026, 1, 15)
+
+        # Yesterday's (display) cache holds tomorrow's prices (== display today).
+        mgr.store(
+            area="SE2",
+            source="nordpool",
+            data=yesterday_cache_data,
+            timestamp=ha_now,
+            target_date=display_yesterday,
+        )
+
+        with patch(
+            "custom_components.ge_spot.coordinator.cache_manager.dt_util"
+        ) as mock_dt:
+            mock_dt.now.return_value = ha_now
+            migrated = mgr.get_data(area="SE2", target_date=display_today)
+
+        # On the old (HA-tz) logic this returns None: current_date would be Jan 15
+        # (!= target Jan 16) and now.hour would be 18 (outside the 00:00-00:10
+        # window), so promotion never fires and "today" is empty.
+        assert (
+            migrated is not None
+        ), "Promotion must fire at displayed midnight even though the HA clock reads 18:05"
+        assert migrated.migrated_from_tomorrow is True
+        assert len(migrated.today_interval_prices) == 96
+        assert len(migrated.tomorrow_interval_prices) == 0
+
+    def test_store_files_under_display_day(self, mock_hass, yesterday_cache_data):
+        ha_tz = ZoneInfo("America/New_York")
+        target_tz = ZoneInfo("Europe/Stockholm")
+        mgr = self._cache_manager(mock_hass, target_tz)
+
+        # Same instant; store WITHOUT an explicit target_date must file under the
+        # display day (Jan 16, Stockholm), not the HA-system day (Jan 15, NY).
+        ha_now = datetime(2026, 1, 15, 18, 5, 0, tzinfo=ha_tz)
+
+        mgr.store(
+            area="SE2",
+            source="nordpool",
+            data=yesterday_cache_data,
+            timestamp=ha_now,
+        )
+
+        entries = mgr.get_cache_stats().get("entries", {})
+        filed_dates = {
+            info.get("metadata", {}).get("target_date") for info in entries.values()
+        }
+        assert (
+            "2026-01-16" in filed_dates
+        ), f"Data must be filed under the display-tz day, got {filed_dates}"
+        assert (
+            "2026-01-15" not in filed_dates
+        ), f"Data must NOT be filed under the HA-system-tz day, got {filed_dates}"
+
+    def test_same_timezone_is_unchanged(self, mock_hass, yesterday_cache_data):
+        """When HA tz == display tz, behaviour is identical to before (no-op)."""
+        tz = ZoneInfo("Europe/Stockholm")
+        mgr = self._cache_manager(mock_hass, tz)
+
+        now_local = datetime(2026, 1, 16, 0, 5, 0, tzinfo=tz)
+        mgr.store(
+            area="SE2",
+            source="nordpool",
+            data=yesterday_cache_data,
+            timestamp=now_local,
+        )
+        entries = mgr.get_cache_stats().get("entries", {})
+        filed_dates = {
+            info.get("metadata", {}).get("target_date") for info in entries.values()
+        }
+        assert filed_dates == {"2026-01-16"}
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
