@@ -5,9 +5,11 @@ from datetime import datetime, timezone
 from typing import Dict, Any
 
 from ..base.price_parser import BasePriceParser
+from ..interval_expander import convert_to_target_intervals
 from ...const.sources import Source
 from ...const.currencies import Currency
 from ...const.energy import EnergyUnit
+from ...const.time import TimeInterval
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -154,6 +156,33 @@ class EnergyChartsParser(BasePriceParser):
             f"[EnergyChartsParser] Parsed {len(interval_raw)} prices. "
             f"Sample keys: {list(interval_raw.keys())[:3]}"
         )
+
+        # Energy-Charts returns hourly data for some zones (e.g. CH) and 15-min for
+        # others (e.g. SE4). Expand a coarser-than-target resolution onto the
+        # integration's interval grid so an hourly zone yields a full 96-interval
+        # day instead of 24/96 (which would leave no current-interval price when
+        # this source is used). The source step is detected from the spacing of the
+        # API timestamps; a 15-min source is a no-op.
+        # Detect the step from the first two PARSED interval keys (valid ISO
+        # timestamps) rather than the raw input, so invalid/missing entries can't
+        # break the detection.
+        if len(interval_raw) >= 2:
+            ordered_keys = sorted(interval_raw)
+            step_minutes = int(
+                (
+                    datetime.fromisoformat(ordered_keys[1])
+                    - datetime.fromisoformat(ordered_keys[0])
+                ).total_seconds()
+                // 60
+            )
+            if step_minutes and step_minutes != TimeInterval.get_interval_minutes():
+                interval_raw = convert_to_target_intervals(
+                    interval_raw, source_interval_minutes=step_minutes
+                )
+                _LOGGER.debug(
+                    f"[EnergyChartsParser] Expanded {step_minutes}-min source to "
+                    f"{len(interval_raw)} target intervals"
+                )
 
         # Construct result
         result = {

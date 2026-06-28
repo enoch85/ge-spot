@@ -513,7 +513,9 @@ class TestAPIResponseFormats:
         result = parser.parse(test_data)
 
         assert "interval_raw" in result
-        assert len(result["interval_raw"]) == 3
+        # The 3 points are hourly (3600s apart); Energy-Charts hourly data is
+        # expanded onto the 15-min grid, so 3 hours -> 3 x 4 = 12 intervals.
+        assert len(result["interval_raw"]) == 12
 
     def test_omie_csv_text_input(self, timezone_service):
         """Test OMIE parser handles CSV text input."""
