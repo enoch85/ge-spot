@@ -66,3 +66,51 @@ def test_native_pt15m_full_day_is_unchanged():
     assert len(prices) == expected
     assert prices["2026-06-26T22:00:00+00:00"] == 11.0
     assert prices["2026-06-27T21:45:00+00:00"] == 10.0 + expected
+
+
+def test_a03_sparse_pt15m_forward_fills_to_96():
+    """A sparse A03 PT15M curve (omitted positions) fills to a full 96-slot day.
+
+    Uses the exact gap pattern observed in live ENTSO-E IT zone documents.
+    """
+    expected = TimeInterval.get_intervals_per_day()  # 96
+    missing = {3, 5, 14, 24, 38, 39, 46, 77, 86}  # 87/96, as seen live
+    points = [(p, 100.0 + p) for p in range(1, expected + 1) if p not in missing]
+    assert len(points) == 87
+
+    prices = EntsoeParser().parse(_document("PT15M", points))["interval_raw"]
+    assert (
+        len(prices) == expected
+    ), f"sparse A03 should fill to {expected}, got {len(prices)}"
+
+
+def test_a03_omitted_position_is_exact_copy_no_drift():
+    """An omitted A03 position must equal the previous position's EXACT value.
+
+    A03 omits a Point only when its value is unchanged, so the fill is a pure
+    decimal copy of the prior value -- never an interpolation/average.
+    """
+    # Real-style many-decimal prices; positions 3 and 5 omitted.
+    present = {1: 147.17, 2: 137.91, 4: 134.80, 6: 134.19, 7: 133.10}
+    points = [(p, present[p]) for p in present]
+    points += [(p, 50.0 + p) for p in range(8, 97)]  # fill out a full day
+
+    prices = EntsoeParser().parse(_document("PT15M", points))["interval_raw"]
+    assert len(prices) == TimeInterval.get_intervals_per_day()
+    # pos 3 (22:30) omitted -> exact copy of pos 2, NOT interpolated toward pos 4
+    assert prices["2026-06-26T22:30:00+00:00"] == 137.91
+    # pos 5 (23:00) omitted -> exact copy of pos 4
+    assert prices["2026-06-26T23:00:00+00:00"] == 134.80
+
+
+def test_a03_trailing_omission_filled_to_period_end():
+    """Trailing omitted positions fill to the Period's end (not just last point)."""
+    expected = TimeInterval.get_intervals_per_day()  # 96
+    points = [(p, 200.0 + p) for p in range(1, 91)]  # only positions 1..90 present
+
+    prices = EntsoeParser().parse(_document("PT15M", points))["interval_raw"]
+    assert (
+        len(prices) == expected
+    ), f"trailing gaps should fill to {expected}, got {len(prices)}"
+    # the final slots inherit position 90's exact value (290.0)
+    assert prices["2026-06-27T21:45:00+00:00"] == 290.0

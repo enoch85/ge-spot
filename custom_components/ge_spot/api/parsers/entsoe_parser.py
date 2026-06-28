@@ -396,20 +396,41 @@ class EntsoeParser(BasePriceParser):
                     )
 
                 # One source point covers several slots on the integration's 15-min
-                # grid (PT60M -> 4, PT30M -> 2, PT15M -> 1). Expand each point across
-                # the slots it covers so an hourly document yields a full 96-interval
-                # day instead of 24/96 ("Incomplete data" warnings downstream).
+                # grid (PT60M -> 4, PT30M -> 2, PT15M -> 1).
                 target_minutes = TimeInterval.get_interval_minutes()
                 sub_slots = max(1, int(round(interval_hours * 60)) // target_minutes)
+
+                # ENTSO-E day-ahead price curves use curveType A03 ("variable-sized
+                # block"): a Point is OMITTED whenever its value is unchanged from the
+                # previous position, so an omitted position's price IS the previous
+                # position's exact value. Read how many positions the Period spans
+                # (from its time interval) and forward-fill omitted positions with the
+                # last seen value -- an exact reconstruction, no interpolation. This
+                # turns sparse curves (e.g. 87/96) and hourly curves (24/96) into a
+                # full day without drift.
+                expected_positions = None
+                end_elem = period.find(".//ns:timeInterval/ns:end", ns)
+                if end_elem is not None and end_elem.text:
+                    try:
+                        end_time = datetime.fromisoformat(
+                            end_elem.text.replace("Z", "+00:00")
+                        )
+                        span_minutes = (end_time - start_time).total_seconds() / 60
+                        if span_minutes > 0:
+                            expected_positions = int(
+                                round(span_minutes / (interval_hours * 60))
+                            )
+                    except (ValueError, TypeError):
+                        expected_positions = None
 
                 points = period.findall(".//ns:Point", ns)
                 _LOGGER.debug(f"_parse_xml: Found {len(points)} Point elements")
 
-                points_added = 0
+                # Collect the positions actually present (A03 leaves gaps).
+                position_prices = {}
                 for point in points:
                     position_elem = point.find("ns:position", ns)
                     price_elem = point.find("ns:price.amount", ns)
-
                     if (
                         position_elem is not None
                         and position_elem.text is not None
@@ -417,23 +438,9 @@ class EntsoeParser(BasePriceParser):
                         and price_elem.text is not None
                     ):
                         try:
-                            pos = int(position_elem.text)
-                            price_val = float(price_elem.text)
-
-                            point_time = start_time + timedelta(
-                                hours=(pos - 1) * interval_hours
+                            position_prices[int(position_elem.text)] = float(
+                                price_elem.text
                             )
-
-                            for sub in range(sub_slots):
-                                slot_time = point_time + timedelta(
-                                    minutes=sub * target_minutes
-                                )
-                                interval_key = slot_time.isoformat()
-                                result["today_interval_prices"][
-                                    interval_key
-                                ] = price_val
-                                points_added += 1
-
                         except (ValueError, TypeError) as e:
                             _LOGGER.warning(
                                 f"_parse_xml: Failed to parse point {position_elem.text}: {e}"
@@ -442,6 +449,32 @@ class EntsoeParser(BasePriceParser):
                         _LOGGER.debug(
                             "_parse_xml: Skipping point with missing position or price"
                         )
+
+                points_added = 0
+                if position_prices:
+                    # Without a Period end, cover only the positions present.
+                    if expected_positions is None:
+                        expected_positions = max(position_prices)
+
+                    last_price = None
+                    for pos in range(1, expected_positions + 1):
+                        if pos in position_prices:
+                            last_price = position_prices[pos]
+                        if last_price is None:
+                            # Leading gap before the first position (invalid A03):
+                            # nothing to forward-fill from yet.
+                            continue
+                        point_time = start_time + timedelta(
+                            hours=(pos - 1) * interval_hours
+                        )
+                        for sub in range(sub_slots):
+                            slot_time = point_time + timedelta(
+                                minutes=sub * target_minutes
+                            )
+                            result["today_interval_prices"][
+                                slot_time.isoformat()
+                            ] = last_price
+                            points_added += 1
 
                 _LOGGER.debug(
                     f"_parse_xml: Added {points_added} points to interval_prices"
