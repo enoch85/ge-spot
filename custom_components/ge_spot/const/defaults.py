@@ -19,6 +19,9 @@ class Defaults:
     PRECISION = 4
     CURRENCY_SUBUNIT = "cents"  # Added default for subunit check
 
+    # Consumption-weighted average disabled by default (no energy sensor chosen)
+    ENERGY_ENTITY = ""
+
     # Cache Settings
     # Cache - 3 days = 4320 minutes (prices valid 24-72h)
     CACHE_TTL = 60 * 24 * 3  # minutes
