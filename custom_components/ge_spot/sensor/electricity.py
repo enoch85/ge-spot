@@ -19,6 +19,7 @@ from .price import (
     TomorrowExtremaPriceSensor,
     HourlyAverageSensor,
     TomorrowHourlyAverageSensor,
+    ConsumptionWeightedAverageSensor,
 )
 
 from ..const.attributes import Attributes
@@ -259,6 +260,41 @@ async def async_setup_entry(
         )
     )
     # --- End Base Market Price Sensors ---
+
+    # --- Consumption-Weighted Average ("your own average") ---
+    # Opt-in: only created when the user selects a cumulative kWh energy sensor.
+    # Weights spot prices by actual consumption so users can see whether they
+    # beat the market average by shifting usage to cheaper intervals.
+    energy_entity = (
+        options.get(Config.ENERGY_ENTITY, data.get(Config.ENERGY_ENTITY, "")) or ""
+    )
+    if energy_entity:
+        entities.append(
+            ConsumptionWeightedAverageSensor(
+                coordinator,
+                config_data,
+                "consumption_weighted_average_today",
+                "Your Average Price Today",
+                energy_entity,
+                period="daily",
+            )
+        )
+        entities.append(
+            ConsumptionWeightedAverageSensor(
+                coordinator,
+                config_data,
+                "consumption_weighted_average_month",
+                "Your Average Price This Month",
+                energy_entity,
+                period="monthly",
+            )
+        )
+        _LOGGER.debug(
+            "Added consumption-weighted average sensors for area %s (meter: %s)",
+            coordinator.area,
+            energy_entity,
+        )
+    # --- End Consumption-Weighted Average ---
 
     # --- Export/Production Price Sensors ---
     # Only add export sensors if export is enabled in config

@@ -207,6 +207,19 @@ def get_options_schema(defaults, supported_sources, area):
         ),
     }
 
+    # Consumption-weighted average ("your own average"): optional energy meter.
+    # Pre-fill the saved entity when set so unrelated option edits don't drop it;
+    # avoid passing an empty default to the EntitySelector when unset.
+    energy_default = defaults.get(Config.ENERGY_ENTITY, Defaults.ENERGY_ENTITY)
+    energy_key = (
+        vol.Optional(Config.ENERGY_ENTITY, default=energy_default)
+        if energy_default
+        else vol.Optional(Config.ENERGY_ENTITY)
+    )
+    schema[energy_key] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor", device_class="energy")
+    )
+
     # Add source priority selection with header
     current_priority = defaults.get(Config.SOURCE_PRIORITY, supported_sources)
     schema[
@@ -348,6 +361,11 @@ def get_default_values(options, data):
         # Display unit
         defaults[Config.DISPLAY_UNIT] = options.get(
             Config.DISPLAY_UNIT, data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
+        )
+
+        # Consumption-weighted average energy meter (opt-in)
+        defaults[Config.ENERGY_ENTITY] = options.get(
+            Config.ENERGY_ENTITY, data.get(Config.ENERGY_ENTITY, Defaults.ENERGY_ENTITY)
         )
 
         # Timezone reference
