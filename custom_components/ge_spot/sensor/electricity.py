@@ -273,8 +273,8 @@ async def async_setup_entry(
             ConsumptionWeightedAverageSensor(
                 coordinator,
                 config_data,
-                "consumption_weighted_average_today",
-                "Your Average Price Today",
+                "average_price_paid_today",
+                "Average Price Paid Today",
                 energy_entity,
                 period="daily",
             )
@@ -283,8 +283,8 @@ async def async_setup_entry(
             ConsumptionWeightedAverageSensor(
                 coordinator,
                 config_data,
-                "consumption_weighted_average_month",
-                "Your Average Price This Month",
+                "average_price_paid_month",
+                "Average Price Paid This Month",
                 energy_entity,
                 period="monthly",
             )

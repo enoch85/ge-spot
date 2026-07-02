@@ -35,12 +35,10 @@ def _make_sensor(
         "entry_id": "x",
     }
     sensor_type = (
-        "consumption_weighted_average_today"
-        if period == "daily"
-        else "consumption_weighted_average_month"
+        "average_price_paid_today" if period == "daily" else "average_price_paid_month"
     )
     return ConsumptionWeightedAverageSensor(
-        coordinator, config_data, sensor_type, "Your Average Price", energy, period
+        coordinator, config_data, sensor_type, "Average Price Paid", energy, period
     )
 
 
