@@ -775,6 +775,23 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
         except (ValueError, TypeError):
             return
 
+        # Late baseline seed: if the meter wasn't available yet when this
+        # entity was added (startup race), the seed in async_added_to_hass
+        # found no numeric state and the baseline is still None. The event's
+        # old_state carries the meter reading this change started from, so
+        # adopt it as the baseline — otherwise this first delta would be
+        # swallowed as a mere baseline reading and its consumption lost.
+        if self._acc.last_energy is None:
+            old_state = event.data.get("old_state")
+            if old_state is not None and old_state.state not in (
+                STATE_UNKNOWN,
+                STATE_UNAVAILABLE,
+            ):
+                try:
+                    self._acc.last_energy = float(old_state.state)
+                except (ValueError, TypeError):
+                    pass
+
         now_local = self._now_local()
         price = self._current_price()
         self._acc.add_energy(new_kwh, price, now_local)
