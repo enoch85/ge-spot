@@ -7,6 +7,8 @@ on:
     paths:
       - 'custom_components/**'
       - '.github/workflows/**'
+      - 'requirements.txt'
+      - 'tests/**'
 
 jobs:
   validate_hacs:
@@ -34,14 +36,14 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 pytest
+          pip install flake8
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Lint with flake8
@@ -50,6 +52,9 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           # exit-zero treats all errors as warnings
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Unit tests
+        run: pytest tests/pytest/unit -q
 
   check_version:
     runs-on: ubuntu-latest

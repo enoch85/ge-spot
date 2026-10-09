@@ -65,6 +65,47 @@ class TestEnergyChartsParser:
             "license_info": sample_energy_charts_data["license_info"],
         }
 
+    @pytest.fixture
+    def sample_hourly_data(self):
+        """Energy-Charts response for an HOURLY zone (e.g. CH): 24 points/day."""
+        start = datetime(2025, 10, 7, 0, 0, 0, tzinfo=timezone.utc).timestamp()
+        unix_seconds = [int(start + i * 3600) for i in range(24)]  # 1-hour steps
+        prices = [round(50.0 + i, 2) for i in range(24)]
+        return {
+            "unix_seconds": unix_seconds,
+            "price": prices,
+            "unit": "EUR / MWh",
+            "license_info": "x",
+        }
+
+    def test_hourly_zone_expands_to_full_15min_day(self, parser, sample_hourly_data):
+        """An hourly zone (24 points) must expand to a full 96-interval day.
+
+        Otherwise hourly Energy-Charts zones (e.g. CH) parse as 24/96 and have no
+        price for the current 15-min interval (has_current=False).
+        """
+        raw = {
+            "raw_data": sample_hourly_data,
+            "timezone": "Europe/Berlin",
+            "currency": Currency.EUR,
+            "area": "CH",
+            "license_info": "x",
+        }
+        prices = parser.parse(raw)["interval_raw"]
+        assert (
+            len(prices) == 96
+        ), f"hourly 24 points should expand to 96, got {len(prices)}"
+        # The hourly price is held constant across its four 15-min sub-slots.
+        assert prices["2025-10-07T00:00:00+00:00"] == 50.0
+        assert prices["2025-10-07T00:15:00+00:00"] == 50.0
+        assert prices["2025-10-07T00:45:00+00:00"] == 50.0
+        assert prices["2025-10-07T01:00:00+00:00"] == 51.0
+
+    def test_native_15min_zone_is_unchanged(self, parser, full_input_data):
+        """A 15-min zone (96 points) is a no-op for the expansion (still 96)."""
+        prices = parser.parse(full_input_data)["interval_raw"]
+        assert len(prices) == 96
+
     def test_parse_de_lu_data(self, parser, full_input_data):
         """Test parsing DE-LU (Germany-Luxembourg) data."""
         result = parser.parse(full_input_data)
