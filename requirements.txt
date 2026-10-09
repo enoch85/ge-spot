@@ -1,18 +1,11 @@
 # Development and CI dependencies, pinned so Dependabot can bump them.
-# The Home Assistant runtime requirements live in
-# custom_components/ge_spot/manifest.json and intentionally stay as floors.
+# Runtime requirements live in custom_components/ge_spot/manifest.json.
+# homeassistant brings aiohttp and voluptuous at the exact versions it supports.
 #
-# homeassistant, pytest-homeassistant-custom-component and aiohttp must move
-# together: the test package pins an exact homeassistant release, and
-# homeassistant pins an exact aiohttp release. Dependabot updates them as one
-# group (see .github/dependabot.yml).
-aiohttp==3.14.4
-beautifulsoup4==4.15.0
+# pytest-homeassistant-custom-component pins an exact homeassistant release, so
+# Dependabot bumps both as one group (see .github/dependabot.yml).
 homeassistant==2026.10.0
-voluptuous==0.16.0
-xmltodict==1.0.4
-PyJWT==2.15.1
-aiofiles==25.1.0
-pytz==2026.5 # Added for timezone handling
 pytest-homeassistant-custom-component==0.13.371
-freezegun==1.5.5 # Added for time manipulation in tests
+aiofiles==25.1.0
+pytz==2026.5
+freezegun==1.5.5
