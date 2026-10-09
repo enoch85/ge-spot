@@ -262,12 +262,10 @@ async def async_setup_entry(
     # --- End Base Market Price Sensors ---
 
     # --- Consumption-Weighted Average ("your own average") ---
-    # Opt-in: only created when the user selects a cumulative kWh energy sensor.
+    # Opt-in: only created when the user selects a cumulative energy sensor.
     # Weights spot prices by actual consumption so users can see whether they
     # beat the market average by shifting usage to cheaper intervals.
-    energy_entity = (
-        options.get(Config.ENERGY_ENTITY, data.get(Config.ENERGY_ENTITY, "")) or ""
-    )
+    energy_entity = options.get(Config.ENERGY_ENTITY)
     if energy_entity:
         entities.append(
             ConsumptionWeightedAverageSensor(

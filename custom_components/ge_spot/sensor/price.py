@@ -1,19 +1,18 @@
 """Price-specific sensor implementations."""
 
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import asdict
 from typing import Any, Dict, Optional, Callable
 from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import SensorDeviceClass
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import callback, Event
-from homeassistant.helpers.event import (
-    async_track_state_change_event,
-    async_track_time_change,
-)
-from homeassistant.helpers.restore_state import RestoreEntity, ExtraStoredData
+from homeassistant.const import ATTR_UNIT_OF_MEASUREMENT, UnitOfEnergy
+from homeassistant.core import callback, Event, State
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.restore_state import RestoreEntity, RestoredExtraData
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_conversion import EnergyConverter
 
 from .base import BaseElectricityPriceSensor
 from .consumption import WeightedAverageAccumulator
@@ -651,35 +650,32 @@ class TomorrowHourlyAverageSensor(TomorrowSensorMixin, HourlyAverageSensor):
     """Hourly average price sensor for tomorrow with proper availability."""
 
 
-@dataclass
-class _WeightedAvgExtraData(ExtraStoredData):
-    """Accumulator state persisted across restarts for the weighted average.
+def _state_kwh(state: Optional[State]) -> Optional[float]:
+    """Meter reading in kWh, or None if the meter is missing or not numeric.
 
-    The meter baseline (``last_energy``) is deliberately excluded: it is
-    re-seeded from the meter on startup so consumption that happened while Home
-    Assistant was down is not back-counted at the wrong price.
+    Converts from the meter's own unit (Wh, MWh, ...) because the energy-sensor
+    picker accepts any energy unit.
     """
-
-    cost_acc: float
-    energy_acc: float
-    simple_sum: float
-    simple_count: int
-    period_start_key: Optional[str]
-    last_interval_key: Optional[str]
-    fingerprint: str
-
-    def as_dict(self) -> Dict[str, Any]:
-        """Return a JSON-serializable dict for the restore store."""
-        return asdict(self)
+    if state is None:
+        return None
+    try:
+        return EnergyConverter.convert(
+            float(state.state),
+            state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
+            or UnitOfEnergy.KILO_WATT_HOUR,
+            UnitOfEnergy.KILO_WATT_HOUR,
+        )
+    except (ValueError, HomeAssistantError):
+        return None
 
 
 class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor):
     """Consumption-weighted average price — your own average vs the market.
 
     Weights each interval's all-in spot price by the energy actually consumed
-    (read from a user-selected cumulative kWh sensor) to show the average price
-    you really paid this period, alongside the simple market average over the
-    same elapsed intervals so you can tell whether you beat it.
+    (read from a user-selected cumulative energy sensor) to show the average
+    price you really paid this period, alongside the simple market average over
+    the same elapsed intervals so you can tell whether you beat it.
 
     Accumulators persist across restarts (RestoreEntity) and reset at the start
     of each period: local midnight for ``daily``, month start for ``monthly``.
@@ -688,10 +684,6 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
     # device_class/state_class (MONETARY / None) and the display unit are
     # inherited from BaseElectricityPriceSensor, matching the Average Price
     # sensor so the two are directly comparable.
-
-    # Only small scalar attributes are emitted here (never the big price arrays),
-    # so nothing needs excluding from the recorder.
-    _unrecorded_attributes = frozenset()
 
     def __init__(
         self,
@@ -705,7 +697,7 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
         """Initialize the consumption-weighted average sensor.
 
         Args:
-            energy_entity_id: entity_id of the cumulative kWh consumption sensor.
+            energy_entity_id: entity_id of the cumulative energy sensor.
             period: ``"daily"`` or ``"monthly"``.
         """
         # BaseElectricityPriceSensor does not chain super().__init__(); call it
@@ -716,90 +708,68 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
         self._energy_entity_id = energy_entity_id
         self._period = period
         self._acc = WeightedAverageAccumulator(period=period)
-        self._unsub_energy = None
-        self._unsub_midnight = None
 
     # --- Lifecycle ---------------------------------------------------------
 
     async def async_added_to_hass(self) -> None:
-        """Restore state, then subscribe to the meter, coordinator and midnight.
+        """Restore the accumulators, then follow the meter and the coordinator.
 
         Intentionally does NOT call the base async_added_to_hass — it registers
         a plain coordinator listener that only writes state, whereas we need one
         that also samples the benchmark. RestoreEntity's own setup runs via
         async_internal_added_to_hass (invoked separately by the entity
         platform), so restore still works.
-        """
-        # 1) Restore persisted accumulators if the config fingerprint matches.
-        last = await self.async_get_last_extra_data()
-        if last is not None:
-            self._restore_from(last.as_dict())
 
-        # 2) Roll over if Home Assistant was down across a period boundary.
+        No midnight timer is needed: the entity is polled, each poll refreshes
+        the coordinator, and its listener rolls the period over.
+        """
+        if last := await self.async_get_last_extra_data():
+            self._restore(last.as_dict())
+
+        # Roll over if Home Assistant was down across a period boundary.
         self._acc.maybe_reset(self._now_local())
 
-        # 3) Track the consumption meter.
-        self._unsub_energy = async_track_state_change_event(
-            self.hass, [self._energy_entity_id], self._handle_energy_change
+        self.async_on_remove(
+            async_track_state_change_event(
+                self.hass, [self._energy_entity_id], self._handle_energy_change
+            )
         )
-        self.async_on_remove(self._unsub_energy)
-
-        # 4) Sample the benchmark on each coordinator update (≈ once per interval).
         self.async_on_remove(
             self.coordinator.async_add_listener(self._handle_coordinator_update)
         )
 
-        # 5) Crisp local-midnight rollover. The content checks above are the
-        #    correctness backstop; this just avoids up-to-15-min display lag.
-        self._unsub_midnight = async_track_time_change(
-            self.hass, self._handle_midnight, hour=0, minute=0, second=5
-        )
-        self.async_on_remove(self._unsub_midnight)
-
-        # 6) Seed the meter baseline from its current reading so the first real
-        #    delta isn't swallowed (and downtime consumption isn't back-counted).
-        self._seed_baseline()
-
-        self.async_write_ha_state()
+        # Seed the meter baseline from its current reading so the first delta
+        # isn't swallowed (and downtime consumption isn't priced afterwards).
+        self._acc.last_energy = _state_kwh(self.hass.states.get(self._energy_entity_id))
 
     # --- Event handlers ----------------------------------------------------
 
     @callback
     def _handle_energy_change(self, event: Event) -> None:
         """Fold a consumption-meter change into the weighted average."""
-        new_state = event.data.get("new_state")
-        if new_state is None or new_state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+        kwh = _state_kwh(event.data.get("new_state"))
+        if kwh is None:
+            # Meter unknown/unavailable: drop the baseline so the gap is not
+            # priced at whichever interval the meter comes back in.
+            self._acc.last_energy = None
             return
-        try:
-            new_kwh = float(new_state.state)
-        except (ValueError, TypeError):
-            return
-
-        now_local = self._now_local()
-        price = self._current_price()
-        self._acc.add_energy(new_kwh, price, now_local)
-        # Also sample the benchmark here so it stays fresh between coordinator
-        # ticks; idempotent within an interval via the dedup key.
-        dedup = self._interval_dedup_key(now_local)
-        if dedup is not None:
-            self._acc.sample_simple(dedup, price, now_local)
+        self._acc.add_energy(kwh, self._current_price(), self._now_local())
         self.async_write_ha_state()
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Sample the benchmark each interval and refresh the state."""
-        now_local = self._now_local()
-        dedup = self._interval_dedup_key(now_local)
-        if dedup is not None:
-            self._acc.sample_simple(dedup, self._current_price(), now_local)
-        else:
-            self._acc.maybe_reset(now_local)
-        self.async_write_ha_state()
+        """Sample the benchmark once per interval and refresh the state.
 
-    @callback
-    def _handle_midnight(self, now) -> None:
-        """Backstop period rollover at local midnight."""
-        self._acc.maybe_reset(self._now_local())
+        The sample key is date-qualified: a bare HH:MM repeats every day, which
+        would freeze the monthly benchmark after day one.
+        """
+        now_local = self._now_local()
+        interval_key = self._tz_service.get_current_interval_key()
+        self._acc.sample_simple(
+            f"{now_local.date().isoformat()}|{interval_key}",
+            self._current_price(),
+            now_local,
+        )
         self.async_write_ha_state()
 
     # --- State -------------------------------------------------------------
@@ -824,7 +794,7 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
 
     @property
     def extra_state_attributes(self):
-        """Return the small scalar attributes for this sensor.
+        """Return the period's consumption and benchmark attributes.
 
         Deliberately does NOT call the base implementation, which emits the full
         today/tomorrow interval price arrays and queries the price manager on
@@ -835,11 +805,6 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
         simple = acc.simple
 
         attrs = {
-            Attributes.CURRENCY: self._currency,
-            Attributes.AREA: self._area,
-            Attributes.VAT: f"{self._vat * 100:.1f}%",
-            "display_unit": self._display_unit,
-            "use_subunit": self._use_subunit,
             Attributes.ENERGY_SOURCE: self._energy_entity_id,
             Attributes.PERIOD: self._period,
             Attributes.PERIOD_START: acc.period_start_key,
@@ -860,44 +825,35 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
     # --- Persistence -------------------------------------------------------
 
     @property
-    def extra_restore_state_data(self) -> _WeightedAvgExtraData:
-        """State persisted across restarts (excludes the meter baseline)."""
-        acc = self._acc
-        return _WeightedAvgExtraData(
-            cost_acc=acc.cost_acc,
-            energy_acc=acc.energy_acc,
-            simple_sum=acc.simple_sum,
-            simple_count=acc.simple_count,
-            period_start_key=acc.period_start_key,
-            last_interval_key=acc.last_interval_key,
-            fingerprint=self._fingerprint(),
+    def extra_restore_state_data(self) -> RestoredExtraData:
+        """Accumulators plus the config fingerprint, persisted across restarts.
+
+        The meter baseline is not kept: it is re-seeded from the meter on
+        startup so consumption while Home Assistant was down isn't priced.
+        """
+        return RestoredExtraData(
+            {
+                **asdict(self._acc),
+                "last_energy": None,
+                "fingerprint": self._fingerprint(),
+            }
         )
 
-    def _restore_from(self, data: Dict[str, Any]) -> None:
-        """Restore accumulators from persisted data if the fingerprint matches.
-
-        A changed fingerprint (display unit, VAT, currency or the energy entity)
-        means the accumulated cost is no longer on the same basis, so we discard
-        it and start fresh rather than mix bases.
-        """
-        if not data or data.get("fingerprint") != self._fingerprint():
-            return
-        acc = self._acc
-        acc.cost_acc = float(data.get("cost_acc", 0.0) or 0.0)
-        acc.energy_acc = float(data.get("energy_acc", 0.0) or 0.0)
-        acc.simple_sum = float(data.get("simple_sum", 0.0) or 0.0)
-        acc.simple_count = int(data.get("simple_count", 0) or 0)
-        acc.period_start_key = data.get("period_start_key")
-        acc.last_interval_key = data.get("last_interval_key")
+    def _restore(self, data: Dict[str, Any]) -> None:
+        """Adopt persisted accumulators unless the fingerprint changed."""
+        data = dict(data)
+        if data.pop("fingerprint", None) == self._fingerprint():
+            self._acc = WeightedAverageAccumulator(**data)
 
     # --- Helpers -----------------------------------------------------------
 
     def _fingerprint(self) -> str:
-        """Config fingerprint; a change invalidates persisted accumulators."""
-        return (
-            f"{self._currency}|{self._display_unit}|{self._vat}|"
-            f"{self._energy_entity_id}"
-        )
+        """Basis of the persisted numbers; a change discards them.
+
+        Only the units (currency, display unit) and the meter matter: cost booked
+        before a VAT or tariff change is still what was actually paid.
+        """
+        return f"{self._currency}|{self._display_unit}|{self._energy_entity_id}"
 
     def _now_local(self) -> datetime:
         """Current time in the area/display timezone (period boundaries)."""
@@ -909,29 +865,3 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
         if not data:
             return None
         return data.current_price
-
-    def _interval_dedup_key(self, now_local: datetime) -> Optional[str]:
-        """Date-qualified current-interval key for benchmark de-duplication.
-
-        Date-qualifying is required for the monthly sensor: a bare HH:MM repeats
-        every day, which would freeze the monthly benchmark after day one.
-        """
-        if not self._tz_service:
-            return None
-        try:
-            interval_key = self._tz_service.get_current_interval_key()
-        except Exception:  # pragma: no cover - defensive
-            return None
-        if not interval_key:
-            return None
-        return f"{now_local.date().isoformat()}|{interval_key}"
-
-    def _seed_baseline(self) -> None:
-        """Seed the meter baseline from the meter's current state, if numeric."""
-        state = self.hass.states.get(self._energy_entity_id)
-        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
-            return
-        try:
-            self._acc.last_energy = float(state.state)
-        except (ValueError, TypeError):
-            self._acc.last_energy = None

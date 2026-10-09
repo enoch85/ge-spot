@@ -89,38 +89,18 @@ class WeightedAverageAccumulator:
     ) -> None:
         """Fold one energy-meter reading into the weighted average.
 
-        Computes the consumption since the last reading and prices it at the
-        current interval price. Rolls the period over first so consumption is
-        attributed to the correct period.
-
-        Edge cases:
-            * No baseline yet → record the reading as the baseline; nothing to
-              accumulate.
-            * ``new_kwh`` < baseline → the meter reset (or was replaced); adopt
-              the new value as the baseline and skip the bogus negative delta.
-            * ``price`` is None (no price for the current interval) → keep the
-              baseline so the unpriced energy is folded into the next priced
-              delta rather than being dropped.
+        Prices the consumption since the previous reading at the current
+        interval price, rolling the period over first so it lands in the right
+        period. Anything else just moves the baseline: the first reading, a
+        meter reset/replacement (negative delta) and an unknown price. Skipping
+        unpriced energy instead of lumping it onto a later interval's price
+        keeps the weighted side on the same intervals as the benchmark, which
+        also skips intervals without a price.
         """
         self.maybe_reset(now_local)
-
-        if self.last_energy is None:
-            self.last_energy = new_kwh
-            return
-
-        delta = new_kwh - self.last_energy
-        if delta < 0:
-            # Meter reset/replacement — re-baseline, don't count a negative jump.
-            self.last_energy = new_kwh
-            return
-
-        if price is None:
-            # Can't price this energy yet; leave the baseline so it is captured
-            # by the next priced delta instead of being lost.
-            return
-
+        delta = None if self.last_energy is None else new_kwh - self.last_energy
         self.last_energy = new_kwh
-        if delta > 0:
+        if price is not None and delta is not None and delta > 0:
             self.cost_acc += delta * price
             self.energy_acc += delta
 

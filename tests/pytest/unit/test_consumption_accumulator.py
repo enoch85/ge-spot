@@ -74,16 +74,16 @@ def test_meter_reset_rebaselines_without_negative():
     assert acc.energy_acc == pytest.approx(4.0)
 
 
-def test_price_none_folds_into_next_priced_delta():
+def test_price_none_skips_energy_instead_of_lumping_it():
     acc = WeightedAverageAccumulator(period="daily")
     now = _utc(2026, 6, 1, 12, 0)
     acc.add_energy(10.0, 1.0, now)  # baseline
-    acc.add_energy(12.0, None, now)  # price unknown -> keep baseline, skip
+    acc.add_energy(12.0, None, now)  # price unknown -> skipped, baseline moves on
     assert acc.energy_acc == pytest.approx(0.0)
-    assert acc.last_energy == pytest.approx(10.0)
-    acc.add_energy(13.0, 2.0, now)  # delta 13-10 = 3 kWh @ 2.0 (folds the gap)
-    assert acc.energy_acc == pytest.approx(3.0)
-    assert acc.cost_acc == pytest.approx(6.0)
+    assert acc.last_energy == pytest.approx(12.0)
+    acc.add_energy(13.0, 2.0, now)  # only 13-12 = 1 kWh @ 2.0, not the gap
+    assert acc.energy_acc == pytest.approx(1.0)
+    assert acc.cost_acc == pytest.approx(2.0)
 
 
 def test_empty_accumulator_returns_none():
