@@ -14,10 +14,16 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # These three are pinned against each other upstream and must be bumped
+    # together, otherwise the pip resolver rejects the update.
+    groups:
+      home-assistant:
+        patterns:
+          - "homeassistant"
+          - "pytest-homeassistant-custom-component"
+          - "aiohttp"
     labels:
       - "dependencies"
       - "python"
     commit-message:
       prefix: "Python"
-    target-branch: "dev"
-    versioning-strategy: increase-if-necessary

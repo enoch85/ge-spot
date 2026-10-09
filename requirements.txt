@@ -1,20 +1,18 @@
-# NOTE: do not pin aiohttp/aiodns above the versions Home Assistant ships -
-# HA pins them in its package constraints and pip's strict resolver fails
-# the install if our floors conflict.
+# Development and CI dependencies, pinned so Dependabot can bump them.
+# The Home Assistant runtime requirements live in
+# custom_components/ge_spot/manifest.json and intentionally stay as floors.
 #
-# Local manual tests against live APIs may crash with
-#   "Channel.getaddrinfo() takes 3 positional arguments but 4 were given"
-# because HA bundles aiohttp 3.11 + aiodns 3.2 (incompatible signatures).
-# Workaround for dev only - after `pip install -r requirements.txt`, run:
-#   pip install --upgrade 'aiodns>=3.3.0'
-# Production HA configures its own aiohttp session so users are not affected.
-aiohttp>=3.8.0
-beautifulsoup4>=4.11.0
-homeassistant>=2023.8.0
-voluptuous>=0.13.0
-xmltodict>=0.13.0
-PyJWT>=2.6.0
-aiofiles>=23.2
-pytz>=2023.3 # Added for timezone handling
-pytest-homeassistant-custom-component
-freezegun>=1.2.2 # Added for time manipulation in tests
+# homeassistant, pytest-homeassistant-custom-component and aiohttp must move
+# together: the test package pins an exact homeassistant release, and
+# homeassistant pins an exact aiohttp release. Dependabot updates them as one
+# group (see .github/dependabot.yml).
+aiohttp==3.14.4
+beautifulsoup4==4.15.0
+homeassistant==2026.10.0
+voluptuous==0.16.0
+xmltodict==1.0.4
+PyJWT==2.15.1
+aiofiles==25.1.0
+pytz==2026.5 # Added for timezone handling
+pytest-homeassistant-custom-component==0.13.371
+freezegun==1.5.5 # Added for time manipulation in tests
