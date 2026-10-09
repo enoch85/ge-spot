@@ -3,14 +3,7 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
-      time: "05:00"
-      timezone: "UTC"
-    open-pull-requests-limit: 10
-    groups:
-      github-actions:
-        patterns:
-          - "*"
+      interval: "weekly"
     labels:
       - "dependencies"
       - "github_actions"
@@ -20,29 +13,11 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "daily"
-      time: "05:15"
-      timezone: "UTC"
-    open-pull-requests-limit: 10
-    groups:
-      python-runtime:
-        patterns:
-          - "aiohttp"
-          - "aiofiles"
-          - "beautifulsoup4"
-          - "PyJWT"
-          - "voluptuous"
-          - "xmltodict"
-      python-tooling:
-        patterns:
-          - "freezegun"
-          - "homeassistant"
-          - "pytest-homeassistant-custom-component"
-          - "pytz"
+      interval: "weekly"
     labels:
       - "dependencies"
       - "python"
     commit-message:
       prefix: "Python"
-    target-branch: "main"
+    target-branch: "dev"
     versioning-strategy: increase-if-necessary
