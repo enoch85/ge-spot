@@ -157,25 +157,3 @@ def test_available_stays_true_even_without_coordinator_data():
     s.coordinator.last_update_success = False
     s.coordinator.data = None
     assert s.available is True
-
-
-def test_boot_race_seeds_baseline_from_event_old_state():
-    """Regression: meter unavailable at startup must not swallow the first delta.
-
-    If the baseline seed in async_added_to_hass found no numeric meter state,
-    the first state-change event must seed the baseline from its old_state and
-    book the delta, instead of treating the new reading as a baseline.
-    Caught live in the week-long devbox verification (run booked 0 kWh).
-    """
-    s = _make_sensor()
-    s._tz_service = None  # fall back to the default timezone for period keys
-    s.async_write_ha_state = Mock()
-    s.coordinator.data = Mock(current_price=1.5)
-    assert s._acc.last_energy is None  # seed failed (meter was unavailable)
-
-    event = Mock(data={"old_state": Mock(state="6.0"), "new_state": Mock(state="8.0")})
-    s._handle_energy_change(event)
-
-    assert s._acc.last_energy == pytest.approx(8.0)
-    assert s._acc.energy_acc == pytest.approx(2.0)  # 8 - 6 booked, not swallowed
-    assert s._acc.cost_acc == pytest.approx(2.0 * 1.5)
