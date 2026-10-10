@@ -38,3 +38,15 @@ class Attributes:
     EXCHANGE_RATE_FORMATTED = "exchange_rate_formatted"
     EXCHANGE_RATE_TIMESTAMP = "exchange_rate_timestamp"
     DATA_SOURCE_ATTRIBUTION = "data_source_attribution"  # Added for Stromligning
+
+    # Consumption-weighted average ("your own average") attributes
+    ENERGY_SOURCE = "energy_source"  # entity_id of the consumption sensor
+    CONSUMED_ENERGY = "consumed_energy"  # kWh consumed this period
+    ACCUMULATED_COST = "accumulated_cost"  # cost this period (in display unit)
+    SIMPLE_AVERAGE = "simple_average"  # unweighted market avg over same window
+    SAVINGS_VS_AVERAGE = (
+        "savings_vs_average"  # simple_average - weighted (>0 = beating)
+    )
+    BEATING_AVERAGE = "beating_average"  # bool: weighted < simple_average
+    PERIOD = "period"  # "daily" or "monthly"
+    PERIOD_START = "period_start"  # key marking when accumulation started

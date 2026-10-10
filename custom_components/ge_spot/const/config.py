@@ -17,6 +17,11 @@ class Config:
     CURRENCY = "currency"
     PRECISION = "precision"
 
+    # Consumption-weighted average ("your own average")
+    # Opt-in: entity_id of a cumulative energy sensor (kWh, total_increasing)
+    # used to weight spot prices by actual consumption. Empty = feature off.
+    ENERGY_ENTITY = "energy_entity"
+
     # Cache Settings
     CACHE_MAX_ENTRIES = "cache_max_entries"
     CACHE_TTL = "cache_ttl"

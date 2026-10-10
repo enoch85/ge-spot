@@ -207,6 +207,18 @@ def get_options_schema(defaults, supported_sources, area):
         ),
     }
 
+    # Consumption-weighted average ("your own average"): optional energy meter.
+    # suggested_value pre-fills the saved meter but, unlike default, lets the
+    # user clear it to turn the feature off (the frontend omits cleared fields).
+    schema[
+        vol.Optional(
+            Config.ENERGY_ENTITY,
+            description={"suggested_value": defaults.get(Config.ENERGY_ENTITY)},
+        )
+    ] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="sensor", device_class="energy")
+    )
+
     # Add source priority selection with header
     current_priority = defaults.get(Config.SOURCE_PRIORITY, supported_sources)
     schema[
@@ -349,6 +361,9 @@ def get_default_values(options, data):
         defaults[Config.DISPLAY_UNIT] = options.get(
             Config.DISPLAY_UNIT, data.get(Config.DISPLAY_UNIT, Defaults.DISPLAY_UNIT)
         )
+
+        # Consumption-weighted average energy meter (opt-in, options only)
+        defaults[Config.ENERGY_ENTITY] = options.get(Config.ENERGY_ENTITY)
 
         # Timezone reference
         defaults[Config.TIMEZONE_REFERENCE] = options.get(
