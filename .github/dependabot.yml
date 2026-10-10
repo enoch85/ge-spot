@@ -8,10 +8,14 @@ updates:
     # release is caught upstream first. Security updates skip the cooldown.
     cooldown:
       default-days: 3
+    # One PR per week. Majors stay separate: they are not auto-merged.
     groups:
       github-actions:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
     labels:
       - "dependencies"
       - "github_actions"
