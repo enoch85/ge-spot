@@ -128,8 +128,12 @@ For complete area mappings, see [const/areas.py](custom_components/ge_spot/const
 | `sensor.gespot_export_current_price_{area}`* | Export price (current) |
 | `sensor.gespot_export_average_price_{area}`* | Export average |
 | `sensor.gespot_export_peak_price_{area}`* | Export peak |
+| `sensor.gespot_average_price_paid_today_{area}`** | Your consumption-weighted average today |
+| `sensor.gespot_average_price_paid_month_{area}`** | Your consumption-weighted average this month |
 
 *Export sensors created when "Enable Export Prices" is configured. Replace `{area}` with your region code (e.g., `se4`, `dk1`, `nsw1`).
+
+**Created when an Energy Sensor (cumulative meter) is selected in the options. Attributes compare it with the market average over the same intervals (`simple_average`, `savings_vs_average`, `beating_average`). A meter that briefly reports 0 (e.g. on device reboot) books its whole reading as one jump, skewing that period.
 
 **Integrations:** Compatible with [EV Smart Charging](https://github.com/jonasbkarlsson/ev_smart_charging) via `today_interval_prices` and `tomorrow_interval_prices` attributes.
 
@@ -154,6 +158,7 @@ See [docs/hourly_average_sensors.md](docs/hourly_average_sensors.md) for details
 | **ENTSO-E API Key** | Required for ENTSO-E source ([register here](https://transparency.entsoe.eu/)) |
 | **Export Enabled** | Enable export/feed-in price sensors for prosumers |
 | **Export Multiplier/Offset/VAT** | Configure export pricing formula |
+| **Energy Sensor** | Optional energy meter; enables the "Average Price Paid" sensors |
 
 ### Reliability
 
