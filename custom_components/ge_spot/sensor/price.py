@@ -741,6 +741,7 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
         # Seed the meter baseline from its current reading so the first delta
         # isn't swallowed (and downtime consumption isn't priced afterwards).
         self._acc.last_energy = _state_kwh(self.hass.states.get(self._energy_entity_id))
+        self._handle_coordinator_update()
 
     # --- Event handlers ----------------------------------------------------
 
@@ -753,7 +754,10 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
             # priced at whichever interval the meter comes back in.
             self._acc.last_energy = None
             return
-        self._acc.add_energy(kwh, self._current_price(), self._now_local())
+        price = self._current_price()
+        self._acc.add_energy(kwh, price, self._now_local())
+        if price is None:
+            self._acc.last_energy = None
         self.async_write_ha_state()
 
     @callback
@@ -765,9 +769,13 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
         """
         now_local = self._now_local()
         interval_key = self._tz_service.get_current_interval_key()
+        price = self._current_price()
+        if price is None:
+            # A price gap can occur without a meter event; re-baseline on recovery.
+            self._acc.last_energy = None
         self._acc.sample_simple(
             f"{now_local.date().isoformat()}|{interval_key}",
-            self._current_price(),
+            price,
             now_local,
         )
         self.async_write_ha_state()

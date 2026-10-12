@@ -6,6 +6,7 @@ heavy price arrays), and availability — the HA-coupled bits that the pure
 accumulator tests don't reach.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -51,7 +52,8 @@ async def _add_to_hass(sensor, hass):
     """Run the real async_added_to_hass: meter tracking and baseline seed."""
     sensor.hass = hass
     sensor.entity_id = "sensor.gespot_average_price_paid_today_se3"
-    sensor._tz_service = None  # default timezone for the period keys
+    sensor._tz_service = Mock(target_timezone=timezone.utc)
+    sensor._tz_service.get_current_interval_key.return_value = "12:00"
     sensor.coordinator.data = Mock(current_price=1.5)
     sensor.async_write_ha_state = Mock()
     sensor.async_get_last_extra_data = AsyncMock(return_value=None)
@@ -158,6 +160,69 @@ async def test_wh_meter_is_converted_to_kwh(hass):
     assert attrs[Attributes.CONSUMED_ENERGY] == pytest.approx(2.0)
     assert attrs[Attributes.ACCUMULATED_COST] == pytest.approx(3.0)
     assert s.native_value == pytest.approx(1.5)
+
+
+@pytest.mark.parametrize("period", ["daily", "monthly"])
+async def test_startup_interval_is_included_in_benchmark(hass, period):
+    hass.states.async_set(METER, "100")
+    s = _make_sensor(period=period)
+    s._now_local = Mock(
+        return_value=datetime(2026, 10, 12, 12, 14, 50, tzinfo=timezone.utc)
+    )
+    await _add_to_hass(s, hass)
+    assert s._acc.simple_count == 1
+
+    hass.states.async_set(METER, "101")
+    await hass.async_block_till_done()
+    s._handle_coordinator_update()
+
+    s._now_local.return_value = datetime(2026, 10, 12, 12, 15, 10, tzinfo=timezone.utc)
+    s._tz_service.get_current_interval_key.return_value = "12:15"
+    s.coordinator.data.current_price = 10.0
+    s._handle_coordinator_update()
+    hass.states.async_set(METER, "102")
+    await hass.async_block_till_done()
+
+    assert s._acc.simple_count == 2
+    assert s.native_value == pytest.approx(5.75)
+    attrs = s.extra_state_attributes
+    assert attrs[Attributes.SIMPLE_AVERAGE] == pytest.approx(5.75)
+    assert attrs[Attributes.SAVINGS_VS_AVERAGE] == 0.0
+    assert attrs[Attributes.BEATING_AVERAGE] is False
+
+
+@pytest.mark.parametrize("period", ["daily", "monthly"])
+@pytest.mark.parametrize("gap_notification", ["coordinator", "meter", "both"])
+async def test_price_gap_is_not_priced(hass, period, gap_notification):
+    hass.states.async_set(METER, "100")
+    s = _make_sensor(period=period)
+    s._now_local = Mock(return_value=datetime(2026, 10, 12, 12, 0, tzinfo=timezone.utc))
+    await _add_to_hass(s, hass)
+    hass.states.async_set(METER, "101")
+    await hass.async_block_till_done()
+
+    s._now_local.return_value = datetime(2026, 10, 12, 12, 15, tzinfo=timezone.utc)
+    s._tz_service.get_current_interval_key.return_value = "12:15"
+    s.coordinator.data.current_price = None
+    if gap_notification != "meter":
+        s._handle_coordinator_update()
+    if gap_notification != "coordinator":
+        hass.states.async_set(METER, "103")
+        await hass.async_block_till_done()
+
+    s._now_local.return_value = datetime(2026, 10, 12, 12, 30, tzinfo=timezone.utc)
+    s._tz_service.get_current_interval_key.return_value = "12:30"
+    s.coordinator.data.current_price = 10.0
+    s._handle_coordinator_update()
+    hass.states.async_set(METER, "105")
+    await hass.async_block_till_done()
+
+    assert s._acc.energy_acc == pytest.approx(1.0)
+    assert s._acc.cost_acc == pytest.approx(1.5)
+    hass.states.async_set(METER, "106")
+    await hass.async_block_till_done()
+    assert s._acc.energy_acc == pytest.approx(2.0)
+    assert s._acc.cost_acc == pytest.approx(11.5)
 
 
 # --- Restore / fingerprint -------------------------------------------------
