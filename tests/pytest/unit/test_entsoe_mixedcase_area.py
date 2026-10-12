@@ -27,8 +27,9 @@ from custom_components.ge_spot.api.entsoe import EntsoeAPI
         ("GB", "10Y1001A1001A59C"),  # all-upper key keeps working
     ],
 )
-async def test_entsoe_resolves_mixed_case_area(area, expected_eic):
+async def test_entsoe_resolves_mixed_case_area(area, expected_eic, caplog):
     """_fetch_data must map the area to its EIC and never reject mixed-case zones."""
+    caplog.set_level("DEBUG", logger="custom_components.ge_spot.api.entsoe")
     api = EntsoeAPI(config={"api_key": "dummy"})
     client = AsyncMock()
     client.fetch = AsyncMock(
@@ -46,3 +47,5 @@ async def test_entsoe_resolves_mixed_case_area(area, expected_eic):
         params = call.kwargs.get("params", {})
         assert params.get("in_Domain") == expected_eic
         assert params.get("out_Domain") == expected_eic
+
+    assert "dummy" not in caplog.text

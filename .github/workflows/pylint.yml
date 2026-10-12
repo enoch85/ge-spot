@@ -6,12 +6,15 @@ on:
   push:
     branches: [ main ]
       
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.14"]
+        python-version: ["3.15"]
     steps:
     - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
