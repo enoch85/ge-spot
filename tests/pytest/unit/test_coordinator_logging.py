@@ -52,7 +52,7 @@ def test_rate_limited_fetch_decisions_only_log_debug(
     assert any(reason in r.message for r in records)
 
 
-async def test_update_failure_logs_once_until_recovery(hass, caplog):
+async def test_update_failure_logs_once_until_recovery(hass, caplog, monkeypatch):
     with patch(
         "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
     ) as manager_class:
@@ -70,10 +70,18 @@ async def test_update_failure_logs_once_until_recovery(hass, caplog):
     manager.fetch_data = AsyncMock(return_value=empty)
     manager.is_in_grace_period.return_value = True
     caplog.set_level(logging.INFO, logger=UnifiedPriceCoordinator.__module__)
+    clock = MagicMock(return_value=datetime(2026, 10, 13, 7, tzinfo=timezone.utc))
+    monkeypatch.setattr(
+        "custom_components.ge_spot.coordinator.unified_price_manager.dt_util.utcnow",
+        clock,
+    )
 
     assert await coordinator._async_update_data() is empty
     assert not caplog.records
     manager.is_in_grace_period.return_value = False
+    clock.return_value += timedelta(
+        minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+    )
     for reason in ("rate limited for 1 minute", "rate limited for 2 minutes"):
         empty._error = reason
         assert await coordinator._async_update_data() is empty
@@ -90,6 +98,11 @@ async def test_update_failure_logs_once_until_recovery(hass, caplog):
     assert sum("Price data recovered" in r.message for r in caplog.records) == 1
 
     manager.fetch_data.return_value = empty
+    assert await coordinator._async_update_data() is empty
+    assert sum(r.levelno == logging.WARNING for r in caplog.records) == 1
+    clock.return_value += timedelta(
+        minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+    )
     assert await coordinator._async_update_data() is empty
     assert sum(r.levelno == logging.WARNING for r in caplog.records) == 2
 
@@ -113,8 +126,19 @@ async def test_future_prices_cannot_hide_sustained_missing_current_price(hass, c
         )
     )
     caplog.set_level(logging.WARNING, logger=UnifiedPriceCoordinator.__module__)
-    for _ in range(Network.Defaults.RETRY_COUNT + 2):
-        await coordinator._async_update_data()
+    now = datetime(2026, 10, 13, 7, tzinfo=timezone.utc)
+    with patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.dt_util.utcnow",
+        return_value=now,
+    ) as clock:
+        for _ in range(Network.Defaults.RETRY_COUNT + 2):
+            await coordinator._async_update_data()
+        assert not caplog.records
+        clock.return_value = now + timedelta(
+            minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+        )
+        for _ in range(2):
+            await coordinator._async_update_data()
     assert sum(r.levelno == logging.WARNING for r in caplog.records) == 1
 
 

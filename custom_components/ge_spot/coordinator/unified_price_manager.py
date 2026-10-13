@@ -1926,6 +1926,7 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         self.config = config
         self._update_failure_logged = False
         self._unavailable_updates = 0
+        self._unavailable_since: Optional[datetime] = None
 
         # Create unified price manager
         self.price_manager = UnifiedPriceManager(
@@ -1949,6 +1950,9 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                 or getattr(data, "current_price", None) is None
             ):
                 self._unavailable_updates += 1
+                now = dt_util.utcnow()
+                if self._unavailable_since is None:
+                    self._unavailable_since = now
                 # Log specific error if available
                 error_msg = (
                     getattr(data, "_error", None)
@@ -1963,11 +1967,17 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                     )
                 elif not self._update_failure_logged and (
                     getattr(data, "_error_code", None) == Errors.NO_SOURCES_CONFIGURED
-                    or max(
-                        self._unavailable_updates,
-                        getattr(data, "_consecutive_failures", 0),
+                    or (
+                        max(
+                            self._unavailable_updates,
+                            getattr(data, "_consecutive_failures", 0),
+                        )
+                        >= Network.Defaults.RETRY_COUNT
+                        and now - self._unavailable_since
+                        >= timedelta(
+                            minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+                        )
                     )
-                    >= Network.Defaults.RETRY_COUNT
                 ):
                     _LOGGER.warning(
                         "Update failed for area %s: %s", self.area, error_msg
@@ -1980,6 +1990,7 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
 
                 return data
             self._unavailable_updates = 0
+            self._unavailable_since = None
             if self._update_failure_logged:
                 _LOGGER.info("Price data recovered for area %s", self.area)
                 self._update_failure_logged = False
