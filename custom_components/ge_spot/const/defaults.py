@@ -13,7 +13,7 @@ class Defaults:
     IMPORT_MULTIPLIER = 1.0  # Default multiplier for import prices (1.0 = no scaling)
     ADDITIONAL_TARIFF = 0.0  # Default additional tariff (transfer fees, etc.) per kWh
     ENERGY_TAX = 0.0  # Default energy tax per kWh (applied before VAT)
-    UPDATE_INTERVAL = 15  # Update every 15 minutes to match interval granularity
+    UPDATE_INTERVAL = 0.5  # Minutes; refresh cached states, API cadence is separate.
     # Display & Formatting
     DISPLAY_UNIT = DisplayUnit.DECIMAL
     PRECISION = 4

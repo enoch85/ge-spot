@@ -13,6 +13,11 @@ from custom_components.ge_spot.coordinator import UnifiedPriceCoordinator
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
 from custom_components.ge_spot.sensor.base import BaseElectricityPriceSensor
+from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
+from custom_components.ge_spot.timezone.service import TimezoneService
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from freezegun import freeze_time
+from homeassistant.util import dt as dt_util
 
 # Define mock data that the coordinator would typically provide
 MOCK_COORDINATOR_DATA = {
@@ -52,6 +57,44 @@ def test_coordinator_sensors_do_not_poll_individually():
         "Current Price",
     )
     assert not sensor.should_poll
+
+
+async def test_shared_coordinator_updates_prices_after_interval_change(hass):
+    config = {Config.AREA: "SE4", Config.CURRENCY: "EUR"}
+    entry = MockConfigEntry(domain=DOMAIN, data=config)
+    entry.add_to_hass(hass)
+    data = IntervalPriceData(
+        today_interval_prices={"12:00": 0.1301, "12:15": 0.12525},
+        _tz_service=TimezoneService(hass, "SE4", config),
+    )
+    values = []
+    with freeze_time("2026-10-13T10:14:59Z") as clock, patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
+    ) as manager_class, patch.object(
+        hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
+    ), patch(
+        "custom_components.ge_spot.get_exchange_service",
+        new=AsyncMock(return_value=MagicMock()),
+    ):
+        manager = manager_class.return_value
+        manager.fetch_data = AsyncMock(return_value=data)
+        manager.async_close = AsyncMock()
+        manager._health_check_scheduled = True
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        remove_listener = coordinator.async_add_listener(
+            lambda: values.append(coordinator.data.current_price)
+        )
+        try:
+            assert coordinator.data.current_price == 0.1301
+            clock.tick(timedelta(seconds=31))
+            async_fire_time_changed(hass, dt_util.now())
+            await hass.async_block_till_done()
+            assert values == [0.12525]
+        finally:
+            remove_listener()
+            await coordinator.async_shutdown()
+            await coordinator.async_close()
 
 
 @pytest.mark.asyncio
