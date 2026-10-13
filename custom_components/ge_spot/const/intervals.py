@@ -8,7 +8,9 @@ class SourceIntervals:
 
     # Source-specific update intervals (in minutes)
     INTERVALS = {
-        Source.AEMO: 5,  # Every 5 minutes for real-time AEMO data
+        Source.AEMO: 30,  # NEMWEB pre-dispatch reports are updated half hourly.
+        Source.COMED: 5,
+        Source.AMBER: 5,
         Source.ENTSOE: 360,  # Every 6 hours for ENTSO-E
         Source.NORDPOOL: 1440,  # Every 24 hours
         Source.ENERGI_DATA_SERVICE: 1440,

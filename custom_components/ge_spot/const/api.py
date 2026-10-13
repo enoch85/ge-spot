@@ -44,6 +44,9 @@ class Stromligning:
 class Aemo:
     """AEMO API constants."""
 
+    TIMEZONE = "Australia/Brisbane"  # NEM market time is fixed AEST, without DST.
+    INTERVAL_MINUTES = 30
+
     # AEMO regions
     REGIONS = ["NSW1", "QLD1", "SA1", "TAS1", "VIC1"]
 
@@ -118,7 +121,7 @@ class SourceTimezone:
         Source.ENTSOE: TimezoneName.UTC,  # Timestamps have 'Z' suffix indicating UTC
         Source.ENERGY_CHARTS: TimezoneName.EUROPE_BERLIN,  # CET/CEST for Energy-Charts API
         Source.OMIE: TimezoneName.EUROPE_MADRID,  # Spanish market uses local time
-        Source.AEMO: TimezoneName.AUSTRALIA_SYDNEY,  # Australian east coast market timezone
+        Source.AEMO: Aemo.TIMEZONE,
         Source.STROMLIGNING: TimezoneName.EUROPE_COPENHAGEN,  # Danish service, uses consistent local time
         Source.COMED: TimezoneName.AMERICA_CHICAGO,  # ComEd uses Chicago time
     }

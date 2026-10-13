@@ -1,12 +1,7 @@
-"""Regression tests: ApiClient must not log handled HTTP 429 at ERROR level.
-
-A 429 (rate limit) is expected and handled by the retry/fallback path, and
-``_track_error_response`` already surfaces it once at WARNING. The per-request
-detail should be DEBUG so a rate-limited source shared by many areas does not
-flood the log with ERRORs. Other non-200 statuses (e.g. 500) stay ERROR.
-"""
+"""Handled upstream failures stay quiet; authentication failures remain visible."""
 
 import logging
+import pytest
 
 from custom_components.ge_spot.api.base.api_client import ApiClient
 
@@ -58,19 +53,18 @@ async def test_429_not_logged_as_error(caplog):
     assert errors == [], f"429 must not log ERROR, got: {errors}"
 
 
-async def test_500_still_logged_as_error(caplog):
-    """A genuine server error (500) must still be logged at ERROR."""
-    client = ApiClient(session=_FakeSession(_FakeResponse(500, body="boom")))
+@pytest.mark.parametrize("status", [400, 401, 403])
+async def test_actionable_failure_logged_as_error(caplog, status):
+    """Authentication and malformed requests require user/developer intervention."""
+    client = ApiClient(session=_FakeSession(_FakeResponse(status, body="denied")))
 
     caplog.clear()
     with caplog.at_level(logging.DEBUG):
         result = await client.fetch("https://example.test/x")
 
-    assert result.get("status_code") == 500
+    assert result.get("status_code") == status
     errors = [r.message for r in caplog.records if r.levelname == "ERROR"]
-    assert any(
-        "status 500" in m for m in errors
-    ), f"500 should log ERROR, got: {errors}"
+    assert any(f"status {status}" in m for m in errors)
 
 
 async def test_503_not_logged_as_error(caplog):
@@ -89,18 +83,14 @@ async def test_503_not_logged_as_error(caplog):
     assert errors == [], f"503 must not log ERROR, got: {errors}"
 
 
-async def test_503_surfaces_single_warning(caplog):
-    """Repeated 503s to the same source warn once (per source), not per request."""
-    client = ApiClient(session=_FakeSession(_FakeResponse(503, body="down")))
+@pytest.mark.parametrize("status", [204, 404, 429, 500, 502, 503, 504])
+async def test_transient_failures_are_debug_across_clients(caplog, status):
+    """A new client per fetch must not restart a warning flood."""
 
     caplog.clear()
     with caplog.at_level(logging.DEBUG):
-        await client.fetch("https://web-api.tp.entsoe.eu/api?doc=A44&x=1")
-        await client.fetch("https://web-api.tp.entsoe.eu/api?doc=A44&x=2")
-
-    warnings = [
-        r.message
-        for r in caplog.records
-        if r.levelname == "WARNING" and "Upstream temporarily unavailable" in r.message
-    ]
-    assert len(warnings) == 1, f"expected exactly one WARNING, got: {warnings}"
+        for _ in range(2):
+            client = ApiClient(session=_FakeSession(_FakeResponse(status)))
+            await client.fetch("https://example.test/prices")
+    assert caplog.records
+    assert all(record.levelno < logging.WARNING for record in caplog.records)

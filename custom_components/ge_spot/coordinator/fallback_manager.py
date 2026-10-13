@@ -87,15 +87,10 @@ class FallbackManager:
                             f"[{area}] '{source_name}' returned no data "
                             f"(attempt {attempt + 1}/{Network.Defaults.RETRY_COUNT})"
                         )
-                        # No data, but no exception - try next attempt
-                        if attempt < Network.Defaults.RETRY_COUNT - 1:
-                            continue
-                        else:
-                            # Last attempt failed, move to next source
-                            last_exception = PriceFetchError(
-                                f"Source {source_name} returned no raw data after {Network.Defaults.RETRY_COUNT} attempts"
-                            )
-                            break
+                        last_exception = PriceFetchError(
+                            f"Source {source_name} returned no raw data"
+                        )
+                        break
 
                 except asyncio.TimeoutError:
                     _LOGGER.debug(
@@ -109,8 +104,7 @@ class FallbackManager:
                         # Not last attempt, retry immediately with higher timeout
                         continue
                     else:
-                        # Last attempt failed, log warning and move to next source
-                        _LOGGER.warning(
+                        _LOGGER.debug(
                             f"[{area}] ✗ '{source_name}' failed all {Network.Defaults.RETRY_COUNT} attempts "
                             f"(timeouts: 5s, 15s, 45s)"
                         )

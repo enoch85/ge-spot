@@ -7,11 +7,13 @@ import zoneinfo
 from custom_components.ge_spot.api.parsers.aemo_parser import AemoParser
 from custom_components.ge_spot.const.currencies import Currency
 from custom_components.ge_spot.const.sources import Source
+from custom_components.ge_spot.const.api import Aemo
+from freezegun import freeze_time
 
 
 # Generate current time data for testing
 def _generate_current_aemo_data(
-    region: str, num_intervals: int = 3, timezone_str: str = "Australia/Sydney"
+    region: str, num_intervals: int = 3, timezone_str: str = Aemo.TIMEZONE
 ) -> str:
     """Generate AEMO CSV data with current timestamps.
 
@@ -28,7 +30,9 @@ def _generate_current_aemo_data(
 
     lines = []
     for i in range(num_intervals):
-        interval_time = current_30min + timedelta(minutes=30 * i)
+        interval_time = current_30min + timedelta(
+            minutes=Aemo.INTERVAL_MINUTES * (i + 1)
+        )
         timestamp = interval_time.strftime("%Y/%m/%d %H:%M:%S")
         price = 150.0 + (i * 10)  # Simple price progression
 
@@ -84,7 +88,7 @@ class TestAemoParser:
 
         # Check values
         assert result["currency"] == Currency.AUD
-        assert result["timezone"] == "Australia/Sydney"
+        assert result["timezone"] == Aemo.TIMEZONE
         assert result["source"] == Source.AEMO
         assert result["area"] == "NSW1"
         assert result["source_interval_minutes"] == 30
@@ -248,13 +252,49 @@ class TestAemoParser:
         """Test empty result structure."""
         result = parser._create_empty_result(
             {"area": "NSW1", "timezone": "Australia/Sydney"},
-            "Australia/Sydney",
             Currency.AUD,
         )
 
         assert result["interval_raw"] == {}
         assert result["currency"] == Currency.AUD
-        assert result["timezone"] == "Australia/Sydney"
+        assert result["timezone"] == Aemo.TIMEZONE
         assert result["area"] == "NSW1"
         assert result["source"] == Source.AEMO
         assert result["source_interval_minutes"] == 30
+
+
+@pytest.mark.parametrize(
+    "area,local_zone",
+    [
+        ("NSW1", "Australia/Sydney"),
+        ("QLD1", "Australia/Brisbane"),
+        ("SA1", "Australia/Adelaide"),
+        ("TAS1", "Australia/Hobart"),
+        ("VIC1", "Australia/Melbourne"),
+    ],
+)
+@pytest.mark.parametrize("date", ["2026-01-14", "2026-07-14"])
+def test_market_time_and_interval_end_are_independent_of_regional_dst(
+    area, local_zone, date
+):
+    with freeze_time(f"{date}T01:35:00+10:00"):
+        result = AemoParser().parse(
+            {
+                "csv_content": f"{SAMPLE_CSV_HEADER}\n{_generate_current_aemo_data(area, 2)}",
+                "area": area,
+                "timezone": local_zone,
+            }
+        )
+    previous_day = datetime.fromisoformat(date) - timedelta(days=1)
+    expected_start = previous_day.replace(
+        hour=15, minute=30, tzinfo=zoneinfo.ZoneInfo("UTC")
+    )
+    assert result["interval_raw"][expected_start.isoformat()] == 150.0
+    assert (
+        result["interval_raw"][(expected_start + timedelta(minutes=15)).isoformat()]
+        == 150.0
+    )
+    assert (
+        result["interval_raw"][(expected_start + timedelta(minutes=30)).isoformat()]
+        == 160.0
+    )

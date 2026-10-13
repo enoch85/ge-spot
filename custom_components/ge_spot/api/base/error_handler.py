@@ -280,7 +280,7 @@ class ErrorHandler:
                 # Calculate retry delay
                 delay = self.get_retry_delay(error_type, retry_count, strategy)
 
-                _LOGGER.warning(
+                _LOGGER.debug(
                     f"Error in {self.source_type} API call (attempt {retry_count + 1}/{max_retries + 1}): {error}. "
                     f"Classified as {error_type}. Retrying in {delay:.2f}s."
                 )

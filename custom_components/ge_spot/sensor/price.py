@@ -720,8 +720,8 @@ class ConsumptionWeightedAverageSensor(RestoreEntity, BaseElectricityPriceSensor
         async_internal_added_to_hass (invoked separately by the entity
         platform), so restore still works.
 
-        No midnight timer is needed: the entity is polled, each poll refreshes
-        the coordinator, and its listener rolls the period over.
+        No midnight timer is needed: scheduled coordinator updates notify the
+        listener, which rolls the period over.
         """
         if last := await self.async_get_last_extra_data():
             self._restore(last.as_dict())

@@ -247,11 +247,12 @@ class UnifiedPriceManager:
 
     def get_disabled_sources(self) -> List[str]:
         """Get list of disabled source names (sources that failed recently)."""
+        now = dt_util.now()
         return sorted(
             [
                 src
                 for src, last_fail in self._failed_sources.items()
-                if last_fail is not None
+                if last_fail is not None and now < self._source_retry_at(last_fail)
             ]
         )
 
@@ -272,8 +273,7 @@ class UnifiedPriceManager:
 
         for source_name, failure_time in self._failed_sources.items():
             if failure_time is not None:  # Source has failed
-                # Calculate next health check time
-                next_check = self._calculate_next_health_check(now)
+                next_check = max(now, self._source_retry_at(failure_time))
 
                 failed_details.append(
                     {
@@ -284,6 +284,12 @@ class UnifiedPriceManager:
                 )
 
         return sorted(failed_details, key=lambda x: x["source"])
+
+    def _source_retry_at(self, failure_time: datetime) -> datetime:
+        """Allow a failed provider to recover without waiting for a daily check."""
+        return failure_time + timedelta(
+            minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+        )
 
     def _mark_source_attempted(self, source_name: str):
         """Track that a source was attempted.
@@ -481,9 +487,9 @@ class UnifiedPriceManager:
                         validated_count = len(
                             [s for s in self._failed_sources.values() if s is None]
                         )
-                        _LOGGER.warning(
+                        _LOGGER.debug(
                             f"[{self.area}] Health check: '{source_name}' ✗ no data returned. "
-                            f"Will retry during next daily health check. "
+                            f"Will retry after the source cooldown. "
                             f"({validated_count} other source(s) available)"
                         )
 
@@ -498,7 +504,7 @@ class UnifiedPriceManager:
                     )
                     _LOGGER.warning(
                         f"[{self.area}] Health check: '{source_name}' ✗ failed: {e}. "
-                        f"Will retry during next daily health check. "
+                        f"Will retry after the source cooldown. "
                         f"({validated_count} other source(s) available)",
                         exc_info=True,
                     )
@@ -648,6 +654,7 @@ class UnifiedPriceManager:
             in_grace_period=self.is_in_grace_period(),
             is_health_check=self._health_check_in_progress,
             area=self.area,
+            source=cached_price_data.source if cached_price_data else None,
         )
 
         # Log if health check is causing a rate limit bypass
@@ -715,8 +722,8 @@ class UnifiedPriceManager:
             # Use all configured sources - health check validates them during special windows
             # force=True bypasses failed source tracking entirely
             # On first fetch OR grace period, try ALL sources regardless of validation failures
-            first_fetch = self._last_api_fetch is None
-            in_grace_period = self.is_in_grace_period()
+            first_fetch = self._last_api_fetch is None and not self._attempted_sources
+            in_grace_period = self.is_in_grace_period() and not self._attempted_sources
 
             # Debug logging for source filtering decision
             _LOGGER.debug(f"[{self.area}] Source filtering:")
@@ -737,12 +744,13 @@ class UnifiedPriceManager:
                 # - force=True (explicit override)
                 # - first_fetch=True (first data fetch after init)
                 # - grace period active (recently reloaded/started)
-                # Health check will validate failed sources during special windows
+                # A short cooldown protects the provider without blocking recovery all day.
                 if (
                     not force
                     and not first_fetch
                     and not in_grace_period
                     and last_failure
+                    and now < self._source_retry_at(last_failure)
                 ):
                     time_since_failure = (now - last_failure).total_seconds() / 60
                     _LOGGER.debug(
@@ -761,11 +769,14 @@ class UnifiedPriceManager:
                     for cls in self._api_classes
                     if cls not in enabled_api_classes
                 ]
-                next_check = self._calculate_next_health_check(now)
-                next_check_str = next_check.strftime("%H:%M") if next_check else "soon"
+                next_check = min(
+                    self._source_retry_at(self._failed_sources[s])
+                    for s in disabled_names
+                )
+                next_check_str = next_check.strftime("%H:%M")
                 _LOGGER.debug(
                     f"[{self.area}] Skipping {disabled_count} recently failed source(s): {', '.join(disabled_names)} "
-                    f"(will be retried during health check at {next_check_str})"
+                    f"(eligible for retry at {next_check_str})"
                 )
             elif first_fetch:
                 _LOGGER.debug(
@@ -819,13 +830,16 @@ class UnifiedPriceManager:
                     )
                 else:
                     # Has API classes but all are temporarily disabled due to failures
-                    next_check = self._calculate_next_health_check(now)
+                    next_check = min(
+                        self._source_retry_at(self._failed_sources[cls.SOURCE_TYPE])
+                        for cls in self._api_classes
+                    )
                     next_check_str = (
                         next_check.strftime("%H:%M") if next_check else "soon"
                     )
                     _LOGGER.debug(
                         f"All {len(self._api_classes)} API source(s) temporarily disabled due to recent failures. "
-                        f"Next health check: {next_check_str}"
+                        f"Next retry: {next_check_str}"
                     )
                     self._consecutive_failures += 1
                     error_msg = ErrorDetails.get_message(
@@ -998,20 +1012,23 @@ class UnifiedPriceManager:
                 # Data is complete if:
                 # - We have both today AND tomorrow (always acceptable)
                 # - OR we have today complete and tomorrow isn't expected yet (before 13:00)
-                has_complete_data = today_complete and (
-                    tomorrow_complete or not tomorrow_expected
+                rolling_source = result.get("data_source") in Source.ROLLING_SOURCES
+                has_complete_data = (
+                    has_today
+                    if rolling_source
+                    else today_complete and (tomorrow_complete or not tomorrow_expected)
                 )
                 has_partial_data = (has_today or has_tomorrow) and not has_complete_data
                 has_any_data = has_today or has_tomorrow
 
-                # Warn if we have data but it's incomplete (missing intervals)
+                # Keep coverage details available for diagnosing partial forecasts.
                 if has_today and not today_complete:
                     dst_note = (
                         f" (DST {today_dst_type} expects {expected_today})"
                         if is_today_dst
                         else ""
                     )
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         f"[{self.area}] Incomplete today data from {result.get('data_source', 'unknown')}: "
                         f"{today_count}/{expected_today} intervals (missing {expected_today - today_count}){dst_note}"
                     )
@@ -1021,10 +1038,8 @@ class UnifiedPriceManager:
                         if is_tomorrow_dst
                         else ""
                     )
-                    # Only warn if after expected release time (13:00-14:00 local)
-                    # Before that, it's normal for tomorrow data to be incomplete
                     if current_hour >= 14:
-                        _LOGGER.warning(
+                        _LOGGER.debug(
                             f"[{self.area}] Incomplete tomorrow data from {result.get('data_source', 'unknown')}: "
                             f"{tomorrow_count}/{expected_tomorrow} intervals (missing {expected_tomorrow - tomorrow_count}){dst_note}"
                         )
@@ -1557,13 +1572,13 @@ class UnifiedPriceManager:
             # Mark attempted sources as failed
             if self._attempted_sources:
                 # Calculate when sources will be retried
-                next_check = self._calculate_next_health_check(now)
+                next_check = self._source_retry_at(now)
                 next_check_str = next_check.strftime("%H:%M") if next_check else "soon"
 
-                _LOGGER.warning(
+                _LOGGER.debug(
                     f"[{self.area}] All attempted sources failed. "
                     f"Failed source(s): {', '.join(self._attempted_sources)}. "
-                    f"Sources will be validated during next health check at {next_check_str}."
+                    f"Sources become eligible for retry at {next_check_str}."
                 )
 
                 for source_name in self._attempted_sources:
@@ -1589,7 +1604,7 @@ class UnifiedPriceManager:
                 area=self.area, target_date=today_date  # Specify today
             )
             if cached_data:
-                _LOGGER.warning(
+                _LOGGER.debug(
                     "Using cached data for %s due to fetch/processing failure.",
                     self.area,
                 )
@@ -1696,7 +1711,7 @@ class UnifiedPriceManager:
 
             # Check if processor returned None (validation failure)
             if processed_price_data is None:
-                _LOGGER.warning(
+                _LOGGER.debug(
                     f"[{self.area}] Data processor returned None (validation failure)"
                 )
                 return await self._generate_empty_result(
@@ -1710,7 +1725,7 @@ class UnifiedPriceManager:
                 not processed_price_data.today_interval_prices
                 and not processed_price_data.tomorrow_interval_prices
             ):
-                _LOGGER.warning(
+                _LOGGER.debug(
                     f"[{self.area}] Data processor returned empty prices - returning empty result"
                 )
                 return await self._generate_empty_result(
@@ -1947,7 +1962,11 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                         self.area,
                         error_msg,
                     )
-                elif not self._update_failure_logged:
+                elif not self._update_failure_logged and (
+                    getattr(data, "_error_code", None) == Errors.NO_SOURCES_CONFIGURED
+                    or getattr(data, "_consecutive_failures", 0)
+                    >= Network.Defaults.RETRY_COUNT
+                ):
                     _LOGGER.warning(
                         "Update failed for area %s: %s", self.area, error_msg
                     )

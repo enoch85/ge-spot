@@ -2,7 +2,7 @@
 
 import csv
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from zoneinfo import ZoneInfo
 from typing import Dict, Any, Optional, List
@@ -12,6 +12,7 @@ from ..interval_expander import convert_to_target_intervals
 from ...const.sources import Source
 from ...const.currencies import Currency
 from ...const.energy import EnergyUnit
+from ...const.api import Aemo
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class AemoParser(BasePriceParser):
         {
             'csv_content': str,  # CSV file content
             'area': str,         # Region code (NSW1, QLD1, etc.)
-            'timezone': str,     # Australia/Sydney
+            'timezone': str,     # Fixed AEST market time
             'currency': str,     # AUD
             'raw_data': dict     # Metadata
         }
@@ -68,7 +69,7 @@ class AemoParser(BasePriceParser):
             _LOGGER.warning("[AemoParser] 'area' not specified")
             return self._create_empty_result(raw_data)
 
-        source_timezone = raw_data.get("timezone", "Australia/Sydney")
+        source_timezone = Aemo.TIMEZONE
         source_currency = raw_data.get("currency", Currency.AUD)
 
         _LOGGER.debug(
@@ -81,9 +82,7 @@ class AemoParser(BasePriceParser):
 
             if not prices_30min:
                 _LOGGER.warning(f"[AemoParser] No price data found for {area}")
-                return self._create_empty_result(
-                    raw_data, source_timezone, source_currency
-                )
+                return self._create_empty_result(raw_data, source_currency)
 
             _LOGGER.debug(
                 f"[AemoParser] Parsed {len(prices_30min)} 30-minute trading intervals"
@@ -92,7 +91,10 @@ class AemoParser(BasePriceParser):
             # Convert to interval_raw format (ISO timestamps)
             interval_raw = {}
             for record in prices_30min:
-                timestamp = record["timestamp"]
+                # NEM timestamps identify the end of each trading interval.
+                timestamp = record["timestamp"] - timedelta(
+                    minutes=Aemo.INTERVAL_MINUTES
+                )
 
                 # Ensure timezone-aware datetime
                 if timestamp.tzinfo is None:
@@ -114,7 +116,7 @@ class AemoParser(BasePriceParser):
             )
             interval_raw = convert_to_target_intervals(
                 source_prices=interval_raw,
-                source_interval_minutes=30,  # AEMO uses 30-min trading intervals
+                source_interval_minutes=Aemo.INTERVAL_MINUTES,
             )
             _LOGGER.debug(
                 f"[AemoParser] After expansion: {len(interval_raw)} 15-minute intervals"
@@ -128,21 +130,19 @@ class AemoParser(BasePriceParser):
                 "timezone": source_timezone,
                 "source": Source.AEMO,
                 "source_unit": EnergyUnit.MWH,
-                "source_interval_minutes": 30,  # AEMO uses 30-min trading intervals
+                "source_interval_minutes": Aemo.INTERVAL_MINUTES,
             }
 
             # Validate before returning
             if not self.validate_parsed_data(result):
                 _LOGGER.warning(f"[AemoParser] Validation failed for parsed data")
-                return self._create_empty_result(
-                    raw_data, source_timezone, source_currency
-                )
+                return self._create_empty_result(raw_data, source_currency)
 
             return result
 
         except Exception as e:
             _LOGGER.error(f"[AemoParser] Error parsing NEMWEB CSV: {e}", exc_info=True)
-            return self._create_empty_result(raw_data, source_timezone, source_currency)
+            return self._create_empty_result(raw_data, source_currency)
 
     def _parse_predispatch_csv(
         self, csv_content: str, target_region: str
@@ -260,16 +260,15 @@ class AemoParser(BasePriceParser):
     def _create_empty_result(
         self,
         original_data: Dict[str, Any],
-        timezone: str = "Australia/Sydney",
         currency: str = Currency.AUD,
     ) -> Dict[str, Any]:
         """Helper to create a standard empty result structure."""
         return {
             "interval_raw": {},
             "currency": original_data.get("currency", currency),
-            "timezone": original_data.get("timezone", timezone),
+            "timezone": Aemo.TIMEZONE,
             "area": original_data.get("area"),
             "source": Source.AEMO,
             "source_unit": EnergyUnit.MWH,
-            "source_interval_minutes": 30,
+            "source_interval_minutes": Aemo.INTERVAL_MINUTES,
         }

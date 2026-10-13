@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from custom_components.ge_spot.const.network import Network
+from custom_components.ge_spot.const.time import TimeInterval
+from custom_components.ge_spot.const.intervals import SourceIntervals
 from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
+from custom_components.ge_spot.coordinator.data_validity import calculate_data_validity
 from custom_components.ge_spot.coordinator.fetch_decision import FetchDecisionMaker
 from custom_components.ge_spot.coordinator.unified_price_manager import (
     UnifiedPriceCoordinator,
@@ -63,6 +66,7 @@ async def test_update_failure_logs_once_until_recovery(hass, caplog):
     manager = manager_class.return_value
     empty = IntervalPriceData(area="SE4", source="None")
     empty._error = "No cache and no fetch: rate limited"
+    empty._consecutive_failures = Network.Defaults.RETRY_COUNT
     manager.fetch_data = AsyncMock(return_value=empty)
     manager.is_in_grace_period.return_value = True
     caplog.set_level(logging.INFO, logger=UnifiedPriceCoordinator.__module__)
@@ -84,3 +88,48 @@ async def test_update_failure_logs_once_until_recovery(hass, caplog):
     manager.fetch_data.return_value = empty
     assert await coordinator._async_update_data() is empty
     assert sum(r.levelno == logging.WARNING for r in caplog.records) == 2
+
+
+def test_usable_startup_cache_does_not_require_network_fetch():
+    validity = MagicMock()
+    validity.has_current_interval = True
+    validity.today_interval_count = TimeInterval.get_intervals_per_day()
+    validity.tomorrow_interval_count = 0
+    validity.intervals_remaining.return_value = TimeInterval.get_intervals_per_day()
+    should_fetch, _ = FetchDecisionMaker(
+        MagicMock(area_timezone=timezone.utc)
+    ).should_fetch(
+        now=datetime(2026, 10, 13, 7, tzinfo=timezone.utc),
+        last_fetch=None,
+        data_validity=validity,
+        in_grace_period=True,
+    )
+    assert not should_fetch
+
+
+def test_tomorrow_prices_do_not_count_as_current_data():
+    validity = calculate_data_validity(
+        {},
+        {"07:00": 1.0},
+        datetime(2026, 10, 13, 7, tzinfo=timezone.utc),
+        "07:00",
+        target_timezone="UTC",
+    )
+    assert not validity.has_current_interval
+
+
+@pytest.mark.parametrize("source", ["aemo", "comed", "amber"])
+@pytest.mark.parametrize("hour", [7, 13, 16])
+def test_rolling_prices_refresh_without_day_ahead_windows(source, hour):
+    now = datetime(2026, 10, 13, hour, tzinfo=timezone.utc)
+    validity = MagicMock(has_current_interval=True)
+    decision = FetchDecisionMaker(MagicMock())
+    assert not decision.should_fetch(
+        now, now - timedelta(minutes=1), validity, source=source
+    )[0]
+    assert decision.should_fetch(
+        now,
+        now - timedelta(minutes=SourceIntervals.get_interval(source)),
+        validity,
+        source=source,
+    )[0]

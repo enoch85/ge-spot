@@ -12,6 +12,7 @@ from custom_components.ge_spot.const import DOMAIN, Config
 from custom_components.ge_spot.coordinator import UnifiedPriceCoordinator
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
+from custom_components.ge_spot.sensor.base import BaseElectricityPriceSensor
 
 # Define mock data that the coordinator would typically provide
 MOCK_COORDINATOR_DATA = {
@@ -41,6 +42,16 @@ MOCK_COORDINATOR_DATA = {
     "error": None,
     # Add other keys expected by sensors if necessary
 }
+
+
+def test_coordinator_sensors_do_not_poll_individually():
+    sensor = BaseElectricityPriceSensor(
+        MagicMock(),
+        {"area": "SE4", "currency": "SEK"},
+        "current_price",
+        "Current Price",
+    )
+    assert not sensor.should_poll
 
 
 @pytest.mark.asyncio

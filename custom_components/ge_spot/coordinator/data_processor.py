@@ -248,7 +248,7 @@ class DataProcessor:
             ):
                 # Cache missing raw data - invalidate to fetch fresh data
                 # This auto-heals old cache formats and ensures current exchange rates
-                _LOGGER.warning(
+                _LOGGER.debug(
                     f"[{self.area}] Cache missing raw data (raw_interval_prices_original, "
                     f"source_timezone, or source_currency) - invalidating to fetch fresh data"
                 )
@@ -598,7 +598,7 @@ class DataProcessor:
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
 
-                    # Time-aware validation: Use DEBUG before publication time, WARNING after.
+                    # Keep publication timing in diagnostics for partial forecasts.
                     # source_name was resolved at the top of process() from
                     # data["data_source"] or data["source"]; DataProcessor itself is
                     # source-agnostic so we look up the per-source schedule each call.
@@ -615,12 +615,10 @@ class DataProcessor:
                     )
 
                     if data_should_be_available:
-                        # After publication time - this is concerning
-                        _LOGGER.warning(
+                        _LOGGER.debug(
                             f"{log_message} (after expected publication time {publication_hour_utc}:00 UTC)"
                         )
                     else:
-                        # Before publication time - this is expected
                         _LOGGER.debug(
                             f"{log_message} (before publication time {publication_hour_utc}:00 UTC, this is normal)"
                         )

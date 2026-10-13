@@ -22,6 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 class BaseElectricityPriceSensor(SensorEntity):
     """Base sensor for electricity prices."""
 
+    _attr_should_poll = False
     _attr_state_class = (
         None  # Prices are instantaneous, not totals. History still recorded.
     )

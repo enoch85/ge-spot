@@ -5,10 +5,12 @@ Instead of asking "do we have complete data?", we ask "how long is our data vali
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional, Tuple
 
 from ..const.network import Network
+from ..const.intervals import SourceIntervals
+from ..const.sources import Source
 from .data_validity import DataValidity
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +40,7 @@ class FetchDecisionMaker:
         in_grace_period: bool = False,
         is_health_check: bool = False,
         area: Optional[str] = None,
+        source: Optional[str] = None,
     ) -> Tuple[bool, str]:
         """Determine if we need to fetch from API based on data validity.
 
@@ -45,8 +48,7 @@ class FetchDecisionMaker:
         1. CRITICAL: No data for current interval → FETCH IMMEDIATELY
         2. Running out: Less than safety buffer intervals remaining → FETCH
         3. Special window: 13:00-14:00 and missing tomorrow's data → FETCH
-        4. Initial fetch: Never fetched before → FETCH
-        5. Otherwise: SKIP (we have enough future data)
+        4. Otherwise: SKIP (we have enough future data, including startup cache)
 
         Args:
             now: Current datetime
@@ -59,6 +61,19 @@ class FetchDecisionMaker:
         Returns:
             Tuple of (need_api_fetch, reason)
         """
+        if source in Source.ROLLING_SOURCES:
+            fetch_interval_minutes = SourceIntervals.get_interval(source)
+            if (
+                not is_health_check
+                and last_fetch
+                and now - last_fetch < timedelta(minutes=fetch_interval_minutes)
+            ):
+                return (
+                    False,
+                    f"Rolling prices refreshed less than {fetch_interval_minutes} minutes ago",
+                )
+            return True, "Refresh rolling prices"
+
         # CRITICAL CHECK: Do we have data for the current interval?
         if not data_validity.has_current_interval:
             current_interval_key = self._tz_service.get_current_interval_key()
@@ -87,12 +102,6 @@ class FetchDecisionMaker:
             if is_health_check:
                 reason += " (health check - bypassing rate limit)"
 
-            return True, reason
-
-        # Initial fetch check (never fetched before)
-        if not last_fetch:
-            reason = "Initial startup - fetching data"
-            _LOGGER.debug(reason)
             return True, reason
 
         # GRACE PERIOD CHECK: During grace period, if we have partial today data, try to get complete data

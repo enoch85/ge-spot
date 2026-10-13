@@ -69,14 +69,21 @@ class ApiClient:
                 ) as response:
                     # HTTP 204 = No Content - data not published yet (not an error)
                     if response.status == 204:
-                        _LOGGER.info(
+                        _LOGGER.debug(
                             f"API returned 204 (No Content) - data not yet published: {url}"
                         )
                         return {"status": 204, "message": "Data not yet published"}
 
                     if response.status != 200:
-                        _LOGGER.error(
-                            f"API request failed with status {response.status}: {url}"
+                        _LOGGER.log(
+                            (
+                                logging.DEBUG
+                                if response.status in (404, 429, 500, 502, 503, 504)
+                                else logging.ERROR
+                            ),
+                            "API request failed with status %s: %s",
+                            response.status,
+                            url,
                         )
                         return {}
 
@@ -99,10 +106,10 @@ class ApiClient:
                         except (aiohttp.ContentTypeError, json.JSONDecodeError):
                             return await response.text(encoding=encoding)
             except asyncio.TimeoutError:
-                _LOGGER.error(f"API request timed out: {url}")
+                _LOGGER.debug(f"API request timed out: {url}")
                 return {}
             except aiohttp.ClientError as e:
-                _LOGGER.error(f"API request failed: {url} - {e}")
+                _LOGGER.debug(f"API request failed: {url} - {e}")
                 return {}
             except Exception as e:
                 _LOGGER.error(f"Unexpected error in API request: {url} - {e}")
@@ -153,22 +160,12 @@ class ApiClient:
                         self._track_error_response(url, response.status)
 
                         if response.status == 429:
-                            # Rate limiting is expected and handled by the
-                            # retry/fallback path; _track_error_response already
-                            # surfaces it once at WARNING. Log the per-request
-                            # detail at DEBUG so a rate-limited source shared by
-                            # many areas does not flood the log with ERRORs.
+                            # The coordinator reports sustained loss of usable prices.
                             _LOGGER.debug(
                                 f"Rate limited (HTTP 429), will fall back / "
                                 f"retry later: {url}"
                             )
-                        elif response.status in (502, 503, 504):
-                            # Transient upstream unavailability (bad gateway /
-                            # service unavailable / gateway timeout). Retried by
-                            # the fetch/fallback path; _track_error_response
-                            # surfaces one WARNING per source, so keep the
-                            # per-request detail at DEBUG to avoid flooding the
-                            # log during an upstream outage (e.g. ENTSO-E 503s).
+                        elif response.status in (204, 404, 500, 502, 503, 504):
                             _LOGGER.debug(
                                 f"Upstream temporarily unavailable "
                                 f"(HTTP {response.status}), will retry / "
@@ -236,10 +233,10 @@ class ApiClient:
                         except (aiohttp.ContentTypeError, json.JSONDecodeError):
                             return await response.text(encoding=encoding)
             except asyncio.TimeoutError:
-                _LOGGER.error(f"API request timed out: {url}")
+                _LOGGER.debug(f"API request timed out: {url}")
                 return {"error": True, "message": "Request timed out", "url": url}
             except aiohttp.ClientError as e:
-                _LOGGER.error(f"API request failed: {url} - {e}")
+                _LOGGER.debug(f"API request failed: {url} - {e}")
                 return {"error": True, "message": str(e), "url": url}
             except Exception as e:
                 _LOGGER.error(f"Unexpected error in API request: {url} - {e}")
@@ -261,31 +258,30 @@ class ApiClient:
         if status_code == 429:
             # Explicit rate limiting
             if url_key not in self._rate_limit_detected:
-                _LOGGER.warning(
+                _LOGGER.debug(
                     f"Rate limit detected (HTTP 429) for {url_key}. "
                     f"Integration will automatically retry later."
                 )
             self._rate_limit_detected[url_key] = True
         elif status_code in (502, 503, 504):
-            # Transient upstream unavailability: surface one WARNING per source
-            # (reset on the next success) instead of an ERROR per request.
+            # Reset transient upstream failure tracking on the next success.
             if url_key not in self._server_error_detected:
-                _LOGGER.warning(
+                _LOGGER.debug(
                     f"Upstream temporarily unavailable (HTTP {status_code}) for "
                     f"{url_key}. Transient; integration will retry / fall back."
                 )
             self._server_error_detected[url_key] = True
         elif status_code == 404:
-            # Track consecutive 404s which may indicate rate limiting
+            # Track missing resources without guessing their cause.
             self._consecutive_error_counts[url_key] = (
                 self._consecutive_error_counts.get(url_key, 0) + 1
             )
             if self._consecutive_error_counts[url_key] >= 3:
                 if url_key not in self._rate_limit_detected:
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         f"Repeated 404 errors for {url_key} "
                         f"({self._consecutive_error_counts[url_key]} consecutive). "
-                        f"This may indicate rate limiting. Integration will retry later."
+                        f"Integration will retry later."
                     )
                 self._rate_limit_detected[url_key] = True
 
