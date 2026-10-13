@@ -226,8 +226,14 @@ class ComedParser(BasePriceParser):
                         )
                     else:
                         timestamp = datetime.now(timezone.utc)
-                    hour_dt = timestamp.replace(minute=0, second=0, microsecond=0)
-                    interval_key = hour_dt.isoformat()
+                    # Preserve the reporting quarter of this rolling average.
+                    interval_minutes = TimeInterval.get_interval_minutes()
+                    interval_dt = timestamp.replace(
+                        minute=timestamp.minute // interval_minutes * interval_minutes,
+                        second=0,
+                        microsecond=0,
+                    )
+                    interval_key = interval_dt.isoformat()
                     result["interval_raw"][
                         interval_key
                     ] = current_price  # Changed from interval_prices

@@ -79,7 +79,11 @@ async def test_update_failure_logs_once_until_recovery(hass, caplog):
         assert await coordinator._async_update_data() is empty
     assert sum(r.levelno == logging.WARNING for r in caplog.records) == 1
 
-    recovered = IntervalPriceData(area="SE4", today_interval_prices={"00:00": 1.0})
+    recovered = IntervalPriceData(
+        area="SE4",
+        today_interval_prices={"00:00": 1.0},
+        _tz_service=MagicMock(get_current_interval_key=MagicMock(return_value="00:00")),
+    )
     manager.fetch_data.return_value = recovered
     for _ in range(2):
         assert await coordinator._async_update_data() is recovered
@@ -88,6 +92,30 @@ async def test_update_failure_logs_once_until_recovery(hass, caplog):
     manager.fetch_data.return_value = empty
     assert await coordinator._async_update_data() is empty
     assert sum(r.levelno == logging.WARNING for r in caplog.records) == 2
+
+
+async def test_future_prices_cannot_hide_sustained_missing_current_price(hass, caplog):
+    with patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
+    ) as manager_class:
+        coordinator = UnifiedPriceCoordinator(
+            hass, "SE4", "SEK", timedelta(minutes=15), {}
+        )
+    manager = manager_class.return_value
+    manager.is_in_grace_period.return_value = False
+    manager.fetch_data = AsyncMock(
+        return_value=IntervalPriceData(
+            area="SE4",
+            tomorrow_interval_prices={"00:00": 1.0},
+            _tz_service=MagicMock(
+                get_current_interval_key=MagicMock(return_value="00:00")
+            ),
+        )
+    )
+    caplog.set_level(logging.WARNING, logger=UnifiedPriceCoordinator.__module__)
+    for _ in range(Network.Defaults.RETRY_COUNT + 2):
+        await coordinator._async_update_data()
+    assert sum(r.levelno == logging.WARNING for r in caplog.records) == 1
 
 
 def test_usable_startup_cache_does_not_require_network_fetch():

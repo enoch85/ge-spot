@@ -1925,6 +1925,7 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         self.currency = currency
         self.config = config
         self._update_failure_logged = False
+        self._unavailable_updates = 0
 
         # Create unified price manager
         self.price_manager = UnifiedPriceManager(
@@ -1940,31 +1941,32 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         try:
             # Fetch data using the manager's logic (includes rate limiting, fallback, caching)
             data = await self.price_manager.fetch_data()
-            # Manager returns IntervalPriceData; check has_data property for success
-            if not hasattr(data, "today_interval_prices") or (
-                not data.today_interval_prices and not data.tomorrow_interval_prices
+            if (
+                not hasattr(data, "today_interval_prices")
+                or (
+                    not data.today_interval_prices and not data.tomorrow_interval_prices
+                )
+                or getattr(data, "current_price", None) is None
             ):
+                self._unavailable_updates += 1
                 # Log specific error if available
-                error_msg = getattr(
-                    data,
-                    "_error",
-                    "No data returned from price manager or data marked as invalid",
+                error_msg = (
+                    getattr(data, "_error", None)
+                    or "No current interval price available"
                 )
 
-                # Check if this is a rate limit situation shortly after coordinator creation
-                if (
-                    self.price_manager.is_in_grace_period()
-                    and "rate limited" in error_msg.lower()
-                ):
-                    # Rate limiting after recent reload - log as DEBUG, not WARNING
+                if self.price_manager.is_in_grace_period():
                     _LOGGER.debug(
-                        "Update pending for area %s: %s (rate limit protection after reload)",
+                        "Update pending for area %s: %s (startup grace period)",
                         self.area,
                         error_msg,
                     )
                 elif not self._update_failure_logged and (
                     getattr(data, "_error_code", None) == Errors.NO_SOURCES_CONFIGURED
-                    or getattr(data, "_consecutive_failures", 0)
+                    or max(
+                        self._unavailable_updates,
+                        getattr(data, "_consecutive_failures", 0),
+                    )
                     >= Network.Defaults.RETRY_COUNT
                 ):
                     _LOGGER.warning(
@@ -1976,8 +1978,8 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
                         "Update still failing for area %s: %s", self.area, error_msg
                     )
 
-                # Return the empty IntervalPriceData from the manager
                 return data
+            self._unavailable_updates = 0
             if self._update_failure_logged:
                 _LOGGER.info("Price data recovered for area %s", self.area)
                 self._update_failure_logged = False

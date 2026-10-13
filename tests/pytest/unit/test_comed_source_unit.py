@@ -11,9 +11,15 @@ MWh->kWh conversion divides every ComEd price by 1000. This test pins the
 contract so the unit declaration cannot silently regress again.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from freezegun import freeze_time
+
 from custom_components.ge_spot.api.comed import ComedAPI
+from custom_components.ge_spot.api.parsers.comed_parser import ComedParser
+from custom_components.ge_spot.const.api import ComEd
 from custom_components.ge_spot.const.energy import EnergyUnit
 
 
@@ -41,3 +47,22 @@ async def test_comed_fetch_raw_data_declares_kwh_source_unit():
     assert result.get("source_unit") == EnergyUnit.KWH
     # Sanity: ComEd is reported in cents (per kWh), not MWh.
     assert result.get("currency") == "cents"
+
+
+@pytest.mark.parametrize("minute", [0, 15, 30, 45])
+def test_current_hour_average_is_available_in_each_quarter(minute):
+    timestamp = datetime(2026, 10, 13, 16, minute + 5, tzinfo=timezone.utc)
+    with freeze_time(timestamp):
+        result = ComedParser().parse(
+            {
+                "endpoint": ComEd.CURRENT_HOUR_AVERAGE,
+                "raw_data": [
+                    {
+                        "millisUTC": str(int(timestamp.timestamp() * 1000)),
+                        "price": "3.1",
+                    }
+                ],
+            }
+        )
+    key = timestamp.replace(minute=minute).isoformat()
+    assert result["interval_raw"] == {key: 3.1}
