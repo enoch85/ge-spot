@@ -25,7 +25,7 @@ from custom_components.ge_spot.const.sources import Source
 from custom_components.ge_spot.const.currencies import Currency
 
 
-async def test_single_area(api: EnergyChartsAPI, area: str):
+async def check_single_area(api: EnergyChartsAPI, area: str):
     """Test fetching and parsing data for a single area."""
     print(f"\n{'='*80}")
     print(f"Testing Area: {area}")
@@ -259,7 +259,7 @@ Testing: API fetch → Parser → Validation
     results = {}
 
     for area in test_areas:
-        success = await test_single_area(api, area)
+        success = await check_single_area(api, area)
         results[area] = success
 
         # Small delay to avoid rate limiting

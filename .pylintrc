@@ -1,6 +1,6 @@
 [MAIN]
 # Minimum Python version
-py-version=3.12
+py-version=3.15
 
 # Discover Python modules and packages in the file system subtree
 ignore=__pycache__,.git,.storage,improvements,docs,scripts
