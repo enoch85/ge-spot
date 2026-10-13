@@ -75,7 +75,7 @@ class FallbackManager:
 
                     # Check if we got valid data
                     if data and isinstance(data, dict) and data.get("raw_data"):
-                        _LOGGER.info(
+                        _LOGGER.debug(
                             f"[{area}] ✓ '{source_name}' succeeded "
                             f"(attempt {attempt + 1}, {timeout}s timeout)"
                         )
@@ -128,7 +128,7 @@ class FallbackManager:
             # Continue to next source in priority list
 
         # All sources failed
-        _LOGGER.error(
+        _LOGGER.debug(
             f"[{area}] All sources failed to provide data. "
             f"Attempted: {', '.join(attempted_sources)}. "
             f"Last error: {last_exception}"

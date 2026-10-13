@@ -552,13 +552,12 @@ class DataProcessor:
                     )  # Log today's stats
                 else:
                     missing_keys = sorted(list(today_keys - found_keys))
-                    # Update warning message threshold
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}"
                     )
                     processed_result["statistics"] = PriceStatistics().to_dict()
             else:
-                _LOGGER.info(
+                _LOGGER.debug(
                     f"No final prices for today available after processing for area {self.area}, skipping stats."
                 )
                 processed_result["statistics"] = PriceStatistics().to_dict()
@@ -681,7 +680,7 @@ class DataProcessor:
             )
 
             processed_result["data_validity"] = validity.to_dict()
-            _LOGGER.info(f"Data validity for {self.area}: {validity}")
+            _LOGGER.debug(f"Data validity for {self.area}: {validity}")
 
         except Exception as e:
             _LOGGER.error(
@@ -690,7 +689,7 @@ class DataProcessor:
             # Add empty validity on error
             processed_result["data_validity"] = DataValidity().to_dict()
 
-        _LOGGER.info(
+        _LOGGER.debug(
             f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['today_interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}"
         )
         # Convert to IntervalPriceData and return it directly (not converted to dict)
