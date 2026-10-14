@@ -1,12 +1,14 @@
 """Unified Price Manager for ge-spot integration."""
 
 import logging
+import random
 from datetime import timedelta, datetime, date
 from typing import Any, Dict, Optional, List
 import asyncio  # Added for rate limiting
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.util import dt as dt_util
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -15,7 +17,7 @@ from ..const.sources import Source
 from ..const.defaults import Defaults
 from ..const.display import DisplayUnit
 from ..const.network import Network
-from ..const.time import ValidationRetry, DSTTransitionType
+from ..const.time import TimeInterval, ValidationRetry, DSTTransitionType
 from ..const.errors import Errors, ErrorDetails
 from ..api import get_sources_for_region
 from ..timezone.service import TimezoneService  # Added import
@@ -1927,11 +1929,54 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         self._update_failure_logged = False
         self._unavailable_updates = 0
         self._unavailable_since: Optional[datetime] = None
+        self._unsub_interval_update: Optional[CALLBACK_TYPE] = None
+        self._interval_update_offset = random.uniform(
+            0, Network.Defaults.INTERVAL_UPDATE_SPREAD_SECONDS
+        )
 
         # Create unified price manager
         self.price_manager = UnifiedPriceManager(
             hass=hass, area=area, currency=currency, config=config
         )
+
+    async def _async_setup(self) -> None:
+        """Start writing cached prices at every interval start."""
+        await super()._async_setup()
+        self._schedule_interval_update()
+
+    @callback
+    def _schedule_interval_update(self) -> None:
+        """Schedule the next interval-start state write in the display timezone."""
+        interval = TimeInterval.get_interval_seconds()
+        now = dt_util.utcnow()
+        offset = now.astimezone(
+            self.price_manager._tz_service.target_timezone
+        ).utcoffset()
+        local = now.timestamp() + offset.total_seconds()
+        start = (local // interval + 1) * interval - offset.total_seconds()
+        self._unsub_interval_update = async_track_point_in_utc_time(
+            self.hass,
+            self._async_handle_interval_start,
+            dt_util.utc_from_timestamp(start + self._interval_update_offset),
+        )
+
+    @callback
+    def _async_handle_interval_start(self, _now: datetime) -> None:
+        """Show the new interval's cached price without waiting for a refresh.
+
+        Listeners are otherwise notified only when a refresh returns, and a
+        refresh can wait more than a minute on slow or failing providers.
+        """
+        self._schedule_interval_update()
+        if self.data is not None:
+            self.async_update_listeners()
+
+    async def async_shutdown(self) -> None:
+        """Cancel interval-start writes as well as scheduled refreshes."""
+        if self._unsub_interval_update:
+            self._unsub_interval_update()
+            self._unsub_interval_update = None
+        await super().async_shutdown()
 
     async def _async_update_data(self):
         """Fetch data from price manager.

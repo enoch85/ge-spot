@@ -1,6 +1,8 @@
 # tests/integration/test_sensor_setup.py
 """Tests for the GE Spot sensor platform setup."""
 
+import asyncio
+
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -9,6 +11,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.const import Platform
 
 from custom_components.ge_spot.const import DOMAIN, Config
+from custom_components.ge_spot.const.network import Network
 from custom_components.ge_spot.coordinator import UnifiedPriceCoordinator
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -80,6 +83,7 @@ async def test_shared_coordinator_updates_prices_after_interval_change(hass):
         manager.fetch_data = AsyncMock(return_value=data)
         manager.async_close = AsyncMock()
         manager._health_check_scheduled = True
+        manager._tz_service = data._tz_service
         assert await hass.config_entries.async_setup(entry.entry_id)
         coordinator = hass.data[DOMAIN][entry.entry_id]
         remove_listener = coordinator.async_add_listener(
@@ -90,8 +94,67 @@ async def test_shared_coordinator_updates_prices_after_interval_change(hass):
             clock.tick(timedelta(seconds=31))
             async_fire_time_changed(hass, dt_util.now())
             await hass.async_block_till_done()
+            # The interval start and the scheduled refresh both notify.
+            assert manager.fetch_data.await_count == 2
+            assert values and set(values) == {0.12525}
+        finally:
+            remove_listener()
+            await coordinator.async_shutdown()
+            await coordinator.async_close()
+
+
+async def test_interval_start_updates_listeners_while_refresh_waits(hass):
+    """A slow provider must not keep the previous interval's price on sensors."""
+    config = {Config.AREA: "SE4", Config.CURRENCY: "EUR"}
+    entry = MockConfigEntry(domain=DOMAIN, data=config)
+    entry.add_to_hass(hass)
+    data = IntervalPriceData(
+        today_interval_prices={"12:00": 0.1301, "12:15": 0.12525},
+        _tz_service=TimezoneService(hass, "SE4", config),
+    )
+    provider = asyncio.Event()
+
+    async def fetch_data():
+        if manager.fetch_data.await_count > 1:
+            await provider.wait()
+        return data
+
+    values = []
+    with freeze_time("2026-10-13T10:14:00Z") as clock, patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
+    ) as manager_class, patch.object(
+        hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
+    ), patch(
+        "custom_components.ge_spot.get_exchange_service",
+        new=AsyncMock(return_value=MagicMock()),
+    ):
+        manager = manager_class.return_value
+        manager.fetch_data = AsyncMock(side_effect=fetch_data)
+        manager.async_close = AsyncMock()
+        manager._health_check_scheduled = True
+        manager._tz_service = data._tz_service
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        remove_listener = coordinator.async_add_listener(
+            lambda: values.append(coordinator.data.current_price)
+        )
+        try:
+            # The scheduled refresh starts and waits on the provider.
+            clock.tick(timedelta(seconds=31))
+            async_fire_time_changed(hass, dt_util.now())
+            await hass.async_block_till_done()
+            assert manager.fetch_data.await_count == 2
+            assert values == []
+            # The 12:15 interval starts while that refresh is still waiting.
+            clock.tick(
+                timedelta(seconds=30 + Network.Defaults.INTERVAL_UPDATE_SPREAD_SECONDS)
+            )
+            async_fire_time_changed(hass, dt_util.now())
+            await hass.async_block_till_done()
             assert values == [0.12525]
         finally:
+            provider.set()
+            await hass.async_block_till_done(wait_background_tasks=True)
             remove_listener()
             await coordinator.async_shutdown()
             await coordinator.async_close()
