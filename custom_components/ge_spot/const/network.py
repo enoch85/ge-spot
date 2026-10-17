@@ -42,10 +42,6 @@ class Network:
         GRACE_PERIOD_MINUTES = (
             5  # Grace period after reload/startup for lenient validation
         )
-        # Each area writes its cached prices up to this many seconds after an
-        # interval starts, so many areas do not recompute their sensors in the
-        # same event-loop turn.
-        INTERVAL_UPDATE_SPREAD_SECONDS = 5
 
         # Time conversion constants
         SECONDS_PER_MINUTE = 60  # Seconds in a minute (for time calculations)

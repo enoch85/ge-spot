@@ -11,7 +11,6 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.const import Platform
 
 from custom_components.ge_spot.const import DOMAIN, Config
-from custom_components.ge_spot.const.network import Network
 from custom_components.ge_spot.coordinator import UnifiedPriceCoordinator
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -120,7 +119,11 @@ async def test_interval_start_updates_listeners_while_refresh_waits(hass):
         return data
 
     values = []
+    # Pin this area's interval-start offset to 2 s within the refresh period.
     with freeze_time("2026-10-13T10:14:00Z") as clock, patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.random.uniform",
+        return_value=2.0,
+    ), patch(
         "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
     ) as manager_class, patch.object(
         hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
@@ -146,9 +149,7 @@ async def test_interval_start_updates_listeners_while_refresh_waits(hass):
             assert manager.fetch_data.await_count == 2
             assert values == []
             # The 12:15 interval starts while that refresh is still waiting.
-            clock.tick(
-                timedelta(seconds=30 + Network.Defaults.INTERVAL_UPDATE_SPREAD_SECONDS)
-            )
+            clock.tick(timedelta(seconds=32))
             async_fire_time_changed(hass, dt_util.now())
             await hass.async_block_till_done()
             assert values == [0.12525]
@@ -176,6 +177,9 @@ async def test_new_day_refreshes_instead_of_showing_yesterdays_price(hass):
     )
     values = []
     with freeze_time("2026-10-13T21:59:50Z") as clock, patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.random.uniform",
+        return_value=2.0,
+    ), patch(
         "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
     ) as manager_class, patch.object(
         hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
@@ -195,9 +199,7 @@ async def test_new_day_refreshes_instead_of_showing_yesterdays_price(hass):
         )
         try:
             # Midnight in Stockholm, before the scheduled refresh is due.
-            clock.tick(
-                timedelta(seconds=10 + Network.Defaults.INTERVAL_UPDATE_SPREAD_SECONDS)
-            )
+            clock.tick(timedelta(seconds=15))
             async_fire_time_changed(hass, dt_util.now())
             await hass.async_block_till_done(wait_background_tasks=True)
             assert values == [0.2]

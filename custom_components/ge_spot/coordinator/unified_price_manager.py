@@ -1930,8 +1930,10 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         self._unavailable_updates = 0
         self._unavailable_since: Optional[datetime] = None
         self._unsub_interval_update: Optional[CALLBACK_TYPE] = None
+        # Spread areas over one refresh period: a 14-sensor area takes about
+        # 0.1 s to recompute, so many areas at once would stall the event loop.
         self._interval_update_offset = random.uniform(
-            0, Network.Defaults.INTERVAL_UPDATE_SPREAD_SECONDS
+            0, effective_update_interval.total_seconds()
         )
 
         # Create unified price manager
