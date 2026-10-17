@@ -160,6 +160,54 @@ async def test_interval_start_updates_listeners_while_refresh_waits(hass):
             await coordinator.async_close()
 
 
+async def test_new_day_refreshes_instead_of_showing_yesterdays_price(hass):
+    """Cached prices describe the previous day until a refresh moves tomorrow's."""
+    config = {Config.AREA: "SE4", Config.CURRENCY: "EUR"}
+    entry = MockConfigEntry(domain=DOMAIN, data=config)
+    entry.add_to_hass(hass)
+    timezone_service = TimezoneService(hass, "SE4", config)
+    previous_day = IntervalPriceData(
+        today_interval_prices={"23:45": 0.5, "00:00": 0.1},
+        tomorrow_interval_prices={"00:00": 0.2},
+        _tz_service=timezone_service,
+    )
+    new_day = IntervalPriceData(
+        today_interval_prices={"00:00": 0.2}, _tz_service=timezone_service
+    )
+    values = []
+    with freeze_time("2026-10-13T21:59:50Z") as clock, patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
+    ) as manager_class, patch.object(
+        hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
+    ), patch(
+        "custom_components.ge_spot.get_exchange_service",
+        new=AsyncMock(return_value=MagicMock()),
+    ):
+        manager = manager_class.return_value
+        manager.fetch_data = AsyncMock(side_effect=[previous_day, new_day])
+        manager.async_close = AsyncMock()
+        manager._health_check_scheduled = True
+        manager._tz_service = timezone_service
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        remove_listener = coordinator.async_add_listener(
+            lambda: values.append(coordinator.data.current_price)
+        )
+        try:
+            # Midnight in Stockholm, before the scheduled refresh is due.
+            clock.tick(
+                timedelta(seconds=10 + Network.Defaults.INTERVAL_UPDATE_SPREAD_SECONDS)
+            )
+            async_fire_time_changed(hass, dt_util.now())
+            await hass.async_block_till_done(wait_background_tasks=True)
+            assert values == [0.2]
+            assert manager.fetch_data.await_count == 2
+        finally:
+            remove_listener()
+            await coordinator.async_shutdown()
+            await coordinator.async_close()
+
+
 @pytest.mark.asyncio
 async def test_sensor_platform_setup(hass, monkeypatch):
     """Test that sensor platform can be set up without errors."""

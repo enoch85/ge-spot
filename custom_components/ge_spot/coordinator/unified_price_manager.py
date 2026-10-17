@@ -1961,15 +1961,25 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         )
 
     @callback
-    def _async_handle_interval_start(self, _now: datetime) -> None:
+    def _async_handle_interval_start(self, now: datetime) -> None:
         """Show the new interval's cached price without waiting for a refresh.
 
         Listeners are otherwise notified only when a refresh returns, and a
-        refresh can wait more than a minute on slow or failing providers.
+        refresh can wait more than a minute on slow or failing providers. A new
+        day is the exception: the cached prices describe the previous day until
+        a refresh moves tomorrow's prices to today, so refresh instead.
         """
         self._schedule_interval_update()
-        if self.data is not None:
-            self.async_update_listeners()
+        if self.data is None:
+            return
+        display_tz = self.price_manager._tz_service.target_timezone
+        previous = now - timedelta(seconds=TimeInterval.get_interval_seconds())
+        if now.astimezone(display_tz).date() != previous.astimezone(display_tz).date():
+            self.config_entry.async_create_background_task(
+                self.hass, self.async_refresh(), f"{self.name} new day refresh"
+            )
+            return
+        self.async_update_listeners()
 
     async def async_shutdown(self) -> None:
         """Cancel interval-start writes as well as scheduled refreshes."""
