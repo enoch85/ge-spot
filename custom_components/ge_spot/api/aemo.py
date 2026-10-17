@@ -84,16 +84,16 @@ class AemoAPI(BasePriceAPI):
             file_url = await self._get_latest_predispatch_file(client)
 
             if not file_url:
-                _LOGGER.error("Could not find latest pre-dispatch file")
+                _LOGGER.debug("Could not find latest pre-dispatch file")
                 return None
 
-            _LOGGER.info(f"Downloading pre-dispatch file: {file_url}")
+            _LOGGER.debug(f"Downloading pre-dispatch file: {file_url}")
 
             # Step 2: Download ZIP file
             zip_data = await self._download_binary_file(client, file_url)
 
             if not zip_data:
-                _LOGGER.error("Failed to download pre-dispatch file")
+                _LOGGER.debug("Failed to download pre-dispatch file")
                 return None
 
             # Step 3: Extract CSV from ZIP. zipfile decompression + UTF-8 decode
@@ -105,7 +105,7 @@ class AemoAPI(BasePriceAPI):
                 None, unzip_single_file, zip_data, ".csv"
             )
 
-            _LOGGER.info(
+            _LOGGER.debug(
                 f"Extracted CSV ({len(csv_content):,} characters) for region {area}"
             )
 
@@ -152,8 +152,8 @@ class AemoAPI(BasePriceAPI):
                 response_format="text",
             )
 
-            if not html:
-                _LOGGER.error("Failed to fetch NEMWEB directory listing")
+            if not isinstance(html, str) or not html:
+                _LOGGER.debug("Failed to fetch NEMWEB directory listing")
                 return None
 
             # Extract all pre-dispatch file timestamps
@@ -209,10 +209,22 @@ class AemoAPI(BasePriceAPI):
             # client.session is always an injected (shared) HA session
             async with client.session.get(url, timeout=timeout_obj) as response:
                 if response.status != 200:
-                    _LOGGER.error(f"Failed to download {url}: HTTP {response.status}")
+                    _LOGGER.log(
+                        (
+                            logging.DEBUG
+                            if response.status in (404, 429, 500, 502, 503, 504)
+                            else logging.ERROR
+                        ),
+                        "Failed to download %s: HTTP %s",
+                        url,
+                        response.status,
+                    )
                     return None
                 return await response.read()
 
+        except (aiohttp.ClientError, TimeoutError) as e:
+            _LOGGER.debug("NEMWEB download temporarily unavailable: %s", e)
+            return None
         except Exception as e:
             _LOGGER.error(
                 f"Error downloading binary file from {url}: {e}", exc_info=True
@@ -220,26 +232,8 @@ class AemoAPI(BasePriceAPI):
             return None
 
     def get_timezone_for_area(self, area: str) -> str:
-        """Get timezone for the given AEMO area.
-
-        All AEMO regions operate in Australian Eastern Time, but we map each
-        region to its capital city timezone for accuracy.
-
-        Args:
-            area: Area code (NSW1, QLD1, etc.)
-
-        Returns:
-            Timezone string (e.g. "Australia/Sydney")
-        """
-        timezone_map = {
-            "NSW1": "Australia/Sydney",  # New South Wales
-            "QLD1": "Australia/Brisbane",  # Queensland
-            "SA1": "Australia/Adelaide",  # South Australia
-            "TAS1": "Australia/Hobart",  # Tasmania
-            "VIC1": "Australia/Melbourne",  # Victoria
-        }
-
-        return timezone_map.get(area, "Australia/Sydney")
+        """Return fixed AEST market time for every NEM region."""
+        return Aemo.TIMEZONE
 
     def get_parser_for_area(self, area: str):
         """Get parser for the given area.

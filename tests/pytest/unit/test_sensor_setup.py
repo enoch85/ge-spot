@@ -1,6 +1,8 @@
 # tests/integration/test_sensor_setup.py
 """Tests for the GE Spot sensor platform setup."""
 
+import asyncio
+
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -12,6 +14,12 @@ from custom_components.ge_spot.const import DOMAIN, Config
 from custom_components.ge_spot.coordinator import UnifiedPriceCoordinator
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch, MagicMock
+from custom_components.ge_spot.sensor.base import BaseElectricityPriceSensor
+from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
+from custom_components.ge_spot.timezone.service import TimezoneService
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from freezegun import freeze_time
+from homeassistant.util import dt as dt_util
 
 # Define mock data that the coordinator would typically provide
 MOCK_COORDINATOR_DATA = {
@@ -41,6 +49,165 @@ MOCK_COORDINATOR_DATA = {
     "error": None,
     # Add other keys expected by sensors if necessary
 }
+
+
+def test_coordinator_sensors_do_not_poll_individually():
+    sensor = BaseElectricityPriceSensor(
+        MagicMock(),
+        {"area": "SE4", "currency": "SEK"},
+        "current_price",
+        "Current Price",
+    )
+    assert not sensor.should_poll
+
+
+async def test_shared_coordinator_updates_prices_after_interval_change(hass):
+    config = {Config.AREA: "SE4", Config.CURRENCY: "EUR"}
+    entry = MockConfigEntry(domain=DOMAIN, data=config)
+    entry.add_to_hass(hass)
+    data = IntervalPriceData(
+        today_interval_prices={"12:00": 0.1301, "12:15": 0.12525},
+        _tz_service=TimezoneService(hass, "SE4", config),
+    )
+    values = []
+    with freeze_time("2026-10-13T10:14:59Z") as clock, patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
+    ) as manager_class, patch.object(
+        hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
+    ), patch(
+        "custom_components.ge_spot.get_exchange_service",
+        new=AsyncMock(return_value=MagicMock()),
+    ):
+        manager = manager_class.return_value
+        manager.fetch_data = AsyncMock(return_value=data)
+        manager.async_close = AsyncMock()
+        manager._health_check_scheduled = True
+        manager._tz_service = data._tz_service
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        remove_listener = coordinator.async_add_listener(
+            lambda: values.append(coordinator.data.current_price)
+        )
+        try:
+            assert coordinator.data.current_price == 0.1301
+            clock.tick(timedelta(seconds=31))
+            async_fire_time_changed(hass, dt_util.now())
+            await hass.async_block_till_done()
+            # The interval start and the scheduled refresh both notify.
+            assert manager.fetch_data.await_count == 2
+            assert values and set(values) == {0.12525}
+        finally:
+            remove_listener()
+            await coordinator.async_shutdown()
+            await coordinator.async_close()
+
+
+async def test_interval_start_updates_listeners_while_refresh_waits(hass):
+    """A slow provider must not keep the previous interval's price on sensors."""
+    config = {Config.AREA: "SE4", Config.CURRENCY: "EUR"}
+    entry = MockConfigEntry(domain=DOMAIN, data=config)
+    entry.add_to_hass(hass)
+    data = IntervalPriceData(
+        today_interval_prices={"12:00": 0.1301, "12:15": 0.12525},
+        _tz_service=TimezoneService(hass, "SE4", config),
+    )
+    provider = asyncio.Event()
+
+    async def fetch_data():
+        if manager.fetch_data.await_count > 1:
+            await provider.wait()
+        return data
+
+    values = []
+    # Pin this area's interval-start offset to 2 s within the refresh period.
+    with freeze_time("2026-10-13T10:14:00Z") as clock, patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.random.uniform",
+        return_value=2.0,
+    ), patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
+    ) as manager_class, patch.object(
+        hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
+    ), patch(
+        "custom_components.ge_spot.get_exchange_service",
+        new=AsyncMock(return_value=MagicMock()),
+    ):
+        manager = manager_class.return_value
+        manager.fetch_data = AsyncMock(side_effect=fetch_data)
+        manager.async_close = AsyncMock()
+        manager._health_check_scheduled = True
+        manager._tz_service = data._tz_service
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        remove_listener = coordinator.async_add_listener(
+            lambda: values.append(coordinator.data.current_price)
+        )
+        try:
+            # The scheduled refresh starts and waits on the provider.
+            clock.tick(timedelta(seconds=31))
+            async_fire_time_changed(hass, dt_util.now())
+            await hass.async_block_till_done()
+            assert manager.fetch_data.await_count == 2
+            assert values == []
+            # The 12:15 interval starts while that refresh is still waiting.
+            clock.tick(timedelta(seconds=32))
+            async_fire_time_changed(hass, dt_util.now())
+            await hass.async_block_till_done()
+            assert values == [0.12525]
+        finally:
+            provider.set()
+            await hass.async_block_till_done(wait_background_tasks=True)
+            remove_listener()
+            await coordinator.async_shutdown()
+            await coordinator.async_close()
+
+
+async def test_new_day_refreshes_instead_of_showing_yesterdays_price(hass):
+    """Cached prices describe the previous day until a refresh moves tomorrow's."""
+    config = {Config.AREA: "SE4", Config.CURRENCY: "EUR"}
+    entry = MockConfigEntry(domain=DOMAIN, data=config)
+    entry.add_to_hass(hass)
+    timezone_service = TimezoneService(hass, "SE4", config)
+    previous_day = IntervalPriceData(
+        today_interval_prices={"23:45": 0.5, "00:00": 0.1},
+        tomorrow_interval_prices={"00:00": 0.2},
+        _tz_service=timezone_service,
+    )
+    new_day = IntervalPriceData(
+        today_interval_prices={"00:00": 0.2}, _tz_service=timezone_service
+    )
+    values = []
+    with freeze_time("2026-10-13T21:59:50Z") as clock, patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.random.uniform",
+        return_value=2.0,
+    ), patch(
+        "custom_components.ge_spot.coordinator.unified_price_manager.UnifiedPriceManager"
+    ) as manager_class, patch.object(
+        hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
+    ), patch(
+        "custom_components.ge_spot.get_exchange_service",
+        new=AsyncMock(return_value=MagicMock()),
+    ):
+        manager = manager_class.return_value
+        manager.fetch_data = AsyncMock(side_effect=[previous_day, new_day])
+        manager.async_close = AsyncMock()
+        manager._health_check_scheduled = True
+        manager._tz_service = timezone_service
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        remove_listener = coordinator.async_add_listener(
+            lambda: values.append(coordinator.data.current_price)
+        )
+        try:
+            # Midnight in Stockholm, before the scheduled refresh is due.
+            clock.tick(timedelta(seconds=15))
+            async_fire_time_changed(hass, dt_util.now())
+            await hass.async_block_till_done(wait_background_tasks=True)
+            assert values == [0.2]
+            assert manager.fetch_data.await_count == 2
+        finally:
+            remove_listener()
+            await coordinator.async_shutdown()
+            await coordinator.async_close()
 
 
 @pytest.mark.asyncio

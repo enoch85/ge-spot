@@ -140,14 +140,14 @@ class ComedAPI(BasePriceAPI):
                     async with asyncio.timeout(Network.Defaults.HTTP_TIMEOUT):
                         response = await client.fetch(url)
                 except TimeoutError:
-                    _LOGGER.error("Timeout fetching ComEd data")
+                    _LOGGER.debug("Timeout fetching ComEd data")
                     continue  # Try next date range
                 except Exception as e:
                     _LOGGER.error(f"Error fetching ComEd data: {e}")
                     continue  # Try next date range
 
                 if not response:
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         f"Empty response from ComEd API for date range: {start_date.isoformat()} to {end_date.isoformat()}"
                     )
                     continue  # Try next date range
@@ -158,14 +158,14 @@ class ComedAPI(BasePriceAPI):
 
             # If we've tried all date ranges and still have no data, return None
             if not response:
-                _LOGGER.warning(
+                _LOGGER.debug(
                     "No valid data found from ComEd after trying multiple date ranges"
                 )
                 return None
 
             # Check if response is valid
             if isinstance(response, dict) and "error" in response:
-                _LOGGER.error(
+                _LOGGER.debug(
                     f"Error response from ComEd API: {response.get('message', 'Unknown error')}"
                 )
                 return None

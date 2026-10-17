@@ -281,7 +281,7 @@ class CacheManager:
                             and entry_data["tomorrow_interval_prices"]
                         ):
                             found_source = metadata.get("source", "unknown")
-                            _LOGGER.info(
+                            _LOGGER.debug(
                                 "Found yesterday's cache from %s with tomorrow's prices for %s. "
                                 "Migrating to today.",
                                 found_source,
@@ -296,7 +296,7 @@ class CacheManager:
                             # Migration is now trivial!
                             price_data.migrate_to_new_day()
 
-                            _LOGGER.info(
+                            _LOGGER.debug(
                                 f"Migration complete for {area}. Validity auto-recalculated: "
                                 f"today={price_data.data_validity.today_interval_count}, "
                                 f"tomorrow={price_data.data_validity.tomorrow_interval_count}"

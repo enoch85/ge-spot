@@ -38,7 +38,7 @@ class ErrorDetails:
         """
         messages = {
             Errors.NO_SOURCES_CONFIGURED: "No API sources configured for area {area}. Check that the area code is valid and supported.",
-            Errors.ALL_SOURCES_DISABLED: "All {count} API source(s) temporarily disabled due to recent failures. Will retry during next health check window (00:00-01:00 or 13:00-15:00). Next check: {next_check}.",
+            Errors.ALL_SOURCES_DISABLED: "All {count} API source(s) temporarily disabled due to recent failures. Next retry: {next_check}.",
             Errors.INVALID_AREA_CODE: "Area code '{area}' is not valid. Please select a supported area from the configuration.",
             Errors.VALIDATION_FAILED: "Data validation failed: {reason}",
             Errors.INCOMPLETE_DATA: "Parser returned incomplete data: {details}",
@@ -68,7 +68,7 @@ class Errors:
     # Source availability errors (v1.4.0+)
     NO_SOURCES_CONFIGURED = "no_sources_configured"  # Permanent: area not supported
     ALL_SOURCES_DISABLED = (
-        "all_sources_disabled"  # Temporary: all failed, waiting health check
+        "all_sources_disabled"  # Temporary: all failed, waiting for cooldown
     )
     INVALID_AREA_CODE = "invalid_area_code"  # Permanent: invalid area in config
 

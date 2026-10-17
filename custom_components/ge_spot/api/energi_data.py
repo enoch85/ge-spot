@@ -2,20 +2,18 @@
 
 import logging
 import datetime
-from datetime import timezone, timedelta, time
+from datetime import timezone, timedelta
 import json
 from typing import Dict, Any
 
 from .base.api_client import ApiClient
 from ..const.sources import Source
-from ..const.network import Network
 from .parsers.energi_data_parser import EnergiDataParser
-from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
-from .utils import fetch_with_retry
-from ..const.time import TimezoneName
+from .utils import fetch_optional_data
 from ..const.currencies import Currency
 from ..const.energy import EnergyUnit
+from ..const.time import TimezoneName
 from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,13 +58,17 @@ class EnergiDataAPI(BasePriceAPI):
                 reference_time = reference_time.astimezone(timezone.utc)
 
             # Always compute today and tomorrow based on reference time
+            # Requests use timezone=dk, so their date boundaries must also be Danish.
+            reference_time = reference_time.astimezone(
+                get_timezone_object(TimezoneName.EUROPE_COPENHAGEN)
+            )
             today = reference_time.strftime("%Y-%m-%d")
             tomorrow = (reference_time + timedelta(days=1)).strftime("%Y-%m-%d")
 
             # Fetch today's data
             raw_today = await self._fetch_data(client, area, today)
 
-            # Fetch tomorrow's data after 13:00 CET, with retry logic
+            # Missing forecasts must not delay today's usable prices.
             now_utc = datetime.datetime.now(timezone.utc)
             # Use the imported function directly
             cet_tz = get_timezone_object(
@@ -77,8 +79,6 @@ class EnergiDataAPI(BasePriceAPI):
 
             # Define expected release hour (e.g. 13:00 CET)
             release_hour_cet = 13
-            # Define a buffer hour to consider it a failure (e.g. 16:00 CET)
-            failure_check_hour_cet = 16
 
             should_fetch_tomorrow = now_cet.hour >= release_hour_cet
 
@@ -91,28 +91,9 @@ class EnergiDataAPI(BasePriceAPI):
                 def is_tomorrow_data_present(data):
                     return data and isinstance(data, dict) and data.get("records")
 
-                raw_tomorrow = await fetch_with_retry(
-                    fetch_tomorrow_task,
-                    is_tomorrow_data_present,  # Basic check on raw data presence
-                    retry_interval=Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
-                    * Network.Defaults.SECONDS_PER_MINUTE,
-                    end_time=time(
-                        Network.Defaults.RETRY_CUTOFF_TIME_HOUR,
-                        Network.Defaults.RETRY_CUTOFF_TIME_MINUTE,
-                    ),
-                    local_tz_name=TimezoneName.EUROPE_COPENHAGEN,
+                raw_tomorrow = await fetch_optional_data(
+                    fetch_tomorrow_task, is_tomorrow_data_present
                 )
-
-                # --- Fallback Trigger Logic ---
-                if (
-                    now_cet.hour >= failure_check_hour_cet
-                    and not is_tomorrow_data_present(raw_tomorrow)
-                ):
-                    _LOGGER.warning(
-                        f"EnergiDataService fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
-                        f"but was not available or invalid. Triggering fallback."
-                    )
-                    return None  # Signal failure to FallbackManager
 
             # --- Final Check for Today's Data ---
             # Check if today's data is valid before proceeding
@@ -121,7 +102,7 @@ class EnergiDataAPI(BasePriceAPI):
                 or not isinstance(raw_today, dict)
                 or not raw_today.get("records")
             ):
-                _LOGGER.error(
+                _LOGGER.debug(
                     f"EnergiDataService fetch failed for area {area}: Today's data is missing or invalid."
                 )
                 return None  # Signal failure if today's data is bad
@@ -187,8 +168,8 @@ class EnergiDataAPI(BasePriceAPI):
             tzinfo=timezone.utc
         )
 
-        # Generate date ranges to try
-        date_ranges = generate_date_ranges(date_obj, Source.ENERGI_DATA_SERVICE)
+        # Historical prices cannot fill a missing forecast for the selected date.
+        date_ranges = [(date_obj, date_obj + timedelta(days=1))]
 
         # Use area from config or passed parameter
         area_code = area if area else "DK1"  # Default to Western Denmark
@@ -218,17 +199,14 @@ class EnergiDataAPI(BasePriceAPI):
                 and "records" in response
                 and response["records"]
             ):
-                _LOGGER.info(
+                _LOGGER.debug(
                     f"Successfully fetched Energi Data Service data for {start_str} to {end_str}"
                 )
                 return response
             else:
                 _LOGGER.debug(
-                    f"No valid data from Energi Data Service for {start_str} to {end_str}, trying next range"
+                    f"No valid data from Energi Data Service for {start_str} to {end_str}"
                 )
 
-        # If we've tried all date ranges and still have no data, log a warning
-        _LOGGER.warning(
-            "No valid data found from Energi Data Service after trying multiple date ranges"
-        )
+        _LOGGER.debug("No prices published for %s on %s", area_code, date_str)
         return None

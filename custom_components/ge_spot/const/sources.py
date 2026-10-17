@@ -14,6 +14,8 @@ class Source:
     COMED = "comed"
     AMBER = "amber"
 
+    ROLLING_SOURCES = (AEMO, COMED, AMBER)
+
     # List of all sources
     ALL = [
         NORDPOOL,
