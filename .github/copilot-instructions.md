@@ -1,5 +1,8 @@
 # GitHub Copilot Instructions for GE-Spot
 
+Follow the [PR workflow and logging policy](instructions/pull-requests.instructions.md)
+when preparing or updating changes.
+
 Home Assistant custom integration providing 15-minute electricity spot prices across global markets. **Production code affecting real homes and electricity costs.**
 
 ## Core Principles

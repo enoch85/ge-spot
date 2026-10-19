@@ -342,6 +342,31 @@ class EntsoeParser(BasePriceParser):
                 )
                 return result
 
+            # Choose between alternative curves within each delivery period,
+            # rather than discarding today when tomorrow has more points.
+            delivery_periods = {}
+            for series in time_series:
+                period = series.find("ns:Period", ns)
+                if period is not None:
+                    key = (
+                        period.findtext("ns:timeInterval/ns:start", namespaces=ns),
+                        period.findtext("ns:timeInterval/ns:end", namespaces=ns),
+                    )
+                    delivery_periods.setdefault(key, []).append(series)
+            if len(delivery_periods) > 1:
+                for candidates in delivery_periods.values():
+                    selected = self._select_best_time_series(candidates)
+                    if selected is None:
+                        continue
+                    document = ET.Element(root.tag)
+                    document.append(selected)
+                    parsed = self._parse_xml(ET.tostring(document, encoding="unicode"))
+                    result["today_interval_prices"].update(
+                        parsed["today_interval_prices"]
+                    )
+                    result["currency"] = parsed["currency"]
+                return result
+
             selected_ts = self._select_best_time_series(time_series)
 
             if selected_ts is None:

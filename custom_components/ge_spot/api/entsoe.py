@@ -2,7 +2,7 @@
 
 import logging
 import asyncio
-from datetime import datetime, timezone, timedelta, time
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 
 from .base.api_client import ApiClient
@@ -17,8 +17,7 @@ from ..const.time import TimeFormat
 from .parsers.entsoe_parser import EntsoeParser
 from .base.base_price_api import BasePriceAPI
 from .base.error_handler import ErrorHandler
-from .utils import fetch_with_retry
-from ..const.time import TimezoneName
+from .utils import fetch_optional_data
 from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
@@ -180,16 +179,16 @@ class EntsoeAPI(BasePriceAPI):
                     and "Publication_MarketDocument" in response
                 ):
                     yesterday_xml_responses.append(response)
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         f"Successfully fetched yesterday's ENTSO-E data for {area}"
                     )
                 elif isinstance(response, dict) and not response.get("error"):
                     yesterday_xml_responses.append(response)
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         f"Successfully fetched yesterday's ENTSO-E dict data for {area}"
                     )
             except Exception as e:
-                _LOGGER.warning(f"Failed to fetch yesterday's data (non-critical): {e}")
+                _LOGGER.debug(f"Failed to fetch yesterday's data (non-critical): {e}")
 
         # Generate date ranges based on the reference time
         date_ranges = generate_date_ranges(reference_time, Source.ENTSOE)
@@ -249,9 +248,7 @@ class EntsoeAPI(BasePriceAPI):
                             )
                         # Other HTTP errors (e.g. transient 503s during an ENTSO-E
                         # outage) are retried and handled by the fallback path; the
-                        # api_client already surfaces one WARNING per source. Log at
-                        # DEBUG without the (often HTML) response body to avoid
-                        # flooding the log.
+                        # coordinator reports sustained loss. Keep HTTP details at DEBUG.
                         _LOGGER.debug(
                             f"ENTSO-E non-OK response (status {status_code}) for "
                             f"doc_type={doc_type}, range={period_start}-{period_end}; "
@@ -282,7 +279,7 @@ class EntsoeAPI(BasePriceAPI):
                             )
                             continue
                         elif "Publication_MarketDocument" in response:
-                            _LOGGER.info(
+                            _LOGGER.debug(
                                 f"Fetched ENTSO-E XML data with doc_type={doc_type} for area {area}"
                             )
                             xml_responses.append(response)
@@ -296,7 +293,7 @@ class EntsoeAPI(BasePriceAPI):
                     elif (
                         isinstance(response, dict) and response
                     ):  # Now this should only catch *valid* dict responses
-                        _LOGGER.info(
+                        _LOGGER.debug(
                             f"Fetched ENTSO-E dict data with doc_type={doc_type} for area {area}"
                         )
                         if not dict_response_found:
@@ -311,7 +308,7 @@ class EntsoeAPI(BasePriceAPI):
                         continue
 
                 except asyncio.TimeoutError:
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         f"ENTSO-E request timed out for doc_type={doc_type}, range={period_start}-{period_end}"
                     )
                     continue  # Go to next doc_type/date_range
@@ -333,7 +330,7 @@ class EntsoeAPI(BasePriceAPI):
                     continue  # Go to next doc_type/date_range
 
             if xml_responses or dict_response_found:
-                _LOGGER.info(
+                _LOGGER.debug(
                     f"Got valid ENTSO-E response(s) for date range {period_start} to {period_end}, skipping remaining ranges"
                 )
                 break
@@ -347,8 +344,6 @@ class EntsoeAPI(BasePriceAPI):
 
         # Define expected release hour (e.g. 13:00 CET)
         release_hour_cet = 13
-        # Define a buffer hour to consider it a failure (e.g. 16:00 CET)
-        failure_check_hour_cet = 16
 
         should_fetch_tomorrow = now_cet.hour >= release_hour_cet
 
@@ -388,42 +383,15 @@ class EntsoeAPI(BasePriceAPI):
                     and "Publication_MarketDocument" in data
                 )
 
-            tomorrow_xml = await fetch_with_retry(
-                fetch_tomorrow,
-                is_data_available,
-                retry_interval=Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
-                * Network.Defaults.SECONDS_PER_MINUTE,
-                end_time=time(
-                    Network.Defaults.RETRY_CUTOFF_TIME_HOUR,
-                    Network.Defaults.RETRY_CUTOFF_TIME_MINUTE,
-                ),
-                local_tz_name=TimezoneName.EUROPE_PARIS,
-            )
+            tomorrow_xml = await fetch_optional_data(fetch_tomorrow, is_data_available)
 
             if tomorrow_xml:
                 xml_responses.append(tomorrow_xml)
 
-            # --- Fallback Trigger Logic ---
-            # If it's past the failure check time and tomorrow's data is still not available/valid,
-            # treat this fetch attempt as a failure to trigger fallback.
-            if now_cet.hour >= failure_check_hour_cet and not is_data_available(
-                tomorrow_xml
-            ):
-                _LOGGER.warning(
-                    f"ENTSO-E fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
-                    f"but was not available or invalid. Triggering fallback."
-                )
-                # Store the specific error before returning None
-                last_exception = ValueError(
-                    f"Tomorrow's data missing after {failure_check_hour_cet}:00 CET"
-                )
-                # Return None to signal failure for tomorrow's data
-                return None
-
         # --- Final Check for Today's Data ---
         # Ensure we have *some* valid data (today or initial fetch) before proceeding
         if not dict_response_found and not xml_responses:
-            _LOGGER.error(
+            _LOGGER.debug(
                 f"ENTSO-E fetch failed for area {area}: No valid data found for today either."
             )
             # If last_exception was set during initial loops or the tomorrow check, use it, otherwise create a generic one

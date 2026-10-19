@@ -7,6 +7,10 @@ parses as 24/96 and the coordinator reports "Incomplete data". Zones that
 already publish 96 PT15M points must be unaffected.
 """
 
+import xml.etree.ElementTree as ET
+
+import pytest
+
 from custom_components.ge_spot.api.parsers.entsoe_parser import EntsoeParser
 from custom_components.ge_spot.const.time import TimeInterval
 
@@ -114,3 +118,27 @@ def test_a03_trailing_omission_filled_to_period_end():
     ), f"trailing gaps should fill to {expected}, got {len(prices)}"
     # the final slots inherit position 90's exact value (290.0)
     assert prices["2026-06-27T21:45:00+00:00"] == 290.0
+
+
+@pytest.mark.parametrize("denser_day", ["today", "tomorrow"])
+def test_multiple_delivery_days_preserve_today_and_tomorrow(denser_day):
+    today = ET.fromstring(
+        _document(
+            "PT15M", [(1, 10), (2, 11)] + ([(3, 12)] if denser_day == "today" else [])
+        )
+    )
+    tomorrow = ET.fromstring(
+        _document(
+            "PT15M",
+            [(1, 20), (2, 21)] + ([(3, 22)] if denser_day == "tomorrow" else []),
+            start="2026-06-27T22:00Z",
+            end="2026-06-28T22:00Z",
+        )
+    )
+    today.append(tomorrow.find(f"{{{NS}}}TimeSeries"))
+    prices = EntsoeParser().parse(ET.tostring(today, encoding="unicode"))[
+        "interval_raw"
+    ]
+    assert len(prices) == 2 * TimeInterval.get_intervals_per_day()
+    assert prices["2026-06-26T22:00:00+00:00"] == 10
+    assert prices["2026-06-27T22:00:00+00:00"] == 20

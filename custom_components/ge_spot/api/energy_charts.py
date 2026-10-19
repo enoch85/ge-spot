@@ -129,13 +129,13 @@ class EnergyChartsAPI(BasePriceAPI):
                 if isinstance(yesterday_response, dict) and not yesterday_response.get(
                     "error"
                 ):
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         f"Successfully fetched yesterday's Energy-Charts data for {area}"
                     )
                 else:
                     yesterday_response = None
             except Exception as e:
-                _LOGGER.warning(f"Failed to fetch yesterday's data (non-critical): {e}")
+                _LOGGER.debug(f"Failed to fetch yesterday's data (non-critical): {e}")
                 yesterday_response = None
 
         # Request 2 days of data (today + tomorrow) to reduce API load
@@ -156,12 +156,12 @@ class EnergyChartsAPI(BasePriceAPI):
                     # Rate limiting is expected and handled by the fallback
                     # manager; don't log it at ERROR (Energy-Charts' public API
                     # is strict, so many areas sharing it would flood the log).
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         f"Energy-Charts rate limited for {area}; "
                         f"will fall back / retry: {error_msg}"
                     )
                 else:
-                    _LOGGER.error(
+                    _LOGGER.debug(
                         f"Energy-Charts API request failed for {area}: {error_msg}"
                     )
                 return None
@@ -180,7 +180,7 @@ class EnergyChartsAPI(BasePriceAPI):
 
             # Check if we got data
             if not response.get("unix_seconds") or not response.get("price"):
-                _LOGGER.warning(f"Energy-Charts returned empty data for {area}")
+                _LOGGER.debug(f"Energy-Charts returned empty data for {area}")
                 return None
 
             _LOGGER.debug(

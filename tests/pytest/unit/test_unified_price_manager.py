@@ -353,6 +353,36 @@ class TestUnifiedPriceManager:
 
         return manager_instance
 
+    def test_get_cached_data_reads_todays_cache_without_fetching(
+        self, manager, auto_mock_core_dependencies
+    ):
+        """The new-day write reads today's cache and never contacts a provider."""
+        from datetime import date
+
+        cache = auto_mock_core_dependencies["cache_manager"].return_value
+        cache.get_data.return_value = _create_interval_price_data(
+            include_tomorrow=False
+        )
+
+        result = manager.get_cached_data()
+
+        assert result.using_cached_data
+        assert result.today_interval_prices == _generate_complete_intervals(
+            "2025-04-26T00:00:00+02:00", 1.1
+        )
+        cache.get_data.assert_called_once_with(
+            area="SE1", target_date=date(2025, 4, 26)
+        )
+        fallback = auto_mock_core_dependencies["fallback_manager"].return_value
+        fallback.fetch_with_fallback.assert_not_called()
+
+        # Prices computed with an old VAT or tariff are not shown.
+        with patch.object(manager, "_price_config_changed", return_value=True):
+            assert manager.get_cached_data() is None
+
+        cache.get_data.return_value = None
+        assert manager.get_cached_data() is None
+
     def test_init(self, manager, auto_mock_core_dependencies):
         """Test initialization sets attributes correctly."""
         # Core attributes
@@ -1645,286 +1675,55 @@ class TestUnifiedPriceManager:
             len(result.tomorrow_interval_prices) == 0
         ), "Should not have tomorrow data"
 
-    @pytest.mark.asyncio
-    async def test_consecutive_failures_backoff(
-        self, manager, auto_mock_core_dependencies
+    @pytest.mark.parametrize(
+        "elapsed_minutes,force,retried",
+        [
+            (5, False, False),
+            (15, False, True),
+            (60, False, True),
+            (5, True, True),
+        ],
+    )
+    async def test_failed_source_cooldown_and_recovery(
+        self, manager, auto_mock_core_dependencies, elapsed_minutes, force, retried
     ):
-        """Test implicit validation - failed sources are skipped after grace period."""
-        # Arrange
-        mock_fallback = auto_mock_core_dependencies[
-            "fallback_manager"
-        ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies[
-            "data_processor"
-        ].return_value.process
-        mock_now = auto_mock_core_dependencies["now"]
-        mock_cache_get = auto_mock_core_dependencies[
-            "cache_manager"
-        ].return_value.get_data
-
-        # Set coordinator created time to past grace period
-        manager._coordinator_created_at = mock_now.return_value - timedelta(minutes=10)
-        # Set last API fetch to simulate non-first-fetch
-        manager._last_api_fetch = mock_now.return_value - timedelta(minutes=8)
-
-        # Configure for failure
-        mock_fallback.return_value = MOCK_FAILURE_RESULT
-        # Processor called by _generate_empty_result
-        empty_res_1 = await manager._generate_empty_result(
-            error=f"All sources failed: {MOCK_FAILURE_RESULT['error']}"
-        )
-        mock_processor.return_value = empty_res_1
-        mock_cache_get.return_value = None  # No cache
-
-        # First failure - sources get marked as failed
-        await manager.fetch_data()
-
-        # Verify sources were marked as failed
-        assert (
-            Source.NORDPOOL in manager._failed_sources
-        ), "Nordpool should be in failed sources"
-        assert (
-            Source.ENTSOE in manager._failed_sources
-        ), "ENTSOE should be in failed sources"
-        assert (
-            manager._failed_sources[Source.NORDPOOL] is not None
-        ), "Nordpool should have failure timestamp"
-        assert (
-            manager._consecutive_failures == 1
-        ), "First failure should set counter to 1"
-
-        # Reset mocks for second call
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        mock_cache_get.reset_mock()
-        empty_res_2 = await manager._generate_empty_result(
-            error="No API sources available"
-        )
-        mock_processor.return_value = empty_res_2
-
-        # Advance time by 1 hour (still past grace period)
-        mock_now.return_value += timedelta(hours=1)
-        manager._last_api_fetch = mock_now.return_value - timedelta(minutes=30)
-
-        # Verify NOT in grace period and NOT first fetch
-        assert manager.is_in_grace_period() == False, "Should be past grace period"
-        assert manager._last_api_fetch is not None, "Should not be first fetch"
-
-        # Second attempt - sources should be SKIPPED because they failed and we're past grace period
-        await manager.fetch_data()
-
-        # Assert: FallbackManager should NOT be called because all sources are filtered out
-        mock_fallback.assert_not_awaited(), "API should not be called - all sources failed recently"
-        # No sources available, so consecutive failures would increment
-        assert (
-            manager._consecutive_failures == 2
-        ), "Consecutive failures should increment to 2"
-
-        # Reset for forced fetch test
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        mock_cache_get.reset_mock()
-        mock_fallback.return_value = (
-            MOCK_SUCCESS_RESULT  # Simulate success for forced fetch
-        )
-        mock_processor.return_value = MOCK_PROCESSED_RESULT
-
-        # Force fetch should bypass 24h filter and try sources again
-        await manager.fetch_data(force=True)
-
-        # Assert: Forced fetch bypasses filters
-        mock_fallback.assert_awaited_once(), "Forced fetch should bypass 24h filter and call API"
-        # On success, failures should be cleared
-        assert (
-            manager._consecutive_failures == 0
-        ), "Consecutive failures should reset to 0 on success"
-        assert (
-            manager._failed_sources[Source.NORDPOOL] is None
-        ), "Nordpool failure should be cleared on success"
-
-        # Cleanup background tasks before finishing
-        await cancel_health_check_tasks(manager)
-
-    @pytest.mark.asyncio
-    async def test_daily_retry_window_success_and_failure(
-        self, manager, auto_mock_core_dependencies, monkeypatch
-    ):
-        """Test comprehensive source validation lifecycle with health check integration."""
-        # This test validates the complete implicit validation flow:
-        # 1. Initial failure marks sources with timestamp (after grace period + past first fetch)
-        # 2. Subsequent regular fetches skip failed sources (health check will validate them)
-        # 3. force=True bypasses the filter and allows immediate retry
-        # 4. Retry success clears failure markers
-        # 5. Retry failure updates failure timestamp and continues cycle
-        # Note: Health check validates sources during special windows, not 24h timer
-
-        mock_fallback = auto_mock_core_dependencies[
-            "fallback_manager"
-        ].return_value.fetch_with_fallback
-        mock_processor = auto_mock_core_dependencies[
-            "data_processor"
-        ].return_value.process
-        mock_now = auto_mock_core_dependencies["now"]
-        mock_cache_get = auto_mock_core_dependencies[
-            "cache_manager"
-        ].return_value.get_data
-
-        # Mock _schedule_health_check to avoid background task complications in tests
-        async def mock_schedule_health_check():
-            pass  # No-op for testing - we're testing the filter logic, not the health check scheduler
-
-        monkeypatch.setattr(
-            manager, "_schedule_health_check", mock_schedule_health_check
-        )
-
-        # Clear the rate limiting state to start fresh
-        from custom_components.ge_spot.coordinator.unified_price_manager import (
-            _LAST_FETCH_TIME,
-        )
-
-        _LAST_FETCH_TIME.clear()
-
-        initial_time = mock_now.return_value
-
-        # Set time past grace period and simulate non-first-fetch
+        """Recent failures back off; expired failures and manual refresh can recover."""
+        dependencies = auto_mock_core_dependencies
+        now = dependencies["now"]
+        initial_time = now.return_value
+        fallback = dependencies["fallback_manager"].return_value.fetch_with_fallback
         manager._coordinator_created_at = initial_time - timedelta(minutes=10)
-        manager._last_api_fetch = initial_time - timedelta(minutes=8)
+        manager._last_api_fetch = initial_time - timedelta(minutes=20)
+        fallback.return_value = MOCK_FAILURE_RESULT
+        try:
+            first = await manager.fetch_data()
+            assert not first.today_interval_prices
+            assert manager.get_disabled_sources() == sorted(
+                [Source.NORDPOOL, Source.ENTSOE]
+            )
+            retry_time = initial_time + timedelta(
+                minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES
+            )
+            assert all(
+                detail["retry_at"] == retry_time.isoformat()
+                for detail in manager.get_failed_source_details()
+            )
 
-        # Verify preconditions
-        assert manager.is_in_grace_period() == False, "Should be past grace period"
-        assert manager._last_api_fetch is not None, "Should not be first fetch"
-
-        # ========== SCENARIO 1: Initial Failure (after grace period) ==========
-        # Sources fail, get marked with timestamp, daily retry scheduled
-
-        mock_fallback.return_value = MOCK_FAILURE_RESULT
-        empty_res_1 = await manager._generate_empty_result(
-            error=f"All sources failed: {MOCK_FAILURE_RESULT['error']}"
-        )
-        mock_processor.return_value = empty_res_1
-        mock_cache_get.return_value = None
-
-        result_1 = await manager.fetch_data()
-
-        # Verify failure was recorded
-        assert (
-            Source.NORDPOOL in manager._failed_sources
-        ), "Nordpool should be marked as failed"
-        assert Source.ENTSOE in manager._failed_sources, "ENTSOE should be in failed"
-        first_failure_time_nordpool = manager._failed_sources[Source.NORDPOOL]
-        first_failure_time_entsoe = manager._failed_sources[Source.ENTSOE]
-        assert (
-            first_failure_time_nordpool is not None
-        ), "Failure timestamp should be set"
-        assert manager._consecutive_failures == 1, "First failure increments counter"
-        assert (
-            not result_1.today_interval_prices
-        ), "No data on failure (empty interval prices)"
-        assert mock_fallback.await_count == 1, "Fallback called on first failure"
-
-        # ========== SCENARIO 2: Second Fetch (Sources Skipped) ==========
-        # Sources should be skipped because they failed and we're past grace period
-
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        mock_cache_get.reset_mock()
-
-        # Advance time by 2 hours (still past grace period)
-        mock_now.return_value = initial_time + timedelta(hours=2)
-        manager._last_api_fetch = initial_time + timedelta(hours=1, minutes=30)
-        _LAST_FETCH_TIME.clear()  # Clear rate limit to allow fetch attempt
-
-        # Verify still past grace period
-        assert (
-            manager.is_in_grace_period() == False
-        ), "Should still be past grace period"
-
-        empty_res_2 = await manager._generate_empty_result(
-            error="No API sources available"
-        )
-        mock_processor.return_value = empty_res_2
-
-        result_2 = await manager.fetch_data()
-
-        # Verify sources were skipped (no API call made)
-        assert (
-            mock_fallback.await_count == 0
-        ), "API should NOT be called - sources failed recently"
-        assert (
-            manager._consecutive_failures == 2
-        ), "Consecutive failures increment when no sources available"
-        assert (
-            manager._failed_sources[Source.NORDPOOL] == first_failure_time_nordpool
-        ), "Failure timestamp unchanged when sources skipped"
-
-        # ========== SCENARIO 3: Force Fetch - Bypasses Failed Source Filter ==========
-        # force=True bypasses the failed source filter and retries immediately
-
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        mock_cache_get.reset_mock()
-
-        # Advance time by 2 hours (still within previous 24h window - but force bypasses it)
-        mock_now.return_value = initial_time + timedelta(hours=4)
-        _LAST_FETCH_TIME.clear()  # Clear rate limit
-
-        # Configure for successful retry
-        mock_fallback.return_value = MOCK_SUCCESS_RESULT
-        mock_processor.return_value = _dict_to_interval_price_data(
-            MOCK_PROCESSED_RESULT
-        )
-
-        result_3 = await manager.fetch_data(force=True)
-
-        # Verify sources were retried (force=True bypasses filter) and success cleared failures
-        assert mock_fallback.await_count == 1, "API should be called when force=True"
-        assert (
-            manager._consecutive_failures == 0
-        ), "Success resets consecutive failure counter"
-        assert (
-            manager._failed_sources[Source.NORDPOOL] is None
-        ), "Successful source clears failure marker"
-        # Note: ENTSOE was never tried because NORDPOOL succeeded (fallback stops at first success)
-        # So ENTSOE still has its failure marker - this is correct behavior
-        assert result_3.today_interval_prices, "Data available on success"
-        assert result_3.source == Source.NORDPOOL, "Correct source in result"
-
-        # ========== SCENARIO 4: New Failure After Previous Success ==========
-        # Sources fail again, get new failure timestamps
-
-        mock_fallback.reset_mock()
-        mock_processor.reset_mock()
-        mock_cache_get.reset_mock()
-
-        # Advance time by 2 hours
-        second_failure_time_start = initial_time + timedelta(hours=6)
-        mock_now.return_value = second_failure_time_start
-        _LAST_FETCH_TIME.clear()
-
-        mock_fallback.return_value = MOCK_FAILURE_RESULT
-        empty_res_4 = await manager._generate_empty_result(
-            error=f"All sources failed: {MOCK_FAILURE_RESULT['error']}"
-        )
-        mock_processor.return_value = empty_res_4
-
-        result_4 = await manager.fetch_data()
-
-        # Verify new failure markers set
-        assert (
-            Source.NORDPOOL in manager._failed_sources
-        ), "Sources marked as failed again"
-        second_failure_time_nordpool = manager._failed_sources[Source.NORDPOOL]
-        assert (
-            second_failure_time_nordpool == second_failure_time_start
-        ), "New failure timestamp set"
-        assert (
-            second_failure_time_nordpool > first_failure_time_nordpool
-        ), "New timestamp is later than first"
-        assert manager._consecutive_failures == 1, "Consecutive failures restart at 1"
-        assert not result_4.today_interval_prices, "No data on second failure"
-
-        # Cleanup background tasks before finishing
-        await cancel_health_check_tasks(manager)
+            now.return_value = initial_time + timedelta(minutes=elapsed_minutes)
+            dependencies["last_fetch_time"].clear()
+            fallback.reset_mock()
+            fallback.return_value = MOCK_SUCCESS_RESULT
+            recovered = await manager.fetch_data(force=force)
+            assert fallback.await_count == int(retried)
+            if retried:
+                assert recovered.today_interval_prices
+                assert manager._failed_sources[Source.NORDPOOL] is None
+                assert manager._consecutive_failures == 0
+            else:
+                assert not recovered.today_interval_prices
+                assert manager._failed_sources[Source.NORDPOOL] == initial_time
+        finally:
+            await cancel_health_check_tasks(manager)
 
 
 class TestHealthCheck:
@@ -2551,11 +2350,10 @@ class TestHealthCheck:
                 ), f"Source '{source_name}' should be tracked after validation"
 
     @pytest.mark.asyncio
-    async def test_failure_message_includes_next_check_time(self, manager, caplog):
-        """Test that failure messages include next health check time.
-
-        Phase 2.1 fix: Users should know WHEN sources will be retried.
-        """
+    async def test_transient_failure_debug_message_includes_retry_time(
+        self, manager, caplog
+    ):
+        """Transient details include the actual retry time without warning noise."""
         # Arrange
         caplog.clear()
 
@@ -2577,21 +2375,21 @@ class TestHealthCheck:
                 result = await manager.fetch_data(force=False)
 
                 # Assert - Check log messages
-                warning_messages = [
+                debug_messages = [
                     record.message
                     for record in caplog.records
-                    if record.levelname == "WARNING"
+                    if record.levelname == "DEBUG"
                 ]
 
                 # Should have a message about failed sources with time
                 assert any(
-                    "failed" in msg.lower() for msg in warning_messages
-                ), "Should have failure warning"
+                    "failed" in msg.lower() for msg in debug_messages
+                ), "Should have debug failure details"
 
                 # Should mention when next check will happen
                 assert any(
                     ":" in msg and any(char.isdigit() for char in msg)
-                    for msg in warning_messages
+                    for msg in debug_messages
                 ), "Should include time (HH:MM format) in failure message"
         finally:
             # Cleanup health check task

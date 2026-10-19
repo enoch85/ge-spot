@@ -1,21 +1,20 @@
 """API handler for Nordpool."""
 
 import logging
-from datetime import datetime, timezone, timedelta, time
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 
 from .base.api_client import ApiClient
 from ..const.sources import Source
 from ..const.currencies import Currency
 from ..const.areas import AreaMapping
-from ..const.time import TimeFormat
+from ..const.time import TimeFormat, TimezoneName
 from ..const.network import Network
 from .parsers.nordpool_parser import NordpoolParser
 from ..utils.date_range import generate_date_ranges
 from .base.base_price_api import BasePriceAPI
 from .base.error_handler import ErrorHandler
-from .utils import fetch_with_retry
-from ..const.time import TimezoneName
+from .utils import fetch_optional_data
 from ..timezone.timezone_utils import get_timezone_object
 
 _LOGGER = logging.getLogger(__name__)
@@ -77,7 +76,7 @@ class NordpoolAPI(BasePriceAPI):
                 or not isinstance(data, dict)
                 or not data.get("raw_data", {}).get("today")
             ):
-                _LOGGER.error(
+                _LOGGER.debug(
                     f"Nordpool API returned empty or invalid data for area {area}: {data}"
                 )
             return data
@@ -105,6 +104,10 @@ class NordpoolAPI(BasePriceAPI):
             reference_time = reference_time.astimezone(timezone.utc)
 
         # Map from area code to delivery area
+        # The date query selects a CET/CEST delivery day, not a UTC day.
+        reference_time = reference_time.astimezone(
+            get_timezone_object(TimezoneName.EUROPE_OSLO)
+        )
         delivery_area = AreaMapping.NORDPOOL_DELIVERY.get(area, area)
 
         _LOGGER.debug(
@@ -157,8 +160,6 @@ class NordpoolAPI(BasePriceAPI):
 
         # Define expected release hour (e.g. 13:00 CET)
         release_hour_cet = 13
-        # Define a buffer hour to consider it a failure (e.g. 16:00 CET)
-        failure_check_hour_cet = 16
 
         should_fetch_tomorrow = now_cet.hour >= release_hour_cet
 
@@ -181,44 +182,7 @@ class NordpoolAPI(BasePriceAPI):
                 # Check if data is a dict and has the expected structure
                 return data and isinstance(data, dict) and data.get("multiAreaEntries")
 
-            # Attempt to fetch tomorrow's data with retry
-            tomorrow_data = await fetch_with_retry(
-                fetch_tomorrow,
-                is_data_available,
-                retry_interval=Network.Defaults.STANDARD_UPDATE_INTERVAL_MINUTES
-                * Network.Defaults.SECONDS_PER_MINUTE,
-                end_time=time(
-                    Network.Defaults.RETRY_CUTOFF_TIME_HOUR,
-                    Network.Defaults.RETRY_CUTOFF_TIME_MINUTE,
-                ),
-                local_tz_name=TimezoneName.EUROPE_OSLO,  # Use Oslo time for end_time check
-            )
-
-            # --- Fallback Trigger Logic ---
-            # If it's past the failure check time and tomorrow's data is still not available,
-            # treat this fetch attempt as a failure to trigger fallback.
-            # However, if we got HTTP 204, this is "data not ready" not "API failed"
-            if now_cet.hour >= failure_check_hour_cet and not is_data_available(
-                tomorrow_data
-            ):
-                # Check if it's a "not ready yet" (204) vs actual failure
-                if (
-                    tomorrow_data
-                    and isinstance(tomorrow_data, dict)
-                    and tomorrow_data.get("status") == 204
-                ):
-                    _LOGGER.info(
-                        f"Nordpool tomorrow data not yet published for area {area} (HTTP 204 after {failure_check_hour_cet}:00 CET). "
-                        f"Will continue with today's data only."
-                    )
-                    # Don't trigger fallback - this is expected, just proceed with today's data
-                    tomorrow_data = None
-                else:
-                    _LOGGER.warning(
-                        f"Nordpool fetch failed for area {area}: Tomorrow's data expected after {failure_check_hour_cet}:00 CET "
-                        f"but was not available or invalid. Triggering fallback."
-                    )
-                    return None  # Signal failure to FallbackManager
+            tomorrow_data = await fetch_optional_data(fetch_tomorrow, is_data_available)
 
         # Construct the dictionary to be returned to FallbackManager/DataProcessor
         # This dictionary should contain everything the parser needs.
@@ -234,7 +198,7 @@ class NordpoolAPI(BasePriceAPI):
             or not isinstance(today_data, dict)
             or not today_data.get("multiAreaEntries")
         ):
-            _LOGGER.error(
+            _LOGGER.debug(
                 f"Nordpool fetch failed for area {area}: Today's data is missing or invalid."
             )
             return None  # Signal failure

@@ -5,10 +5,12 @@ Instead of asking "do we have complete data?", we ask "how long is our data vali
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional, Tuple
 
 from ..const.network import Network
+from ..const.intervals import SourceIntervals
+from ..const.sources import Source
 from .data_validity import DataValidity
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +40,7 @@ class FetchDecisionMaker:
         in_grace_period: bool = False,
         is_health_check: bool = False,
         area: Optional[str] = None,
+        source: Optional[str] = None,
     ) -> Tuple[bool, str]:
         """Determine if we need to fetch from API based on data validity.
 
@@ -45,8 +48,7 @@ class FetchDecisionMaker:
         1. CRITICAL: No data for current interval → FETCH IMMEDIATELY
         2. Running out: Less than safety buffer intervals remaining → FETCH
         3. Special window: 13:00-14:00 and missing tomorrow's data → FETCH
-        4. Initial fetch: Never fetched before → FETCH
-        5. Otherwise: SKIP (we have enough future data)
+        4. Otherwise: SKIP (we have enough future data, including startup cache)
 
         Args:
             now: Current datetime
@@ -59,11 +61,24 @@ class FetchDecisionMaker:
         Returns:
             Tuple of (need_api_fetch, reason)
         """
+        if source in Source.ROLLING_SOURCES:
+            fetch_interval_minutes = SourceIntervals.get_interval(source)
+            if (
+                not is_health_check
+                and last_fetch
+                and now - last_fetch < timedelta(minutes=fetch_interval_minutes)
+            ):
+                return (
+                    False,
+                    f"Rolling prices refreshed less than {fetch_interval_minutes} minutes ago",
+                )
+            return True, "Refresh rolling prices"
+
         # CRITICAL CHECK: Do we have data for the current interval?
         if not data_validity.has_current_interval:
             current_interval_key = self._tz_service.get_current_interval_key()
             reason = f"No data for current interval ({current_interval_key}) - fetching data immediately"
-            _LOGGER.info(reason)  # INFO level: expected on reload, not an error
+            _LOGGER.debug(reason)
 
             # Respect rate limiting UNLESS this is a health check
             if last_fetch and not is_health_check:
@@ -80,21 +95,13 @@ class FetchDecisionMaker:
                     reason = (
                         f"No current interval data, but rate limited ({skip_reason})"
                     )
-                    # INFO level: This is expected when parser changes or cache invalidation happens
-                    # The system will fall back to any available cached data
-                    _LOGGER.info(reason)
+                    _LOGGER.debug(reason)
                     return False, reason
 
             # If is_health_check=True, we skip the rate limit check entirely
             if is_health_check:
                 reason += " (health check - bypassing rate limit)"
 
-            return True, reason
-
-        # Initial fetch check (never fetched before)
-        if not last_fetch:
-            reason = "Initial startup - fetching data"
-            _LOGGER.info(reason)
             return True, reason
 
         # GRACE PERIOD CHECK: During grace period, if we have partial today data, try to get complete data
@@ -115,7 +122,7 @@ class FetchDecisionMaker:
                     f"Grace period: incomplete today data (have {data_validity.today_interval_count} intervals, "
                     f"need {required_today_intervals}) - fetching to get complete data"
                 )
-                _LOGGER.info(reason)
+                _LOGGER.debug(reason)
 
                 # Check rate limiting (still respect it even in grace period, but with relaxed rules)
                 from ..utils.rate_limiter import RateLimiter
@@ -130,7 +137,7 @@ class FetchDecisionMaker:
 
                 if should_skip:
                     reason = f"Grace period with incomplete today data, but rate limited ({skip_reason})"
-                    _LOGGER.info(reason)
+                    _LOGGER.debug(reason)
                     return False, reason
 
                 return True, reason
@@ -148,7 +155,7 @@ class FetchDecisionMaker:
                 f"Running low on data: only {intervals_remaining} intervals remaining "
                 f"(safety buffer: {Network.Defaults.DATA_SAFETY_BUFFER_INTERVALS} intervals) - fetching"
             )
-            _LOGGER.info(reason)
+            _LOGGER.debug(reason)
 
             # Check rate limiting
             from ..utils.rate_limiter import RateLimiter
@@ -162,12 +169,7 @@ class FetchDecisionMaker:
 
             if should_skip:
                 reason = f"Low on data but rate limited: {skip_reason}"
-                # INFO, not WARNING: this is the rate limiter working as intended
-                # (we recently fetched). It is logged every update cycle for each
-                # affected area, and its siblings above ("no current interval data
-                # but rate limited", "special window but rate limited") are INFO
-                # too — surfacing it at WARNING flooded the log during outages.
-                _LOGGER.info(reason)
+                _LOGGER.debug(reason)
                 return False, reason
 
             return True, reason
@@ -188,7 +190,7 @@ class FetchDecisionMaker:
                     f"missing tomorrow's data (have {data_validity.tomorrow_interval_count} intervals, "
                     f"need {Network.Defaults.REQUIRED_TOMORROW_INTERVALS}) - fetching"
                 )
-                _LOGGER.info(reason)
+                _LOGGER.debug(reason)
 
                 # Check rate limiting
                 from ..utils.rate_limiter import RateLimiter
@@ -205,7 +207,7 @@ class FetchDecisionMaker:
                         f"Special window but rate limited: {skip_reason}. "
                         f"Will retry in next update cycle."
                     )
-                    _LOGGER.info(reason)
+                    _LOGGER.debug(reason)
                     return False, reason
 
                 return True, reason
@@ -229,7 +231,7 @@ class FetchDecisionMaker:
                     f"(have {data_validity.tomorrow_interval_count} intervals, "
                     f"need {Network.Defaults.REQUIRED_TOMORROW_INTERVALS}) - retry fetch"
                 )
-                _LOGGER.info(reason)
+                _LOGGER.debug(reason)
 
                 # Check rate limiting - don't spam the API
                 from ..utils.rate_limiter import RateLimiter

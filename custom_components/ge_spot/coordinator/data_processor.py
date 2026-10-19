@@ -248,7 +248,7 @@ class DataProcessor:
             ):
                 # Cache missing raw data - invalidate to fetch fresh data
                 # This auto-heals old cache formats and ensures current exchange rates
-                _LOGGER.warning(
+                _LOGGER.debug(
                     f"[{self.area}] Cache missing raw data (raw_interval_prices_original, "
                     f"source_timezone, or source_currency) - invalidating to fetch fresh data"
                 )
@@ -552,13 +552,12 @@ class DataProcessor:
                     )  # Log today's stats
                 else:
                     missing_keys = sorted(list(today_keys - found_keys))
-                    # Update warning message threshold
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         f"Insufficient data for today ({len(found_keys)}/{len(today_keys)} keys found, need {math.ceil(expected_intervals * 0.8)}), skipping statistics calculation for {self.area}. Missing: {missing_keys[:10]}{'...' if len(missing_keys) > 10 else ''}"
                     )
                     processed_result["statistics"] = PriceStatistics().to_dict()
             else:
-                _LOGGER.info(
+                _LOGGER.debug(
                     f"No final prices for today available after processing for area {self.area}, skipping stats."
                 )
                 processed_result["statistics"] = PriceStatistics().to_dict()
@@ -599,7 +598,7 @@ class DataProcessor:
                 else:
                     missing_keys = sorted(list(tomorrow_keys - found_keys))
 
-                    # Time-aware validation: Use DEBUG before publication time, WARNING after.
+                    # Keep publication timing in diagnostics for partial forecasts.
                     # source_name was resolved at the top of process() from
                     # data["data_source"] or data["source"]; DataProcessor itself is
                     # source-agnostic so we look up the per-source schedule each call.
@@ -616,12 +615,10 @@ class DataProcessor:
                     )
 
                     if data_should_be_available:
-                        # After publication time - this is concerning
-                        _LOGGER.warning(
+                        _LOGGER.debug(
                             f"{log_message} (after expected publication time {publication_hour_utc}:00 UTC)"
                         )
                     else:
-                        # Before publication time - this is expected
                         _LOGGER.debug(
                             f"{log_message} (before publication time {publication_hour_utc}:00 UTC, this is normal)"
                         )
@@ -681,7 +678,7 @@ class DataProcessor:
             )
 
             processed_result["data_validity"] = validity.to_dict()
-            _LOGGER.info(f"Data validity for {self.area}: {validity}")
+            _LOGGER.debug(f"Data validity for {self.area}: {validity}")
 
         except Exception as e:
             _LOGGER.error(
@@ -690,7 +687,7 @@ class DataProcessor:
             # Add empty validity on error
             processed_result["data_validity"] = DataValidity().to_dict()
 
-        _LOGGER.info(
+        _LOGGER.debug(
             f"Successfully processed data for area {self.area}. Source: {source_name}, Today Prices: {len(processed_result['today_interval_prices'])}, Tomorrow Prices: {len(processed_result['tomorrow_interval_prices'])}, Cached: {processed_result['using_cached_data']}"
         )
         # Convert to IntervalPriceData and return it directly (not converted to dict)

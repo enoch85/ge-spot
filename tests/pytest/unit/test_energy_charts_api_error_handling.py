@@ -36,85 +36,32 @@ class TestEnergyChartsErrorHandling:
         """Create an EnergyChartsAPI instance for testing."""
         return EnergyChartsAPI(config={})
 
-    @pytest.mark.asyncio
-    async def test_timeout_error_handled_correctly(self, api, caplog):
-        """Test that timeout errors are detected and don't cascade to 'missing fields' error.
-
-        Phase 1.2 fix: API client returns {"error": True, "message": "..."} on timeout.
-        This should be detected BEFORE checking for missing fields.
-        """
-        # Arrange
-        mock_client = AsyncMock()
-        mock_client.fetch = AsyncMock(
-            return_value={
-                "error": True,
-                "message": "Request timed out",
-                "url": "https://api.energy-charts.info/price",
-            }
-        )
-
-        caplog.clear()
-
-        # Act
-        result = await api._fetch_data(
-            client=mock_client, area="NL", reference_time=datetime.now(timezone.utc)
-        )
-
-        # Assert
-        assert result is None, "Should return None on error"
-
-        # Check that we got the timeout error message, not "missing fields"
-        error_messages = [
-            record.message for record in caplog.records if record.levelname == "ERROR"
-        ]
-
-        # Should have exactly one error message about the timeout
-        assert (
-            len(error_messages) == 1
-        ), f"Should have 1 error message, got {len(error_messages)}"
-        assert (
-            "request failed" in error_messages[0].lower()
-        ), "Error message should indicate request failure"
-        assert (
-            "timed out" in error_messages[0].lower()
-            or "timeout" in error_messages[0].lower()
-        ), "Error message should mention timeout"
-
-        # Should NOT have "missing required fields" error
-        assert not any(
-            "missing required fields" in msg.lower() for msg in error_messages
-        ), "Should NOT have cascading 'missing fields' error"
-
-    @pytest.mark.asyncio
-    async def test_connection_error_handled_correctly(self, api, caplog):
-        """Test that connection errors are detected and don't cascade."""
-        # Arrange
-        mock_client = AsyncMock()
-        mock_client.fetch = AsyncMock(
-            return_value={
-                "error": True,
-                "message": "Cannot connect to host",
-                "url": "https://api.energy-charts.info/price",
-            }
-        )
-
-        caplog.clear()
-
-        # Act
-        result = await api._fetch_data(
-            client=mock_client, area="DE-LU", reference_time=datetime.now(timezone.utc)
-        )
-
-        # Assert
+    @pytest.mark.parametrize(
+        "status,message",
+        [
+            (None, "Request timed out"),
+            (None, "Cannot connect to host"),
+            (429, "Too Many Requests"),
+            (404, "no content available"),
+            (503, "Service unavailable"),
+        ],
+    )
+    async def test_handled_request_failure_is_debug_without_cascading_errors(
+        self, api, caplog, status, message
+    ):
+        client = AsyncMock()
+        client.fetch.return_value = {
+            "error": True,
+            "status_code": status,
+            "message": message,
+        }
+        with caplog.at_level(logging.DEBUG):
+            result = await api._fetch_data(client, "SE4", datetime.now(timezone.utc))
         assert result is None
-
-        error_messages = [
-            record.message for record in caplog.records if record.levelname == "ERROR"
-        ]
-        assert len(error_messages) == 1
-        assert "request failed" in error_messages[0].lower()
+        assert any(message in record.message for record in caplog.records)
+        assert all(record.levelno < logging.WARNING for record in caplog.records)
         assert not any(
-            "missing required fields" in msg.lower() for msg in error_messages
+            "missing required fields" in record.message for record in caplog.records
         )
 
     @pytest.mark.asyncio
@@ -233,77 +180,3 @@ class TestEnergyChartsErrorHandling:
             record.message for record in caplog.records if record.levelname == "ERROR"
         ]
         assert len(error_messages) == 0, "Should have no errors for successful response"
-
-    @pytest.mark.asyncio
-    async def test_rate_limit_429_logged_as_warning_not_error(self, api, caplog):
-        """A 429 (rate limit) response is handled by fallback and must not log ERROR.
-
-        Energy-Charts' public API is strict; when many configured areas share it
-        the per-request 429 must not flood the log at ERROR level.
-        """
-        mock_client = AsyncMock()
-        mock_client.fetch = AsyncMock(
-            return_value={
-                "error": True,
-                "status_code": 429,
-                "message": "Too Many Requests",
-                "url": "https://api.energy-charts.info/price",
-            }
-        )
-
-        caplog.clear()
-        with caplog.at_level(logging.DEBUG):
-            result = await api._fetch_data(
-                client=mock_client,
-                area="NO2NSL",
-                reference_time=datetime.now(timezone.utc),
-            )
-
-        assert result is None
-        error_messages = [r.message for r in caplog.records if r.levelname == "ERROR"]
-        assert error_messages == [], f"429 must not log ERROR, got: {error_messages}"
-        warnings = [r.message for r in caplog.records if r.levelname == "WARNING"]
-        assert any(
-            "rate limited" in m.lower() for m in warnings
-        ), f"Expected a rate-limit WARNING, got: {warnings}"
-
-    @pytest.mark.asyncio
-    async def test_error_check_order(self, api, caplog):
-        """Test that error checking happens in correct order.
-
-        Order should be:
-        1. Check for error flag from API client
-        2. Check for valid response structure
-        3. Check for required fields
-        """
-        # Test case: Response with error flag AND missing fields
-        # Should only log the error flag message, not missing fields
-        mock_client = AsyncMock()
-        mock_client.fetch = AsyncMock(
-            return_value={
-                "error": True,
-                "message": "API rate limit exceeded",
-                # Also missing unix_seconds and price, but error flag should be caught first
-            }
-        )
-
-        caplog.clear()
-
-        # Act
-        result = await api._fetch_data(
-            client=mock_client, area="AT", reference_time=datetime.now(timezone.utc)
-        )
-
-        # Assert
-        assert result is None
-
-        error_messages = [
-            record.message for record in caplog.records if record.levelname == "ERROR"
-        ]
-        assert len(error_messages) == 1, "Should have exactly one error"
-        assert "request failed" in error_messages[0].lower()
-        assert "rate limit" in error_messages[0].lower()
-        # Should NOT reach the "missing fields" check
-        assert not any(
-            "missing required fields" in msg.lower() for msg in error_messages
-        )
