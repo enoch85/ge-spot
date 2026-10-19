@@ -192,3 +192,7 @@ TODO/SOURCE_VALIDATION_MASTER_PLAN.md
 
 # Always track Claude Code harness config (overrides *.md above)
 !.claude/**
+
+# Release notes are versioned inputs to publication.
+!scripts/release/notes-template.md
+!scripts/release/notes/v*.md

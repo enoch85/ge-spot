@@ -9,6 +9,7 @@ on:
       - '.github/workflows/**'
       - 'requirements.txt'
       - 'tests/**'
+      - 'scripts/release/**'
 
 permissions:
   contents: read
@@ -58,54 +59,3 @@ jobs:
 
       - name: Unit tests
         run: pytest tests/pytest/unit -q
-
-  check_version:
-    runs-on: ubuntu-latest
-    name: Version Check
-    if: startsWith(github.head_ref, 'release/v')
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Check manifest version
-        # The branch name comes from the PR author: read it from the
-        # environment, never expand it into the script.
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          MANIFEST_VERSION=$(grep '"version"' custom_components/ge_spot/manifest.json | cut -d'"' -f4)
-          BRANCH_VERSION="${HEAD_REF#release/}"
-
-          echo "Manifest version: $MANIFEST_VERSION"
-          echo "Branch version: $BRANCH_VERSION"
-
-          if [ "$MANIFEST_VERSION" != "$BRANCH_VERSION" ]; then
-            echo "Error: Version in manifest.json ($MANIFEST_VERSION) does not match branch version ($BRANCH_VERSION)"
-            exit 1
-          else
-            echo "✅ Version check passed"
-          fi
-
-  add_release_label:
-    runs-on: ubuntu-latest
-    name: Add Release Label
-    if: startsWith(github.head_ref, 'release/v')
-    # Narrowest grant that unblocks the labels call. The default
-    # GITHUB_TOKEN in this repo is read-only, so the labels API returns
-    # 403 without it. Job-scoped (no other job inherits this), no
-    # checkout, no PR-supplied code is executed; the only call is a
-    # hard-coded `addLabels` with the fixed label 'release'. Fork PRs
-    # are auto-downgraded to read by GitHub regardless of this grant.
-    permissions:
-      pull-requests: write
-    steps:
-      - name: Add release label
-        uses: actions/github-script@v9
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            github.rest.issues.addLabels({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['release']
-            })

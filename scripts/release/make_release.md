@@ -1,112 +1,60 @@
-# How a New OVMS Release Is Made
+# Releasing GE-Spot
 
-The OVMS integration follows a two-phase release process:
+1. **Make a production release with the release script, following semantic versioning.**
+2. **Immediately after publication, make it a prerelease.** The workflow performs this automatically so the owner can test the published package before promoting it to latest.
 
-## 1. Create and merge a release Pull Request
+## Prepare the release
 
-A release PR is created to update the version in manifest.json and goes through validation checks.
+Choose `vMAJOR.MINOR.PATCH`:
 
-<details>
-<summary>Read more about the PR creation phase</summary>
+- Increase MAJOR for breaking changes.
+- Increase MINOR for compatible new features.
+- Increase PATCH for fixes and compatible small improvements.
 
-This phase involves preparing the codebase for release:
+Use a normal production version such as `v1.9.2`. Prerelease status is a GitHub release flag; the version and tag keep the same name when promoted.
 
-1. **Version Update**: The version in `custom_components/ovms/manifest.json` is updated to match the new release version (e.g. "v0.3.24").
+Work from current `main`. Run the tests on Python 3.15 and fix failures before publishing:
 
-2. **Release Branch Creation**: A branch named `release/vX.Y.Z` (e.g. `release/v0.3.24`) is created with this change.
-
-3. **PR Creation**: A pull request is opened using this branch, targeting the main branch.
-
-4. **Automated Validation**: When this PR is created, the `release_test.yml` workflow automatically runs multiple validation checks:
-   - HACS validation (compatibility with Home Assistant Community Store)
-   - Hassfest validation (compatibility with Home Assistant core)
-   - Python code validation (syntax checking, linting)
-   - Version check (ensures the manifest version matches the branch name)
-   - The PR is automatically labeled with "release"
-
-5. **Manual Review**: The PR must be reviewed and approved according to the checklist in the PR template.
-
-This can be done manually or automated using the `release.sh` script with the `--pr-only` flag:
 ```bash
-bash release.sh v0.3.24 --pr-only
+bash scripts/run_pytest.sh
+python -m pytest -q
+black --check .
+flake8 . --select=E9,F63,F7,F82
 ```
 
-This script handles steps 1-3, and GitHub Actions handles step 4.
-</details>
+Prepare `scripts/release/notes/vMAJOR.MINOR.PATCH.md` from [notes-template.md](notes-template.md), replacing every placeholder. Follow [v1.6.3](https://github.com/enoch85/ge-spot/releases/tag/v1.6.3):
 
-## 2. Push a version tag to trigger the release
+- `## What's Changed`: merged changes with author and pull-request links.
+- `### Key Changes`: concise bullets with bold names describing the changes users will see.
+- `**Full Changelog**`: a comparison URL from the previous version to this version.
 
-After the PR is merged, a tag is pushed to create the actual release.
+Commit the code and release notes before running the script. The script requires a clean checkout and validates the version and notes before creating a tag. Git, authenticated GitHub CLI, jq and Python 3 are required.
 
-<details>
-<summary>Read more about the release creation phase</summary>
+## Publish and hold for owner testing
 
-This phase creates the actual GitHub release:
+From the repository root:
 
-1. **Tag Creation**: After the PR is merged to main, a Git tag matching the version (e.g. `v0.3.24`) is created and pushed to GitHub.
-
-2. **Release Workflow Trigger**: When a tag starting with "v" is pushed, the `release.yml` workflow is automatically triggered.
-
-3. **Asset Preparation**: The workflow:
-   - Creates a `release` directory
-   - Copies only the necessary files into it:
-     - `custom_components/ovms/` (the integration code)
-     - `README.md` (documentation)
-     - `LICENSE` (legal information)
-
-4. **ZIP Creation**: The workflow zips these files into `ovms-home-assistant.zip`, which will be the installable package.
-
-5. **GitHub Release Creation**: Using the GitHub CLI, the workflow:
-   - Creates a new GitHub release with the tag name
-   - Sets the title to "OVMS Home Assistant vX.Y.Z"
-   - Automatically generates release notes based on changes since the last release
-   - Attaches the ZIP file as a downloadable asset
-   - Marks it as the latest release
-
-This can be done manually with Git commands or using the `release.sh` script without flags:
 ```bash
-bash release.sh v0.3.24
+bash scripts/release/release.sh vMAJOR.MINOR.PATCH
 ```
 
-The script checks if the version is already updated in manifest.json, creates and pushes the tag, triggering the GitHub Actions workflow to create the actual release.
-</details>
+The script fast-forwards `main`, updates `custom_components/ge_spot/manifest.json` and the README badge, commits and pushes those changes when necessary, then pushes the annotated version tag.
 
-## 3. Release completion and verification
+The tag triggers `.github/workflows/release.yml`. It packages `ge_spot/`, `README.md` and `LICENSE` into `ge_spot.zip`, then runs `scripts/release/publish.sh` to:
 
-The GitHub Actions workflow creates the release with a downloadable ZIP file.
+1. Publish the production release with the committed release notes and ZIP.
+2. Immediately mark that same release as a prerelease and clear its latest flag.
 
-<details>
-<summary>Read more about release verification</summary>
+Both operations run together. A transient conversion failure is retried; a persistent failure makes the workflow fail and needs immediate attention.
 
-Once the release workflow completes:
+Check that the workflow succeeded, the release is published with the prerelease flag, and the ZIP manifest contains the requested version. Existing tags and packages are retained.
 
-1. **Release Availability**: A new release appears on the GitHub repository's Releases page with:
-   - The version number in the title
-   - Automatically generated release notes
-   - The `ovms-home-assistant.zip` file attached as a downloadable asset
+## Promote after testing
 
-2. **HACS Discovery**: When properly tagged and released, the new version becomes discoverable in the Home Assistant Community Store (HACS).
+After the owner tests the package, edit the release on GitHub: clear **Set as a pre-release** and mark it as the latest release. The equivalent command is:
 
-3. **Verification Steps**:
-   - Check that the release appears on GitHub
-   - Verify that the ZIP file contains all necessary components
-   - Ensure the version in the manifest.json inside the ZIP matches the release tag
-   - The ZIP file structure should match what Home Assistant expects for custom integrations
+```bash
+gh release edit vMAJOR.MINOR.PATCH --repo enoch85/ge-spot --prerelease=false --latest
+```
 
-4. **Installation**: Users can install this release either:
-   - Through HACS if the repository is added as a custom repository
-   - By manually downloading the ZIP and extracting to their Home Assistant config/custom_components directory
-
-The release workflow is designed to create consistent, properly structured releases that follow Home Assistant's requirements for custom integrations.
-</details>
-
-## Common Release Pattern
-
-Most commonly, the release process looks like this:
-
-1. Run `bash release.sh v0.3.24 --pr-only` to create a release PR
-2. Review and merge the PR after it passes checks
-3. Run `bash release.sh v0.3.24` to create the tag and trigger the release
-4. Verify the release appears on GitHub with the proper assets
-
-This pattern separates the preparatory steps from the actual release creation, allowing proper validation and review before publication.
+This promotes the exact package already tested. Do not rerun the release script or create another tag or version for promotion.

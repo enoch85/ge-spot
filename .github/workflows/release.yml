@@ -17,6 +17,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.15"
+
       - name: Prepare Release Assets
         run: |
           mkdir release
@@ -29,23 +34,8 @@ jobs:
           cd release
           zip -r ../ge_spot.zip .
 
-      - name: Create release
+      - name: Publish production release and mark prerelease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-        run: |
-          if [[ "$tag" == *-beta* ]]; then
-            gh release create "$tag" \
-                --repo="$GITHUB_REPOSITORY" \
-                --title="GE-Spot Home Assistant $tag" \
-                --generate-notes \
-                --prerelease \
-                ge_spot.zip#"GE-Spot Home Assistant $tag"
-          else
-            gh release create "$tag" \
-                --repo="$GITHUB_REPOSITORY" \
-                --title="GE-Spot Home Assistant $tag" \
-                --generate-notes \
-                --latest \
-                ge_spot.zip#"GE-Spot Home Assistant $tag"
-          fi
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash scripts/release/publish.sh "$RELEASE_TAG"
