@@ -1816,6 +1816,24 @@ class UnifiedPriceManager:
 
         return empty_data
 
+    def get_cached_data(self) -> Optional[IntervalPriceData]:
+        """Return today's cached prices without contacting any provider.
+
+        Reading today's cache moves yesterday's tomorrow prices to today just
+        after midnight, so the result describes the current display day. None
+        if there is no such cache or the price config changed since it was
+        computed.
+        """
+        now = dt_util.now()
+        cached = self._cache_manager.get_data(
+            area=self.area, target_date=self._today_in_target_tz(now)
+        )
+        if cached is None or self._price_config_changed(cached):
+            return None
+        from dataclasses import replace
+
+        return replace(cached, using_cached_data=True, last_updated=now.isoformat())
+
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get statistics about the data cache.
 
@@ -1968,8 +1986,9 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
 
         Listeners are otherwise notified only when a refresh returns, and a
         refresh can wait more than a minute on slow or failing providers. A new
-        day is the exception: the cached prices describe the previous day until
-        a refresh moves tomorrow's prices to today, so refresh instead.
+        day is the exception: the current data describes the previous day, so
+        show today's cache (reading it moves tomorrow's prices to today) and
+        refresh. The refresh may wait on providers for the next day's prices.
         """
         self._schedule_interval_update()
         if self.data is None:
@@ -1977,6 +1996,9 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         display_tz = self.price_manager._tz_service.target_timezone
         previous = now - timedelta(seconds=TimeInterval.get_interval_seconds())
         if now.astimezone(display_tz).date() != previous.astimezone(display_tz).date():
+            cached = self.price_manager.get_cached_data()
+            if cached is not None and cached.current_price is not None:
+                self.async_set_updated_data(cached)
             self.config_entry.async_create_background_task(
                 self.hass, self.async_refresh(), f"{self.name} new day refresh"
             )

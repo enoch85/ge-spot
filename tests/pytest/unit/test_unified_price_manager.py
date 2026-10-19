@@ -353,6 +353,36 @@ class TestUnifiedPriceManager:
 
         return manager_instance
 
+    def test_get_cached_data_reads_todays_cache_without_fetching(
+        self, manager, auto_mock_core_dependencies
+    ):
+        """The new-day write reads today's cache and never contacts a provider."""
+        from datetime import date
+
+        cache = auto_mock_core_dependencies["cache_manager"].return_value
+        cache.get_data.return_value = _create_interval_price_data(
+            include_tomorrow=False
+        )
+
+        result = manager.get_cached_data()
+
+        assert result.using_cached_data
+        assert result.today_interval_prices == _generate_complete_intervals(
+            "2025-04-26T00:00:00+02:00", 1.1
+        )
+        cache.get_data.assert_called_once_with(
+            area="SE1", target_date=date(2025, 4, 26)
+        )
+        fallback = auto_mock_core_dependencies["fallback_manager"].return_value
+        fallback.fetch_with_fallback.assert_not_called()
+
+        # Prices computed with an old VAT or tariff are not shown.
+        with patch.object(manager, "_price_config_changed", return_value=True):
+            assert manager.get_cached_data() is None
+
+        cache.get_data.return_value = None
+        assert manager.get_cached_data() is None
+
     def test_init(self, manager, auto_mock_core_dependencies):
         """Test initialization sets attributes correctly."""
         # Core attributes
