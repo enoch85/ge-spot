@@ -8,13 +8,19 @@ SARD 10Y1001A1001A74G. Before this was fixed, five areas were shifted by one
 zone (e.g. "IT-Sicily" requested Sardinia, "IT-South" the Corsica AC zone).
 """
 
+import json
+from unittest.mock import MagicMock
+
 import pytest
+from homeassistant.util import dt as dt_util
 
 from custom_components.ge_spot.const.areas import (
     AreaMapping,
     Timezone,
     get_available_sources,
 )
+from custom_components.ge_spot.coordinator.cache_manager import CacheManager
+from custom_components.ge_spot.coordinator.data_models import IntervalPriceData
 
 ZONES = {
     "IT-North": "10Y1001A1001A73I",
@@ -44,3 +50,57 @@ def test_legacy_italian_areas_name_the_zone_they_return():
     assert AreaMapping.ENTSOE_MAPPING["IT-South-2"] == ZONES["IT-Sicily"]
     assert AreaMapping.ENTSOE_AREAS["IT"] == "IT (Centre-North)"
     assert AreaMapping.ENTSOE_AREAS["IT-South-2"] == "IT-South-2 (Sicily)"
+
+
+def test_persisted_prices_from_before_the_correction_are_fetched_again(tmp_path):
+    """A persisted cache must not keep serving the zone the old code requested."""
+    hass = MagicMock()
+    hass.config.path = lambda *parts: str(tmp_path)
+    hass.async_add_executor_job = lambda func, *args: func(*args)
+    config = {"persist_cache": True, "cache_ttl": 60}
+    now = dt_util.now()
+
+    writer = CacheManager(hass, config)
+    for area, source in (("IT-Sicily", "entsoe"), ("SE3", "nordpool")):
+        writer.store(
+            area=area,
+            source=source,
+            data=IntervalPriceData(
+                area=area, source=source, today_interval_prices={"00:00": 0.05}
+            ),
+            timestamp=now,
+        )
+    # Entries written before this change carry no area code; the ENTSO-E one
+    # holds whatever zone the old mapping requested (Sardinia for IT-Sicily).
+    cache_file = tmp_path / "cache" / "price_cache.json"
+    entries = json.loads(cache_file.read_text())
+    for entry in entries.values():
+        entry["metadata"].pop("area_code", None)
+    cache_file.write_text(json.dumps(entries))
+
+    reader = CacheManager(hass, config)
+
+    assert reader.get_data(area="IT-Sicily", target_date=now.date()) is None
+    assert reader.get_data(area="SE3", target_date=now.date()) is not None
+
+
+def test_persisted_prices_fetched_with_the_current_code_are_kept(tmp_path):
+    hass = MagicMock()
+    hass.config.path = lambda *parts: str(tmp_path)
+    hass.async_add_executor_job = lambda func, *args: func(*args)
+    config = {"persist_cache": True, "cache_ttl": 60}
+    now = dt_util.now()
+
+    CacheManager(hass, config).store(
+        area="IT-Sicily",
+        source="entsoe",
+        data=IntervalPriceData(
+            area="IT-Sicily", source="entsoe", today_interval_prices={"00:00": 0.07}
+        ),
+        timestamp=now,
+    )
+
+    cached = CacheManager(hass, config).get_data(
+        area="IT-Sicily", target_date=now.date()
+    )
+    assert cached.today_interval_prices == {"00:00": 0.07}

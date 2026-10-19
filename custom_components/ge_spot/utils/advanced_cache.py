@@ -4,7 +4,7 @@ import logging
 import json
 import os
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Any, Callable, Dict, Optional
 
 from homeassistant.core import HomeAssistant
 
@@ -105,15 +105,19 @@ class AdvancedCache:
         self,
         hass: Optional[HomeAssistant] = None,
         config: Optional[Dict[str, Any]] = None,
+        keep_loaded_entry: Optional[Callable[[Dict[str, Any]], bool]] = None,
     ):
         """Initialize the cache.
 
         Args:
             hass: Optional Home Assistant instance
             config: Optional configuration
+            keep_loaded_entry: Optional check on a persisted entry's metadata;
+                entries it rejects are not loaded
         """
         self.hass = hass
         self.config = config or {}
+        self._keep_loaded_entry = keep_loaded_entry
 
         # Configuration
         self.max_entries = self.config.get(
@@ -325,8 +329,14 @@ class AdvancedCache:
                     entry = CacheEntry.from_dict(entry_data)
 
                     # Only add non-expired entries
-                    if not entry.is_expired:
-                        self._cache[key] = entry
+                    if entry.is_expired:
+                        continue
+                    if self._keep_loaded_entry and not self._keep_loaded_entry(
+                        entry.metadata
+                    ):
+                        _LOGGER.debug(f"Discarding outdated cache entry {key}")
+                        continue
+                    self._cache[key] = entry
                 except Exception as e:
                     _LOGGER.warning(f"Failed to load cache entry {key}: {e}")
 
