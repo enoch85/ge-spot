@@ -1950,8 +1950,13 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         self._unsub_interval_update: Optional[CALLBACK_TYPE] = None
         # Spread areas over one refresh period: a 14-sensor area takes about
         # 0.1 s to recompute, so many areas at once would stall the event loop.
+        # Stay within one price interval so every interval start is written.
         self._interval_update_offset = random.uniform(
-            0, effective_update_interval.total_seconds()
+            0,
+            min(
+                effective_update_interval.total_seconds(),
+                TimeInterval.get_interval_seconds(),
+            ),
         )
 
         # Create unified price manager
@@ -1968,7 +1973,8 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
     def _schedule_interval_update(self) -> None:
         """Schedule the next interval-start state write in the display timezone."""
         interval = TimeInterval.get_interval_seconds()
-        now = dt_util.utcnow()
+        # Count from the interval start just written, not the delayed write.
+        now = dt_util.utcnow() - timedelta(seconds=self._interval_update_offset)
         offset = now.astimezone(
             self.price_manager._tz_service.target_timezone
         ).utcoffset()
@@ -1994,8 +2000,12 @@ class UnifiedPriceCoordinator(DataUpdateCoordinator):
         if self.data is None:
             return
         display_tz = self.price_manager._tz_service.target_timezone
-        previous = now - timedelta(seconds=TimeInterval.get_interval_seconds())
-        if now.astimezone(display_tz).date() != previous.astimezone(display_tz).date():
+        start = now - timedelta(seconds=self._interval_update_offset)
+        previous = start - timedelta(seconds=TimeInterval.get_interval_seconds())
+        if (
+            start.astimezone(display_tz).date()
+            != previous.astimezone(display_tz).date()
+        ):
             cached = self.price_manager.get_cached_data()
             if cached is not None and cached.current_price is not None:
                 self.async_set_updated_data(cached)
