@@ -268,6 +268,7 @@ class EnergyChartsAPI(BasePriceAPI):
             "IT-South": "IT-South",
             "IT-Centre-North": "IT-Centre-North",
             "IT-Centre-South": "IT-Centre-South",
+            "IT-Calabria": "IT-Calabria",
             "IT-Sardinia": "IT-Sardinia",
             "IT-Sicily": "IT-Sicily",
             # Iberia

@@ -18,12 +18,12 @@ from custom_components.ge_spot.api.entsoe import EntsoeAPI
 @pytest.mark.parametrize(
     "area,expected_eic",
     [
-        ("IT-North", "10Y1001A1001A71M"),
-        ("IT-Centre-South", "10Y1001A1001A788"),
-        ("IT-South", "10Y1001A1001A885"),
-        ("IT-Sardinia", "10Y1001A1001A73I"),
-        ("IT-Sicily", "10Y1001A1001A74G"),
-        ("it-north", "10Y1001A1001A71M"),  # case-variant input still resolves
+        ("IT-North", "10Y1001A1001A73I"),
+        ("IT-Centre-South", "10Y1001A1001A71M"),
+        ("IT-South", "10Y1001A1001A788"),
+        ("IT-Sardinia", "10Y1001A1001A74G"),
+        ("IT-Sicily", "10Y1001A1001A75E"),
+        ("it-north", "10Y1001A1001A73I"),  # case-variant input still resolves
         ("GB", "10Y1001A1001A59C"),  # all-upper key keeps working
     ],
 )

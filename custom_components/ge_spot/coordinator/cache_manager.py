@@ -8,8 +8,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from ..utils.advanced_cache import AdvancedCache
+from ..const.areas import AreaMapping
 from ..const.defaults import Defaults
 from ..const.network import Network
+from ..const.sources import Source
 from .data_models import IntervalPriceData
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,7 +37,28 @@ class CacheManager:
             **config,
             "cache_ttl": default_ttl_minutes * Network.Defaults.SECONDS_PER_MINUTE,
         }
-        self._price_cache = AdvancedCache(hass, config_with_ttl_seconds)
+        self._price_cache = AdvancedCache(
+            hass,
+            config_with_ttl_seconds,
+            keep_loaded_entry=self._fetched_with_current_area_code,
+        )
+
+    @staticmethod
+    def _area_code(source: Optional[str], area: Optional[str]) -> Optional[str]:
+        """The provider's own code requested for the area (the ENTSO-E EIC)."""
+        if source == Source.ENTSOE:
+            return AreaMapping.ENTSOE_MAPPING.get(area)
+        return None
+
+    def _fetched_with_current_area_code(self, metadata: Dict[str, Any]) -> bool:
+        """Whether a persisted entry was fetched with today's code for its area.
+
+        After a corrected area mapping, prices persisted by an earlier version
+        belong to another zone and must be fetched again.
+        """
+        return metadata.get("area_code") == self._area_code(
+            metadata.get("source"), metadata.get("area")
+        )
 
     def store(
         self,
@@ -89,6 +112,7 @@ class CacheManager:
             "target_date": actual_target_date.isoformat(),
             "timestamp": timestamp.isoformat(),
             "source_timezone": source_timezone,
+            "area_code": self._area_code(source, area),
         }
 
         # Store only source data (no computed fields)

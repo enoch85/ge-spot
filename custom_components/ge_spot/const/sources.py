@@ -210,11 +210,12 @@ class SourceInfo:
             "RS",
             "ME",
             "GR",
-            # Italy (6 zones)
+            # Italy (7 zones)
             "IT-North",
             "IT-South",
             "IT-Centre-North",
             "IT-Centre-South",
+            "IT-Calabria",
             "IT-Sardinia",
             "IT-Sicily",
             # Iberian Peninsula (2 zones)
@@ -283,6 +284,7 @@ class SourceInfo:
         "IT-South": [Source.ENERGY_CHARTS, Source.ENTSOE],
         "IT-Centre-North": [Source.ENERGY_CHARTS, Source.ENTSOE],
         "IT-Centre-South": [Source.ENERGY_CHARTS, Source.ENTSOE],
+        "IT-Calabria": [Source.ENERGY_CHARTS, Source.ENTSOE],
         "IT-Sardinia": [Source.ENERGY_CHARTS, Source.ENTSOE],
         "IT-Sicily": [Source.ENERGY_CHARTS, Source.ENTSOE],
         # Australia

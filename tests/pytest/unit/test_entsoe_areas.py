@@ -127,6 +127,9 @@ class TestEntsoeAreasValidation:
                 "GB",
                 "IE(SEM)",
             ],  # Great Britain and Ireland SEM share code
+            # Existing "IT" and "IT-South-2" setups keep returning these zones.
+            "10Y1001A1001A70O": ["IT", "IT-Centre-North"],
+            "10Y1001A1001A75E": ["IT-South-2", "IT-Sicily"],
             # Note: DE-LU is the only area for the Germany-Luxembourg bidding zone now
             # (DE was removed as it's the same bidding zone)
         }
@@ -187,18 +190,11 @@ class TestEntsoeAreasValidation:
                 "entsoe" not in sources
             ), f"Non-working area '{area}' should NOT have 'entsoe' as available source"
 
-    def test_removed_dead_code(self):
-        """Test that dead code like IT-Centre-North has been completely removed."""
-        # IT-Centre-North was removed as it doesn't work
-        assert (
-            "IT-Centre-North" not in AreaMapping.ENTSOE_MAPPING
-        ), "Dead code 'IT-Centre-North' found in ENTSOE_MAPPING"
-        assert (
-            "IT-Centre-North" not in AreaMapping.ENTSOE_AREAS
-        ), "Dead code 'IT-Centre-North' found in ENTSOE_AREAS"
-        assert (
-            "IT-Centre-North" not in AreaMapping.ENERGY_CHARTS_BZN
-        ), "Dead code 'IT-Centre-North' found in ENERGY_CHARTS_BZN"
+    def test_it_centre_north_is_offered(self):
+        """IT-Centre-North failed only because it used Foggia's code (A72K)."""
+        assert AreaMapping.ENTSOE_MAPPING["IT-Centre-North"] == "10Y1001A1001A70O"
+        assert "IT-Centre-North" in AreaMapping.ENTSOE_AREAS
+        assert "IT-Centre-North" in AreaMapping.ENERGY_CHARTS_BZN
 
     def test_all_working_areas_have_display_names(self):
         """Test that all working areas have proper display names."""
