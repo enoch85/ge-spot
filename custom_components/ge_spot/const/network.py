@@ -27,6 +27,13 @@ class Network:
         # Must be higher than max FallbackManager timeout (45s) to avoid conflicts
         HTTP_TIMEOUT = 60  # seconds - safety net for slowest possible requests
 
+        # A request that fails with a server error or a dropped connection is
+        # repeated once after a short pause. Missing data, rate limits (429)
+        # and auth errors are not retried.
+        TRANSIENT_HTTP_STATUSES = (500, 502, 503, 504)
+        TRANSIENT_RETRY_COUNT = 1
+        TRANSIENT_RETRY_DELAY_SECONDS = 1
+
         CACHE_TTL = 21600  # 6 hours in seconds
         USER_AGENT = "HomeAssistantGESpot/1.0"
 

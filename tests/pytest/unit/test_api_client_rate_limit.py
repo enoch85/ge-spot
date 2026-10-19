@@ -1,9 +1,15 @@
 """Handled upstream failures stay quiet; authentication failures remain visible."""
 
 import logging
+from unittest.mock import MagicMock
+
+import aiohttp
 import pytest
 
 from custom_components.ge_spot.api.base.api_client import ApiClient
+from custom_components.ge_spot.api.energy_charts import EnergyChartsAPI
+from custom_components.ge_spot.const.network import Network
+from custom_components.ge_spot.coordinator.fallback_manager import FallbackManager
 
 
 class _FakeResponse:
@@ -37,6 +43,36 @@ class _FakeSession:
         # aiohttp's session.get(...) is used as an async context manager and is
         # not awaited, so return the context manager directly.
         return self._response
+
+
+class _DroppedConnection:
+    """Request context whose connection fails before a response arrives."""
+
+    async def __aenter__(self):
+        raise aiohttp.ClientConnectionError("Connection reset by peer")
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _SequenceSession:
+    """Answers each request with the next of the given responses."""
+
+    def __init__(self, *responses):
+        self._responses = list(responses)
+        self.requests = 0
+
+    def get(self, *args, **kwargs):
+        self.requests += 1
+        return self._responses.pop(0)
+
+
+@pytest.fixture(autouse=True)
+def no_retry_pause(monkeypatch):
+    """Keep the pause before a transient retry out of the test run time."""
+    monkeypatch.setattr(
+        Network.Defaults, "TRANSIENT_RETRY_DELAY_SECONDS", 0, raising=False
+    )
 
 
 async def test_429_not_logged_as_error(caplog):
@@ -94,3 +130,56 @@ async def test_transient_failures_are_debug_across_clients(caplog, status):
             await client.fetch("https://example.test/prices")
     assert caplog.records
     assert all(record.levelno < logging.WARNING for record in caplog.records)
+
+
+@pytest.mark.parametrize(
+    "failure", [_FakeResponse(503, body="down"), _DroppedConnection()]
+)
+async def test_transient_failure_is_retried_once(failure):
+    """One server error or dropped connection must not cost a source its prices."""
+    session = _SequenceSession(failure, _FakeResponse(200, body='{"price": [70]}'))
+
+    result = await ApiClient(session=session).fetch(
+        "https://api.energy-charts.info/price"
+    )
+
+    assert result == {"price": [70]}
+    assert session.requests == 2
+
+
+@pytest.mark.parametrize("status", [204, 404, 429, 403])
+async def test_missing_data_rate_limit_and_auth_are_not_retried(status):
+    """Repeating these requests cannot help and would add load."""
+    session = _SequenceSession(_FakeResponse(status, body="no"))
+
+    result = await ApiClient(session=session).fetch("https://example.test/prices")
+
+    assert result["status_code"] == status
+    assert session.requests == 1
+
+
+async def test_transient_retry_happens_once():
+    """A second failure is returned; the coordinator schedules later attempts."""
+    session = _SequenceSession(_FakeResponse(503), _FakeResponse(502))
+
+    result = await ApiClient(session=session).fetch("https://example.test/prices")
+
+    assert result["status_code"] == 502
+    assert session.requests == 2
+
+
+async def test_energy_charts_recovers_from_one_server_error():
+    """The only source returns prices after a single 503 instead of failing."""
+    session = _SequenceSession(
+        _FakeResponse(503, body="Service Unavailable"),
+        _FakeResponse(200, body='{"unix_seconds": [1792195200], "price": [70]}'),
+    )
+    api = EnergyChartsAPI(session=session)
+    api.needs_extended_date_range = MagicMock(
+        return_value={"need_yesterday": False, "need_tomorrow": False}
+    )
+
+    result = await FallbackManager().fetch_with_fallback([api], "SE4", session=session)
+
+    assert result["raw_data"]["today"]["price"] == [70]
+    assert session.requests == 2
