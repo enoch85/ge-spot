@@ -303,6 +303,97 @@ class TestMidnightMigration:
         )
 
 
+class TestMigrationKeepsFreshData:
+    """Yesterday's forecast must not replace prices already fetched for today."""
+
+    def _store(self, mgr, source, data, target_date, created):
+        from freezegun import freeze_time
+
+        with freeze_time(created):
+            mgr.store(
+                area="SE2",
+                source=source,
+                data=data,
+                timestamp=datetime.now(tz=ZoneInfo("Europe/Stockholm")),
+                target_date=target_date,
+            )
+
+    def test_fresh_fetch_for_today_wins_in_migration_window(
+        self, cache_manager_with_tz, yesterday_cache_data
+    ):
+        today = date.today()
+        tz = ZoneInfo("Europe/Stockholm")
+        now = datetime.now(tz)
+        self._store(
+            cache_manager_with_tz,
+            "nordpool",
+            yesterday_cache_data,
+            today - timedelta(days=1),
+            now - timedelta(minutes=2),
+        )
+        fresh = IntervalPriceData(
+            area="SE2",
+            source="entsoe",
+            today_interval_prices={"00:00": 7.0, "00:15": 7.5},
+        )
+        self._store(cache_manager_with_tz, "entsoe", fresh, today, now)
+
+        with patch(
+            "custom_components.ge_spot.coordinator.cache_manager.dt_util"
+        ) as mock_dt:
+            mock_dt.now.return_value = datetime(
+                today.year, today.month, today.day, 0, 5, 0, tzinfo=tz
+            )
+            data = cache_manager_with_tz.get_data(area="SE2", target_date=today)
+
+        assert data.source == "entsoe"
+        assert data.today_interval_prices["00:00"] == 7.0
+        assert not data.migrated_from_tomorrow
+
+    def test_newest_of_yesterdays_entries_is_migrated(
+        self, cache_manager_with_tz, yesterday_cache_data
+    ):
+        from dataclasses import replace
+
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        tz = ZoneInfo("Europe/Stockholm")
+        now = datetime.now(tz)
+        newer = replace(
+            yesterday_cache_data,
+            source="entsoe",
+            tomorrow_interval_prices={
+                key: price + 1000
+                for key, price in yesterday_cache_data.tomorrow_interval_prices.items()
+            },
+        )
+        self._store(
+            cache_manager_with_tz,
+            "nordpool",
+            yesterday_cache_data,
+            yesterday,
+            now - timedelta(minutes=2),
+        )
+        self._store(
+            cache_manager_with_tz,
+            "entsoe",
+            newer,
+            yesterday,
+            now - timedelta(minutes=1),
+        )
+
+        with patch(
+            "custom_components.ge_spot.coordinator.cache_manager.dt_util"
+        ) as mock_dt:
+            mock_dt.now.return_value = datetime(
+                today.year, today.month, today.day, 0, 5, 0, tzinfo=tz
+            )
+            data = cache_manager_with_tz.get_data(area="SE2", target_date=today)
+
+        assert data.migrated_from_tomorrow
+        assert data.today_interval_prices["00:00"] == 1100.0
+
+
 class TestMigrationIntegration:
     """Integration tests for migration behavior with unified price manager."""
 

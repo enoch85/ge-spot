@@ -255,8 +255,10 @@ class CacheManager:
         rollover_now = self._to_target_tz(now)
         current_date = rollover_now.date()
 
-        # Only attempt the migration if we're looking for today's date and it's just after midnight
-        if target_date == current_date:
+        # Only attempt the migration if we're looking for today's date, nothing is
+        # stored for today yet (a fresh fetch must not be replaced by yesterday's
+        # forecast), and it's just after midnight
+        if target_date == current_date and not valid_entries_with_timestamp:
             # Only allow migration between 00:00 and 00:10 (10 minute window after midnight)
             if rollover_now.hour == 0 and rollover_now.minute < 10:
                 yesterday = target_date - timedelta(days=1)
@@ -265,7 +267,8 @@ class CacheManager:
                     target_date,
                 )
 
-                # Look for any source from yesterday that has tomorrow data
+                # Use the newest entry from yesterday that has tomorrow data
+                candidates = []
                 for key, entry_info in all_entries_info.items():
                     metadata = entry_info.get("metadata", {})
                     if (
@@ -280,39 +283,49 @@ class CacheManager:
                             and "tomorrow_interval_prices" in entry_data
                             and entry_data["tomorrow_interval_prices"]
                         ):
-                            found_source = metadata.get("source", "unknown")
-                            _LOGGER.debug(
-                                "Found yesterday's cache from %s with tomorrow's prices for %s. "
-                                "Migrating to today.",
-                                found_source,
-                                area,
-                            )
+                            try:
+                                created_at = datetime.fromisoformat(
+                                    entry_info["created_at"]
+                                )
+                            except (KeyError, TypeError, ValueError):
+                                created_at = datetime.min.replace(tzinfo=timezone.utc)
+                            candidates.append((created_at, metadata, entry_data))
 
-                            # Create IntervalPriceData from cache
-                            price_data = IntervalPriceData.from_cache_dict(
-                                entry_data, self._timezone_service
-                            )
+                if candidates:
+                    _, metadata, entry_data = max(candidates, key=lambda c: c[0])
+                    found_source = metadata.get("source", "unknown")
+                    _LOGGER.debug(
+                        "Found yesterday's cache from %s with tomorrow's prices for %s. "
+                        "Migrating to today.",
+                        found_source,
+                        area,
+                    )
 
-                            # Migration is now trivial!
-                            price_data.migrate_to_new_day()
+                    # Create IntervalPriceData from cache
+                    price_data = IntervalPriceData.from_cache_dict(
+                        entry_data, self._timezone_service
+                    )
 
-                            _LOGGER.debug(
-                                f"Migration complete for {area}. Validity auto-recalculated: "
-                                f"today={price_data.data_validity.today_interval_count}, "
-                                f"tomorrow={price_data.data_validity.tomorrow_interval_count}"
-                            )
+                    # Migration is now trivial!
+                    price_data.migrate_to_new_day()
 
-                            # Store migrated data
-                            self.store(
-                                area=area,
-                                source=found_source,
-                                data=price_data,
-                                timestamp=now,
-                                target_date=current_date,
-                            )
+                    _LOGGER.debug(
+                        f"Migration complete for {area}. Validity auto-recalculated: "
+                        f"today={price_data.data_validity.today_interval_count}, "
+                        f"tomorrow={price_data.data_validity.tomorrow_interval_count}"
+                    )
 
-                            # Return as dict for now (will be converted back to IntervalPriceData by get_data)
-                            return price_data.to_cache_dict()
+                    # Store migrated data
+                    self.store(
+                        area=area,
+                        source=found_source,
+                        data=price_data,
+                        timestamp=now,
+                        target_date=current_date,
+                    )
+
+                    # Return as dict for now (will be converted back to IntervalPriceData by get_data)
+                    return price_data.to_cache_dict()
 
         if not valid_entries_with_timestamp:
             _LOGGER.debug(
