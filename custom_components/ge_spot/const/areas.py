@@ -71,6 +71,7 @@ class Timezone:
         "GER": "Europe/Berlin",  # Nord Pool code for DE-LU
         "IT": "Europe/Rome",
         "IT-North": "Europe/Rome",
+        "IT-Centre-North": "Europe/Rome",
         "IT-Centre-South": "Europe/Rome",
         "IT-South": "Europe/Rome",
         "IT-South-2": "Europe/Rome",
@@ -184,13 +185,18 @@ class AreaMapping:
         Area.DE_LU: "10Y1001A1001A82H",  # Germany-Luxembourg bidding zone (same EIC as DE)
         "GR": "10YGR-HTSO-----Y",
         "HU": "10YHU-MAVIR----U",
-        "IT": "10Y1001A1001A70O",  # Italy mainland
-        "IT-North": "10Y1001A1001A71M",  # Italy north
-        "IT-Centre-South": "10Y1001A1001A788",  # Italy centre-south
-        "IT-South": "10Y1001A1001A885",  # Italy south
-        "IT-South-2": "10Y1001A1001A75E",  # Additional Italian region
-        "IT-Sardinia": "10Y1001A1001A73I",  # Updated EIC code (was: 10YIT-SARDGN--19)
-        "IT-Sicily": "10Y1001A1001A74G",  # Updated EIC code (was: 10YIT-SICILY---A)
+        # Italian bidding zones as registered for SDAC, with GME's zone codes.
+        # Italy has no national day-ahead price on ENTSO-E; "IT" has always
+        # returned Centro Nord and "IT-South-2" Sicilia, kept for existing setups.
+        "IT": "10Y1001A1001A70O",  # Centro Nord (CNOR)
+        "IT-North": "10Y1001A1001A73I",  # Nord (NORD)
+        "IT-Centre-North": "10Y1001A1001A70O",  # Centro Nord (CNOR)
+        "IT-Centre-South": "10Y1001A1001A71M",  # Centro Sud (CSUD)
+        "IT-South": "10Y1001A1001A788",  # Sud (SUD)
+        "IT-South-2": "10Y1001A1001A75E",  # Sicilia (SICI)
+        "IT-Calabria": "10Y1001C--00096J",  # Calabria (CALA)
+        "IT-Sardinia": "10Y1001A1001A74G",  # Sardegna (SARD)
+        "IT-Sicily": "10Y1001A1001A75E",  # Sicilia (SICI)
         Area.LV: "10YLV-1001A00074",  # Fixed: added missing zero
         Area.LT: "10YLT-1001A0008Q",  # Fixed: corrected EIC code
         Area.NL: "10YNL----------L",
@@ -241,11 +247,13 @@ class AreaMapping:
         Area.DE_LU: "DE-LU",  # Germany-Luxembourg bidding zone as DE
         "GR": "GR",
         "HU": "HU",
-        "IT": "IT",
+        "IT": "IT (Centre-North)",
         "IT-North": "IT-North",
+        "IT-Centre-North": "IT-Centre-North",
         "IT-Centre-South": "IT-Centre-South",
         "IT-South": "IT-South",
-        "IT-South-2": "IT-South-2",
+        "IT-South-2": "IT-South-2 (Sicily)",
+        "IT-Calabria": "IT-Calabria",
         "IT-Sardinia": "IT-Sardinia",
         "IT-Sicily": "IT-Sicily",
         Area.LV: "LV",
@@ -321,10 +329,12 @@ class AreaMapping:
         "RS": "RS",
         "ME": "ME",
         "GR": "GR",
-        # Italy zones (5 zones)
+        # Italy zones (7 zones)
         "IT-North": "IT-North",
-        "IT-South": "IT-South",
+        "IT-Centre-North": "IT-Centre-North",
         "IT-Centre-South": "IT-Centre-South",
+        "IT-South": "IT-South",
+        "IT-Calabria": "IT-Calabria",
         "IT-Sardinia": "IT-Sardinia",
         "IT-Sicily": "IT-Sicily",
         # Iberia
