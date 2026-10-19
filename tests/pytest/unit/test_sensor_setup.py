@@ -279,10 +279,18 @@ async def test_new_day_shows_cached_prices_while_refresh_waits(hass):
 
 async def test_interval_offset_stays_within_one_interval(hass):
     """A refresh period longer than an interval must not skip interval starts."""
+    from custom_components.ge_spot.coordinator.unified_price_manager import (
+        UnifiedPriceManager,
+    )
     from custom_components.ge_spot.const.defaults import Defaults
     from custom_components.ge_spot.const.time import TimeInterval
 
-    config = {Config.AREA: "SE4", Config.CURRENCY: "EUR"}
+    config = {
+        Config.AREA: "SE4",
+        Config.CURRENCY: "EUR",
+        Config.INCLUDE_VAT: False,
+        Config.DISPLAY_UNIT: "decimal",
+    }
     entry = MockConfigEntry(domain=DOMAIN, data=config)
     entry.add_to_hass(hass)
     timezone_service = TimezoneService(hass, "SE4", config)
@@ -295,6 +303,14 @@ async def test_interval_offset_stays_within_one_interval(hass):
         today_interval_prices={"00:00": 0.2}, _tz_service=timezone_service
     )
     values = []
+    provider = asyncio.Event()
+
+    async def fetch_data():
+        if manager.fetch_data.await_count == 1:
+            return previous_day
+        await provider.wait()
+        return new_day
+
     # A 20-minute refresh period, with the offset near the top of its range.
     with freeze_time("2026-10-13T21:59:50Z") as clock, patch.object(
         Defaults, "UPDATE_INTERVAL", 20
@@ -309,9 +325,10 @@ async def test_interval_offset_stays_within_one_interval(hass):
         "custom_components.ge_spot.get_exchange_service",
         new=AsyncMock(return_value=MagicMock()),
     ):
-        manager = manager_class.return_value
-        manager.fetch_data = AsyncMock(side_effect=[previous_day, new_day])
-        manager.get_cached_data = MagicMock(return_value=new_day)
+        manager = UnifiedPriceManager(hass, "SE4", "EUR", config)
+        manager_class.return_value = manager
+        manager._cache_manager.store("SE4", "nordpool", previous_day)
+        manager.fetch_data = AsyncMock(side_effect=fetch_data)
         manager.async_close = AsyncMock()
         manager._health_check_scheduled = True
         manager._tz_service = timezone_service
@@ -334,10 +351,13 @@ async def test_interval_offset_stays_within_one_interval(hass):
             # handled as a new day.
             clock.tick(timedelta(minutes=15))
             async_fire_time_changed(hass, dt_util.now())
-            await hass.async_block_till_done(wait_background_tasks=True)
+            await hass.async_block_till_done()
+            assert manager.fetch_data.await_count == 2
             assert values[1] == 0.2
-            manager.get_cached_data.assert_called_once()
+            assert coordinator.data.today_interval_prices == {"00:00": 0.2}
         finally:
+            provider.set()
+            await hass.async_block_till_done(wait_background_tasks=True)
             remove_listener()
             await coordinator.async_shutdown()
             await coordinator.async_close()

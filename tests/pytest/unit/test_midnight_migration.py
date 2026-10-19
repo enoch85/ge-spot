@@ -194,32 +194,89 @@ class TestMidnightMigration:
         assert tomorrow_stats.avg is None or tomorrow_stats.avg == 0
         assert tomorrow_stats.min is None or tomorrow_stats.min == 0
 
-    def test_migration_only_in_window(
-        self, cache_manager_with_tz, yesterday_cache_data
+    @pytest.mark.parametrize(
+        ("hour", "minute", "second"), [(0, 10, 0), (0, 14, 51), (13, 0, 0), (23, 59, 0)]
+    )
+    def test_delayed_migration_uses_the_forecasts_display_date(
+        self, cache_manager_with_tz, yesterday_cache_data, hour, minute, second
     ):
-        """Test that migration only happens between 00:00-00:10."""
-        yesterday = date.today() - timedelta(days=1)
+        """A late callback or restart can still use today's cached forecast."""
         today = date.today()
         tz = ZoneInfo("Europe/Stockholm")
-
         cache_manager_with_tz.store(
             area="SE2",
             source="nordpool",
             data=yesterday_cache_data,
             timestamp=datetime.now(tz=tz),
-            target_date=yesterday,
+            target_date=today - timedelta(days=1),
         )
 
-        # Try at 00:15 (outside migration window)
         with patch(
             "custom_components.ge_spot.coordinator.cache_manager.dt_util"
         ) as mock_dt:
-            mock_now = datetime(today.year, today.month, today.day, 0, 15, 0, tzinfo=tz)
-            mock_dt.now.return_value = mock_now
+            mock_dt.now.return_value = datetime(
+                today.year, today.month, today.day, hour, minute, second, tzinfo=tz
+            )
             data = cache_manager_with_tz.get_data(area="SE2", target_date=today)
+            # A second lookup must use today's entry rather than promote again.
+            cached = cache_manager_with_tz.get_data(area="SE2", target_date=today)
 
-        # Should NOT migrate (outside window)
-        assert data is None or data.get("migrated_from_tomorrow") is not True
+        assert data is not None
+        assert data.migrated_from_tomorrow
+        assert (
+            data.today_interval_prices == yesterday_cache_data.tomorrow_interval_prices
+        )
+        assert not data.tomorrow_interval_prices
+        assert cached.today_interval_prices == data.today_interval_prices
+        today_entries = [
+            entry
+            for entry in cache_manager_with_tz.get_cache_stats()["entries"].values()
+            if entry["metadata"]["target_date"] == today.isoformat()
+        ]
+        assert len(today_entries) == 1
+
+    @pytest.mark.parametrize(
+        ("stored_days_ago", "age_minutes", "max_age_minutes"),
+        [(2, 0, None), (1, 120, None), (1, 10, 5)],
+    )
+    def test_delayed_migration_rejects_invalid_forecast(
+        self,
+        cache_manager_with_tz,
+        yesterday_cache_data,
+        stored_days_ago,
+        age_minutes,
+        max_age_minutes,
+    ):
+        """Removing the clock window must retain the date and TTL checks."""
+        today = date.today()
+        tz = ZoneInfo("Europe/Stockholm")
+        stored_day = today - timedelta(days=stored_days_ago)
+        cache_manager_with_tz.store(
+            area="SE2",
+            source="nordpool",
+            data=yesterday_cache_data,
+            timestamp=datetime.now(tz=tz),
+            target_date=stored_day,
+        )
+        if age_minutes:
+            key = cache_manager_with_tz._generate_cache_key(
+                "SE2", "nordpool", stored_day
+            )
+            cache_manager_with_tz._price_cache._cache[key].created_at -= timedelta(
+                minutes=age_minutes
+            )
+
+        with patch(
+            "custom_components.ge_spot.coordinator.cache_manager.dt_util"
+        ) as mock_dt:
+            mock_dt.now.return_value = datetime(
+                today.year, today.month, today.day, 13, 0, 0, tzinfo=tz
+            )
+            data = cache_manager_with_tz.get_data(
+                area="SE2", target_date=today, max_age_minutes=max_age_minutes
+            )
+
+        assert data is None
 
     def test_migration_without_timezone_service(self, mock_hass, yesterday_cache_data):
         """Test migration without timezone service removes stale validity."""
@@ -318,8 +375,9 @@ class TestMigrationKeepsFreshData:
                 target_date=target_date,
             )
 
-    def test_fresh_fetch_for_today_wins_in_migration_window(
-        self, cache_manager_with_tz, yesterday_cache_data
+    @pytest.mark.parametrize("hour", [0, 13])
+    def test_fresh_fetch_for_today_wins(
+        self, cache_manager_with_tz, yesterday_cache_data, hour
     ):
         today = date.today()
         tz = ZoneInfo("Europe/Stockholm")
@@ -342,7 +400,7 @@ class TestMigrationKeepsFreshData:
             "custom_components.ge_spot.coordinator.cache_manager.dt_util"
         ) as mock_dt:
             mock_dt.now.return_value = datetime(
-                today.year, today.month, today.day, 0, 5, 0, tzinfo=tz
+                today.year, today.month, today.day, hour, 5, 0, tzinfo=tz
             )
             data = cache_manager_with_tz.get_data(area="SE2", target_date=today)
 
