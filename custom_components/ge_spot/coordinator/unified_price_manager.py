@@ -703,18 +703,6 @@ class UnifiedPriceManager:
                     error_code=Errors.NO_DATA,
                 )
 
-        # --- Fetch Lock and Timestamp Update ---
-        # Trust the fetch decision - it already considered rate limiting.
-        # Acquire lock to ensure atomicity when updating fetch timestamp.
-        async with _FETCH_LOCK:
-            # Update fetch timestamp now that we are committed to fetching
-            _LOGGER.debug(
-                f"Proceeding with API fetch for area {self.area} (Reason: {fetch_reason}, Force: {force})"
-            )
-            _LAST_FETCH_TIME[area_key] = now
-
-        # --- Actual Fetching Logic (outside the rate limiting lock, but after decision and timestamp update) ---
-
         # Fetch data using the new FallbackManager
         try:
             # Prepare API instances - pass necessary context
@@ -801,6 +789,17 @@ class UnifiedPriceManager:
                 )
                 for cls in enabled_api_classes
             ]
+
+            # --- Fetch Lock and Timestamp Update ---
+            # Trust the fetch decision - it already considered rate limiting.
+            # A refresh that finds every source cooling down sends no request
+            # and must not restart the rate limit.
+            if api_instances or not self._api_classes:
+                async with _FETCH_LOCK:
+                    _LOGGER.debug(
+                        f"Proceeding with API fetch for area {self.area} (Reason: {fetch_reason}, Force: {force})"
+                    )
+                    _LAST_FETCH_TIME[area_key] = now
 
             if not api_instances:
                 # Distinguish between "no sources configured" vs "all temporarily disabled"
