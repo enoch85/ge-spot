@@ -1725,6 +1725,38 @@ class TestUnifiedPriceManager:
         finally:
             await cancel_health_check_tasks(manager)
 
+    @pytest.mark.asyncio
+    async def test_skipped_fetch_does_not_delay_retry_after_cooldown(
+        self, manager, auto_mock_core_dependencies
+    ):
+        """Refreshes that send no request must not restart the fetch rate limit."""
+        dependencies = auto_mock_core_dependencies
+        now = dependencies["now"]
+        initial_time = now.return_value
+        fallback = dependencies["fallback_manager"].return_value.fetch_with_fallback
+        fallback.return_value = MOCK_FAILURE_RESULT
+        try:
+            # The first fetch after startup fails, so every source cools down.
+            await manager.fetch_data()
+            # A refresh in the startup grace period finds no source to ask.
+            now.return_value = initial_time + timedelta(minutes=4)
+            await manager.fetch_data()
+            assert fallback.await_count == 1
+
+            # Once the grace period and the cooldown are over, retry at once.
+            manager._coordinator_created_at = datetime.now(timezone.utc) - timedelta(
+                minutes=Network.Defaults.GRACE_PERIOD_MINUTES + 1
+            )
+            now.return_value = initial_time + timedelta(
+                minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES, seconds=30
+            )
+            fallback.return_value = MOCK_SUCCESS_RESULT
+            recovered = await manager.fetch_data()
+            assert fallback.await_count == 2
+            assert recovered.today_interval_prices
+        finally:
+            await cancel_health_check_tasks(manager)
+
 
 class TestHealthCheck:
     """Test the daily health check functionality."""
