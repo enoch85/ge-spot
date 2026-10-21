@@ -1,5 +1,4 @@
 {
-  "name": "Global Energy Spotprices ",
-  "render_readme": true,
+  "name": "Global Energy Spotprices",
   "homeassistant": "2025.2.5"
 }

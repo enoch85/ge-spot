@@ -1,6 +1,7 @@
 {
     "domain": "ge_spot",
     "name": "Global Electricity Spot Prices",
+    "categories": ["energy.energy_prices"],
     "codeowners": ["@enoch85"],
     "config_flow": true,
     "dependencies": [],
