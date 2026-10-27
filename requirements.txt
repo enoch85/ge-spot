@@ -4,7 +4,7 @@
 #
 # pytest-homeassistant-custom-component pins an exact homeassistant release, so
 # Dependabot bumps both as one group (see .github/dependabot.yml).
-homeassistant==2026.10.2
+homeassistant==2026.10.3
 pytest-homeassistant-custom-component==0.13.373
 aiofiles==25.1.0
 pytz==2026.5
