@@ -23,14 +23,14 @@ If you find this project useful, please consider sponsoring the development on G
 
 ## Installation
 
-### HACS (Recommended)
+### Marketplace (Recommended)
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=enoch85&repository=ge-spot&category=integration)
+[![Open your Home Assistant instance and open a repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=enoch85&repository=ge-spot&category=integration)
 
-1. Install [HACS](https://hacs.xyz/)
-2. Search for "GE-Spot" in HACS → Integrations
-3. Download, restart Home Assistant
-4. Add via Settings → Devices & Services → Add Integration
+1. Select the button above, or find GE-Spot in Settings → Marketplace (Home Assistant 2026.11 and newer), and download it
+2. Add via Settings → Devices & Services → Add Integration
+
+On Home Assistant 2026.10 and older, search for "GE-Spot" in [HACS](https://hacs.xyz/) → Integrations, download it and restart Home Assistant.
 
 ### Manual
 
