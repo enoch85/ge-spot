@@ -23,6 +23,9 @@ updates:
       prefix: "GitHub Actions"
 
   - package-ecosystem: "pip"
+    # Dependabot reads the Python version from .python-version and aborts on one it
+    # does not support (3.14 is its newest), so that file stays on 3.14, the oldest
+    # line Home Assistant supports. CI runs 3.15.
     directory: "/"
     schedule:
       interval: "weekly"
