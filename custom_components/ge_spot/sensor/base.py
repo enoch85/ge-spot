@@ -1,7 +1,8 @@
 """Base sensor for electricity prices."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, tzinfo
+from typing import Any, Dict, List, Optional
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -101,6 +102,10 @@ class BaseElectricityPriceSensor(SensorEntity):
             self._attr_native_unit_of_measurement = f"{self._currency}/kWh"
 
         self._attr_suggested_display_precision = self._precision
+
+        # Converted interval price lists ("today"/"tomorrow"), see
+        # _interval_price_list
+        self._interval_price_lists: Dict[str, tuple] = {}
 
     @property
     def _target_timezone(self):
@@ -253,37 +258,9 @@ class BaseElectricityPriceSensor(SensorEntity):
                 now = dt_util.now().astimezone(target_tz)
                 today_date = now.date()
 
-                today_list = []
-                for hhmm_key in sorted(today_prices.keys()):
-                    try:
-                        hour, minute = parse_interval_key(hhmm_key)
-                        dt = datetime(
-                            today_date.year,
-                            today_date.month,
-                            today_date.day,
-                            hour,
-                            minute,
-                            0,
-                            tzinfo=target_tz,
-                        )
-                        price = today_prices[hhmm_key]
-                        raw_price = today_raw_prices.get(hhmm_key)
-
-                        entry = {
-                            "time": dt,  # datetime object (not ISO string!)
-                            "value": round(float(price), 4),
-                        }
-
-                        # Add raw_value if available (Issue #40)
-                        if raw_price is not None:
-                            entry["raw_value"] = round(float(raw_price), 4)
-
-                        today_list.append(entry)
-                    except (ValueError, AttributeError) as e:
-                        _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
-                        continue
-
-                attrs["today_interval_prices"] = today_list
+                attrs["today_interval_prices"] = self._interval_price_list(
+                    "today", today_prices, today_raw_prices, today_date, target_tz
+                )
             else:
                 attrs["today_interval_prices"] = []
         else:
@@ -298,43 +275,92 @@ class BaseElectricityPriceSensor(SensorEntity):
                 now = dt_util.now().astimezone(target_tz)
                 tomorrow_date = (now + timedelta(days=1)).date()
 
-                tomorrow_list = []
-                for hhmm_key in sorted(tomorrow_prices.keys()):
-                    try:
-                        hour, minute = parse_interval_key(hhmm_key)
-                        dt = datetime(
-                            tomorrow_date.year,
-                            tomorrow_date.month,
-                            tomorrow_date.day,
-                            hour,
-                            minute,
-                            0,
-                            tzinfo=target_tz,
-                        )
-                        price = tomorrow_prices[hhmm_key]
-                        raw_price = tomorrow_raw_prices.get(hhmm_key)
-
-                        entry = {
-                            "time": dt,  # datetime object (not ISO string!)
-                            "value": round(float(price), 4),
-                        }
-
-                        # Add raw_value if available (Issue #40)
-                        if raw_price is not None:
-                            entry["raw_value"] = round(float(raw_price), 4)
-
-                        tomorrow_list.append(entry)
-                    except (ValueError, AttributeError) as e:
-                        _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
-                        continue
-
-                attrs["tomorrow_interval_prices"] = tomorrow_list
+                attrs["tomorrow_interval_prices"] = self._interval_price_list(
+                    "tomorrow",
+                    tomorrow_prices,
+                    tomorrow_raw_prices,
+                    tomorrow_date,
+                    target_tz,
+                )
             else:
                 attrs["tomorrow_interval_prices"] = []
         else:
             attrs["tomorrow_interval_prices"] = []
 
         return attrs
+
+    def _interval_price_list(
+        self,
+        day: str,
+        prices: Dict[str, float],
+        raw_prices: Optional[Dict[str, float]],
+        interval_date: date,
+        target_tz: tzinfo,
+    ) -> List[Dict[str, Any]]:
+        """Convert an HH:MM price dict to the list external integrations read.
+
+        Every coordinator refresh writes the state of every sensor, so the
+        converted entries are kept and rebuilt only when the price dicts, the
+        date or the zone change. Callers get fresh dicts, so modifying a state
+        attribute cannot alter the kept entries.
+        """
+        cached = self._interval_price_lists.get(day)
+        if cached is not None:
+            sources, cached_date, cached_tz, contents, entries = cached
+            # Same dicts with unchanged contents (they could be edited in place)
+            if (
+                sources[0] is prices
+                and sources[1] is raw_prices
+                and contents == (prices, raw_prices)
+                and cached_date == interval_date
+                and cached_tz is target_tz
+            ):
+                return [entry.copy() for entry in entries]
+
+        interval_list = []
+        complete = isinstance(raw_prices, dict)
+        for hhmm_key in sorted(prices.keys()):
+            try:
+                hour, minute = parse_interval_key(hhmm_key)
+                dt = datetime(
+                    interval_date.year,
+                    interval_date.month,
+                    interval_date.day,
+                    hour,
+                    minute,
+                    0,
+                    tzinfo=target_tz,
+                )
+                price = prices[hhmm_key]
+                raw_price = raw_prices.get(hhmm_key)
+
+                entry = {
+                    "time": dt,  # datetime object (not ISO string!)
+                    "value": round(float(price), 4),
+                }
+
+                # Add raw_value if available (Issue #40)
+                if raw_price is not None:
+                    entry["raw_value"] = round(float(raw_price), 4)
+
+                interval_list.append(entry)
+            except (ValueError, AttributeError) as e:
+                _LOGGER.warning(f"Failed to convert interval {hhmm_key}: {e}")
+                complete = False
+                continue
+
+        # Keep failed conversions uncached so they are still logged every write
+        if complete:
+            self._interval_price_lists[day] = (
+                (prices, raw_prices),
+                interval_date,
+                target_tz,
+                (dict(prices), dict(raw_prices)),
+                interval_list,
+            )
+            return [entry.copy() for entry in interval_list]
+        self._interval_price_lists.pop(day, None)
+        return interval_list
 
     async def async_added_to_hass(self):
         """When entity is added to hass."""

@@ -6,6 +6,7 @@ replacing the old 'complete_data' boolean with clear timestamp-based validity.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from functools import cache
 from typing import Optional, Dict
 import logging
 import re
@@ -17,7 +18,14 @@ from ..const.time import TimeInterval
 
 _LOGGER = logging.getLogger(__name__)
 
+# Match format: HH:MM optionally followed by _1 or _2
+# This is strict - only allows valid DST suffixes, not any arbitrary suffix
+_INTERVAL_KEY_RE = re.compile(r"^(\d{1,2}):(\d{2})(?:_[12])?$")
 
+
+# Every sensor state write parses each interval key. Only valid keys are
+# cached (invalid ones raise), so the cache is bounded by the HH:MM key space.
+@cache
 def parse_interval_key(interval_key: str) -> tuple[int, int]:
     """Parse interval key to hour and minute, handling DST suffixes.
 
@@ -38,9 +46,7 @@ def parse_interval_key(interval_key: str) -> tuple[int, int]:
         >>> parse_interval_key("02:15_2")
         (2, 15)
     """
-    # Match format: HH:MM optionally followed by _1 or _2
-    # This is strict - only allows valid DST suffixes, not any arbitrary suffix
-    match = re.match(r"^(\d{1,2}):(\d{2})(?:_[12])?$", interval_key)
+    match = _INTERVAL_KEY_RE.match(interval_key)
 
     if not match:
         raise ValueError(
@@ -231,9 +237,6 @@ def calculate_data_validity(
     # Tomorrow's same HH:MM is a different interval and cannot supply today's price.
     validity.has_current_interval = current_interval_key in interval_prices
 
-    # Find the last valid interval timestamp
-    all_intervals = []
-
     # Determine which timezone to use for localizing interval keys
     # The interval keys (e.g. "04:15") are ALREADY in the target timezone
     if target_timezone:
@@ -255,49 +258,37 @@ def calculate_data_validity(
         tz = None
         today_date = now.date()
 
-    # Parse today's intervals
-    for interval_key in interval_prices.keys():
-        try:
-            # Use the validation function that handles DST suffixes
-            hour, minute = parse_interval_key(interval_key)
-            interval_dt = datetime.combine(
-                today_date, datetime.min.time().replace(hour=hour, minute=minute)
-            )
-            # Make timezone aware using target timezone or HA timezone
-            if tz:
-                interval_dt = interval_dt.replace(tzinfo=tz)
-            else:
-                interval_dt = dt_util.as_local(interval_dt)
-            all_intervals.append(interval_dt)
-        except (ValueError, AttributeError) as e:
-            # Malformed interval key - this IS a data problem
-            _LOGGER.warning(f"Malformed interval key '{interval_key}': {e}")
-            continue
-
-    # Parse tomorrow's intervals
+    # Find the last valid interval. All keys of one day share its date and
+    # zone, so comparing (date, hour, minute) finds the same interval as
+    # building and sorting a datetime for every key, at a fraction of the cost.
+    last_interval = None
     tomorrow_date = today_date + timedelta(days=1)
-    for interval_key in tomorrow_interval_prices.keys():
-        try:
-            # Use the validation function that handles DST suffixes
-            hour, minute = parse_interval_key(interval_key)
-            interval_dt = datetime.combine(
-                tomorrow_date, datetime.min.time().replace(hour=hour, minute=minute)
-            )
-            # Make timezone aware using target timezone or HA timezone
-            if tz:
-                interval_dt = interval_dt.replace(tzinfo=tz)
-            else:
-                interval_dt = dt_util.as_local(interval_dt)
-            all_intervals.append(interval_dt)
-        except (ValueError, AttributeError) as e:
-            # Malformed interval key - this IS a data problem
-            _LOGGER.warning(f"Malformed interval key '{interval_key}': {e}")
-            continue
+    for interval_date, prices in (
+        (today_date, interval_prices),
+        (tomorrow_date, tomorrow_interval_prices),
+    ):
+        for interval_key in prices.keys():
+            try:
+                # Use the validation function that handles DST suffixes
+                hour, minute = parse_interval_key(interval_key)
+            except (ValueError, AttributeError) as e:
+                # Malformed interval key - this IS a data problem
+                _LOGGER.warning(f"Malformed interval key '{interval_key}': {e}")
+                continue
+            if last_interval is None or (interval_date, hour, minute) > last_interval:
+                last_interval = (interval_date, hour, minute)
 
-    if all_intervals:
-        # Sort to find the last interval
-        all_intervals.sort()
-        validity.last_valid_interval = all_intervals[-1]
+    if last_interval:
+        interval_date, hour, minute = last_interval
+        interval_dt = datetime.combine(
+            interval_date, datetime.min.time().replace(hour=hour, minute=minute)
+        )
+        # Make timezone aware using target timezone or HA timezone
+        if tz:
+            interval_dt = interval_dt.replace(tzinfo=tz)
+        else:
+            interval_dt = dt_util.as_local(interval_dt)
+        validity.last_valid_interval = interval_dt
 
         # Add interval duration to get data_valid_until
         interval_minutes = TimeInterval.get_interval_minutes()
@@ -320,6 +311,6 @@ def calculate_data_validity(
     else:
         _LOGGER.debug("No valid intervals found in price data")
 
-    _LOGGER.debug(f"Calculated {validity}")
+    _LOGGER.debug("Calculated %s", validity)
 
     return validity
