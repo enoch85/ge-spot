@@ -271,11 +271,11 @@ class UnifiedPriceManager:
             List of dicts with source name, failure time, and retry time
         """
         failed_details = []
-        now = dt_util.now()
 
         for source_name, failure_time in self._failed_sources.items():
             if failure_time is not None:  # Source has failed
-                next_check = max(now, self._source_retry_at(failure_time))
+                # Keep expired retry deadlines stable across sensor state writes.
+                next_check = self._source_retry_at(failure_time)
 
                 failed_details.append(
                     {
