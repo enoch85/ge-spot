@@ -96,6 +96,42 @@ class TestFailedSourcesTracking:
         assert Source.ENERGY_CHARTS not in price_manager._failed_sources
         assert len(price_manager._failed_sources) == 0
 
+    def test_failed_source_details_keep_retry_deadline(
+        self, price_manager: UnifiedPriceManager
+    ) -> None:
+        """Polling after a cooldown must not invent a new retry timestamp."""
+        failed_at = dt_util.now()
+        cooldown = timedelta(minutes=Network.Defaults.MIN_UPDATE_INTERVAL_MINUTES)
+        retry_at = failed_at + cooldown
+        price_manager._failed_sources = {
+            Source.NORDPOOL: None,
+            Source.ENERGY_CHARTS: failed_at,
+        }
+        expected = [
+            {
+                "source": Source.ENERGY_CHARTS,
+                "failed_at": failed_at.isoformat(),
+                "retry_at": retry_at.isoformat(),
+            }
+        ]
+        with patch(
+            "custom_components.ge_spot.coordinator.unified_price_manager.dt_util.now"
+        ) as now:
+            for elapsed in (timedelta(0), cooldown, cooldown * 2):
+                now.return_value = failed_at + elapsed
+                assert price_manager.get_failed_source_details() == expected
+                assert (
+                    Source.ENERGY_CHARTS in price_manager.get_disabled_sources()
+                ) == (elapsed < cooldown)
+
+            price_manager._failed_sources[Source.ENERGY_CHARTS] = now.return_value
+            assert (
+                price_manager.get_failed_source_details()[0]["retry_at"]
+                == (now.return_value + cooldown).isoformat()
+            )
+            price_manager._failed_sources[Source.ENERGY_CHARTS] = None
+            assert price_manager.get_failed_source_details() == []
+
 
 class TestExponentialBackoffConfiguration:
     """Test exponential backoff timeout configuration."""
