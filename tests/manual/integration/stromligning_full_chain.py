@@ -13,7 +13,7 @@ Usage:
 
     area: Optional area code (DK1, DK2)
           Defaults to DK1 if not provided
-    supplier: Required supplier name (e.g. EWII, AndelEnergi)
+    supplier: Required grid company ID (e.g. radius_c, rah_c)
 """
 
 import sys
@@ -54,7 +54,7 @@ async def main():
     )
     # Add supplier argument
     parser.add_argument(
-        "--supplier", required=True, help="Supplier name (e.g. EWII, AndelEnergi)"
+        "--supplier", required=True, help="Grid company ID (e.g. radius_c, rah_c)"
     )
     args = parser.parse_args()
 
@@ -263,5 +263,5 @@ async def main():
 if __name__ == "__main__":
     logger.info("Starting Strømlikning API full chain test...")
     # Note: User needs to provide --supplier argument now
-    # Example: python3 tests/manual/integration/stromligning_full_chain.py DK2 --supplier EWII
+    # Example: python3 tests/manual/integration/stromligning_full_chain.py DK2 --supplier radius_c
     sys.exit(asyncio.run(main()))
