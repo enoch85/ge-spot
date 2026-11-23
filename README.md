@@ -711,8 +711,8 @@ flowchart TD
 
 | Source | Native | Output |
 |--------|--------|--------|
-| ENTSO-E/Nordpool/Energy-Charts | 15-60 min | 96 intervals/day |
-| OMIE/Strømligning | 60 min | Expanded to 15-min |
+| ENTSO-E/Nordpool/Energy-Charts/Strømligning | 15-60 min | 96 intervals/day |
+| OMIE | 60 min | Expanded to 15-min |
 | AEMO/Amber | 30 min | Expanded to 15-min |
 | ComEd | 5 min | Aggregated to 15-min |
 

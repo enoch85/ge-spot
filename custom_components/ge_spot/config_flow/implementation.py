@@ -252,7 +252,7 @@ class GSpotConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=self._errors,
             description_placeholders={
                 "data_description": "data_description",
-                "stromligning_docs_url": "https://github.com/enoch95/ge-spot/blob/main/docs/stromligning.md",
+                "stromligning_docs_url": "https://github.com/enoch85/ge-spot/blob/main/docs/stromligning.md",
             },
         )
 
