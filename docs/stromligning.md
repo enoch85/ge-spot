@@ -4,7 +4,7 @@ This document provides specific information regarding the integration with the S
 
 ## Supplier Configuration
 
-The Stromligning API (`/api/prices` endpoint) requires a specific `supplier` ID to be provided when fetching price data. When configuring GE-Spot for a Danish price area (DK1 or DK2), you will be prompted to enter this supplier ID in the integration options.
+The Stromligning API (`/api/prices` endpoint) takes a `supplierId` (the grid company) when fetching price data; without it, the price contains no grid tariff. When configuring GE-Spot for a Danish price area (DK1 or DK2), you will be prompted to enter this supplier ID in the integration options.
 
 The value you need to enter corresponds to the `id` field from the supplier list below (e.g. `ewii_c`, `andelenergi_c`).
 
