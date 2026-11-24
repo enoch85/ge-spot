@@ -140,10 +140,9 @@ class StromligningAPI(BasePriceAPI):
             f"Fetching Stromligning data for area: {area}, supplier: {supplier}, date range: {today_start} to {today_end}"
         )
 
-        # Fetch from the API - supplierId selects the grid company, whose tariff
-        # is then included in the price
+        # Fetch from the API - Use priceArea and add supplier
         try:
-            url = f"{self._get_base_url()}?priceArea={area}&supplierId={supplier}"
+            url = f"{self._get_base_url()}?priceArea={area}&supplier={supplier}"
             response = await client.fetch(
                 url,
                 timeout=Network.Defaults.HTTP_TIMEOUT,
